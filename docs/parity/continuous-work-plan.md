@@ -7380,3 +7380,13 @@ vista plana del eje y la política nativa de suprimir sólo el fallback que
 corresponde cuando un grupo custom sí resuelve. Sus anclas y offsets se
 aplican a los mismos tres recortes y frente; la aceptación raster amplia
 queda pendiente y #326 continúa abierta.
+
+Corrección #326-BRIDGE-FRONT-COMBINE-PARENT (2026-09-13): el bloque frontal
+de `DrawBridgeRoadBits` ya conserva su parent real. Cuando la catenaria vial
+vanilla o NewGRF resuelve la primera imagen del `StartSpriteCombine`, esa
+imagen entra como `ViewportSortableParent` con la caja frontal nativa y la
+baranda frontal pasa a `ViewportSortableChild`; si el cable no está disponible,
+la baranda mantiene el fallback como parent visible. La regresión ECS cubre
+vanilla y NewGRF, ambos ejes de caja y la relación parent/child. La aceptación
+raster y los layouts/callbacks NewGRF que todavía no publican todos sus
+children siguen pendientes; #326 continúa abierta.

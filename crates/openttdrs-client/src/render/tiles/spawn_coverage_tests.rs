@@ -13953,7 +13953,7 @@ fn spawn_bridge_middle_draws_deck_over_marked_water() {
 }
 
 #[test]
-fn bridge_middle_uses_south_ramp_tram_overlay_as_combined_child() {
+fn bridge_middle_keeps_road_front_combine_parent_and_child_roles() {
     let assets = boot_assets_app();
     let expected_overlay = assets.tram_flat[1].clone();
     // `offset=1` para un vano X: `GetBridgeRoadCatenary` escoge las filas
@@ -14022,23 +14022,43 @@ fn bridge_middle_uses_south_ramp_tram_overlay_as_combined_child() {
         "el overlay debe colgar del parent trasero combinado"
     );
 
-    let catenary_children: Vec<_> = world
+    let catenary_back_children: Vec<_> = world
         .query::<(Entity, &ViewportSortableChild, &Sprite)>()
         .iter(&world)
-        .filter(|(_, _, sprite)| {
-            expected_catenary_back.matches(sprite) || expected_catenary_front.matches(sprite)
-        })
+        .filter(|(_, _, sprite)| expected_catenary_back.matches(sprite))
         .collect();
     assert_eq!(
-        catenary_children.len(),
-        2,
-        "el fallback vanilla debe emitir las dos mitades de catenaria del puente"
+        catenary_back_children.len(),
+        1,
+        "la mitad trasera debe seguir siendo child de la baranda posterior"
     );
-    assert!(catenary_children.iter().all(|(_, child, _)| {
+    assert!(catenary_back_children.iter().all(|(_, child, _)| {
         world
             .entity(child.parent)
             .contains::<ViewportSortableParent>()
     }));
+
+    let catenary_front_parents: Vec<_> = world
+        .query::<(Entity, &ViewportSortableParent, &Sprite)>()
+        .iter(&world)
+        .filter(|(_, _, sprite)| expected_catenary_front.matches(sprite))
+        .collect();
+    assert_eq!(
+        catenary_front_parents.len(),
+        1,
+        "la mitad frontal debe abrir el parent del bloque combinado"
+    );
+    let front_parent = catenary_front_parents[0].0;
+    let front_children: Vec<_> = world
+        .query::<(&ViewportSortableChild, &Sprite)>()
+        .iter(&world)
+        .filter(|(child, _)| child.parent == front_parent)
+        .collect();
+    assert_eq!(
+        front_children.len(),
+        1,
+        "la baranda frontal debe ser child del cable frontal"
+    );
 }
 
 #[test]
@@ -14182,10 +14202,9 @@ fn bridge_middle_resolves_newgrf_bridge_overlay_and_catenary_groups_from_south_r
             .then_some((parent, first.to_vec()))
         })
         .collect();
-    assert_eq!(
-        custom_handles.len(),
-        4,
-        "bridge, overlay y ambos grupos de catenaria deben ser children"
+    assert!(
+        custom_handles.len() >= 3,
+        "bridge, overlay y la catenaria trasera deben ser children"
     );
     assert!(
         custom_handles
@@ -14207,10 +14226,30 @@ fn bridge_middle_resolves_newgrf_bridge_overlay_and_catenary_groups_from_south_r
             .iter()
             .any(|(_, rgba)| rgba == &[0, 255, 0, 255])
     );
-    assert!(
-        custom_handles
-            .iter()
-            .any(|(_, rgba)| rgba == &[255, 255, 0, 255])
+    let custom_front_parents: Vec<_> = world
+        .query::<(Entity, &ViewportSortableParent, &Sprite)>()
+        .iter(&world)
+        .filter_map(|(entity, _, sprite)| {
+            let image = world.resource::<Assets<Image>>().get(&sprite.image)?;
+            let first = image.data.as_deref()?.get(0..4)?;
+            (first == [255, 255, 0, 255]).then_some(entity)
+        })
+        .collect();
+    assert_eq!(
+        custom_front_parents.len(),
+        1,
+        "la catenaria frontal custom debe ser el parent del bloque frontal"
+    );
+    let front_parent = custom_front_parents[0];
+    let front_children: Vec<_> = world
+        .query::<&ViewportSortableChild>()
+        .iter(&world)
+        .filter(|child| child.parent == front_parent)
+        .collect();
+    assert_eq!(
+        front_children.len(),
+        1,
+        "la baranda frontal vanilla debe colgar del cable custom"
     );
 }
 

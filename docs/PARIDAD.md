@@ -860,8 +860,10 @@ contra la rampa sur del puente, aplican los offsets específicos, sustituyen el
 deck Action5 cuando entregan una superficie y quedan como children del parent
 trasero combinado. `ROTSG_CATENARY_BACK` y `ROTSG_CATENARY_FRONT` también se
 resuelven con la misma prioridad carretera→tranvía: la mitad trasera queda
-unida al parent posterior y la delantera al parent frontal de cada vano (en
-una cabeza sin baranda frontal se conserva el parent de la cabeza). Cuando no
+unida al parent posterior y, cuando existe, la delantera abre el parent del
+bloque frontal; la baranda frontal se conserva como child de esa catenaria,
+igual que el `StartSpriteCombine` nativo (en una cabeza sin baranda frontal se
+conserva el parent de la cabeza). Cuando no
 hay grupos específicos, el fallback vanilla de `SPR_TRAMWAY_BASE` selecciona
 las seis filas de puente (`95..106`) con sus 119 sprites extraídos y las mismas
 cajas `SpriteBounds` delanteras/traseras. El flag Action0

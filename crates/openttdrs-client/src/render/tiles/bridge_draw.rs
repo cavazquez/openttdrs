@@ -629,6 +629,51 @@ fn spawn_bridge_specific_child(
     }
 }
 
+/// Materializa el primer sprite de un `StartSpriteCombine` como parent.
+///
+/// `DrawBridgeRoadBits` puede abrir el bloque frontal con la catenaria. En
+/// ese caso la baranda frontal de `DrawBridgeMiddle` no es otro parent: queda
+/// como child del cable y debe moverse con él cuando el sorter global cambia
+/// de posición el puente respecto de sus vecinos.
+#[allow(clippy::too_many_arguments)]
+fn spawn_bridge_combined_parent(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    map_width: u32,
+    sprite: Sprite,
+    position: Vec3,
+    sprite_id: u32,
+    surface_z: u8,
+    layer: f32,
+    placement: BridgeTracePlacement,
+) -> Entity {
+    let source_depth = viewport_source_depth(
+        crate::iso::sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), surface_z, layer),
+        ctx.tx,
+        map_width,
+    );
+    let mut position = position;
+    position.z = source_depth;
+    let parent = bridge_sortable_parent(
+        ctx,
+        map_width,
+        sprite_id,
+        surface_z,
+        layer,
+        BRIDGE_FRONT_ORDINAL,
+        placement,
+    );
+    commands
+        .spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+            parent,
+        ))
+        .id()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_bridge_pbs_reservation(
     commands: &mut Commands,
@@ -1452,6 +1497,19 @@ struct BridgeTracePlacement {
     bounds: TraceSpriteBounds,
 }
 
+/// Datos de una pieza de puente que se exportan al contrato de `world-draw`.
+/// Agruparlos evita que la traza y la composición ECS diverjan al añadir una
+/// variante de parent/child.
+struct BridgeStructureTrace {
+    sprite_id: u32,
+    palette: u32,
+    fallback: bool,
+    surface_z: u8,
+    bounds: Option<TraceSpriteBounds>,
+    placement: Option<BridgeTracePlacement>,
+    combined: bool,
+}
+
 /// Convierte la misma geometría de `AddSortableSpriteToDraw` que se exporta a
 /// `world-draw` en la caja que consume el sorter runtime de Bevy.
 fn bridge_parent_bounds(
@@ -1654,6 +1712,7 @@ fn spawn_layer(
     map_width: u32,
     draw_ordinal: u8,
     pillar_half: Option<(usize, PillarHalf)>,
+    combined_parent: Option<Entity>,
 ) -> Option<Entity> {
     if sprite_id == 0 {
         return None;
@@ -1670,12 +1729,15 @@ fn spawn_layer(
     } else {
         record_bridge_structure_trace(
             ctx,
-            sprite_id,
-            palette.openttd_palette_id(),
-            true,
-            deck_z,
-            trace_bounds,
-            trace_placement,
+            BridgeStructureTrace {
+                sprite_id,
+                palette: palette.openttd_palette_id(),
+                fallback: true,
+                surface_z: deck_z,
+                bounds: trace_bounds,
+                placement: trace_placement,
+                combined: combined_parent.is_some(),
+            },
         );
         return None;
     };
@@ -1693,12 +1755,15 @@ fn spawn_layer(
     });
     record_bridge_structure_trace(
         ctx,
-        sprite_id,
-        palette.openttd_palette_id(),
-        false,
-        deck_z,
-        trace_bounds,
-        effective_placement,
+        BridgeStructureTrace {
+            sprite_id,
+            palette: palette.openttd_palette_id(),
+            fallback: false,
+            surface_z: deck_z,
+            bounds: trace_bounds,
+            placement: effective_placement,
+            combined: combined_parent.is_some(),
+        },
     );
     sprite.color = sprite_color(TransparencyOption::Bridges);
     let (w, h, xrel, yrel) = bridge_sprite_meta(sprite_id).unwrap_or((64.0, 32.0, -32.0, -16.0));
@@ -1713,7 +1778,7 @@ fn spawn_layer(
     } else {
         0.0
     };
-    let pos = Vec3::new(
+    let mut pos = Vec3::new(
         ctx.iso_pos.x + shift.x + xrel + w / 2.0 + crop_x_shift,
         ctx.iso_pos.y + shift.y - yrel - h / 2.0 + z_px,
         crate::iso::sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), deck_z, layer),
@@ -1729,13 +1794,23 @@ fn spawn_layer(
             placement,
         )
     });
+    let child_source_depth =
+        combined_parent.map(|_| viewport_source_depth(pos.z, ctx.tx, map_width));
+    if let Some(source_depth) = child_source_depth {
+        pos.z = source_depth;
+    }
     let mut entity = commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
         sprite,
         Transform::from_translation(pos),
     ));
-    if let Some(parent) = sortable_parent {
+    if let Some(parent) = combined_parent {
+        entity.insert(ViewportSortableChild {
+            parent,
+            source_depth: child_source_depth.unwrap_or(pos.z),
+        });
+    } else if let Some(parent) = sortable_parent {
         entity.insert(parent);
     }
     Some(entity.id())
@@ -1766,6 +1841,7 @@ fn spawn_custom_layer(
     pillar_half: Option<(usize, PillarHalf)>,
     twocc_map: Option<&openttdrs_core::DecodedSprite>,
     images: Option<&mut Assets<Image>>,
+    combined_parent: Option<Entity>,
 ) -> Option<Entity> {
     if reference.sprite_id == 0 {
         return None;
@@ -1777,12 +1853,15 @@ fn spawn_custom_layer(
         let Some(images) = images else {
             record_bridge_structure_trace(
                 ctx,
-                sprite_id,
-                u32::from(reference.palette),
-                true,
-                deck_z,
-                trace_bounds,
-                trace_placement,
+                BridgeStructureTrace {
+                    sprite_id,
+                    palette: u32::from(reference.palette),
+                    fallback: true,
+                    surface_z: deck_z,
+                    bounds: trace_bounds,
+                    placement: trace_placement,
+                    combined: combined_parent.is_some(),
+                },
             );
             return None;
         };
@@ -1833,12 +1912,15 @@ fn spawn_custom_layer(
         } else {
             record_bridge_structure_trace(
                 ctx,
-                sprite_id,
-                u32::from(reference.palette),
-                true,
-                deck_z,
-                trace_bounds,
-                trace_placement,
+                BridgeStructureTrace {
+                    sprite_id,
+                    palette: u32::from(reference.palette),
+                    fallback: true,
+                    surface_z: deck_z,
+                    bounds: trace_bounds,
+                    placement: trace_placement,
+                    combined: combined_parent.is_some(),
+                },
             );
             return None;
         }
@@ -1857,12 +1939,15 @@ fn spawn_custom_layer(
     });
     record_bridge_structure_trace(
         ctx,
-        sprite_id,
-        u32::from(reference.palette),
-        fallback,
-        deck_z,
-        trace_bounds,
-        effective_placement,
+        BridgeStructureTrace {
+            sprite_id,
+            palette: u32::from(reference.palette),
+            fallback,
+            surface_z: deck_z,
+            bounds: trace_bounds,
+            placement: effective_placement,
+            combined: combined_parent.is_some(),
+        },
     );
     sprite.color = sprite_color(TransparencyOption::Bridges);
     let crop_x_shift = if let Some((axis, half)) = pillar_half {
@@ -1872,7 +1957,7 @@ fn spawn_custom_layer(
     } else {
         0.0
     };
-    let pos = Vec3::new(
+    let mut pos = Vec3::new(
         ctx.iso_pos.x + shift.x + xrel + w / 2.0 + crop_x_shift,
         ctx.iso_pos.y + shift.y - yrel - h / 2.0 + z_px,
         crate::iso::sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), deck_z, layer),
@@ -1888,13 +1973,23 @@ fn spawn_custom_layer(
             placement,
         )
     });
+    let child_source_depth =
+        combined_parent.map(|_| viewport_source_depth(pos.z, ctx.tx, map_width));
+    if let Some(source_depth) = child_source_depth {
+        pos.z = source_depth;
+    }
     let mut entity = commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
         sprite,
         Transform::from_translation(pos),
     ));
-    if let Some(parent) = sortable_parent {
+    if let Some(parent) = combined_parent {
+        entity.insert(ViewportSortableChild {
+            parent,
+            source_depth: child_source_depth.unwrap_or(pos.z),
+        });
+    } else if let Some(parent) = sortable_parent {
         entity.insert(parent);
     }
     Some(entity.id())
@@ -1903,22 +1998,19 @@ fn spawn_custom_layer(
 /// Las cabezas de puente se comparan con el `AddSortableSpriteToDraw` de
 /// OpenTTD. La traza debe usar la Z posterior a `DrawFoundation`, no el
 /// `base_z` crudo que conserva el contexto de la tesela.
-fn record_bridge_structure_trace(
-    ctx: &TileRenderContext,
-    sprite_id: u32,
-    palette: u32,
-    fallback: bool,
-    surface_z: u8,
-    bounds: Option<TraceSpriteBounds>,
-    placement: Option<BridgeTracePlacement>,
-) {
-    if let Some(placement) = placement {
+fn record_bridge_structure_trace(ctx: &TileRenderContext, trace: BridgeStructureTrace) {
+    let primitive = if trace.combined {
+        "combined"
+    } else {
+        "sortable"
+    };
+    if let Some(placement) = trace.placement {
         WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
             "bridge-structure",
-            "sortable",
-            sprite_id,
-            palette,
-            fallback,
+            primitive,
+            trace.sprite_id,
+            trace.palette,
+            trace.fallback,
             placement.world_xy_delta,
             placement.world_z_delta,
             placement.offset,
@@ -1926,16 +2018,16 @@ fn record_bridge_structure_trace(
         );
         return;
     }
-    let world_z_delta = (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8;
+    let world_z_delta = (i32::from(trace.surface_z) - i32::from(ctx.info.base_z)) * 8;
     WorldDrawTrace::record_sprite_with_palette_and_geometry(
         "bridge-structure",
-        "sortable",
-        sprite_id,
-        palette,
-        fallback,
+        primitive,
+        trace.sprite_id,
+        trace.palette,
+        trace.fallback,
         (0, 0, 0),
         world_z_delta,
-        bounds,
+        trace.bounds,
     );
 }
 
@@ -3090,6 +3182,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             None,
             twocc_map,
             images.as_deref_mut(),
+            None,
         )
     } else {
         spawn_layer(
@@ -3126,6 +3219,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             }),
             dims.0,
             BRIDGE_REAR_ORDINAL,
+            None,
             None,
         )
     };
@@ -3315,7 +3409,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                         &mut images,
                     )
                 {
-                    custom_front_catenary = Some((sprite, view));
+                    custom_front_catenary = Some((sprite, view, offset));
                 }
             } else {
                 let (back_id, front_id) = bridge_road_catenary_sprite_ids(offset);
@@ -3523,7 +3617,155 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             );
         }
     }
-    let front_parent = if let Some((reference, view)) = custom_front {
+    // `DrawBridgeRoadBits` abre el bloque frontal con la catenaria cuando
+    // ésta resolvió un sprite. La baranda frontal se agrega después y, por
+    // tanto, debe ser child de ese parent; si el cable falta, la baranda toma
+    // el lugar del primer parent como en el fallback de clipping de OpenTTD.
+    let front_catenary_parent = if let Some((sprite, view, offset)) = custom_front_catenary.as_ref()
+    {
+        let (bounds, geometry_offset) = bridge_road_catenary_trace_geometry(*offset, true);
+        let position = overlay_pos(
+            ctx.iso_pos,
+            f32::from(view.x_offs),
+            f32::from(view.y_offs),
+            f32::from(view.width),
+            f32::from(view.height),
+            surface_z,
+            FRONT_LAYER_FRAC + 0.002,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+        );
+        Some(spawn_bridge_combined_parent(
+            commands,
+            ctx,
+            dims.0,
+            sprite.clone(),
+            position,
+            front_id,
+            surface_z,
+            FRONT_LAYER_FRAC + 0.002,
+            BridgeTracePlacement {
+                world_xy_delta: (0, 0),
+                world_z_delta: (i32::from(surface_z) - i32::from(ctx.info.base_z))
+                    * TILE_HEIGHT_WORLD,
+                offset: geometry_offset,
+                bounds,
+            },
+        ))
+    } else if let Some((sprite, anchor, sprite_id, offset)) = vanilla_front_catenary.as_ref() {
+        let (bounds, geometry_offset) = bridge_road_catenary_trace_geometry(*offset, true);
+        let z_delta = (i32::from(surface_z) - i32::from(ctx.info.base_z)) * TILE_HEIGHT_WORLD;
+        WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+            "bridge-road-catenary-front",
+            "combined",
+            *sprite_id,
+            0,
+            false,
+            (0, 0),
+            z_delta,
+            geometry_offset,
+            Some(bounds),
+        );
+        let position = catenary_sprite_center(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            surface_z,
+            FRONT_LAYER_FRAC + 0.002,
+            0.0,
+            0.0,
+            0.0,
+            *anchor,
+        );
+        Some(spawn_bridge_combined_parent(
+            commands,
+            ctx,
+            dims.0,
+            sprite.clone(),
+            position,
+            *sprite_id,
+            surface_z,
+            FRONT_LAYER_FRAC + 0.002,
+            BridgeTracePlacement {
+                world_xy_delta: (0, 0),
+                world_z_delta: z_delta,
+                offset: geometry_offset,
+                bounds,
+            },
+        ))
+    } else {
+        if let Some((sprite_id, offset)) = vanilla_front_catenary_id {
+            let (bounds, geometry_offset) = bridge_road_catenary_trace_geometry(offset, true);
+            WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+                "bridge-road-catenary-front",
+                "combined",
+                sprite_id,
+                0,
+                true,
+                (0, 0),
+                (i32::from(surface_z) - i32::from(ctx.info.base_z)) * TILE_HEIGHT_WORLD,
+                geometry_offset,
+                Some(bounds),
+            );
+        }
+        None
+    };
+
+    if let Some(parent) = front_catenary_parent {
+        if let Some((reference, view)) = custom_front {
+            let twocc_map = action5_sprites
+                .as_mut()
+                .and_then(|cache| cache.twocc_map_for_palette(reference.palette));
+            spawn_custom_layer(
+                commands,
+                assets,
+                ctx,
+                reference,
+                view,
+                front_shift,
+                z_draw_px,
+                FRONT_LAYER_FRAC,
+                surface_z,
+                None,
+                Some(bridge_middle_structure_trace_placement(
+                    ctx.info.base_z,
+                    span.axis,
+                    true,
+                    z_draw_px,
+                )),
+                dims.0,
+                BRIDGE_FRONT_ORDINAL,
+                None,
+                twocc_map,
+                images.as_deref_mut(),
+                Some(parent),
+            );
+        } else {
+            spawn_layer(
+                commands,
+                assets,
+                ctx,
+                front_id,
+                front_shift,
+                z_draw_px,
+                FRONT_LAYER_FRAC,
+                surface_z,
+                span.bridge_type,
+                None,
+                (!on_ramp).then(|| {
+                    bridge_middle_structure_trace_placement(
+                        ctx.info.base_z,
+                        span.axis,
+                        true,
+                        z_draw_px,
+                    )
+                }),
+                dims.0,
+                BRIDGE_FRONT_ORDINAL,
+                None,
+                Some(parent),
+            );
+        }
+    } else if let Some((reference, view)) = custom_front {
         let twocc_map = action5_sprites
             .as_mut()
             .and_then(|cache| cache.twocc_map_for_palette(reference.palette));
@@ -3549,7 +3791,8 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             None,
             twocc_map,
             images.as_deref_mut(),
-        )
+            None,
+        );
     } else {
         spawn_layer(
             commands,
@@ -3568,69 +3811,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             dims.0,
             BRIDGE_FRONT_ORDINAL,
             None,
-        )
-    };
-    if let Some((sprite, view)) = custom_front_catenary {
-        // En una rampa no hay baranda frontal independiente; el bloque de
-        // catenaria sigue siendo parte del combine de la cabeza y se ancla al
-        // parent trasero. En un vano se conserva el combine frontal real.
-        spawn_bridge_specific_child(
-            commands,
-            ctx,
-            dims.0,
-            front_parent.or(rear_parent),
-            sprite,
-            &view,
-            surface_z,
-            FRONT_LAYER_FRAC + 0.002,
-        );
-    }
-    if let Some((sprite, anchor, sprite_id, offset)) = vanilla_front_catenary {
-        let (bounds, geometry_offset) = bridge_road_catenary_trace_geometry(offset, true);
-        let z_delta = (i32::from(surface_z) - i32::from(ctx.info.base_z)) * TILE_HEIGHT_WORLD;
-        WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
-            "bridge-road-catenary-front",
-            "combined",
-            sprite_id,
-            0,
-            false,
-            (0, 0),
-            z_delta,
-            geometry_offset,
-            Some(bounds),
-        );
-        let position = catenary_sprite_center(
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            surface_z,
-            FRONT_LAYER_FRAC + 0.002,
-            0.0,
-            0.0,
-            0.0,
-            anchor,
-        );
-        if let Some(parent) = front_parent.or(rear_parent) {
-            spawn_bridge_combined_child(commands, ctx, dims.0, parent, sprite, position);
-        } else {
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                sprite,
-                Transform::from_translation(position),
-            ));
-        }
-    } else if let Some((sprite_id, offset)) = vanilla_front_catenary_id {
-        let (bounds, geometry_offset) = bridge_road_catenary_trace_geometry(offset, true);
-        WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
-            "bridge-road-catenary-front",
-            "combined",
-            sprite_id,
-            0,
-            true,
-            (0, 0),
-            (i32::from(surface_z) - i32::from(ctx.info.base_z)) * TILE_HEIGHT_WORLD,
-            geometry_offset,
-            Some(bounds),
+            None,
         );
     }
 
@@ -3692,6 +3873,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 segment.half.map(|half| (span.axis, half)),
                 twocc_map,
                 images.as_deref_mut(),
+                None,
             );
         }
         let back_top_px = z_draw_px.round() as i32 - 2 * TILE_HEIGHT_PX as i32;
@@ -3719,6 +3901,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                     segment.half.map(|half| (span.axis, half)),
                     twocc_map,
                     images.as_deref_mut(),
+                    None,
                 );
             }
         }
@@ -3748,6 +3931,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 dims.0,
                 BRIDGE_PILLAR_ORDINAL_BASE,
                 segment.half.map(|half| (span.axis, half)),
+                None,
             );
         }
         let back_top_px = z_draw_px.round() as i32 - 2 * TILE_HEIGHT_PX as i32;
@@ -3773,6 +3957,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                     dims.0,
                     BRIDGE_PILLAR_ORDINAL_BASE + 1,
                     segment.half.map(|half| (span.axis, half)),
+                    None,
                 );
             }
         }

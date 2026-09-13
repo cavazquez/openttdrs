@@ -7123,3 +7123,12 @@ dibujar pilares bajo un vano. Reutiliza la máscara vanilla o custom de
 una parada de bus/camión ya no muestra apoyos que desaparecerán al confirmar la
 obra. El alcance no altera la validación de construcción ni cubre aún tipos de
 puente custom del selector; #326 continúa abierta.
+
+Corrección #326-BRIDGE-PREVIEW-TYPE (2026-09-13): la preview de construcción
+usa ahora el último `BridgeType` elegido para carretera o ferrocarril, en lugar
+de fijarse siempre en madera. Los ids de tablero, cabeza y pilar siguen la
+tabla de sprites del tipo seleccionado y la máscara de pilares recibe la misma
+especie de puente; el valor por defecto continúa siendo madera antes de la
+primera elección. La validación previa sigue usando madera como sonda porque la
+ventana aún permite escoger el tipo después de terminar el arrastre; #326
+continúa abierta por paletas de recolor, callbacks custom y aceptación raster.

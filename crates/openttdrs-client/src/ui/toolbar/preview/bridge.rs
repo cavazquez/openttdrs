@@ -66,6 +66,7 @@ pub(crate) struct BridgeSpanPreviewSpawn<'a> {
     pub foundation_newgrf: &'a [Option<openttdrs_core::DecodedSprite>],
     pub action5_sprites: &'a mut NewGrfAction5SpriteCache,
     pub images: &'a mut Assets<Image>,
+    pub bridge_type: BridgeType,
     pub stations: &'a [openttdrs_core::Station],
     pub road_stop_catalog: &'a [openttdrs_core::RoadStopSpecDef],
     pub bridge_spec_catalog: &'a [openttdrs_core::BridgeSpecDef],
@@ -746,6 +747,7 @@ fn spawn_bridge_pillars_preview(
     axis_y: bool,
     surface_z: u8,
     pillar_id: u32,
+    bridge_type: BridgeType,
     piece: openttdrs_core::BridgePiece,
     tint: Color,
 ) {
@@ -762,7 +764,7 @@ fn spawn_bridge_pillars_preview(
             road_stop_catalog,
             bridge_spec_catalog,
             coord,
-            BridgeType::Wooden,
+            bridge_type,
             piece,
             axis,
         )
@@ -851,6 +853,7 @@ pub(crate) fn spawn_bridge_span_preview(
         foundation_newgrf,
         action5_sprites,
         images,
+        bridge_type,
         stations,
         road_stop_catalog,
         bridge_spec_catalog,
@@ -860,7 +863,6 @@ pub(crate) fn spawn_bridge_span_preview(
     let axis_y = bridge_span_axis_y(&ordered_tiles);
     let axis = usize::from(axis_y);
     let total = ordered_tiles.len();
-    let bridge_type = BridgeType::Wooden;
     let tint = if valid {
         Color::srgba(1.0, 1.0, 1.0, 0.58)
     } else {
@@ -971,6 +973,7 @@ pub(crate) fn spawn_bridge_span_preview(
                 axis_y,
                 surface_z,
                 ids.pillar[axis],
+                bridge_type,
                 piece,
                 tint,
             );

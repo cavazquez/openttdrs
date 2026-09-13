@@ -45,6 +45,7 @@ pub(crate) fn spawn_preview_plan(
     action: crate::ui::toolbar::BuildMenuAction,
     anim_cursor_frame: u8,
     preview_newgrf: &mut PreviewNewGrfResources<'_>,
+    bridge_type: openttdrs_core::BridgeType,
 ) {
     match plan {
         PreviewPlan::None | PreviewPlan::HandledByDedicatedSystem => {}
@@ -138,6 +139,7 @@ pub(crate) fn spawn_preview_plan(
                     foundation_newgrf: &sim.state.runtime.foundation_newgrf_sprites,
                     action5_sprites: &mut preview_newgrf.action5_sprites,
                     images: &mut preview_newgrf.images,
+                    bridge_type,
                     stations: &sim.state.stations,
                     road_stop_catalog: &sim.state.road_stop_spec_catalog,
                     bridge_spec_catalog: &sim.state.bridge_spec_catalog,

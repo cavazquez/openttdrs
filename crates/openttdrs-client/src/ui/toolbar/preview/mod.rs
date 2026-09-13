@@ -38,7 +38,8 @@ use crate::ui::hud::HoveredTileCoord;
 
 use super::build_input::rail_lane::rail_lane_bits_for_action;
 use super::{
-    BuildMenuAction, DragBuildState, OrderEditState, StationBuildState, ToolbarState, UiToolState,
+    BridgeBuildState, BuildMenuAction, DragBuildState, OrderEditState, StationBuildState,
+    ToolbarState, UiToolState,
 };
 
 use dispatch::build_preview_plan;
@@ -50,6 +51,17 @@ pub(crate) use rail_signal::{
 };
 use spawn::spawn_preview_plan;
 use validation::preview_build_command_valid;
+
+fn bridge_type_for_preview(
+    action: BuildMenuAction,
+    bridge_state: &BridgeBuildState,
+) -> openttdrs_core::BridgeType {
+    match action {
+        BuildMenuAction::RoadBridge => bridge_state.last_road_type,
+        BuildMenuAction::RailBridge => bridge_state.last_rail_type,
+        _ => openttdrs_core::BridgeType::Wooden,
+    }
+}
 
 #[derive(Component)]
 pub(crate) struct BuildGhostPreview;
@@ -95,6 +107,7 @@ pub(crate) fn update_build_ghost_preview(
     sim: Res<SimWorld>,
     tool_state: Res<UiToolState>,
     station_state: Res<StationBuildState>,
+    bridge_state: Res<BridgeBuildState>,
     drag_state: Res<DragBuildState>,
     order_state: Res<OrderEditState>,
     pick_state: Res<State<OrderPickState>>,
@@ -261,6 +274,8 @@ pub(crate) fn update_build_ghost_preview(
 
     let plan = build_preview_plan(&ctx, &sim.state);
 
+    let bridge_type = bridge_type_for_preview(action, &bridge_state);
+
     // Spawn entidades según el plan
     spawn_preview_plan(
         &mut commands,
@@ -273,6 +288,7 @@ pub(crate) fn update_build_ghost_preview(
         action,
         anim_cursor_frame,
         &mut preview_newgrf,
+        bridge_type,
     );
 }
 
@@ -280,14 +296,16 @@ pub(crate) fn update_build_ghost_preview(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::ui::toolbar::{BuildMenuAction, DragBuildState, StationBuildState, UiToolState};
+    use crate::ui::toolbar::{
+        BridgeBuildState, BuildMenuAction, DragBuildState, StationBuildState, UiToolState,
+    };
     use bevy::ecs::system::RunSystemOnce;
     use bevy::ecs::world::World;
     use bevy::input::ButtonInput;
     use bevy::prelude::{MouseButton, default};
     use openttdrs_core::Command;
     use openttdrs_core::prelude::*;
-    use openttdrs_core::{Industry, IndustryKind, IndustrySpec, industry_template};
+    use openttdrs_core::{BridgeType, Industry, IndustryKind, IndustrySpec, industry_template};
 
     use super::industry::industry_spec_for_action;
     use super::station_coverage::station_preview_has_coverage;
@@ -324,6 +342,27 @@ mod tests {
         run_rotate(&mut world, Some(BuildMenuAction::Rail), false);
         run_rotate(&mut world, None, false);
         run_rotate(&mut world, Some(BuildMenuAction::Station), true);
+    }
+
+    #[test]
+    fn bridge_preview_uses_the_last_type_for_each_transport() {
+        let state = BridgeBuildState {
+            last_road_type: BridgeType::CantileverRed,
+            last_rail_type: BridgeType::SuspensionSteel,
+            ..default()
+        };
+        assert_eq!(
+            bridge_type_for_preview(BuildMenuAction::RoadBridge, &state),
+            BridgeType::CantileverRed
+        );
+        assert_eq!(
+            bridge_type_for_preview(BuildMenuAction::RailBridge, &state),
+            BridgeType::SuspensionSteel
+        );
+        assert_eq!(
+            bridge_type_for_preview(BuildMenuAction::Road, &state),
+            BridgeType::Wooden
+        );
     }
 
     #[test]

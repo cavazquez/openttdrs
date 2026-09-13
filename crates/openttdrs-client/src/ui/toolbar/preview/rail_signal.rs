@@ -250,8 +250,8 @@ pub(crate) fn rail_signal_flash_position(
 pub(crate) fn update_rail_signal_ghost_preview(
     mut commands: Commands,
     time: Res<Time>,
-    asset_server: Res<AssetServer>,
-    atlas: Option<Res<TileAtlas>>,
+    asset_server: &AssetServer,
+    atlas: Option<&TileAtlas>,
     mut state: ResMut<RailSignalGhostState>,
     map: &Map,
     coord: TileCoord,
@@ -265,8 +265,8 @@ pub(crate) fn update_rail_signal_ghost_preview(
 ) {
     let Some(plan) = build_rail_signal_ghost_plan(
         map,
-        atlas.as_deref(),
-        &asset_server,
+        atlas,
+        asset_server,
         coord,
         orientation,
         fract_x,

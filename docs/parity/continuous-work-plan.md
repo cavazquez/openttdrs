@@ -831,6 +831,16 @@ variantes Action5 `WithTrack`/`NoTrack`, sus anclas y tamaños NFO, y agrega
 la UI, por lo que #326/#565 continúan abiertas junto con clipping, pivotes y
 aceptación raster.
 
+Corrección #326-ROAD-DEPOT-PREVIEW-ROTSG-DEPOT (2026-09-13): la preview de
+depósito ya resuelve también las capas específicas `ROTSG_DEPOT` de un
+roadtype NewGRF, usando el contexto GUI de `INVALID_TILE`, parámetros del GRF,
+metadatos NFO de cada vista y la caché de texturas compartida con el mapa.
+Cada una de las seis posiciones BUILD puede caer de forma atómica al fallback
+Action5/OpenGFX si el grupo no entrega una vista; no se mezclan anclas ni
+dimensiones entre capas. La cobertura de selección/atlas/anchos queda
+probada; #326/#565 siguen abiertas por callbacks variables, clipping, pivotes
+y aceptación raster.
+
 Actualización #326-ROAD-CATENARY-GLOBAL (2026-09-09): las calles normales
 publican ya los cuatro `AddSortableSpriteToDraw` de cada
 `DrawRoadTypeCatenary` como parents globales: tres recortes traseros con sus

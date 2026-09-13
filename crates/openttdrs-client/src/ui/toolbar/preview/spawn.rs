@@ -11,6 +11,7 @@ use crate::state::SimWorld;
 use crate::ui::toolbar::StationBuildState;
 
 use super::BuildGhostPreview;
+use super::PreviewNewGrfResources;
 use super::bridge::spawn_bridge_span_preview;
 use super::dock::spawn_dock_preview;
 use super::industry::spawn_industry_template_preview;
@@ -43,6 +44,7 @@ pub(crate) fn spawn_preview_plan(
     station_state: &StationBuildState,
     action: crate::ui::toolbar::BuildMenuAction,
     anim_cursor_frame: u8,
+    preview_newgrf: &mut PreviewNewGrfResources<'_>,
 ) {
     match plan {
         PreviewPlan::None | PreviewPlan::HandledByDedicatedSystem => {}
@@ -131,6 +133,15 @@ pub(crate) fn spawn_preview_plan(
             );
         }
         PreviewPlan::TileByTile { tiles } => {
+            let custom_depot_def = (action == crate::ui::toolbar::BuildMenuAction::RoadDepot)
+                .then(|| {
+                    openttdrs_core::road_type_def(
+                        &sim.state.road_type_catalog,
+                        sim.state.current_road_type,
+                    )
+                })
+                .flatten()
+                .filter(|def| def.has_newgrf_specific_group(8));
             for tile_plan in tiles {
                 spawn_tile_preview(
                     commands,
@@ -141,6 +152,9 @@ pub(crate) fn spawn_preview_plan(
                     &sim.state.map,
                     action,
                     anim_cursor_frame,
+                    custom_depot_def,
+                    &sim.state.newgrf_stack,
+                    preview_newgrf,
                 );
             }
         }
@@ -375,6 +389,9 @@ fn spawn_tile_preview(
     map: &Map,
     action: crate::ui::toolbar::BuildMenuAction,
     anim_cursor_frame: u8,
+    custom_depot_def: Option<&openttdrs_core::RoadTypeDef>,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    preview_newgrf: &mut PreviewNewGrfResources<'_>,
 ) {
     let coord = tile_plan.coord;
     let (px, py) = (coord.x, coord.y);
@@ -452,6 +469,10 @@ fn spawn_tile_preview(
                     company,
                     action5_replacement: *action5_replacement,
                     show_tram_overlay: *show_tram_overlay,
+                    custom_depot_def,
+                    newgrf_stack,
+                    road_sprites: &mut preview_newgrf.road_sprites,
+                    images: &mut preview_newgrf.images,
                 },
             );
         }

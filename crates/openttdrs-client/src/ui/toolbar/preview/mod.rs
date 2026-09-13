@@ -64,6 +64,23 @@ pub(crate) struct RailSignalGhostPreviewParams<'w, 's> {
     pub toolbar: Res<'w, ToolbarState>,
 }
 
+/// Recursos NewGRF que sólo necesita el preview de depósitos custom.
+/// Agruparlos evita ampliar todavía más la firma del sistema ECS y permite
+/// reutilizar la misma caché que usa el render del mapa.
+#[derive(SystemParam)]
+pub(crate) struct PreviewNewGrfResources<'w> {
+    pub images: ResMut<'w, Assets<Image>>,
+    pub road_sprites: ResMut<'w, crate::render::NewGrfRoadSpriteCache>,
+}
+
+/// Assets opcionales que consume cada variante del preview.
+#[derive(SystemParam)]
+pub(crate) struct PreviewAssetResources<'w> {
+    pub asset_server: Res<'w, AssetServer>,
+    pub atlas: Option<Res<'w, TileAtlas>>,
+    pub company: Option<Res<'w, CompanyColoredSprites>>,
+}
+
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn update_build_ghost_preview(
     mut commands: Commands,
@@ -71,9 +88,8 @@ pub(crate) fn update_build_ghost_preview(
     cam_q: Query<(&Camera, &GlobalTransform), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     existing: Query<Entity, (With<BuildGhostPreview>, Without<RailSignalGhost>)>,
     mut rail_ghost: RailSignalGhostPreviewParams,
-    asset_server: Res<AssetServer>,
-    atlas: Option<Res<TileAtlas>>,
-    company: Option<Res<CompanyColoredSprites>>,
+    asset_resources: PreviewAssetResources,
+    mut preview_newgrf: PreviewNewGrfResources,
     sim: Res<SimWorld>,
     tool_state: Res<UiToolState>,
     station_state: Res<StationBuildState>,
@@ -101,13 +117,18 @@ pub(crate) fn update_build_ghost_preview(
     let orders_preview =
         order_pick_active(&pick_state) || tool_state.active_tool == Some(BuildMenuAction::Orders);
     if orders_preview && order_state.vehicle_id().is_some() {
-        spawn_order_route_preview(&mut commands, &asset_server, &sim.state.map, &order_state);
+        spawn_order_route_preview(
+            &mut commands,
+            &asset_resources.asset_server,
+            &sim.state.map,
+            &order_state,
+        );
         if order_pick_active(&pick_state)
             && let Some(hover) = hovered.pos
         {
             spawn_order_pick_target_preview(
                 &mut commands,
-                &asset_server,
+                &asset_resources.asset_server,
                 &sim,
                 &order_state,
                 hover,
@@ -202,8 +223,8 @@ pub(crate) fn update_build_ghost_preview(
                 update_rail_signal_ghost_preview(
                     commands,
                     time,
-                    asset_server,
-                    atlas,
+                    &asset_resources.asset_server,
+                    asset_resources.atlas.as_deref(),
                     rail_ghost.state,
                     &sim.state.map,
                     coord,
@@ -242,13 +263,14 @@ pub(crate) fn update_build_ghost_preview(
     spawn_preview_plan(
         &mut commands,
         &plan,
-        &asset_server,
-        atlas.as_deref(),
-        company.as_deref(),
+        &asset_resources.asset_server,
+        asset_resources.atlas.as_deref(),
+        asset_resources.company.as_deref(),
         &sim,
         &station_state,
         action,
         anim_cursor_frame,
+        &mut preview_newgrf,
     );
 }
 

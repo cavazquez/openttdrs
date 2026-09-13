@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::action2::{eval_action2_random, eval_action2_var, resolve_callback_chain};
-use super::pixel_codec::{bake_sprite_company_palette, bake_sprite_palette_map};
+use super::pixel_codec::{bake_sprite_company_palette, bake_sprite_crash, bake_sprite_palette_map};
 
 /// Rango `PALETTE_RECOLOUR_START..=+15` que puede hornearse sin conservar un
 /// identificador de paleta en el cliente. Otras paletas directas necesitan
@@ -13,6 +13,8 @@ use super::pixel_codec::{bake_sprite_company_palette, bake_sprite_palette_map};
 /// transporta.
 const PALETTE_RECOLOUR_START: u16 = 775;
 const PALETTE_RECOLOUR_END: u16 = PALETTE_RECOLOUR_START + 15;
+/// Paleta nativa de sprites en estado de choque (`PALETTE_CRASH`).
+const PALETTE_CRASH: u16 = 804;
 
 /// Sprite RGBA decodificado (índice 0 → alpha 0).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -509,6 +511,13 @@ fn resolve_layout_sprite_asset(
             sprite.rgba = bake_sprite_company_palette(&sprite, colour);
             // La paleta explícita ya quedó horneada. Evitar que el cliente
             // vuelva a tratarla como máscara del color del dueño.
+            sprite.mask.clear();
+            return Some((Some(sprite), None));
+        }
+        if direct_palette == PALETTE_CRASH {
+            sprite.rgba = bake_sprite_crash(&sprite);
+            // El remapeo ya quedó materializado; no debe reaplicarse sobre la
+            // máscara de paleta al subir la textura al cliente.
             sprite.mask.clear();
             return Some((Some(sprite), None));
         }

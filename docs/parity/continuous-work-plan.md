@@ -6676,3 +6676,13 @@ fundaciones y catenaria. El fallback vanilla no reaparece cuando un layout
 completo queda enteramente oculto. La composición destino de `transparent` y
 las paletas especiales siguen pendientes, por lo que #326/#329 continúan
 abiertas.
+
+Corrección #326/#329-TILELAYOUT-CRASH-PALETTE (2026-09-13): las entradas
+Action1 de `TileLayout` que seleccionan la paleta nativa `PALETTE_CRASH` (804)
+ya no se descartan automáticamente. El core reutiliza el mismo horneado
+`MakeDark` que ya cubre el renderer de vehículos y limpia la máscara después
+de materializarlo, evitando que el cliente lo recoloree una segunda vez. Las
+paletas 2CC, transparencia de destino y demás tablas especiales continúan
+conservando fallback atómico hasta tener su compositor/tabla correspondiente;
+la regresión `tile_layout_honours_crash_palette_on_action1_sprite` fija el
+alcance de esta subetapa y #326/#329 siguen abiertas.

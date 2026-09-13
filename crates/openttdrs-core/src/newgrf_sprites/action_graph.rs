@@ -1532,6 +1532,54 @@ mod tests {
     }
 
     #[test]
+    fn tile_layout_honours_crash_palette_on_action1_sprite() {
+        let sprite = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![100, 150, 200, 255],
+            mask: Vec::new(),
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![sprite.clone()]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 7,
+                set_id: 9,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    direct_palette: 804, // PALETTE_CRASH
+                    ..TileLayoutSpriteRef::default()
+                },
+                sequence: Vec::new(),
+            },
+        );
+
+        let mut ctx = Action2EvalCtx::default();
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("direct crash palette TileLayout");
+        let ground = layout.ground.expect("ground");
+        assert!(layout.complete);
+        assert_eq!(
+            ground.action1_sprite().map(|decoded| decoded.rgba.clone()),
+            Some(crate::newgrf_sprites::bake_sprite_crash(&sprite))
+        );
+        assert!(
+            ground
+                .action1_sprite()
+                .is_some_and(|decoded| decoded.mask.is_empty()),
+            "el remapeo crash explícito debe quedar horneado"
+        );
+    }
+
+    #[test]
     fn tile_layout_honours_static_custom_action1_palette() {
         let sprite = DecodedSprite {
             width: 1,

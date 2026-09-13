@@ -320,6 +320,38 @@ fn direct_tile_layout_ground_sprite_is_supported(sprite_id: u16) -> bool {
     direct_tile_layout_ground_geometry(sprite_id).is_some()
 }
 
+/// Geometría NFO de un sprite vanilla que puede aparecer en una secuencia
+/// `BUILD`. Además del terreno, las tablas de estación rail y airport ya
+/// conservan el tamaño y el ancla de cada sprite; no es correcto tratarlos
+/// como un rombo plano sólo porque vienen de un `TileLayout` directo.
+fn direct_tile_layout_sequence_geometry(sprite_id: u16) -> Option<DirectTileLayoutGroundGeometry> {
+    direct_tile_layout_ground_geometry(sprite_id)
+        .or_else(|| {
+            crate::sprites::rail_station_sprite_meta(u32::from(sprite_id)).map(
+                |(width, height, x_offs, y_offs)| DirectTileLayoutGroundGeometry {
+                    width,
+                    height,
+                    x_offs,
+                    y_offs,
+                },
+            )
+        })
+        .or_else(|| {
+            crate::sprites::airport_station_sprite_for_id(u32::from(sprite_id)).map(|sprite| {
+                DirectTileLayoutGroundGeometry {
+                    width: sprite.w,
+                    height: sprite.h,
+                    x_offs: sprite.x_offs,
+                    y_offs: sprite.y_offs,
+                }
+            })
+        })
+}
+
+fn direct_tile_layout_sequence_sprite_is_supported(sprite_id: u16) -> bool {
+    direct_tile_layout_sequence_geometry(sprite_id).is_some()
+}
+
 /// Base-sprite data that a TileLayout renderer needs in addition to the atlas
 /// rect. `AtlasSprite` deliberately has no NFO offset, so resolving only
 /// audited IDs prevents a direct reference from silently using a wrong anchor.
@@ -344,7 +376,7 @@ pub(crate) fn tile_layout_is_renderable(layout: &ResolvedTileLayout) -> bool {
                 && !entry.base_sprite_id().is_some_and(|id| {
                     entry.sprite_modifiers == 0
                         && entry.direct_palette == 0
-                        && direct_tile_layout_ground_sprite_is_supported(id)
+                        && direct_tile_layout_sequence_sprite_is_supported(id)
                 })
         })
     {
@@ -422,6 +454,38 @@ pub(crate) fn direct_tile_layout_ground(
     })
 }
 
+/// Resolves a direct base reference used by a `BUILD` sequence. Terrain keeps
+/// using the ground resolver; station sprites then use their own atlas maps
+/// and exact NFO dimensions/anchors. A missing atlas entry remains a caller
+/// fallback instead of borrowing a visually similar sprite.
+#[must_use]
+pub(crate) fn direct_tile_layout_sequence(
+    layer: &ResolvedTileLayoutSprite,
+    assets: &WorldAssets,
+) -> Option<DirectTileLayoutGround> {
+    if let Some(ground) = direct_tile_layout_ground(layer, assets) {
+        return Some(ground);
+    }
+    if layer.action1_sprite().is_some() || layer.sprite_modifiers != 0 || layer.direct_palette != 0
+    {
+        return None;
+    }
+    let sprite_id = layer.base_sprite_id()?;
+    let geometry = direct_tile_layout_sequence_geometry(sprite_id)?;
+    let atlas = assets
+        .rail
+        .get(&u32::from(sprite_id))
+        .cloned()
+        .or_else(|| assets.airport_station_sprite(u32::from(sprite_id)).cloned())?;
+    Some(DirectTileLayoutGround {
+        atlas,
+        width: geometry.width,
+        height: geometry.height,
+        x_offs: geometry.x_offs,
+        y_offs: geometry.y_offs,
+    })
+}
+
 /// Listas de vars Action2 que entran en el fingerprint por dominio.
 pub(crate) mod vars {
     pub const ROAD: &[u8] = &[0x40, 0x42, 0x45, 0x5F];
@@ -480,7 +544,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_base_ground_is_only_accepted_for_audited_flat_ground_ids() {
+    fn direct_base_ground_and_build_are_limited_to_audited_ids() {
         let direct_ground = ResolvedTileLayoutSprite {
             sprite: None,
             base_sprite: Some(3981),
@@ -529,6 +593,39 @@ mod tests {
         assert!(tile_layout_is_renderable(&direct_build));
         direct_build.sequence[0].base_sprite = Some(4080);
         assert!(!tile_layout_is_renderable(&direct_build));
+    }
+
+    #[test]
+    fn direct_base_build_accepts_station_namespaces_with_nfo_geometry() {
+        let direct_ground = ResolvedTileLayoutSprite {
+            sprite: None,
+            base_sprite: Some(3981),
+            sprite_modifiers: 0,
+            direct_palette: 0,
+            origin: [0, 0, 0],
+            extent: [0, 0, 0],
+        };
+        let mut layout = ResolvedTileLayout {
+            ground: Some(direct_ground),
+            sequence: vec![action1_sprite()],
+            complete: true,
+        };
+
+        for sprite_id in [1069, 1083, 1151, 1233, 4974, 2633, 2651, 2668, 4982, 5966] {
+            layout.sequence[0].sprite = None;
+            layout.sequence[0].base_sprite = Some(sprite_id);
+            assert!(
+                tile_layout_is_renderable(&layout),
+                "sprite de estación vanilla {sprite_id} debe conservarse como BUILD"
+            );
+        }
+        for sprite_id in [2692, 4983, 5969] {
+            layout.sequence[0].base_sprite = Some(sprite_id);
+            assert!(
+                !tile_layout_is_renderable(&layout),
+                "sprite fuera del catálogo de estación {sprite_id} debe usar fallback"
+            );
+        }
     }
 
     #[test]
@@ -581,6 +678,33 @@ mod tests {
         assert_eq!(direct_tile_layout_ground_geometry(4080), None);
         assert_eq!(direct_tile_layout_ground_geometry(4492), None);
         assert_eq!(direct_tile_layout_ground_geometry(4569), None);
+    }
+
+    #[test]
+    fn direct_base_build_uses_station_nfo_geometry() {
+        assert_eq!(
+            direct_tile_layout_sequence_geometry(1069),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 42.0,
+                height: 26.0,
+                x_offs: -9.0,
+                y_offs: -6.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_sequence_geometry(2651),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 42.0,
+                height: 79.0,
+                x_offs: -19.0,
+                y_offs: -60.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_sequence_geometry(3981),
+            direct_tile_layout_ground_geometry(3981)
+        );
+        assert_eq!(direct_tile_layout_sequence_geometry(2692), None);
     }
 
     #[test]

@@ -21,8 +21,9 @@ use crate::iso::{
 };
 use crate::render::atlas::AtlasSprite;
 use crate::render::newgrf_cache::{
-    direct_tile_layout_ground, runtime_fingerprint, tile_layout_entry_is_hidden,
-    tile_layout_is_renderable, tile_layout_sprite_color_with_palette, vars,
+    direct_tile_layout_ground, direct_tile_layout_sequence, runtime_fingerprint,
+    tile_layout_entry_is_hidden, tile_layout_is_renderable, tile_layout_sprite_color_with_palette,
+    vars,
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
@@ -1290,7 +1291,7 @@ fn spawn_newgrf_house_layout_sequence(
                 f32::from(decoded.x_offs),
                 f32::from(decoded.y_offs),
             )
-        } else if let Some(base) = direct_tile_layout_ground(layer, assets) {
+        } else if let Some(base) = direct_tile_layout_sequence(layer, assets) {
             let color = tile_layout_sprite_color_with_palette(
                 tint,
                 layer.sprite_modifiers,
@@ -2173,7 +2174,7 @@ fn spawn_newgrf_industry_layout_sequence(
                 f32::from(decoded.x_offs),
                 f32::from(decoded.y_offs),
             )
-        } else if let Some(base) = direct_tile_layout_ground(layer, assets) {
+        } else if let Some(base) = direct_tile_layout_sequence(layer, assets) {
             let color = tile_layout_sprite_color_with_palette(
                 tint,
                 layer.sprite_modifiers,
@@ -2584,7 +2585,7 @@ fn spawn_newgrf_object_layout_sequence(
                 f32::from(decoded.x_offs),
                 f32::from(decoded.y_offs),
             )
-        } else if let Some(base) = direct_tile_layout_ground(layer, assets) {
+        } else if let Some(base) = direct_tile_layout_sequence(layer, assets) {
             let color = tile_layout_sprite_color_with_palette(
                 tint,
                 layer.sprite_modifiers,

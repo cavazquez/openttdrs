@@ -6827,3 +6827,15 @@ de imponer el 64×31 plano. Los modifiers y paletas directas siguen forzando
 fallback atómico. Las regresiones cubren todos los IDs admitidos, rangos
 fuera del contrato y los anclajes normales/parciales; #326/#329 continúan
 abiertas por los layouts y callbacks restantes.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-STATION-BUILD (2026-09-13): las
+secuencias `BUILD` con referencias directas al banco vanilla ya no se
+descartan cuando usan piezas de estación rail/mono/maglev (`1069..1086`,
+`1151..1168`, `1233..1250`, `4974..4981`) o airport (`2095`, `2601`,
+`2633..2691`, `3981`, `4982`, `5966..5968`). El cliente reutiliza el atlas
+específico de cada namespace y
+los metadatos NFO reales de cada pieza (incluidos edificios altos, techos,
+radar y helipads), manteniendo `TILE_SEQ` como origen de la caja y el orden
+parent/child existente. Los IDs fuera del catálogo, modifiers y paletas
+explícitas conservan fallback atómico; #326/#329 continúan abiertas por los
+namespaces de objetos/vehículos, callbacks y layouts aún no auditados.

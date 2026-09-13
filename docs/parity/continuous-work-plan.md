@@ -7182,6 +7182,13 @@ ausente conserva el fallback vanilla OpenGFX y todos entran en la profundidad
 del pase `DrawGroundSprite`. Features Action1/3, callbacks, river edges y
 aceptación raster siguen fuera de esta unidad; #326 continúa abierta.
 
+Corrección #326-SHIP-DEPOT-PREVIEW-RIVER-ACTION5 (2026-09-13): las pendientes
+fluviales diagonales del ghost consumen ahora los slots 0..3 del bloque Action5
+`Canals`, con sus anclas/dimensiones reemplazadas y fallback individual a
+`water_river_slope_*`; el agua plana continúa usando `SPR_FLAT_WATER_TILE`.
+Features Action1/3, callbacks, river edges y aceptación raster siguen fuera de
+esta unidad; #326 continúa abierta.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

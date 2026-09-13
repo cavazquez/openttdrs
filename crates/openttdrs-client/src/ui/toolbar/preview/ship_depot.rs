@@ -64,24 +64,49 @@ pub(crate) fn spawn_ship_depot_preview(
             .then(|| river_slope_sprite_index(tileh))
             .flatten();
         let (water, water_position) = if let Some(index) = river_slope {
-            let Some(&(width, height, xrel, yrel)) = WATER_RIVER_SLOPE_SPRITE_META.get(index)
-            else {
-                continue;
-            };
-            let water = world_assets.map_or_else(
-                || Sprite {
-                    image: asset_server.load::<Image>(RIVER_SLOPE_PATHS[index]),
-                    color: tint,
-                    ..default()
-                },
-                |assets| assets.river_slopes[index].sprite_colored(tint),
-            );
+            let action5 = canal_action5
+                .get(index)
+                .and_then(Option::as_ref)
+                .and_then(|decoded| {
+                    let sprite = action5_sprites.sprite_colored(
+                        ACTION5_TYPE_CANALS,
+                        index,
+                        canal_action5,
+                        tint,
+                        images,
+                    )?;
+                    Some((
+                        sprite,
+                        f32::from(decoded.width),
+                        f32::from(decoded.height),
+                        f32::from(decoded.x_offs),
+                        f32::from(decoded.y_offs),
+                    ))
+                });
+            let (water, width, height, xrel, yrel) = action5.unwrap_or_else(|| {
+                let (width, height, xrel, yrel) = WATER_RIVER_SLOPE_SPRITE_META[index];
+                let water = world_assets.map_or_else(
+                    || Sprite {
+                        image: asset_server.load::<Image>(RIVER_SLOPE_PATHS[index]),
+                        color: tint,
+                        ..default()
+                    },
+                    |assets| assets.river_slopes[index].sprite_colored(tint),
+                );
+                (
+                    water,
+                    f32::from(width),
+                    f32::from(height),
+                    f32::from(xrel),
+                    f32::from(yrel),
+                )
+            });
             let mut position = overlay_pos(
                 iso(coord.x, coord.y),
-                f32::from(xrel),
-                f32::from(yrel),
-                f32::from(width),
-                f32::from(height),
+                xrel,
+                yrel,
+                width,
+                height,
                 base_z,
                 PREVIEW_WATER_LAYER,
                 coord.x,

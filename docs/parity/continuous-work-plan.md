@@ -6796,3 +6796,13 @@ por píxel que usa para BUILD, sin aplicar el alpha de categoría dos veces. Un
 ground sin `recolour` sigue ignorando la paleta 802, y BUILD sin su modifier
 `transparent` conserva fallback según el contrato nativo. Las regresiones
 cubren resolución core y textura Bevy; #326/#329 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-SPRITE-OFFSET (2026-09-13): las
+referencias directas del baseset que declaran `TLF_SPRITE` aplican ahora el
+offset firmado del registro antes de decidir si el sprite pertenece a la
+whitelist materializable. Esto permite que una entrada seleccione, por
+ejemplo, `SPR_FLAT_GRASS_TILE` desde el id inmediatamente anterior, igual que
+`SpriteLayoutProcessor::ProcessRegisters` de OpenTTD. Valores fuera de
+`u16`, `var10`, paletas custom o resultados no auditados conservan fallback
+atómico; la regresión cubre selección válida y desborde sin truncarlo. #326/#329
+continúan abiertas.

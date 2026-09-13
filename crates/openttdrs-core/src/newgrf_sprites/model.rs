@@ -618,22 +618,40 @@ fn resolve_layout_sprite_asset(
         return None;
     }
 
-    // Sprite zero means no ground/child in the original TTD layout.
-    if reference.direct_sprite == 0 {
+    let direct_sprite = if reference.flags & 0x02 != 0 {
+        let offset = signed_register(ctx, reference.registers.sprite);
+        let Some(sprite) = i32::from(reference.direct_sprite)
+            .checked_add(offset)
+            .and_then(|value| u16::try_from(value).ok())
+        else {
+            // OpenTTD turns an out-of-range register-selected baseset sprite
+            // into its query/fallback sprite. Do not truncate it into an
+            // unrelated atlas entry.
+            *complete = false;
+            return None;
+        };
+        sprite
+    } else {
+        reference.direct_sprite
+    };
+    // Sprite zero means no ground/child after applying TLF_SPRITE. A direct
+    // reference may legitimately use a positive register offset to select a
+    // real baseset sprite, so the zero check belongs after that operation.
+    if direct_sprite == 0 {
         return None;
     }
     // A direct baseset sprite can be materialized only while its identity stays
-    // constant and uses PAL_NONE. Keep the atomic fallback for register-selected
-    // or recoloured base sprites.
+    // constant and uses PAL_NONE. Keep the atomic fallback for var10-selected,
+    // custom-palette or otherwise recoloured base sprites.
     let direct_palette = resolve_layout_direct_palette(reference, ctx, complete)?;
     if direct_palette != 0
-        || reference.flags & (0x02 | 0x40 | 0x08) != 0
+        || reference.flags & (0x40 | 0x08) != 0
         || reference.palette_action1_set.is_some()
     {
         *complete = false;
         return None;
     }
-    Some((None, Some(reference.direct_sprite), 0))
+    Some((None, Some(direct_sprite), 0))
 }
 
 #[must_use]

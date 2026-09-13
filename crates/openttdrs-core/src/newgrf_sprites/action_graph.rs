@@ -1469,6 +1469,52 @@ mod tests {
     }
 
     #[test]
+    fn tile_layout_applies_sprite_register_to_direct_base_sprite() {
+        let mut graphics = TrainSpriteGraphics {
+            assigns: vec![TrainSpriteAssign {
+                local_id: 7,
+                set_id: 9,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    // 3980 is the preceding sprite of the audited flat grass
+                    // tile; TLF_SPRITE must select 3981 through the register.
+                    direct_sprite: 3980,
+                    flags: 0x02,
+                    registers: TileLayoutRegisterRefs {
+                        sprite: Some(4),
+                        ..TileLayoutRegisterRefs::default()
+                    },
+                    ..TileLayoutSpriteRef::default()
+                },
+                sequence: Vec::new(),
+            },
+        );
+
+        let mut ctx = Action2EvalCtx::default();
+        ctx.temp_registers.insert(4, 1);
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("register-selected direct base TileLayout");
+        assert!(layout.complete);
+        assert_eq!(layout.ground.expect("ground").base_sprite_id(), Some(3981));
+
+        let mut out_of_range = graphics.tile_layouts.get(&9).cloned().unwrap();
+        out_of_range.ground.direct_sprite = 0;
+        ctx.temp_registers.insert(4, u32::from(u16::MAX));
+        graphics.tile_layouts.insert(9, out_of_range);
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("out-of-range direct base TileLayout");
+        assert!(!layout.complete);
+        assert!(layout.ground.is_none());
+    }
+
+    #[test]
     fn tile_layout_honours_explicit_company_palette_on_action1_sprite() {
         let sprite = DecodedSprite {
             width: 1,
@@ -1523,6 +1569,8 @@ mod tests {
             .cloned()
             .expect("source layout");
         unsupported.ground.direct_palette = crate::newgrf_sprites::TWOCC_PALETTE_BASE;
+        unsupported.ground.sprite_modifiers =
+            crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT;
         graphics.tile_layouts.insert(9, unsupported);
         let layout = graphics
             .tile_layout_for_local_id_ctx(7, 0, &mut ctx)

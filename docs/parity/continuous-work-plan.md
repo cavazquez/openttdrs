@@ -7189,6 +7189,14 @@ fluviales diagonales del ghost consumen ahora los slots 0..3 del bloque Action5
 Features Action1/3, callbacks, river edges y aceptación raster siguen fuera de
 esta unidad; #326 continúa abierta.
 
+Corrección #326-SHIP-DEPOT-PREVIEW-CANAL-FEATURES (2026-09-13): el ghost
+naval resuelve ahora las vistas Action1/3 de `CF_RIVER_SLOPE` y `CF_DIKES` con
+el contexto real de la tesela —random, conectividad, clima y línea de nieve—,
+conservando el ancla de cada `DecodedSprite` y el fallback individual a
+Action5/OpenGFX`; también conserva el callback de desplazamiento de sprite de
+canales. Callbacks de aceptación, river edges y captura raster siguen fuera de
+esta unidad; #326 continúa abierta.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

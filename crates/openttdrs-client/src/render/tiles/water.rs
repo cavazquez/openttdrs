@@ -241,6 +241,30 @@ fn canal_feature_sprite_with_context_and_slot(
     ))
 }
 
+/// Resuelve una vista de feature de canal para previews que no recorren el
+/// spawner completo del mapa. Mantiene el mismo contexto de Action2 —clima,
+/// altura, random y conectividad— que `DrawWaterClassGround`/`DrawWaterEdges`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn canal_feature_sprite_for_preview(
+    map: &Map,
+    ctx: &TileRenderContext,
+    feature_id: u8,
+    slot: usize,
+    canal_features: &[openttdrs_core::CanalFeatureDef],
+    action5_sprites: &mut crate::render::NewGrfAction5SpriteCache,
+    images: &mut Assets<Image>,
+) -> Option<(Sprite, DecodedSprite, usize)> {
+    let mut action2 = canal_action2_context_for_tile(map, ctx);
+    canal_feature_sprite_with_context_and_slot(
+        canal_features,
+        feature_id,
+        slot,
+        &mut Some(action5_sprites),
+        &mut Some(images),
+        &mut action2,
+    )
+}
+
 /// Resuelve la vista `CF_BUOY` que `DrawTile_Station` suma a
 /// `SPR_IMG_BUOY` mediante `GetCanalSprite`.
 ///

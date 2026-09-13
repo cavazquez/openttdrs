@@ -8,9 +8,11 @@ use crate::iso::{
 };
 use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
 use crate::render::{
-    CompanyColoredSprites, NewGrfAction5SpriteCache, ViewportSortableParent, WorldAssets,
-    canal_dike_slots, river_slope_sprite_index, sprite_from_atlas_or_company_colour,
-    sprite_from_company_or_asset, viewport_insertion_key, viewport_source_depth,
+    CompanyColoredSprites, NewGrfAction5SpriteCache, RenderGrid, TileRenderContext,
+    TileViewportBounds, ViewportSortableParent, WorldAssets, canal_dike_slots,
+    canal_feature_sprite_for_preview, river_slope_sprite_index,
+    sprite_from_atlas_or_company_colour, sprite_from_company_or_asset, viewport_insertion_key,
+    viewport_source_depth,
 };
 use crate::sprites::{
     SHIP_DEPOT_PATHS, WATER_CANAL_DIKE_SPRITE_META, WATER_RIVER_SLOPE_SPRITE_META,
@@ -45,6 +47,9 @@ pub(crate) fn spawn_ship_depot_preview(
     origin: TileCoord,
     dir: u8,
     valid: bool,
+    climate: openttdrs_core::Climate,
+    snow_line_height: u8,
+    canal_features: &[openttdrs_core::CanalFeatureDef],
     canal_action5: &[Option<openttdrs_core::DecodedSprite>],
     action5_sprites: &mut NewGrfAction5SpriteCache,
     images: &mut Assets<Image>,
@@ -60,9 +65,27 @@ pub(crate) fn spawn_ship_depot_preview(
             continue;
         };
         let (tileh, base_z) = tile_slope_and_min_z(map, coord.x as u32, coord.y as u32);
+        let tile_context = preview_tile_context(map, coord, climate, snow_line_height);
         let river_slope = (map.get(coord).and_then(water_class) == Some(WaterClass::River))
             .then(|| river_slope_sprite_index(tileh))
             .flatten();
+        let river_feature = river_slope.and_then(|index| {
+            let flat_offset = canal_features
+                .get(usize::from(openttdrs_core::CF_RIVER_SLOPE))
+                .filter(|feature| feature.id == openttdrs_core::CF_RIVER_SLOPE)
+                .map_or(0, |feature| {
+                    usize::from(feature.flags & openttdrs_core::CFF_HAS_FLAT_SPRITE != 0)
+                });
+            canal_feature_sprite_for_preview(
+                map,
+                &tile_context,
+                openttdrs_core::CF_RIVER_SLOPE,
+                flat_offset + index,
+                canal_features,
+                action5_sprites,
+                images,
+            )
+        });
         let (water, water_position) = if let Some(index) = river_slope {
             let action5 = canal_action5
                 .get(index)
@@ -83,24 +106,36 @@ pub(crate) fn spawn_ship_depot_preview(
                         f32::from(decoded.y_offs),
                     ))
                 });
-            let (water, width, height, xrel, yrel) = action5.unwrap_or_else(|| {
-                let (width, height, xrel, yrel) = WATER_RIVER_SLOPE_SPRITE_META[index];
-                let water = world_assets.map_or_else(
-                    || Sprite {
-                        image: asset_server.load::<Image>(RIVER_SLOPE_PATHS[index]),
-                        color: tint,
-                        ..default()
-                    },
-                    |assets| assets.river_slopes[index].sprite_colored(tint),
-                );
-                (
-                    water,
-                    f32::from(width),
-                    f32::from(height),
-                    f32::from(xrel),
-                    f32::from(yrel),
-                )
-            });
+            let (water, width, height, xrel, yrel) = river_feature
+                .map(|(mut sprite, decoded, _)| {
+                    sprite.color = tint;
+                    (
+                        sprite,
+                        f32::from(decoded.width),
+                        f32::from(decoded.height),
+                        f32::from(decoded.x_offs),
+                        f32::from(decoded.y_offs),
+                    )
+                })
+                .or(action5)
+                .unwrap_or_else(|| {
+                    let (width, height, xrel, yrel) = WATER_RIVER_SLOPE_SPRITE_META[index];
+                    let water = world_assets.map_or_else(
+                        || Sprite {
+                            image: asset_server.load::<Image>(RIVER_SLOPE_PATHS[index]),
+                            color: tint,
+                            ..default()
+                        },
+                        |assets| assets.river_slopes[index].sprite_colored(tint),
+                    );
+                    (
+                        water,
+                        f32::from(width),
+                        f32::from(height),
+                        f32::from(xrel),
+                        f32::from(yrel),
+                    )
+                });
             let mut position = overlay_pos(
                 iso(coord.x, coord.y),
                 xrel,
@@ -114,6 +149,23 @@ pub(crate) fn spawn_ship_depot_preview(
             );
             position.z = ground_draw_z(coord.x, coord.y, PREVIEW_WATER_LAYER);
             (water, position)
+        } else if let Some((mut sprite, decoded, _)) =
+            river_flat_feature_sprite(map, &tile_context, canal_features, action5_sprites, images)
+        {
+            sprite.color = tint;
+            let mut position = overlay_pos(
+                iso(coord.x, coord.y),
+                f32::from(decoded.x_offs),
+                f32::from(decoded.y_offs),
+                f32::from(decoded.width),
+                f32::from(decoded.height),
+                base_z,
+                PREVIEW_WATER_LAYER,
+                coord.x,
+                coord.y,
+            );
+            position.z = ground_draw_z(coord.x, coord.y, PREVIEW_WATER_LAYER);
+            (sprite, position)
         } else {
             let water = world_assets.map_or_else(
                 || Sprite {
@@ -139,8 +191,10 @@ pub(crate) fn spawn_ship_depot_preview(
             world_assets,
             map,
             coord,
+            &tile_context,
             base_z,
             tint,
+            canal_features,
             canal_action5,
             action5_sprites,
             images,
@@ -220,8 +274,10 @@ fn spawn_ship_depot_canal_dikes(
     world_assets: Option<&WorldAssets>,
     map: &Map,
     coord: TileCoord,
+    ctx: &TileRenderContext,
     base_z: u8,
     tint: Color,
+    canal_features: &[openttdrs_core::CanalFeatureDef],
     canal_action5: &[Option<openttdrs_core::DecodedSprite>],
     action5_sprites: &mut NewGrfAction5SpriteCache,
     images: &mut Assets<Image>,
@@ -234,6 +290,15 @@ fn spawn_ship_depot_canal_dikes(
         if !selected {
             continue;
         }
+        let feature = canal_feature_sprite_for_preview(
+            map,
+            ctx,
+            openttdrs_core::CF_DIKES,
+            slot,
+            canal_features,
+            action5_sprites,
+            images,
+        );
         let action5_slot = ACTION5_CANALS_DIKES_OFFSET.saturating_add(slot);
         let action5 = canal_action5
             .get(action5_slot)
@@ -254,26 +319,38 @@ fn spawn_ship_depot_canal_dikes(
                     f32::from(decoded.y_offs),
                 ))
             });
-        let (sprite, width, height, xrel, yrel) = action5.unwrap_or_else(|| {
-            let (width, height, xrel, yrel) = WATER_CANAL_DIKE_SPRITE_META[slot];
-            let sprite = world_assets.map_or_else(
-                || Sprite {
-                    image: asset_server.load::<Image>(format!(
-                        "assets/opengfx/tiles/water_canal_dike_{slot:02}.png"
-                    )),
-                    color: tint,
-                    ..default()
-                },
-                |assets| assets.canal_dikes[slot].sprite_colored(tint),
-            );
-            (
-                sprite,
-                f32::from(width),
-                f32::from(height),
-                f32::from(xrel),
-                f32::from(yrel),
-            )
-        });
+        let (sprite, width, height, xrel, yrel) = feature
+            .map(|(mut sprite, decoded, _)| {
+                sprite.color = tint;
+                (
+                    sprite,
+                    f32::from(decoded.width),
+                    f32::from(decoded.height),
+                    f32::from(decoded.x_offs),
+                    f32::from(decoded.y_offs),
+                )
+            })
+            .or(action5)
+            .unwrap_or_else(|| {
+                let (width, height, xrel, yrel) = WATER_CANAL_DIKE_SPRITE_META[slot];
+                let sprite = world_assets.map_or_else(
+                    || Sprite {
+                        image: asset_server.load::<Image>(format!(
+                            "assets/opengfx/tiles/water_canal_dike_{slot:02}.png"
+                        )),
+                        color: tint,
+                        ..default()
+                    },
+                    |assets| assets.canal_dikes[slot].sprite_colored(tint),
+                );
+                (
+                    sprite,
+                    f32::from(width),
+                    f32::from(height),
+                    f32::from(xrel),
+                    f32::from(yrel),
+                )
+            });
         let mut position = overlay_pos(
             origin,
             xrel,
@@ -292,6 +369,59 @@ fn spawn_ship_depot_canal_dikes(
             Transform::from_translation(position).with_scale(Vec3::splat(PREVIEW_SCALE)),
         ));
     }
+}
+
+fn preview_tile_context(
+    map: &Map,
+    coord: TileCoord,
+    climate: openttdrs_core::Climate,
+    snow_line_height: u8,
+) -> TileRenderContext {
+    let (mw, mh) = map.dimensions();
+    let tx = coord.x as u32;
+    let ty = coord.y as u32;
+    let grid = RenderGrid::from_bounds(
+        map,
+        mw,
+        mh,
+        TileViewportBounds {
+            tx0: tx,
+            ty0: ty,
+            tx1: tx.saturating_add(1),
+            ty1: ty.saturating_add(1),
+        },
+    );
+    TileRenderContext::new_with_climate(map, &grid, tx, ty, climate, snow_line_height)
+}
+
+fn river_flat_feature_sprite(
+    map: &Map,
+    ctx: &TileRenderContext,
+    canal_features: &[openttdrs_core::CanalFeatureDef],
+    action5_sprites: &mut NewGrfAction5SpriteCache,
+    images: &mut Assets<Image>,
+) -> Option<(Sprite, openttdrs_core::DecodedSprite, usize)> {
+    if ctx.tile.and_then(water_class) != Some(WaterClass::River) {
+        return None;
+    }
+    if !canal_features
+        .get(usize::from(openttdrs_core::CF_RIVER_SLOPE))
+        .is_some_and(|feature| {
+            feature.id == openttdrs_core::CF_RIVER_SLOPE
+                && feature.flags & openttdrs_core::CFF_HAS_FLAT_SPRITE != 0
+        })
+    {
+        return None;
+    }
+    canal_feature_sprite_for_preview(
+        map,
+        ctx,
+        openttdrs_core::CF_RIVER_SLOPE,
+        0,
+        canal_features,
+        action5_sprites,
+        images,
+    )
 }
 
 /// Caja `TILE_SEQ_LINE` que comparte el ghost con el parent del mapa.

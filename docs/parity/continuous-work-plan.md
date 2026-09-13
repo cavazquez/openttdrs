@@ -6746,3 +6746,16 @@ mantiene fallback atómico. Las regresiones cubren resolución core, mapa
 Action5 y separación de caches; `PALETTE_TO_TRANSPARENT` ya tiene su propia
 subetapa, las referencias directas del baseset y el resto del compositor
 siguen pendientes, por lo que #326/#329 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-FLAT-GROUND (2026-09-13): las
+referencias directas de `TileLayout::ground` a los suelos planos vanilla ya no
+caen al fallback cuando el layout usa una de las densidades de césped
+(`3924/3943/3962/3981`), las cinco variantes rough (`4000/4019..4022`), las
+dos series rocosas (`4023/4042`), agua (`4061`) o nieve/desierto
+(`4493/4512/4531/4550`). La whitelist se basa en `table/sprites.h` y cada
+entrada se enlaza con su asset atlas real (`grass_density`, `rough_flat`,
+`rocky`, `snow_desert` o `water`), conservando la geometría NFO plana
+64×31/`(-31,0)`. Las pendientes, sprites de edificio y grounds con modifier
+siguen en fallback hasta tener un contrato de ancla/paleta independiente; la
+regresión cubre todos los IDs admitidos y rechaza `4062`. #326/#329 continúan
+abiertas.

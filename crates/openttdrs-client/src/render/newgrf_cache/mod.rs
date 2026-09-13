@@ -18,7 +18,31 @@ pub(crate) use image_factory::{
 /// Baseset sprites that are safe to use as a `TileLayout` ground without
 /// guessing a palette, an animation, or NFO geometry. They all share the
 /// flat 64×31 tile geometry and `xrel=-31, yrel=0`.
-const DIRECT_FLAT_GROUND_SPRITES: [u16; 4] = [3924, 3981, 4000, SPR_FLAT_WATER_TILE as u16];
+///
+/// The groups mirror the vanilla landscape table: bare/grass densities
+/// (`3924, 3943, 3962, 3981`), the five rough variants (`4000, 4019..4022`),
+/// both rocky sets (`4023, 4042`), water (`4061`) and the four
+/// snow/desert densities (`4493, 4512, 4531, 4550`). Sloped neighbours are
+/// deliberately absent because their sprite-specific geometry is not this
+/// flat ground contract.
+const DIRECT_FLAT_GROUND_SPRITES: [u16; 16] = [
+    3924,
+    3943,
+    3962,
+    3981,
+    4000,
+    4019,
+    4020,
+    4021,
+    4022,
+    4023,
+    4042,
+    SPR_FLAT_WATER_TILE as u16,
+    4493,
+    4512,
+    4531,
+    4550,
+];
 
 /// Base-sprite data that a TileLayout renderer needs in addition to the atlas
 /// rect. `AtlasSprite` deliberately has no NFO offset, so keeping this small
@@ -69,9 +93,21 @@ pub(crate) fn direct_tile_layout_ground(
     }
     let atlas = match ground.base_sprite_id()? {
         3924 => assets.industries.get(&3924)?.clone(), // SPR_FLAT_BARE_LAND
+        3943 => assets.grass_density[1][0].clone(),    // SPR_FLAT_1_THIRD_GRASS_TILE
+        3962 => assets.grass_density[2][0].clone(),    // SPR_FLAT_2_THIRD_GRASS_TILE
         3981 => assets.grass.clone(),                  // SPR_FLAT_GRASS_TILE
         4000 => assets.rough_flat[0].clone(),          // SPR_FLAT_ROUGH_LAND
+        4019 => assets.rough_flat[1].clone(),          // SPR_FLAT_ROUGH_LAND_1
+        4020 => assets.rough_flat[2].clone(),          // SPR_FLAT_ROUGH_LAND_2
+        4021 => assets.rough_flat[3].clone(),          // SPR_FLAT_ROUGH_LAND_3
+        4022 => assets.rough_flat[4].clone(),          // SPR_FLAT_ROUGH_LAND_4
+        4023 => assets.rocky[0][0].clone(),            // SPR_FLAT_ROCKY_LAND_1
+        4042 => assets.rocky[1][0].clone(),            // SPR_FLAT_ROCKY_LAND_2
         id if id == SPR_FLAT_WATER_TILE as u16 => assets.water.clone(),
+        4493 => assets.snow_desert[0][0].clone(), // SPR_FLAT_1_QUART_SNOW_DESERT_TILE
+        4512 => assets.snow_desert[1][0].clone(), // SPR_FLAT_2_QUART_SNOW_DESERT_TILE
+        4531 => assets.snow_desert[2][0].clone(), // SPR_FLAT_3_QUART_SNOW_DESERT_TILE
+        4550 => assets.snow_desert[3][0].clone(), // SPR_FLAT_SNOW_DESERT_TILE
         _ => return None,
     };
     Some(DirectTileLayoutGround {
@@ -162,8 +198,17 @@ mod tests {
             .ground
             .as_mut()
             .expect("ground")
-            .base_sprite = Some(4061);
-        assert!(tile_layout_is_renderable(&unsupported_ground));
+            .base_sprite = Some(4062);
+        assert!(!tile_layout_is_renderable(&unsupported_ground));
+
+        for sprite_id in DIRECT_FLAT_GROUND_SPRITES {
+            let mut supported = layout.clone();
+            supported.ground.as_mut().expect("ground").base_sprite = Some(sprite_id);
+            assert!(
+                tile_layout_is_renderable(&supported),
+                "sprite plano vanilla {sprite_id} debe conservarse como ground"
+            );
+        }
 
         let mut direct_build = layout;
         direct_build.sequence[0].sprite = None;

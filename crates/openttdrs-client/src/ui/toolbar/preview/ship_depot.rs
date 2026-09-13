@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use openttdrs_core::{Map, TileCoord, ship_depot_footprint};
 
-use crate::iso::{iso, overlay_pos, remap_tile_offset, tile_slope_and_min_z};
+use crate::iso::{full_tile_sprite_pos, iso, overlay_pos, remap_tile_offset, tile_slope_and_min_z};
 use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
 use crate::render::{
     CompanyColoredSprites, ViewportSortableParent, WorldAssets,
@@ -15,6 +15,7 @@ use crate::sprites::{SHIP_DEPOT_PATHS, ship_depot_layers};
 use super::BuildGhostPreview;
 
 const PREVIEW_Z_BASE: f32 = 3.0;
+const PREVIEW_WATER_LAYER: f32 = PREVIEW_Z_BASE - 0.030;
 const PREVIEW_SCALE: f32 = 1.002;
 
 /// Spawn del depósito completo. `origin` conserva la tesela que recibe el
@@ -42,6 +43,25 @@ pub(crate) fn spawn_ship_depot_preview(
             continue;
         };
         let (_, base_z) = tile_slope_and_min_z(map, coord.x as u32, coord.y as u32);
+        let water = world_assets.map_or_else(
+            || Sprite {
+                image: asset_server.load::<Image>("assets/opengfx/tiles/water.png"),
+                color: tint,
+                ..default()
+            },
+            |assets| assets.water.sprite_colored(tint),
+        );
+        commands.spawn((
+            BuildGhostPreview,
+            water,
+            Transform::from_translation(full_tile_sprite_pos(
+                coord.x,
+                coord.y,
+                base_z,
+                PREVIEW_WATER_LAYER,
+            ))
+            .with_scale(Vec3::splat(PREVIEW_SCALE)),
+        ));
         let ref_pos = iso(coord.x, coord.y);
         for (layer_i, layer) in ship_depot_layers(axis_y, part_south).iter().enumerate() {
             let local = remap_tile_offset(layer.dx, layer.dy, 0.0) * 0.5;

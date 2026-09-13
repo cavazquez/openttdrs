@@ -7151,6 +7151,14 @@ adjunta suelo, tranvía y postes como children; una pendiente empinada conserva
 la elevación de dos niveles. La catenaria, layouts NewGRF, clipping y
 aceptación raster siguen siendo unidades separadas; #326 continúa abierta.
 
+Corrección #326-SHIP-DEPOT-PREVIEW-WATER-GROUND (2026-09-13): el ghost de
+depósito naval pinta ahora el `SPR_FLAT_WATER_TILE` de cada una de sus dos
+teselas antes de las capas BUILD, con el mismo desplazamiento horizontal
+`xrel=-31` y la altura de la tesela. El fallback directo conserva la preview
+cuando el atlas no está disponible; diques de canal, pendientes/river edges,
+features NewGRF y aceptación raster quedan como subetapas separadas; #326
+continúa abierta.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

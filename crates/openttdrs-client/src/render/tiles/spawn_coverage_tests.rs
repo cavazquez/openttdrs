@@ -13665,6 +13665,44 @@ fn direct_rail_station_tile_layout_uses_rail_atlas_and_nfo_geometry() {
 }
 
 #[test]
+fn direct_rail_station_track_ground_uses_typed_rail_atlas() {
+    let assets = boot_assets_app();
+    for sprite_id in [1011u32, 1012, 1093, 1094, 1175, 1176] {
+        let expected_atlas = assets
+            .rail
+            .get(&sprite_id)
+            .unwrap_or_else(|| panic!("rail station track atlas {sprite_id}"));
+        let layer = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+            sprite: None,
+            base_sprite: Some(u16::try_from(sprite_id).expect("track SpriteID")),
+            sprite_modifiers: 0,
+            direct_palette: 0,
+            origin: [0, 0, 0],
+            extent: [16, 16, 0],
+        };
+        for (name, resolved) in [
+            (
+                "ground",
+                direct_tile_layout_rail_station_ground(&layer, &assets),
+            ),
+            (
+                "sequence",
+                direct_tile_layout_rail_station_sequence(&layer, &assets),
+            ),
+        ] {
+            let resolved = resolved.unwrap_or_else(|| {
+                panic!("rail station track {name} {sprite_id} no se pudo materializar")
+            });
+            assert!(resolved.atlas.matches(&expected_atlas.sprite()));
+            assert_eq!(resolved.width, 64.0, "{name} sprite {sprite_id}");
+            assert_eq!(resolved.height, 31.0, "{name} sprite {sprite_id}");
+            assert_eq!(resolved.x_offs, -31.0, "{name} sprite {sprite_id}");
+            assert_eq!(resolved.y_offs, 0.0, "{name} sprite {sprite_id}");
+        }
+    }
+}
+
+#[test]
 fn company_hq_uses_persisted_2x2_footprint_level_and_build_sorting() {
     use openttdrs_core::map::{MP_OBJECT_MAPT, OBJECT_TYPE_COMPANY_HEADQUARTERS};
 

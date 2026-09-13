@@ -6954,3 +6954,12 @@ global y el fallback ante paletas, modifiers, IDs no auditados o atlas ausente.
 La regresión cubre las capas rail para los cuatro tipos de red en ground y
 BUILD; #326/#329 continúan abiertas por callbacks, rotaciones exhaustivas,
 otros namespaces y aceptación raster.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-RAIL-STATION-TRACK-GROUND (2026-09-13):
+el namespace contextual de estación ferroviaria acepta también las seis vías
+compuestas que pueden actuar como superficie directa (`1011/1012`,
+`1093/1094` mono y `1175/1176` maglev). Se reutiliza su atlas rail y la
+geometría plana NFO de OpenGFX (`64×31`, `(-31,0)`), tanto en `ground` como en
+una entrada `BUILD`; el resolver global sigue rechazándolas como ground para
+no ampliar otros consumidores. La regresión cubre los seis IDs, sus atlas y
+el rechazo de paletas explícitas; #326/#329 continúan abiertas.

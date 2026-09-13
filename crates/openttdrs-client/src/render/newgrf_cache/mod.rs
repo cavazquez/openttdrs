@@ -645,14 +645,25 @@ fn direct_tile_layout_airport_geometry(sprite_id: u16) -> Option<DirectTileLayou
 fn direct_tile_layout_rail_station_geometry(
     sprite_id: u16,
 ) -> Option<DirectTileLayoutGroundGeometry> {
-    crate::sprites::rail_station_sprite_meta(u32::from(sprite_id)).map(
-        |(width, height, x_offs, y_offs)| DirectTileLayoutGroundGeometry {
-            width,
-            height,
-            x_offs,
-            y_offs,
-        },
-    )
+    match u32::from(sprite_id) {
+        // `DrawTile_Station` uses the flat rail track as its ground. The
+        // mono/maglev variants are the same 64x31 composite with the native
+        // railtype sprite offset applied.
+        1011 | 1012 | 1093 | 1094 | 1175 | 1176 => Some(DirectTileLayoutGroundGeometry {
+            width: 64.0,
+            height: 31.0,
+            x_offs: -31.0,
+            y_offs: 0.0,
+        }),
+        _ => crate::sprites::rail_station_sprite_meta(u32::from(sprite_id)).map(
+            |(width, height, x_offs, y_offs)| DirectTileLayoutGroundGeometry {
+                width,
+                height,
+                x_offs,
+                y_offs,
+            },
+        ),
+    }
 }
 
 fn direct_tile_layout_road_waypoint_atlas(
@@ -1837,6 +1848,41 @@ mod tests {
         layout.ground.as_mut().expect("ground").base_sprite = Some(2692);
         assert!(!tile_layout_is_rail_station_renderable(&layout));
         layout.ground.as_mut().expect("ground").base_sprite = Some(1069);
+        layout.ground.as_mut().expect("ground").direct_palette = 1;
+        assert!(!tile_layout_is_rail_station_renderable(&layout));
+    }
+
+    #[test]
+    fn direct_rail_station_layout_accepts_typed_track_ground() {
+        let mut layout = ResolvedTileLayout {
+            ground: Some(ResolvedTileLayoutSprite {
+                sprite: None,
+                base_sprite: Some(1011),
+                sprite_modifiers: 0,
+                direct_palette: 0,
+                origin: [0, 0, 0],
+                extent: [16, 16, 0],
+            }),
+            sequence: Vec::new(),
+            complete: true,
+        };
+        for sprite_id in [1011, 1012, 1093, 1094, 1175, 1176] {
+            layout.ground.as_mut().expect("ground").base_sprite = Some(sprite_id);
+            assert_eq!(
+                direct_tile_layout_rail_station_geometry(sprite_id),
+                Some(DirectTileLayoutGroundGeometry {
+                    width: 64.0,
+                    height: 31.0,
+                    x_offs: -31.0,
+                    y_offs: 0.0,
+                }),
+                "geometría de vía de estación {sprite_id}"
+            );
+            assert!(tile_layout_is_rail_station_renderable(&layout));
+            assert!(!tile_layout_is_renderable(&layout));
+        }
+
+        layout.ground.as_mut().expect("ground").base_sprite = Some(1011);
         layout.ground.as_mut().expect("ground").direct_palette = 1;
         assert!(!tile_layout_is_rail_station_renderable(&layout));
     }

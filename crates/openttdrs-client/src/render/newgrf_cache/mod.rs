@@ -319,6 +319,7 @@ fn direct_tile_layout_ground_geometry(sprite_id: u16) -> Option<DirectTileLayout
 fn direct_tile_layout_ground_sprite_is_supported(sprite_id: u16) -> bool {
     direct_tile_layout_ground_geometry(sprite_id).is_some()
         || direct_tile_layout_industry_ground_geometry(sprite_id).is_some()
+        || direct_tile_layout_house_ground_geometry(sprite_id).is_some()
 }
 
 /// Busca la geometría del suelo propio de una industria (`s1`) en todas sus
@@ -341,6 +342,39 @@ fn direct_tile_layout_industry_ground_geometry(
             height: entry.ground_h,
             x_offs: entry.ground_xrel,
             y_offs: entry.ground_yrel,
+        };
+        if let Some(previous) = geometry {
+            if previous != candidate {
+                return None;
+            }
+        } else {
+            geometry = Some(candidate);
+        }
+    }
+    geometry
+}
+
+/// Busca la geometría del suelo propio de una casa (`s1`) en todas las vistas
+/// y etapas. Los IDs vanilla de terreno siguen resolviéndose por sus rangos;
+/// esta tabla cubre las fachadas, patios y piezas parciales que usan un
+/// sprite de casa como base. Sólo se acepta una geometría consistente.
+fn direct_tile_layout_house_ground_geometry(
+    sprite_id: u16,
+) -> Option<DirectTileLayoutGroundGeometry> {
+    if sprite_id == 0 {
+        return None;
+    }
+    let sprite_id = u32::from(sprite_id);
+    let mut geometry = None;
+    for spec in crate::sprites::HOUSE_DRAW_DATA
+        .iter()
+        .filter(|spec| spec.s1 == sprite_id)
+    {
+        let candidate = DirectTileLayoutGroundGeometry {
+            width: spec.s1_w,
+            height: spec.s1_h,
+            x_offs: spec.s1_xrel,
+            y_offs: spec.s1_yrel,
         };
         if let Some(previous) = geometry {
             if previous != candidate {
@@ -421,6 +455,7 @@ fn direct_tile_layout_house_geometry(sprite_id: u16) -> Option<DirectTileLayoutG
 fn direct_tile_layout_sequence_geometry(sprite_id: u16) -> Option<DirectTileLayoutGroundGeometry> {
     direct_tile_layout_ground_geometry(sprite_id)
         .or_else(|| direct_tile_layout_industry_ground_geometry(sprite_id))
+        .or_else(|| direct_tile_layout_house_ground_geometry(sprite_id))
         .or_else(|| direct_tile_layout_industry_geometry(sprite_id))
         .or_else(|| direct_tile_layout_house_geometry(sprite_id))
         .or_else(|| {
@@ -539,10 +574,15 @@ pub(crate) fn direct_tile_layout_ground(
         4532..=4549 => assets.snow_desert[2][usize::from(sprite_id - 4531)].clone(),
         4550 => assets.snow_desert[3][0].clone(), // SPR_FLAT_SNOW_DESERT_TILE
         4551..=4568 => assets.snow_desert[3][usize::from(sprite_id - 4550)].clone(),
-        _ => assets.industries.get(&u32::from(sprite_id))?.clone(),
+        _ => assets
+            .industries
+            .get(&u32::from(sprite_id))
+            .or_else(|| assets.houses.get(&u32::from(sprite_id)))?
+            .clone(),
     };
     let geometry = direct_tile_layout_ground_geometry(sprite_id)
-        .or_else(|| direct_tile_layout_industry_ground_geometry(sprite_id))?;
+        .or_else(|| direct_tile_layout_industry_ground_geometry(sprite_id))
+        .or_else(|| direct_tile_layout_house_ground_geometry(sprite_id))?;
     Some(DirectTileLayoutGround {
         atlas,
         width: geometry.width,
@@ -676,7 +716,7 @@ mod tests {
                 "sprite de terreno vanilla {sprite_id} debe conservarse como ground"
             );
         }
-        for sprite_id in [2022, 2269, 4721, 4769] {
+        for sprite_id in [1424, 2022, 2269, 4471, 4721, 4769] {
             let mut supported = layout.clone();
             supported.ground.as_mut().expect("ground").base_sprite = Some(sprite_id);
             assert!(
@@ -870,6 +910,38 @@ mod tests {
             })
         );
         assert_eq!(direct_tile_layout_industry_ground_geometry(2000), None);
+    }
+
+    #[test]
+    fn direct_base_ground_uses_consistent_house_ground_geometry() {
+        assert_eq!(
+            direct_tile_layout_house_ground_geometry(1424),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 64.0,
+                height: 37.0,
+                x_offs: -31.0,
+                y_offs: -6.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_house_ground_geometry(4471),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 44.0,
+                height: 23.0,
+                x_offs: -21.0,
+                y_offs: 4.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_house_ground_geometry(4458),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 64.0,
+                height: 36.0,
+                x_offs: -30.0,
+                y_offs: -5.0,
+            })
+        );
+        assert_eq!(direct_tile_layout_house_ground_geometry(2000), None);
     }
 
     #[test]

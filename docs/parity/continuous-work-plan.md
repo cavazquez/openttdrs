@@ -6865,3 +6865,11 @@ con el atlas `industries` y sus anclas `ground_w/ground_h/ground_xrel/ground_yre
 La tabla se valida por todas sus etapas para no seleccionar una geometría
 arbitraria; modifiers, paletas y draw-procs animados siguen en fallback
 atómico. #326/#329 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-HOUSE-GROUND (2026-09-13): las capas
+`s1` de `HOUSE_DRAW_DATA` que usan sprites de casa como suelo directo ahora
+reutilizan el atlas `houses` y sus anclas `s1_w/s1_h/s1_xrel/s1_yrel`, además
+de los suelos comunes del baseset. La geometría se acepta sólo cuando es
+idéntica en todas las vistas y etapas del ID; las paletas/modifiers explícitas
+y los procedimientos dinámicos conservan fallback atómico. #326/#329
+continúan abiertas.

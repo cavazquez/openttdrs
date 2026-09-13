@@ -1538,6 +1538,7 @@ mod tests {
     #[test]
     fn apply_station_advanced_layout_attaches_runtime_tile_seq() {
         let mut a0 = build_action0_station_payload(b"ADVS", b"Plat", 0, 0, "Advanced station");
+        a0[3] = 2; // El bloque puede aplicar las mismas props a un rango.
         a0[4] = 7; // El primer id no tiene por qué coincidir con el índice del bloque.
         let name_start = a0.len().saturating_sub("Advanced station".len() + 2);
         let tail = a0.split_off(name_start);
@@ -1556,6 +1557,7 @@ mod tests {
 
         let parsed = parse_action0_station_meta(&a0).expect("advanced station metadata");
         assert_eq!(parsed.local_id, 7);
+        assert_eq!(parsed.num_ids, 2);
         assert_eq!(parsed.advanced_layouts.len(), 2, "action0={a0:?}");
         assert_eq!(parsed.advanced_layouts[1].sequence.len(), 1);
 
@@ -1586,7 +1588,17 @@ mod tests {
             runtime.station_advanced_layouts.get(&7).map(Vec::len),
             Some(2)
         );
+        assert_eq!(
+            runtime.station_advanced_layouts.get(&8).map(Vec::len),
+            Some(2)
+        );
         assert_eq!(def.newgrf_local_id, 7);
+        assert!(
+            state
+                .station_spec_catalog
+                .iter()
+                .any(|candidate| { candidate.from_newgrf && candidate.newgrf_local_id == 8 })
+        );
 
         let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
         let layout = def

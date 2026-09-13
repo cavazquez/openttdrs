@@ -61,8 +61,13 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
         let metas = collect_station_metas_from_grf(&data);
         for meta in &metas {
             if !meta.advanced_layouts.is_empty() {
-                gfx.station_advanced_layouts
-                    .insert(meta.local_id, meta.advanced_layouts.clone());
+                for offset in 0..meta.num_ids {
+                    let Some(local_id) = meta.local_id.checked_add(offset) else {
+                        break;
+                    };
+                    gfx.station_advanced_layouts
+                        .insert(local_id, meta.advanced_layouts.clone());
+                }
             }
         }
         // Resolver copy_layout (0x0F) dentro del mismo GRF por id local, no
@@ -77,28 +82,16 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
             {
                 layouts.clone_from(src_layouts);
             }
-            layouts_by_local.insert(u16::from(meta.local_id), layouts);
+            for offset in 0..meta.num_ids {
+                let Some(local_id) = meta.local_id.checked_add(offset) else {
+                    break;
+                };
+                layouts_by_local.insert(u16::from(local_id), layouts.clone());
+            }
         }
         for meta in metas {
             let Some(class_id) = resolve_or_create_station_class(&mut classes, &meta) else {
                 break;
-            };
-            let Some(spec_id) = next_free_station_spec_id(&specs) else {
-                break;
-            };
-            let local_id = meta.local_id;
-            let views = gfx
-                .views_for_local_id(local_id)
-                .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
-                .unwrap_or_default();
-            let preview = views.first().cloned();
-            let newgrf_runtime = if gfx.needs_runtime_resolve()
-                || gfx.has_tile_layouts()
-                || gfx.has_station_advanced_layouts()
-            {
-                Some(Box::new(gfx.clone()))
-            } else {
-                None
             };
             let (associated_badges, newgrf_badge_translation, unresolved_badges) =
                 resolve_badge_local_ids(
@@ -115,35 +108,56 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
                     entry.filename, meta.label
                 ));
             }
-            let custom_layouts = layouts_by_local
-                .get(&u16::from(local_id))
-                .cloned()
-                .unwrap_or_default();
-            specs.push(StationSpecDef {
-                id: spec_id,
-                class: class_id,
-                label: meta.label,
-                short_label: meta.short_label,
-                disallowed_platforms: meta.disallowed_platforms,
-                disallowed_lengths: meta.disallowed_lengths,
-                callback_mask: meta.callback_mask,
-                flags: meta.flags,
-                animation_status: meta.animation_status,
-                animation_frames: meta.animation_frames,
-                animation_speed: meta.animation_speed,
-                animation_triggers: meta.animation_triggers,
-                from_newgrf: true,
-                newgrf_preview: preview,
-                newgrf_views: views,
-                newgrf_local_id: local_id,
-                newgrf_runtime,
-                newgrf_grfid: entry.grfid,
-                newgrf_grf_version: entry.grf_version,
-                newgrf_type_tables: tables_opt.clone(),
-                associated_badges,
-                newgrf_badge_translation,
-                custom_layouts,
-            });
+            for offset in 0..meta.num_ids {
+                let Some(local_id) = meta.local_id.checked_add(offset) else {
+                    break;
+                };
+                let Some(spec_id) = next_free_station_spec_id(&specs) else {
+                    break;
+                };
+                let views = gfx
+                    .views_for_local_id(local_id)
+                    .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
+                    .unwrap_or_default();
+                let preview = views.first().cloned();
+                let newgrf_runtime = if gfx.needs_runtime_resolve()
+                    || gfx.has_tile_layouts()
+                    || gfx.has_station_advanced_layouts()
+                {
+                    Some(Box::new(gfx.clone()))
+                } else {
+                    None
+                };
+                let custom_layouts = layouts_by_local
+                    .get(&u16::from(local_id))
+                    .cloned()
+                    .unwrap_or_default();
+                specs.push(StationSpecDef {
+                    id: spec_id,
+                    class: class_id,
+                    label: meta.label.clone(),
+                    short_label: meta.short_label.clone(),
+                    disallowed_platforms: meta.disallowed_platforms,
+                    disallowed_lengths: meta.disallowed_lengths,
+                    callback_mask: meta.callback_mask,
+                    flags: meta.flags,
+                    animation_status: meta.animation_status,
+                    animation_frames: meta.animation_frames,
+                    animation_speed: meta.animation_speed,
+                    animation_triggers: meta.animation_triggers,
+                    from_newgrf: true,
+                    newgrf_preview: preview,
+                    newgrf_views: views,
+                    newgrf_local_id: local_id,
+                    newgrf_runtime,
+                    newgrf_grfid: entry.grfid,
+                    newgrf_grf_version: entry.grf_version,
+                    newgrf_type_tables: tables_opt.clone(),
+                    associated_badges: associated_badges.clone(),
+                    newgrf_badge_translation: newgrf_badge_translation.clone(),
+                    custom_layouts,
+                });
+            }
         }
     }
     state.station_class_catalog = classes;

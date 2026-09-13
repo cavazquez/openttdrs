@@ -3097,6 +3097,17 @@ mod tests {
     /// Estado mínimo con STNN moderno cargable por `OpenTTD` 15.3.
     fn mvp_stations_state() -> GameState {
         let mut state = tiny_state();
+        // `tiny_state` usa un m8 arbitrario para probar el round-trip de
+        // campos desconocidos. Esta familia de fixtures sí se carga y se
+        // dibuja en OpenTTD: los seis bits bajos de m8 son RailType y deben
+        // contener un valor definido, no el 0x34 de ese caso genérico.
+        let fixture_rail = TileCoord::new(10, 20);
+        let mut fixture_rail_tile = state.map.get(fixture_rail).expect("fixture rail");
+        fixture_rail_tile.m8 = 0;
+        state
+            .map
+            .set_tile(fixture_rail, fixture_rail_tile)
+            .expect("set fixture rail type");
         let rail_pos = TileCoord::new(28, 39);
         let mut rail_tile = state.map.get(rail_pos).expect("in bounds");
         rail_tile.kind = TileKind::Station;

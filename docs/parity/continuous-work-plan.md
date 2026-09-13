@@ -7097,3 +7097,11 @@ remapeados mediante el anclaje NFO real. Los 14 sprites clásicos se cargan de
 OpenGFX y las fundaciones virtuales usan la tabla Action5 vigente del save,
 incluidos los reemplazos NewGRF; el suelo efectivo de la rampa queda para la
 siguiente etapa. #326 continúa abierta.
+
+Corrección #326-BRIDGE-PREVIEW-RAMP-GROUND (2026-09-13): la preview de cada
+cabeza de puente ya dibuja el mismo suelo efectivo que `DrawTile_TunnelBridge`:
+césped con pendiente, costa cuando la rampa nivelada toca mar, o nieve/desierto
+cuando el bit de paisaje lo exige. La dirección virtual se instala sólo en una
+copia del tile para que la preview no mutile el mapa; la posición usa la cota y
+la altura visual resultantes de la fundación. #326 continúa abierta por
+sprites custom restantes y aceptación raster.

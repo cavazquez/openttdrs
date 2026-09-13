@@ -144,7 +144,7 @@ const SPR_MAGLEV_SLOPED_RESERVATION_BASE: u32 = 5409;
 /// OpenTTD llama primero a `DrawFoundation` y después decide entre costa,
 /// césped y nieve/desierto.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum BridgeRampGround {
+pub(crate) enum BridgeRampGround {
     Grass,
     Shore,
     SnowOrDesert,
@@ -385,7 +385,7 @@ const fn bridge_foundation_child_offset(foundation: u8) -> (i32, i32, i32) {
     }
 }
 
-fn bridge_ramp_ground_kind(
+pub(crate) fn bridge_ramp_ground_kind(
     map: &Map,
     coord: TileCoord,
     tile: Tile,
@@ -413,7 +413,7 @@ fn bridge_ramp_ground_kind(
     BridgeRampGround::Grass
 }
 
-fn bridge_ramp_ground_sprite_id(kind: BridgeRampGround, tileh: u8) -> u32 {
+pub(crate) fn bridge_ramp_ground_sprite_id(kind: BridgeRampGround, tileh: u8) -> u32 {
     match kind {
         BridgeRampGround::Grass => SPR_FLAT_GRASS_TILE + u32::from(slope_sprite_offset(tileh)),
         BridgeRampGround::Shore => {

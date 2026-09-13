@@ -7,17 +7,20 @@ use openttdrs_core::{
     set_tram_road_type_on_tile, stack_params_for_grfid,
 };
 
-use crate::iso::{HEIGHT_PX, iso, overlay_pos, remap_tile_offset, tile_slope_and_min_z};
+use crate::iso::{
+    HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half, iso, overlay_pos, remap_tile_offset,
+    slope_half_h, slope_sprite_offset, tile_slope_and_min_z,
+};
 use crate::render::{
-    CatenarySpriteAnchor, NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache,
+    BridgeRampGround, CatenarySpriteAnchor, NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache,
     NewGrfRoadSpriteCache, bridge_foundation_decision_at, bridge_ramp_catenary_slope,
-    bridge_ramp_catenary_world_z_delta, catenary_local_z_delta, catenary_sprite_anchor,
-    catenary_sprite_center,
+    bridge_ramp_catenary_world_z_delta, bridge_ramp_ground_kind, catenary_local_z_delta,
+    catenary_sprite_anchor, catenary_sprite_center,
 };
 use crate::sprites::{
-    BridgeDeckSpriteIds, OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, bridge_deck_sprite_ids,
-    bridge_ramp_sprite_id, bridge_sprite_meta, catenary_sprite_atlas_key, catenary_sprite_color,
-    catenary_tile_location_group, collect_catenary_bridge_draws,
+    BridgeDeckSpriteIds, OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, TILEH_TO_SHORE_SPRITE,
+    bridge_deck_sprite_ids, bridge_ramp_sprite_id, bridge_sprite_meta, catenary_sprite_atlas_key,
+    catenary_sprite_color, catenary_tile_location_group, collect_catenary_bridge_draws,
     collect_catenary_ramp_draws_from_map, foundation_asset_path, foundation_gfx_for_tileh,
 };
 use crate::ui::toolbar::BuildMenuAction;
@@ -30,6 +33,7 @@ const FRONT_LAYER: f32 = 0.045;
 /// del suelo efectivo y del tablero. El ordinal evita invertir las dos piezas
 /// de una pendiente empinada cuando comparten tesela.
 const FOUNDATION_LAYER: f32 = DECK_LAYER - 0.006;
+const RAMP_GROUND_LAYER: f32 = DECK_LAYER - 0.001;
 const CUSTOM_BRIDGE_LAYER: f32 = DECK_LAYER + 0.001;
 const CUSTOM_OVERLAY_LAYER: f32 = DECK_LAYER + 0.002;
 const CUSTOM_CATENARY_BACK_LAYER: f32 = DECK_LAYER + 0.003;
@@ -590,6 +594,74 @@ fn spawn_bridge_ramp_foundations(
     }
 }
 
+/// Nombre del atlas vanilla para el `DrawGroundSprite` de una rampa. El
+/// renderer del mapa obtiene estas mismas imágenes de `WorldAssets`; la
+/// preview sólo necesita convertir el sprite global a su ruta de atlas.
+fn bridge_ramp_ground_asset_path(kind: BridgeRampGround, tileh: u8) -> String {
+    match kind {
+        BridgeRampGround::Grass => {
+            let offset = slope_sprite_offset(tileh);
+            if offset == 0 {
+                "assets/opengfx/tiles/grass.png".into()
+            } else {
+                format!("assets/opengfx/tiles/terrain_grass_slope_{offset:02}.png")
+            }
+        }
+        BridgeRampGround::Shore => format!(
+            "assets/opengfx/tiles/shore_full_{:02}.png",
+            TILEH_TO_SHORE_SPRITE[usize::from(tileh)]
+        ),
+        BridgeRampGround::SnowOrDesert => format!(
+            "assets/opengfx/tiles/terrain_snow_desert_3_{:02}.png",
+            slope_sprite_offset(tileh)
+        ),
+    }
+}
+
+/// Dibuja la superficie que OpenTTD emite después de la fundación de una
+/// cabeza de puente. La dirección se instala en una copia del tile original:
+/// la tesela materializada todavía no existe durante el drag, pero la regla de
+/// costa necesita leer sus bits bajos de `m5`.
+#[allow(clippy::too_many_arguments)]
+fn spawn_bridge_ramp_ground(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    map: &Map,
+    coord: TileCoord,
+    direction: u8,
+    foundation_tileh: u8,
+    foundation_base_z: u8,
+    tint: Color,
+) {
+    let Some(mut tile) = map.get(coord) else {
+        return;
+    };
+    tile.m5 = (tile.m5 & !0x03) | (direction & 0x03);
+    let kind = bridge_ramp_ground_kind(map, coord, tile, foundation_tileh, foundation_base_z);
+    let path = bridge_ramp_ground_asset_path(kind, foundation_tileh);
+    let half_h = if foundation_tileh == 0 {
+        TILE_HALF_H
+    } else {
+        slope_half_h(foundation_tileh)
+    };
+    commands.spawn((
+        BuildGhostPreview,
+        Sprite {
+            image: asset_server.load::<Image>(path),
+            color: tint.with_alpha(tint.alpha() * 0.76),
+            ..default()
+        },
+        Transform::from_translation(full_tile_sprite_pos_half(
+            coord.x,
+            coord.y,
+            foundation_base_z,
+            RAMP_GROUND_LAYER,
+            half_h,
+        ))
+        .with_scale(Vec3::splat(1.002)),
+    ));
+}
+
 /// Posición en pantalla con offsets NFO, como `spawn_layer` en `bridge_draw.rs`.
 fn bridge_ghost_translation(
     px: i32,
@@ -692,6 +764,19 @@ pub(crate) fn spawn_bridge_span_preview(
                 foundation_newgrf,
                 action5_sprites,
                 images,
+            );
+        }
+        if !is_middle && let (Some(foundation), Some(direction)) = (ramp_foundation, ramp_direction)
+        {
+            spawn_bridge_ramp_ground(
+                commands,
+                asset_server,
+                map,
+                coord,
+                direction,
+                foundation.surface_tileh,
+                foundation.surface_base_z,
+                tint,
             );
         }
         let (sprite_id, shift, layer) = if is_middle {
@@ -1168,6 +1253,27 @@ mod tests {
         assert_eq!(
             crate::sprites::catenary_sprite_atlas_key(crate::sprites::PYLON_SPRITE_BASE),
             Some("rail_pylon_0.png".into())
+        );
+    }
+
+    #[test]
+    fn bridge_preview_ground_paths_match_materialized_sprite_tables() {
+        assert_eq!(
+            bridge_ramp_ground_asset_path(BridgeRampGround::Grass, 0),
+            "assets/opengfx/tiles/grass.png"
+        );
+        let offset = slope_sprite_offset(12);
+        assert_eq!(
+            bridge_ramp_ground_asset_path(BridgeRampGround::Grass, 12),
+            format!("assets/opengfx/tiles/terrain_grass_slope_{offset:02}.png")
+        );
+        assert_eq!(
+            bridge_ramp_ground_asset_path(BridgeRampGround::Shore, 12),
+            "assets/opengfx/tiles/shore_full_12.png"
+        );
+        assert_eq!(
+            bridge_ramp_ground_asset_path(BridgeRampGround::SnowOrDesert, 12),
+            format!("assets/opengfx/tiles/terrain_snow_desert_3_{offset:02}.png")
         );
     }
 }

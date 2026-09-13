@@ -610,11 +610,11 @@ mod tests {
             .clone();
         custom.id = openttdrs_core::NEWGRF_ENGINE_ID_BASE + 73;
         custom.newgrf_views = vec![openttdrs_core::DecodedSprite {
-            width: 4,
+            width: 80,
             height: 4,
             x_offs: 96,
             y_offs: 0,
-            rgba: vec![255; 4 * 4 * 4],
+            rgba: vec![255; 80 * 4 * 4],
             mask: Vec::new(),
         }];
         sim.state.engine_catalog.push(custom.clone());
@@ -636,6 +636,14 @@ mod tests {
 
         assert!(catalog_pos.distance(vanilla_pos) > 34.0);
         assert_eq!(pick_vehicle_id_at_world(catalog_pos, &sim), Some(43));
+        assert_eq!(
+            pick_vehicle_id_at_world(catalog_pos + Vec2::new(35.0, 0.0), &sim),
+            Some(43)
+        );
+        assert_eq!(
+            pick_vehicle_id_at_world(catalog_pos + Vec2::new(41.0, 0.0), &sim),
+            None
+        );
         assert_eq!(pick_vehicle_id_at_world(vanilla_pos, &sim), None);
     }
 

@@ -88,6 +88,20 @@ pub(crate) fn vehicle_sprite_pos_at_with_catalog(
     pose: openttdrs_core::VehiclePose,
     catalog: Option<&[EngineDef]>,
 ) -> Vec3 {
+    vehicle_sprite_geometry_at_with_catalog(v, map, pose, catalog).0
+}
+
+/// Centro y tamaño de la vista que corresponde a la posición de render.
+///
+/// Mantener esta geometría junto a `vehicle_sprite_pos_at_offsets` evita que
+/// los consumidores de input vuelvan a aproximar un sprite con un radio fijo
+/// cuando el catálogo NewGRF aporta offsets o dimensiones propias.
+pub(crate) fn vehicle_sprite_geometry_at_with_catalog(
+    v: &Vehicle,
+    map: &Map,
+    pose: openttdrs_core::VehiclePose,
+    catalog: Option<&[EngineDef]>,
+) -> (Vec3, Vec2) {
     let dir = vehicle_sprite_direction_at_with_map(v, pose, Some(map)).min(7) as usize;
     let (x_offs, y_offs, w, h) = if let Some(cat) = catalog
         && let Some(eid) = v.engine_id
@@ -107,7 +121,10 @@ pub(crate) fn vehicle_sprite_pos_at_with_catalog(
         );
         (layer.x_offs, layer.y_offs, layer.w, layer.h)
     };
-    vehicle_sprite_pos_at_offsets(v, map, pose, x_offs, y_offs, w, h)
+    (
+        vehicle_sprite_pos_at_offsets(v, map, pose, x_offs, y_offs, w, h),
+        Vec2::new(w.max(1.0), h.max(1.0)),
+    )
 }
 
 /// Posición de una capa de vehículo que conserva sus offsets NFO individuales.

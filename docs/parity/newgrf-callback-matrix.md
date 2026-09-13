@@ -1886,6 +1886,8 @@ de render de cada sprite: rectángulo centrado en sus offsets y dimensiones, o
 unión de las capas runtime cuando el vehículo usa `SpriteStack`. Se mantienen
 los filtros de visibilidad y la prioridad del centro más cercano, pero ya no se
 descartan píxeles válidos por el radio aproximado de 34 px. La regresión
-`pick_vehicle_uses_catalog_sprite_offsets` comprueba un clic a 35 px dentro de
-un sprite custom de 80 px y otro a 41 px fuera; quedan pendientes callbacks y
+Las regresiones `pick_vehicle_uses_catalog_sprite_offsets` y
+`pick_vehicle_uses_union_of_runtime_sprite_stack_layers` comprueban un clic a
+35 px dentro de un sprite custom de 80 px, otro a 41 px fuera y una segunda
+capa runtime separada de la primera; quedan pendientes callbacks y
 consumidores legacy fuera de esta ruta.

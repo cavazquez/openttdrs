@@ -6469,9 +6469,11 @@ hit-test deja de usar un radio fijo alrededor del centro y comparte con el
 renderer el rectángulo de cada vista, incluyendo `width`/`height`, offsets
 catalog-aware y la unión de todas las capas runtime de un `SpriteStack`. Esto
 permite seleccionar un vehículo en cualquier píxel de su huella visible sin
-ampliar artificialmente la zona de clic de sprites pequeños. La regresión
-`pick_vehicle_uses_catalog_sprite_offsets` comprueba el borde interior y
-exterior de un sprite custom de 80 px; pasaron 42 tests de
-`render::vehicles`, Clippy estricto de cliente y core, formato y
-`git diff --check`. #329 continúa abierta por callbacks, efectos avanzados,
-layouts GUI y consumidores legacy restantes.
+ampliar artificialmente la zona de clic de sprites pequeños. Las regresiones
+`pick_vehicle_uses_catalog_sprite_offsets` y
+`pick_vehicle_uses_union_of_runtime_sprite_stack_layers` comprueban tanto el
+borde interior/exterior de un sprite custom de 80 px como una segunda capa
+runtime separada de la primera. Pasaron 43 tests de `render::vehicles`,
+Clippy estricto de cliente y core, formato y `git diff --check`. #329 continúa
+abierta por callbacks, efectos avanzados, layouts GUI y consumidores legacy
+restantes.

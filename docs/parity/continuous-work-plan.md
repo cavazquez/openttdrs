@@ -6974,3 +6974,12 @@ blitter mantiene esos offsets. La regresión de tranvía inclinado comprueba
 textura, relación child/foundation y posición exacta; #326/#565 continúan
 abiertas por la matriz restante de superficies, depósitos, clipping y
 aceptación raster.
+
+Corrección #326-ROAD-DEPOT-ACTION5-OVERLAY-PURITY (2026-09-13): un roadtype
+eléctrico válido que cae en `DEPOT_NO_TRACK` ya no recibe además la tira
+`SPR_TRAMWAY_OVERLAY`. OpenTTD reserva esa capa separada para el depósito de
+tram puro (`road_rt == INVALID_ROADTYPE`); el roadtype válido ya obtiene su
+fachada completa de la relocalización Action5. La regresión conjunta conserva
+las fachadas `6099/6100` y exige cero overlays duplicados. #326/#565 siguen
+abiertas por la selección Action5 de tramtypes custom, clipping, pivotes y
+framebuffer.

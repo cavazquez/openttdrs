@@ -2453,6 +2453,8 @@ fn action5_no_track_tram_depot_relocates_buildings_and_draws_the_overlay() {
 #[test]
 fn action5_catenary_depot_fallback_covers_custom_tram_and_road_types() {
     let assets = boot_assets_app();
+    let expected_overlay =
+        assets.tram_flat[crate::sprites::road_flat_sprite_index(0, 0x04)].clone();
     let tram_coord = TileCoord::new(1, 1);
     let road_coord = TileCoord::new(3, 1);
     let mut map = Map::new_flat(6, 4, 0);
@@ -2622,6 +2624,15 @@ fn action5_catenary_depot_fallback_covers_custom_tram_and_road_types() {
             "un roadtype eléctrico válido fuerza DEPOT_NO_TRACK ({sprite_id})"
         );
     }
+    assert_eq!(
+        world
+            .query::<&Sprite>()
+            .iter(&world)
+            .filter(|sprite| expected_overlay.matches(sprite))
+            .count(),
+        0,
+        "un roadtype eléctrico válido no agrega un overlay de tranvía duplicado"
+    );
     assert!(
         parents
             .iter()

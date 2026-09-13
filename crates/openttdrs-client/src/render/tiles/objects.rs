@@ -6619,7 +6619,15 @@ fn spawn_road_depot_tile(
                 &view,
             );
         }
-    } else if tram_depot_replacement == Some(TramwayDepotReplacement::NoTrack) {
+    } else if tram_depot_replacement == Some(TramwayDepotReplacement::NoTrack)
+        // `DrawTile_Road` sólo dibuja `SPR_TRAMWAY_OVERLAY` cuando el
+        // depósito es un tram puro (`road_rt == INVALID_ROADTYPE`). Para un
+        // roadtype eléctrico válido, `DEPOT_NO_TRACK` ya es la fachada
+        // completa: agregar aquí la tira de tranvía duplicaba la vía.
+        && depot_tile.is_some_and(|tile| {
+            road_type_from_tile(&tile).as_u8() == INVALID_ROAD_TYPE_ID
+        })
+    {
         spawn_road_depot_vanilla_tram_overlay(
             commands,
             assets,

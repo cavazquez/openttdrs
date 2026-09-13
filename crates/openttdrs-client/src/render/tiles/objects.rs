@@ -4697,7 +4697,7 @@ fn spawn_newgrf_airport_tile(
         "airport-newgrf-tile",
         "sortable",
         u32::from(gfx),
-        0,
+        station_company_palette(owner_colour),
         false,
         (0, 0),
         0,

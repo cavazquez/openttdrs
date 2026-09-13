@@ -87,8 +87,18 @@ fn record_render_trace(
         let pose = extrapolate_vehicle_pose(v, alpha);
         let sprite_dir = vehicle_render_direction_at(v, pose);
         let logical_pose = extrapolate_vehicle_pose(v, 0.0);
-        let logical_world = crate::render::vehicle_sprite_pos_at(v, &sim.state.map, logical_pose);
-        let extrap_world = crate::render::vehicle_sprite_pos_at(v, &sim.state.map, pose);
+        let logical_world = crate::render::vehicle_sprite_pos_at_with_catalog(
+            v,
+            &sim.state.map,
+            logical_pose,
+            Some(&sim.state.engine_catalog),
+        );
+        let extrap_world = crate::render::vehicle_sprite_pos_at_with_catalog(
+            v,
+            &sim.state.map,
+            pose,
+            Some(&sim.state.engine_catalog),
+        );
         let (logical_sub_x, logical_sub_y) = vehicle_subtile_at(v, logical_pose);
         let (extrap_sub_x, extrap_sub_y) = vehicle_subtile_at(v, pose);
         let _ = writeln!(
@@ -180,6 +190,74 @@ mod tests {
         );
         assert_ne!(cols[12], cols[14], "subtile_x extrapolado ≠ lógico");
         assert_ne!(cols[20], cols[21], "road frame extrapolado ≠ lógico");
+        let _ = std::fs::remove_file(&dir);
+    }
+
+    #[test]
+    fn trace_uses_active_catalog_sprite_offsets() {
+        let dir = std::env::temp_dir().join(format!(
+            "openttdrs_render_trace_catalog_{}.csv",
+            std::process::id()
+        ));
+        let file = File::create(&dir).unwrap();
+        let mut writer = BufWriter::new(file);
+        writeln!(writer, "{CSV_HEADER}").unwrap();
+
+        let mut sim = SimWorld {
+            state: openttdrs_core::GameState::new(8, 8),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let mut custom = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_BUS_MPS)
+            .unwrap()
+            .clone();
+        custom.id = openttdrs_core::NEWGRF_ENGINE_ID_BASE + 91;
+        custom.newgrf_views = vec![openttdrs_core::DecodedSprite {
+            width: 4,
+            height: 4,
+            x_offs: 96,
+            y_offs: 0,
+            rgba: vec![255; 4 * 4 * 4],
+            mask: Vec::new(),
+        }];
+        sim.state.engine_catalog.push(custom.clone());
+
+        let tile = TileCoord::new(2, 2);
+        let mut vehicle = Vehicle::new(7, VehicleKind::Bus, tile, tile);
+        vehicle.engine_id = Some(custom.id);
+        sim.state.vehicles.push(vehicle);
+
+        let expected_pose = extrapolate_vehicle_pose(&sim.state.vehicles[0], 0.0);
+        let expected = crate::render::vehicle_sprite_pos_at_with_catalog(
+            &sim.state.vehicles[0],
+            &sim.state.map,
+            expected_pose,
+            Some(&sim.state.engine_catalog),
+        );
+        let vanilla = crate::render::vehicle_sprite_pos_at_with_catalog(
+            &sim.state.vehicles[0],
+            &sim.state.map,
+            expected_pose,
+            None,
+        );
+
+        let mut world = World::new();
+        world.insert_resource(RenderTrace {
+            writer: Some(Mutex::new(writer)),
+        });
+        world.insert_resource(sim);
+        world.insert_resource(SimClock { tick_alpha: 0.0 });
+        world.run_system_once(record_render_trace).unwrap();
+
+        drop(world);
+        let contents = std::fs::read_to_string(&dir).unwrap();
+        let cols: Vec<&str> = contents.lines().nth(1).unwrap().split(',').collect();
+        let traced_x: f32 = cols[16].parse().unwrap();
+        let traced_y: f32 = cols[17].parse().unwrap();
+        assert!((traced_x - expected.x).abs() < 0.01);
+        assert!((traced_y - expected.y).abs() < 0.01);
+
+        assert!(expected.x - vanilla.x > 30.0);
         let _ = std::fs::remove_file(&dir);
     }
 }

@@ -14,7 +14,8 @@ pub(crate) use assets::{NewGrfTrainSpriteCache, NewGrfVehicleLayer, TruckHandles
 pub(crate) use picking::pick_vehicle_id_at_world;
 pub(crate) use plugin::VehicleRenderPlugin;
 pub(crate) use pose::{
-    vehicle_draw_anchor_from_pose, vehicle_sprite_pos_at, vehicle_world_position_with_catalog,
+    vehicle_draw_anchor_from_pose, vehicle_sprite_pos_at_with_catalog,
+    vehicle_world_position_with_catalog,
 };
 pub(crate) use spawn::spawn_initial_vehicles;
 pub(crate) use sync::{

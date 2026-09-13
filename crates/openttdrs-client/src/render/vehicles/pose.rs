@@ -73,6 +73,7 @@ pub(crate) fn vehicle_world_position_with_catalog(
     vehicle_sprite_pos_at_with_catalog(v, map, extrapolate_vehicle_pose(v, 0.0), Some(catalog))
 }
 
+#[cfg(test)]
 pub(crate) fn vehicle_sprite_pos_at(
     v: &Vehicle,
     map: &Map,

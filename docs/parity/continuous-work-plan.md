@@ -6517,5 +6517,16 @@ NewGRF que declaran `ObjectFlag::Uses2CC` ya no suben sus vistas o piezas
 incluye ese byte y hornea ambas rampas para vistas planas, suelo, parents y
 children. La regresión de cliente contrasta dos libreas sobre los mismos
 píxeles; la de core verifica el offset inicial y el fallback de una sola rampa.
-Esto no cierra #329/#425: mapas 2CC Action5, paletas custom Action1,
+Esto no cierra #329/#425: mapas 2CC Action5, paletas custom Action1 dinámicas,
 transparencia, layouts 16-bit y otros consumidores visuales siguen pendientes.
+
+Corrección #326/#329-TILELAYOUT-CUSTOM-ACTION1-PALETTE (2026-09-12,
+`7518216e`): el resolver común de `TileLayout` hornea mapas de paleta Action1
+estáticos representados por sprites `256×1` sobre las entradas Action1 de
+suelo, parents y children. La máscara se limpia después para que el cliente no
+reaplique la librea de compañía; mapas ausentes o inválidos conservan el
+fallback atómico. La regresión
+`tile_layout_honours_static_custom_action1_palette` y los 15 tests de layouts
+quedan verdes con Clippy estricto y formato. Las cadenas con registros,
+`PALETTE_VAR10`, transparencia y layouts 16-bit continúan pendientes; no se
+cierran #326/#329.

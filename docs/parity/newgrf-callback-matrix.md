@@ -1918,8 +1918,8 @@ Corrección posterior (`c5b3e166`): un `TileLayout` Action1 con paleta directa
 sin máscara pendiente. Las paletas directas no representadas, incluyendo
 2CC, ya no pasan como textura cruda: el layout se marca incompleto para usar
 fallback. `tile_layout_honours_explicit_company_palette_on_action1_sprite`
-cubre ambos caminos; mapas 2CC, paletas custom Action1, transparencia y
-`PALETTE_VAR10` siguen abiertos.
+cubre ambos caminos; mapas 2CC, paletas custom Action1 dinámicas, transparencia
+y `PALETTE_VAR10` siguen abiertos.
 
 ### #329/#425-OBJECT-2CC-PALETTE — librea de objetos NewGRF
 
@@ -1931,5 +1931,17 @@ pieza `TileSeq` de suelo, parent o child, y separa cada combinación en la
 caché. `object_sprite_cache_bakes_instance_2cc_and_separates_liveries` y
 `object_initial_colour_keeps_default_2cc_livery` cubren píxeles, aislamiento
 de texturas y persistencia del color inicial. El callback CB15B conserva su
-byte resultante; siguen pendientes paletas custom Action1, mapas 2CC Action5
-por objeto, transparencia y layouts 16-bit.
+byte resultante; siguen pendientes paletas custom Action1 dinámicas, mapas 2CC
+Action5 por objeto, transparencia y layouts 16-bit.
+
+### #326/#329-TILELAYOUT-CUSTOM-ACTION1-PALETTE — mapas estáticos de paleta
+
+Actualizado: 2026-09-12 (`7518216e`). El resolver común de `TileLayout` ya
+materializa una paleta Action1 estática como tabla DOS `256×1`, la aplica a
+sprites Action1 de suelo, parents y children, y limpia la máscara una vez
+horneada. Un mapa ausente, corto o incompatible deja el layout incompleto para
+conservar el fallback atómico; las paletas con registro `TLF_PALETTE`,
+`PALETTE_VAR10`, transparencia y otros modificadores aún no se fuerzan como
+textura cruda. `tile_layout_honours_static_custom_action1_palette` comprueba el
+remapeo y su contrato de no doble recolorización; el alcance no cierra #326 ni
+#329.

@@ -6517,7 +6517,7 @@ NewGRF que declaran `ObjectFlag::Uses2CC` ya no suben sus vistas o piezas
 incluye ese byte y hornea ambas rampas para vistas planas, suelo, parents y
 children. La regresión de cliente contrasta dos libreas sobre los mismos
 píxeles; la de core verifica el offset inicial y el fallback de una sola rampa.
-Esto no cierra #329/#425: mapas 2CC Action5, paletas custom Action1 dinámicas,
+Esto no cierra #329/#425: mapas 2CC Action5, paletas custom Action1 con var10,
 transparencia, layouts 16-bit y otros consumidores visuales siguen pendientes.
 
 Corrección #326/#329-TILELAYOUT-CUSTOM-ACTION1-PALETTE (2026-09-12,
@@ -6530,3 +6530,10 @@ fallback atómico. La regresión
 quedan verdes con Clippy estricto y formato. Las cadenas con registros,
 `PALETTE_VAR10`, transparencia y layouts 16-bit continúan pendientes; no se
 cierran #326/#329.
+
+Corrección posterior #326/#329-TILELAYOUT-PALETTE-REGISTER (2026-09-12,
+`f3d9e2f2`): `TLF_PALETTE` aplica desplazamientos firmados válidos a la entrada
+seleccionada de un mapa Action1 o a una paleta directa de compañía. Los límites
+se validan antes de hornear y los casos no representables mantienen el
+fallback atómico. Las cadenas `PALETTE_VAR10`, transparencia y layouts 16-bit
+siguen pendientes; no se cierran #326/#329.

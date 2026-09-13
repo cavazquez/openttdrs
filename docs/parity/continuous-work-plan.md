@@ -6884,3 +6884,13 @@ layout de objeto usa `object_transmitter.png`; las referencias Action1,
 paletas/modifiers y sprites no auditados mantienen fallback atómico. Las
 regresiones cubren atlas, tamaño y ancla de los cinco IDs; #326/#329 continúan
 abiertas por vehículos, callbacks, layouts y namespaces restantes.
+
+Corrección #326/#329-OBJECT-HQ-VANILLA-RENDER (2026-09-13): las sedes de
+compañía vanilla (`OBJECT_HQ`) dejan de caer en césped genérico. El cliente
+carga los 29 sprites `2603..2631`, resuelve el nivel desde `M4` y la posición
+dentro de la huella 2×2 desde `OBJS`, aplica la paleta de compañía y emite
+las tres piezas BUILD con sus cajas `TILE_SEQ_LINE` de 20/50/60 unidades al
+sorter global. Las pendientes usan la fundación nivelada y mantienen el
+ground como child, igual que `DrawTile_Object`; la regresión cubre footprint,
+ nivel, atlas y bounds. #326/#329 continúan abiertas por los namespaces,
+ callbacks y contratos visuales restantes.

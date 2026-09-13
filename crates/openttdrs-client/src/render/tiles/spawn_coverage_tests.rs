@@ -13371,6 +13371,138 @@ fn direct_object_build_uses_object_atlas_and_namespace_anchor() {
 }
 
 #[test]
+fn company_hq_uses_persisted_2x2_footprint_level_and_build_sorting() {
+    use openttdrs_core::map::{MP_OBJECT_MAPT, OBJECT_TYPE_COMPANY_HEADQUARTERS};
+
+    let assets = boot_assets_app();
+    let origin = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(5, 5, 0);
+    for dy in 0..2 {
+        for dx in 0..2 {
+            let coord = TileCoord::new(origin.x + dx, origin.y + dy);
+            map.set_tile(
+                coord,
+                Tile {
+                    kind: TileKind::Grass,
+                    mapt: MP_OBJECT_MAPT,
+                    // OpenTTD stores the ObjectID in MAP2/MAP5. The pool
+                    // below resolves it to OBJECT_HQ; m3hi is M4, the HQ
+                    // growth level selected by GetCompanyHQSize.
+                    m2: 7,
+                    m3hi: 2,
+                    ..tile_template()
+                },
+            )
+            .expect("HQ footprint tile");
+        }
+    }
+    let object = openttdrs_core::sav::SavObject {
+        object_id: 7,
+        tile: origin,
+        width: 2,
+        height: 2,
+        town: 0,
+        build_date: 0,
+        colour: 0,
+        view: 0,
+        object_type: u16::from(OBJECT_TYPE_COMPANY_HEADQUARTERS),
+    };
+    let expected_ground = [
+        assets.hq[8].clone(),
+        assets.hq[10].clone(),
+        assets.hq[12].clone(),
+        assets.hq[14].clone(),
+    ];
+    let expected_build = [
+        assets.hq[9].clone(),
+        assets.hq[11].clone(),
+        assets.hq[13].clone(),
+    ];
+    let grid = RenderGrid::from_map(&map, 5, 5);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let objects = [object.clone()];
+                let mut batches = MapSpriteBatches::default();
+                for dy in 0..2 {
+                    for dx in 0..2 {
+                        let coord = TileCoord::new(origin.x + dx, origin.y + dy);
+                        let mut ctx = TileRenderContext::new(
+                            &m.0,
+                            &g.0,
+                            u32::try_from(coord.x).expect("positive x"),
+                            u32::try_from(coord.y).expect("positive y"),
+                        );
+                        // The synthetic Map has no OBTY footer; emulate the same
+                        // pool resolution performed by tile_spawn for an imported
+                        // save.
+                        ctx.object_type = Some(u16::from(OBJECT_TYPE_COMPANY_HEADQUARTERS));
+                        spawn_generic_land_tile_with_objects_and_water(
+                            &mut commands,
+                            &a.0,
+                            None,
+                            None,
+                            &ctx,
+                            &m.0,
+                            4.0,
+                            TEST_CLIMATE,
+                            TEST_WORLD_SEED,
+                            m.0.dimensions().0,
+                            &[],
+                            &[],
+                            &objects,
+                            None,
+                            None,
+                            None,
+                            &[],
+                            &[],
+                            None,
+                            &mut batches,
+                        );
+                    }
+                }
+                flush_map_batches(&mut commands, batches);
+            },
+        )
+        .expect("company HQ spawn");
+
+    let sprites: Vec<_> = world.query::<&Sprite>().iter(&world).collect();
+    assert_eq!(sprites.len(), 7, "HQ 2x2 = cuatro grounds + tres BUILD");
+    for image in expected_ground {
+        assert!(
+            sprites.iter().any(|sprite| image.matches(sprite)),
+            "falta el ground HQ esperado"
+        );
+    }
+    for image in expected_build {
+        assert!(
+            sprites.iter().any(|sprite| image.matches(sprite)),
+            "falta una pieza BUILD HQ"
+        );
+    }
+
+    let mut parents: Vec<_> = world
+        .query::<&ViewportSortableParent>()
+        .iter(&world)
+        .map(|parent| (parent.sprite_id, parent.bounds))
+        .collect();
+    parents.sort_unstable_by_key(|(sprite_id, _)| *sprite_id);
+    assert_eq!(
+        parents,
+        vec![
+            (2612, ParentSpriteBounds::new(16, 16, 0, 31, 31, 19)),
+            (2614, ParentSpriteBounds::new(32, 16, 0, 47, 31, 19)),
+            (2616, ParentSpriteBounds::new(16, 32, 0, 31, 47, 19)),
+        ],
+        "las tres piezas BUILD de la sede deben entrar al sorter con TILE_SEQ_LINE"
+    );
+}
+
+#[test]
 fn spawn_bridge_middle_draws_deck_over_marked_water() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();

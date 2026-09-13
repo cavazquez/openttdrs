@@ -3,9 +3,10 @@ use openttdrs_core::map::has_tile_water_ground;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
-    CLEAR_GROUND_SNOW, Climate, OBJECT_FLAG_DRAW_WATER, OBJECT_TYPE_LIGHTHOUSE,
-    OBJECT_TYPE_OWNED_LAND, OBJECT_TYPE_STATUE_COMPANY, OBJECT_TYPE_TRANSMITTER, ObjectSpecDef,
-    effective_clear_ground, industry_uses_water_ground, is_newgrf_object_type_id,
+    CLEAR_GROUND_SNOW, Climate, OBJECT_FLAG_DRAW_WATER, OBJECT_TYPE_COMPANY_HEADQUARTERS,
+    OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND, OBJECT_TYPE_STATUE_COMPANY,
+    OBJECT_TYPE_TRANSMITTER, ObjectSpecDef, effective_clear_ground, industry_uses_water_ground,
+    is_newgrf_object_type_id,
 };
 
 use super::{
@@ -25,23 +26,24 @@ use crate::render::newgrf_cache::{
     runtime_fingerprint, tile_layout_entry_is_hidden, tile_layout_is_renderable,
     tile_layout_sprite_color_with_palette, vars,
 };
-use crate::render::viewport_sort::ParentSpriteBounds;
+use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, TileRenderContext,
     ViewportSortableChild, ViewportSortableParent, WaterTile, WorldAssets,
-    sprite_from_atlas_or_company_colour, sprite_from_atlas_or_industry_palette,
-    viewport_insertion_key, viewport_source_depth,
+    sprite_from_atlas_or_company_colour, sprite_from_atlas_or_company_white_colour,
+    sprite_from_atlas_or_industry_palette, viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
-    CompanyColour, FENCE_MOD_BY_TILEH_NE, FENCE_MOD_BY_TILEH_NW, FENCE_MOD_BY_TILEH_SE,
-    FENCE_MOD_BY_TILEH_SW, FENCE_SPRITE_META, FIELD_STATES, HOUSE_DRAW_DATA, HouseDrawSpec,
-    TILEH_TO_SHORE_SPRITE, TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY, TREE_SPRITE_META,
-    house_building_stage_from_tile, industry_anim_layer_used_in_any_frame,
-    industry_building_needs_client_anim, industry_effective_m4_for_draw,
-    industry_gfx_entry_for_tile, industry_gfx_uses_fizzy_drink_anim,
-    industry_gfx_uses_random_colour, industry_gfx_uses_refinery_fire_anim,
-    industry_palette_colour_for_instance,
+    COMPANY_HQ_SPRITE_BASE, CompanyColour, FENCE_MOD_BY_TILEH_NE, FENCE_MOD_BY_TILEH_NW,
+    FENCE_MOD_BY_TILEH_SE, FENCE_MOD_BY_TILEH_SW, FENCE_SPRITE_META, FIELD_STATES, HOUSE_DRAW_DATA,
+    HouseDrawSpec, TILEH_TO_SHORE_SPRITE, TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY, TREE_SPRITE_META,
+    company_hq_asset_filename, company_hq_build_height, company_hq_build_sprite_id,
+    company_hq_ground_sprite_id, company_hq_sprite_meta, house_building_stage_from_tile,
+    industry_anim_layer_used_in_any_frame, industry_building_needs_client_anim,
+    industry_effective_m4_for_draw, industry_gfx_entry_for_tile,
+    industry_gfx_uses_fizzy_drink_anim, industry_gfx_uses_random_colour,
+    industry_gfx_uses_refinery_fire_anim, industry_palette_colour_for_instance,
 };
 
 /// `GetTreeGround`: bits 6–8 de MAP2 (MAP2 es una palabra, no sólo `m2`).
@@ -2427,6 +2429,230 @@ fn requested_object_neighbor_vars(
     requested
 }
 
+/// Dibuja una sede vanilla (`OBJECT_HQ`) con la misma tabla 2×2 de
+/// `object_land.h`.
+///
+/// A diferencia de los objetos 1×1, el tipo de sede no puede deducirse de la
+/// tesela sola: el nivel está en `M4` (`m3hi`) y la posición se obtiene desde
+/// `Object::location.tile` cuando el save trae el pool `OBJS`. Mantener esa
+/// resolución aquí evita que las tres teselas no-origen se confundan con una
+/// sede nueva en cada coordenada.
+#[allow(clippy::too_many_arguments)]
+fn spawn_company_hq_tile(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
+    ctx: &TileRenderContext,
+    map: &Map,
+    map_width: u32,
+    objects: &[openttdrs_core::sav::SavObject],
+) -> bool {
+    let Some(tile) = ctx.tile else {
+        return false;
+    };
+    let Some(origin) =
+        openttdrs_core::object_origin_from_tile_with_objects(&tile, ctx.coord, objects)
+    else {
+        return false;
+    };
+    let Some(dx) = ctx
+        .coord
+        .x
+        .checked_sub(origin.x)
+        .and_then(|value| (0..=1).contains(&value).then(|| u8::try_from(value).ok()))
+        .flatten()
+    else {
+        return false;
+    };
+    let Some(dy) = ctx
+        .coord
+        .y
+        .checked_sub(origin.y)
+        .and_then(|value| (0..=1).contains(&value).then(|| u8::try_from(value).ok()))
+        .flatten()
+    else {
+        return false;
+    };
+
+    let level = tile.m3hi.min(4);
+    let ground_id = company_hq_ground_sprite_id(level, dx, dy);
+    let Some(ground_index) = ground_id
+        .checked_sub(COMPANY_HQ_SPRITE_BASE)
+        .and_then(|id| usize::try_from(id).ok())
+    else {
+        return false;
+    };
+    let Some(ground_image) = assets.hq.get(ground_index) else {
+        WorldDrawTrace::record_sprite_with_palette(
+            "object-hq-ground",
+            "ground",
+            ground_id,
+            0,
+            true,
+        );
+        return false;
+    };
+    let Some(ground_meta) = company_hq_sprite_meta(ground_id) else {
+        return false;
+    };
+
+    // `DrawTile_Object` siempre llama a `GetFoundation_Object`; la tabla
+    // vanilla no marca `HasNoFoundation`, por lo que una pendiente debe
+    // quedar nivelada antes de recibir tanto el suelo como el edificio.
+    let foundation = spawn_forced_leveled_foundation_with_child_parent(
+        commands,
+        map,
+        map.dimensions(),
+        assets,
+        ctx,
+        ctx.info.tileh,
+        "object-hq",
+        "object-hq-foundation",
+        &[],
+        None,
+        None,
+    );
+    let surface_base_z = foundation.surface_base_z;
+    let palette = owner_colour.map_or(0, |colour| {
+        PALETTE_RECOLOUR_START + u32::from(colour.as_u8())
+    });
+    let asset_path = company_hq_asset_filename(ground_id);
+    let ground_sprite =
+        sprite_from_atlas_or_company_white_colour(company, owner_colour, ground_image, &asset_path);
+    let mut ground_position = foundation_surface_overlay_pos(
+        ctx.iso_pos,
+        ground_meta.x_offs,
+        ground_meta.y_offs,
+        ground_meta.width,
+        ground_meta.height,
+        surface_base_z,
+        0.4,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    if let Some(parent) = foundation.child_parent {
+        WorldDrawTrace::record_foundation_child_sprite_with_palette(
+            "object-hq-ground",
+            ground_id,
+            palette,
+            false,
+            (0, -32, 0),
+        );
+        spawn_foundation_child_sprite_at(
+            commands,
+            ground_sprite,
+            ctx,
+            ground_position,
+            map_width,
+            parent,
+        );
+    } else {
+        WorldDrawTrace::record_sprite_with_palette(
+            "object-hq-ground",
+            "ground",
+            ground_id,
+            palette,
+            false,
+        );
+        ground_position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.4);
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            ground_sprite,
+            Transform::from_translation(ground_position),
+        ));
+    }
+
+    use crate::sprites::{TransparencyOption, is_hidden, sprite_color};
+    if is_hidden(TransparencyOption::Structures) {
+        return true;
+    }
+    let Some(build_id) = company_hq_build_sprite_id(level, dx, dy) else {
+        return true;
+    };
+    let Some(build_height) = company_hq_build_height(build_id) else {
+        return true;
+    };
+    let Some(build_meta) = company_hq_sprite_meta(build_id) else {
+        return true;
+    };
+    let Some(build_index) = build_id
+        .checked_sub(COMPANY_HQ_SPRITE_BASE)
+        .and_then(|id| usize::try_from(id).ok())
+    else {
+        return true;
+    };
+    let Some(build_image) = assets.hq.get(build_index) else {
+        WorldDrawTrace::record_sprite_with_palette_and_geometry(
+            "object-hq-building",
+            "sortable",
+            build_id,
+            palette,
+            true,
+            (0, 0, 0),
+            (i32::from(surface_base_z) - i32::from(ctx.info.base_z)) * 8,
+            Some(TraceSpriteBounds::new(0, 0, 0, 16, 16, build_height)),
+        );
+        return true;
+    };
+    let build_path = company_hq_asset_filename(build_id);
+    let mut build_sprite =
+        sprite_from_atlas_or_company_white_colour(company, owner_colour, build_image, &build_path);
+    build_sprite.color = sprite_color(TransparencyOption::Structures);
+    let build_position = road_stop_build_sprite_center(
+        ctx.iso_pos,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+        surface_base_z,
+        0.6,
+        RoadStopSeqGfx {
+            dx: 0.0,
+            dy: 0.0,
+            dz: 0.0,
+            x_offs: build_meta.x_offs,
+            y_offs: build_meta.y_offs,
+            remap_x_adj: 0.0,
+        },
+        build_meta.width,
+        build_meta.height,
+    );
+    let source_depth = viewport_source_depth(build_position.z, ctx.tx, map_width);
+    WorldDrawTrace::record_sprite_with_palette_and_geometry(
+        "object-hq-building",
+        "sortable",
+        build_id,
+        palette,
+        false,
+        (0, 0, 0),
+        (i32::from(surface_base_z) - i32::from(ctx.info.base_z)) * 8,
+        Some(TraceSpriteBounds::new(0, 0, 0, 16, 16, build_height)),
+    );
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        build_sprite,
+        Transform::from_translation(Vec3::new(build_position.x, build_position.y, source_depth)),
+        ViewportSortableParent {
+            sprite_id: build_id,
+            bounds: tile_seq_parent_bounds(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                surface_base_z,
+                0,
+                0,
+                0,
+                16,
+                16,
+                build_height,
+            ),
+            insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 2),
+            source_depth,
+        },
+    ));
+    true
+}
+
 /// Decide si `DrawNewObjectTile` sustituye el ground del layout por
 /// `DrawWaterClassGround`.
 fn object_layout_ground_uses_water(
@@ -2990,6 +3216,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
         | TileKind::Void => unreachable!(),
     };
     let mut used_newgrf_layout_ground = false;
+    let mut used_vanilla_hq_ground = false;
     if let Some((def, layout, runtime_fp, _view_idx, object_colour)) = object_layout.as_ref()
         && let Some(tile) = ctx.tile
     {
@@ -3021,7 +3248,19 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
             );
         }
     }
-    if !used_newgrf_layout_ground {
+    if ottd_type == 10 && object_type == u16::from(OBJECT_TYPE_COMPANY_HEADQUARTERS) {
+        used_vanilla_hq_ground = spawn_company_hq_tile(
+            commands,
+            assets,
+            company,
+            owner_colour,
+            ctx,
+            map,
+            map_width,
+            objects,
+        );
+    }
+    if !used_newgrf_layout_ground && !used_vanilla_hq_ground {
         spawn_ground_sprite(commands, &image, color, ctx, slope_half_ground);
     }
 

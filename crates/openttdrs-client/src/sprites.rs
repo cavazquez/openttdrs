@@ -13,6 +13,8 @@ mod bridge_draw_data_generated;
 mod bridge_sprites_generated;
 #[path = "sprites/bridge_structure_palette.rs"]
 pub(crate) mod bridge_structure_palette;
+#[path = "sprites/company_hq.rs"]
+mod company_hq;
 #[path = "sprites/company_palette.rs"]
 pub(crate) mod company_palette;
 #[path = "sprites/copper_smoke_draw_data_generated.rs"]
@@ -130,6 +132,11 @@ pub const ROAD_FLAT_HALF_H: [f32; 19] = [
     15.5, 15.5, 15.5,
 ];
 
+pub(crate) use company_hq::{
+    COMPANY_HQ_SPRITE_BASE, COMPANY_HQ_SPRITE_COUNT, company_hq_asset_filename,
+    company_hq_build_height, company_hq_build_sprite_id, company_hq_ground_sprite_id,
+    company_hq_sprite_meta,
+};
 pub(crate) use company_palette::{
     CompanyColoredSprites, CompanyColour, company_colour_name, company_colour_swatch_color,
     company_colour_tooltip, tile_filename,

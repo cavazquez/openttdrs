@@ -87,6 +87,9 @@ pub(crate) struct WorldAssets {
     pub(crate) lighthouse: AtlasSprite,
     pub(crate) transmitter: AtlasSprite,
     pub(crate) company_statue: AtlasSprite,
+    /// Sprites 2603..2631 de las cinco etapas de sede de compañía vanilla.
+    /// El índice es `sprite_id - COMPANY_HQ_SPRITE_BASE`.
+    pub(crate) hq: Vec<AtlasSprite>,
     pub(crate) road_flat: Vec<AtlasSprite>,
     /// Set pavimentado (`SPR_ROAD_Y - 19` = 1313..1331), mismo orden que `road_flat`.
     pub(crate) road_paved: Vec<AtlasSprite>,
@@ -326,6 +329,12 @@ impl WorldAssets {
         let lighthouse = atlas.get("object_lighthouse.png");
         let transmitter = atlas.get("object_transmitter.png");
         let company_statue = atlas.get("object_statue_company.png");
+        let mut hq = Vec::with_capacity(crate::sprites::COMPANY_HQ_SPRITE_COUNT);
+        hq.extend((0..4).map(|i| atlas.get(&format!("hq_tiny_{i}.png"))));
+        hq.extend((0..4).map(|i| atlas.get(&format!("hq_small_{i}.png"))));
+        hq.extend((0..7).map(|i| atlas.get(&format!("hq_medium_{i}.png"))));
+        hq.extend((0..7).map(|i| atlas.get(&format!("hq_large_{i}.png"))));
+        hq.extend((0..7).map(|i| atlas.get(&format!("hq_huge_{i}.png"))));
         let road_flat = (0..19)
             .map(|i| atlas.get(&format!("road_flat_{i:02}.png")))
             .collect();
@@ -847,6 +856,7 @@ impl WorldAssets {
             lighthouse,
             transmitter,
             company_statue,
+            hq,
             road_flat,
             road_paved,
             oneway_roads,

@@ -6553,3 +6553,15 @@ comprueban que ambos IDs se resuelven sin aliasar modelos de otros climas.
 La creación de un `ENGN` cuando falta el chunk sigue deliberadamente pendiente:
 la tabla nativa es densa y requiere materializar el prefijo completo del pool
 para no sobrescribir motores no representados.
+
+Corrección #326/#329-STATION-ADVANCED-LAYOUT-PARSE (2026-09-12, `eb1385c6`):
+el parser de metadatos de `Stations` consume ahora `prop 0x1A` (advanced sprite
+layout) con el mismo orden de `OpenTTD`: contador de building sprites, flags,
+origen/extensión parent y registros de sprite, paleta y `var10`. Esto evita que
+un `PALETTE_VAR10` o un offset de caja haga que el parser trate la siguiente
+propiedad como parte del layout y pierda nombre, animación o badges. También se
+cerró el acceso truncado del `extended byte`. La regresión combina registros de
+ground y parent con propiedades de animación posteriores. Este corte sólo
+arregla el consumo del formato; la materialización visual runtime del layout
+legacy y la resolución dinámica de sus paletas siguen pendientes, por lo que
+#326/#329 permanecen abiertas.

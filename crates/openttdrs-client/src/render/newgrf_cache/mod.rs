@@ -351,6 +351,36 @@ fn direct_tile_layout_industry_geometry(sprite_id: u16) -> Option<DirectTileLayo
     geometry
 }
 
+/// Busca la geometría del overlay de casa (`s2`) en todas las vistas y etapas
+/// de `_town_draw_tile_data`. Las paletas de compañía se resuelven aparte;
+/// aquí sólo habilitamos la referencia directa sin recolour explícito.
+fn direct_tile_layout_house_geometry(sprite_id: u16) -> Option<DirectTileLayoutGroundGeometry> {
+    if sprite_id == 0 {
+        return None;
+    }
+    let sprite_id = u32::from(sprite_id);
+    let mut geometry = None;
+    for spec in crate::sprites::HOUSE_DRAW_DATA
+        .iter()
+        .filter(|spec| spec.s2 == sprite_id)
+    {
+        let candidate = DirectTileLayoutGroundGeometry {
+            width: spec.s2_w,
+            height: spec.s2_h,
+            x_offs: spec.s2_xrel,
+            y_offs: spec.s2_yrel,
+        };
+        if let Some(previous) = geometry {
+            if previous != candidate {
+                return None;
+            }
+        } else {
+            geometry = Some(candidate);
+        }
+    }
+    geometry
+}
+
 /// Geometría NFO de un sprite vanilla que puede aparecer en una secuencia
 /// `BUILD`. Además del terreno, las tablas de estación rail y airport ya
 /// conservan el tamaño y el ancla de cada sprite; no es correcto tratarlos
@@ -358,6 +388,7 @@ fn direct_tile_layout_industry_geometry(sprite_id: u16) -> Option<DirectTileLayo
 fn direct_tile_layout_sequence_geometry(sprite_id: u16) -> Option<DirectTileLayoutGroundGeometry> {
     direct_tile_layout_ground_geometry(sprite_id)
         .or_else(|| direct_tile_layout_industry_geometry(sprite_id))
+        .or_else(|| direct_tile_layout_house_geometry(sprite_id))
         .or_else(|| {
             crate::sprites::rail_station_sprite_meta(u32::from(sprite_id)).map(
                 |(width, height, x_offs, y_offs)| DirectTileLayoutGroundGeometry {
@@ -509,6 +540,7 @@ pub(crate) fn direct_tile_layout_sequence(
         .get(&u32::from(sprite_id))
         .cloned()
         .or_else(|| assets.industries.get(&u32::from(sprite_id)).cloned())
+        .or_else(|| assets.houses.get(&u32::from(sprite_id)).cloned())
         .or_else(|| assets.airport_station_sprite(u32::from(sprite_id)).cloned())?;
     Some(DirectTileLayoutGround {
         atlas,
@@ -645,7 +677,7 @@ mod tests {
         };
 
         for sprite_id in [
-            1069, 1083, 1151, 1233, 4974, 2633, 2651, 2668, 4982, 5966, 2011, 2047,
+            1069, 1083, 1151, 1233, 4974, 2633, 2651, 2668, 4982, 5966, 2011, 2047, 1421, 1430,
         ] {
             layout.sequence[0].sprite = None;
             layout.sequence[0].base_sprite = Some(sprite_id);
@@ -654,7 +686,7 @@ mod tests {
                 "sprite de estación vanilla {sprite_id} debe conservarse como BUILD"
             );
         }
-        for sprite_id in [2000, 2692, 4983, 5969] {
+        for sprite_id in [1419, 2000, 2692, 4983, 5969] {
             layout.sequence[0].base_sprite = Some(sprite_id);
             assert!(
                 !tile_layout_is_renderable(&layout),
@@ -763,6 +795,29 @@ mod tests {
             })
         );
         assert_eq!(direct_tile_layout_industry_geometry(2000), None);
+    }
+
+    #[test]
+    fn direct_base_build_uses_consistent_house_overlay_geometry() {
+        assert_eq!(
+            direct_tile_layout_house_geometry(1421),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 64.0,
+                height: 37.0,
+                x_offs: -31.0,
+                y_offs: -6.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_house_geometry(1430),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 35.0,
+                height: 20.0,
+                x_offs: -18.0,
+                y_offs: 2.0,
+            })
+        );
+        assert_eq!(direct_tile_layout_house_geometry(1419), None);
     }
 
     #[test]

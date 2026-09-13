@@ -6631,6 +6631,14 @@ o materializados con un contrato que OpenTTD deshabilitaría; paletas especiales
 transparencia, relocación y scopes restantes siguen pendientes, por lo que
 #326/#329 continúan abiertas.
 
+Corrección #326/#329-TILELAYOUT-DIRECT-HOUSE-BUILD (2026-09-13): las
+secuencias `BUILD` de casas que referencian directamente un overlay `s2` del
+baseset ahora reutilizan `WorldAssets.houses` y sus anclas de
+`HOUSE_DRAW_DATA`. El resolver compara todas las vistas y etapas que usan el
+mismo ID y sólo lo materializa si la geometría es única; las paletas de casa,
+los suelos `s1` no auditados y el draw-proc del ascensor siguen usando sus
+contratos/fallback propios. #326/#329 continúan abiertas.
+
 Corrección #326/#329-TILELAYOUT-SPRITE-MODIFIERS (2026-09-13, `00fb3251`): los
 lectores de `Stations` legacy `0x09`, `Stations` avanzado `0x1A` y grupos
 Action2 traducen los bits nativos de modifier antes de tratar los words como

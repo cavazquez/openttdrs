@@ -13275,6 +13275,26 @@ fn direct_industry_build_uses_the_industry_atlas_and_overlay_anchor() {
 }
 
 #[test]
+fn direct_house_build_uses_the_house_atlas_and_overlay_anchor() {
+    let assets = boot_assets_app();
+    let layer = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+        sprite: None,
+        base_sprite: Some(1421),
+        sprite_modifiers: 0,
+        direct_palette: 0,
+        origin: [0, 0, 0],
+        extent: [14, 14, 8],
+    };
+
+    let resolved = direct_tile_layout_sequence(&layer, &assets).expect("house BUILD sprite");
+    assert!(resolved.atlas.matches(&assets.houses[&1421].sprite()));
+    assert_eq!(resolved.width, 64.0);
+    assert_eq!(resolved.height, 37.0);
+    assert_eq!(resolved.x_offs, -31.0);
+    assert_eq!(resolved.y_offs, -6.0);
+}
+
+#[test]
 fn spawn_bridge_middle_draws_deck_over_marked_water() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();

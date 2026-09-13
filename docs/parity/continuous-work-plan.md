@@ -6545,3 +6545,11 @@ seleccionada de un mapa Action1 o a una paleta directa de compañía. Los límit
 se validan antes de hornear y los casos no representables mantienen el
 fallback atómico. Las cadenas `PALETTE_VAR10`, transparencia y layouts 16-bit
 siguen pendientes; no se cierran #326/#329.
+
+Corrección #329/#567-VEHICLE-SAV-MONORAIL-MAGLEV (2026-09-12, `f443f713`): el
+puente vanilla de `ENGN` reconoce los slots nativos `54` (X2001/monorail) y
+`84` (Lev1/maglev), además de los motores ya cubiertos. Las regresiones
+comprueban que ambos IDs se resuelven sin aliasar modelos de otros climas.
+La creación de un `ENGN` cuando falta el chunk sigue deliberadamente pendiente:
+la tabla nativa es densa y requiere materializar el prefijo completo del pool
+para no sobrescribir motores no representados.

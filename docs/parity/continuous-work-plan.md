@@ -6397,3 +6397,20 @@ contrasta una librea de grupo 2CC `4/9` con el resultado de compra. Pasaron 37
 tests de `render::vehicles`, Clippy estricto de cliente y core, formato y
 `git diff --check`. #329 continúa abierta por image types, callbacks y
 consumidores legacy restantes; #326/#567 permanecen abiertas.
+
+Corrección #329-VEHICLE-COLOUR-MAPPING-PREVIEW (2026-09-12, `2155c05b`): las
+previews de compra y rotor, que todavía no tienen una unidad materializada,
+construyen ahora el scope GUI equivalente con motor, compañía activa, carga,
+capacidad y fecha; `CBID_VEHICLE_COLOUR_MAPPING` (`0x2D`) puede seleccionar
+la paleta explícita o la librea 2CC antes de hornear la textura. La misma
+resolución se usa sólo sobre el contexto efímero de la preview, mientras las
+unidades reales conservan el writeback aislado y sus registros no se mutan.
+El apply de vehículos mantiene el runtime cuando la máscara de callbacks sólo
+declara `ColourRemap`, evitando perder el grafo antes de llegar a la UI. Las
+regresiones `vehicle_preview_applies_colour_mapping_callback` y
+`callbacks_ac_vehicle_colour_mapping_respects_mask_and_company_bit` cubren la
+selección de una paleta distinta de la compañía activa y la variante con
+contexto preparado. Pasaron 39 tests de `render::vehicles`, el callback core
+dirigido, Clippy estricto de cliente y core, formato y `git diff --check`.
+#329 continúa abierta por layouts/call sites GUI restantes, callbacks de
+vehículos sin consumidor y consumidores legacy; #326/#567 permanecen abiertas.

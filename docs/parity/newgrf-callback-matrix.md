@@ -1808,3 +1808,20 @@ compra `0x20`. La regresión
 `runtime_vehicle_layers_receive_purchase_image_type` verifica que un grupo
 seleccione una vista distinta para compra frente al mapa; quedan callbacks,
 layouts específicos y consumidores legacy pendientes.
+
+### #329-VEHICLE-COLOUR-MAPPING-PREVIEW — callback de paleta en scope GUI
+
+Actualizado: 2026-09-12 (`2155c05b`). Las previews de compra y rotor ejecutan
+`CBID_VEHICLE_COLOUR_MAPPING` (`0x2D`) con un `Action2EvalCtx` efímero que
+reproduce el motor sin unidad construida, la compañía activa, carga,
+capacidad, año/fecha y parámetros del GRF. El resultado conserva `PaletteID`,
+bit de librea de compañía, paletas `775..790`, 2CC y `804`; una unidad real
+continúa evaluándose sobre una copia para no mutar su storage. El apply de
+vehículos conserva el runtime cuando la máscara declara sólo `ColourRemap`,
+para que el callback llegue a las ventanas GUI. Las regresiones
+`vehicle_preview_applies_colour_mapping_callback` y
+`callbacks_ac_vehicle_colour_mapping_respects_mask_and_company_bit` verifican
+respectivamente una paleta explícita distinta del color activo y la variante
+de API con contexto preparado. Quedan pendientes layouts/call sites GUI
+adicionales, invalidación global fuera de la caché de vehículos y callbacks
+avanzados; #329 sigue abierta.

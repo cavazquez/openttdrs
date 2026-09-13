@@ -22,7 +22,9 @@ const TEST_WORLD_SEED: u64 = 0;
 
 use crate::iso::{ground_draw_z, overlay_pos};
 use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
-use crate::render::newgrf_cache::direct_tile_layout_sequence;
+use crate::render::newgrf_cache::{
+    direct_tile_layout_object_sequence, direct_tile_layout_sequence,
+};
 use crate::render::tiles::{
     FLAT_WATER_LAYER_FRAC, HouseSpawnResources, TramwayDepotAction5, flush_map_batches,
     push_forest_tree, push_water_tile, push_water_tile_with_action5, spawn_bridge_middle,
@@ -13332,6 +13334,40 @@ fn direct_house_build_uses_the_house_atlas_and_overlay_anchor() {
     assert_eq!(resolved.height, 37.0);
     assert_eq!(resolved.x_offs, -31.0);
     assert_eq!(resolved.y_offs, -6.0);
+}
+
+#[test]
+fn direct_object_build_uses_object_atlas_and_namespace_anchor() {
+    let assets = boot_assets_app();
+    let cases = [
+        (1420, &assets.object_concrete, 64.0, 31.0, -31.0, 0.0),
+        (2601, &assets.transmitter, 54.0, 94.0, -26.0, -80.0),
+        (2602, &assets.lighthouse, 21.0, 64.0, -9.0, -52.0),
+        (2632, &assets.company_statue, 60.0, 45.0, -30.0, -42.0),
+        (4790, &assets.bought_land, 32.0, 48.0, -16.0, -40.0),
+    ];
+
+    for (sprite_id, expected, width, height, x_offs, y_offs) in cases {
+        let layer = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+            sprite: None,
+            base_sprite: Some(sprite_id),
+            sprite_modifiers: 0,
+            direct_palette: 0,
+            origin: [0, 0, 0],
+            extent: [14, 14, 61],
+        };
+
+        let resolved = direct_tile_layout_object_sequence(&layer, &assets)
+            .unwrap_or_else(|| panic!("object BUILD sprite {sprite_id}"));
+        assert!(
+            resolved.atlas.matches(&expected.sprite()),
+            "sprite {sprite_id}"
+        );
+        assert_eq!(resolved.width, width, "sprite {sprite_id}");
+        assert_eq!(resolved.height, height, "sprite {sprite_id}");
+        assert_eq!(resolved.x_offs, x_offs, "sprite {sprite_id}");
+        assert_eq!(resolved.y_offs, y_offs, "sprite {sprite_id}");
+    }
 }
 
 #[test]

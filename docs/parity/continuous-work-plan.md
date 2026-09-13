@@ -6873,3 +6873,14 @@ de los suelos comunes del baseset. La geometría se acepta sólo cuando es
 idéntica en todas las vistas y etapas del ID; las paletas/modifiers explícitas
 y los procedimientos dinámicos conservan fallback atómico. #326/#329
 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-OBJECT-BUILD (2026-09-13): la ruta
+`DrawNewObjectTile` resuelve ahora las referencias directas de `object_land.h`
+con el atlas y las anclas NFO del namespace de objetos: concreto (`1420`),
+transmisor (`2601`), faro (`2602`), estatua de compañía (`2632`) y terreno
+comprado (`4790`). El resolver es contextual: el ID `2601` conserva su
+geometría de aeropuerto en los consumidores de estación, mientras que un
+layout de objeto usa `object_transmitter.png`; las referencias Action1,
+paletas/modifiers y sprites no auditados mantienen fallback atómico. Las
+regresiones cubren atlas, tamaño y ancla de los cinco IDs; #326/#329 continúan
+abiertas por vehículos, callbacks, layouts y namespaces restantes.

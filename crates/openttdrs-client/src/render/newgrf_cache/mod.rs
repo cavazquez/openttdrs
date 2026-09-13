@@ -448,6 +448,58 @@ fn direct_tile_layout_house_geometry(sprite_id: u16) -> Option<DirectTileLayoutG
     geometry
 }
 
+/// Geometría NFO de las referencias directas que `object_land.h` usa dentro
+/// del namespace de objetos. Estos IDs también pueden aparecer en tablas de
+/// estación (por ejemplo, el transmisor 2601); por eso el consumidor de
+/// objetos tiene un resolver contextual y no se sobreescribe la prioridad de
+/// los metadatos de estación del resolver genérico.
+fn direct_tile_layout_object_geometry(sprite_id: u16) -> Option<DirectTileLayoutGroundGeometry> {
+    match sprite_id {
+        1420 => Some(DirectTileLayoutGroundGeometry {
+            width: 64.0,
+            height: 31.0,
+            x_offs: -31.0,
+            y_offs: 0.0,
+        }), // SPR_CONCRETE_GROUND
+        2601 => Some(DirectTileLayoutGroundGeometry {
+            width: 54.0,
+            height: 94.0,
+            x_offs: -26.0,
+            y_offs: -80.0,
+        }), // SPR_TRANSMITTER
+        2602 => Some(DirectTileLayoutGroundGeometry {
+            width: 21.0,
+            height: 64.0,
+            x_offs: -9.0,
+            y_offs: -52.0,
+        }), // SPR_LIGHTHOUSE
+        2632 => Some(DirectTileLayoutGroundGeometry {
+            width: 60.0,
+            height: 45.0,
+            x_offs: -30.0,
+            y_offs: -42.0,
+        }), // SPR_STATUE_COMPANY
+        4790 => Some(DirectTileLayoutGroundGeometry {
+            width: 32.0,
+            height: 48.0,
+            x_offs: -16.0,
+            y_offs: -40.0,
+        }), // SPR_BOUGHT_LAND
+        _ => None,
+    }
+}
+
+fn direct_tile_layout_object_atlas(sprite_id: u16, assets: &WorldAssets) -> Option<AtlasSprite> {
+    match sprite_id {
+        1420 => Some(assets.object_concrete.clone()),
+        2601 => Some(assets.transmitter.clone()),
+        2602 => Some(assets.lighthouse.clone()),
+        2632 => Some(assets.company_statue.clone()),
+        4790 => Some(assets.bought_land.clone()),
+        _ => None,
+    }
+}
+
 /// Geometría NFO de un sprite vanilla que puede aparecer en una secuencia
 /// `BUILD`. Además del terreno, las tablas de estación rail y airport ya
 /// conservan el tamaño y el ancla de cada sprite; no es correcto tratarlos
@@ -478,6 +530,7 @@ fn direct_tile_layout_sequence_geometry(sprite_id: u16) -> Option<DirectTileLayo
                 }
             })
         })
+        .or_else(|| direct_tile_layout_object_geometry(sprite_id))
 }
 
 fn direct_tile_layout_sequence_sprite_is_supported(sprite_id: u16) -> bool {
@@ -624,6 +677,36 @@ pub(crate) fn direct_tile_layout_sequence(
         x_offs: geometry.x_offs,
         y_offs: geometry.y_offs,
     })
+}
+
+/// Resuelve una referencia directa de una secuencia `BUILD` desde el
+/// contexto `DrawNewObjectTile`. Los IDs vanilla comparten un espacio global
+/// con estaciones e industrias, así que el resolver genérico no puede elegir
+/// siempre la textura correcta: 2601, por ejemplo, tiene una entrada de
+/// aeropuerto distinta. Para objetos se prioriza el atlas y la geometría de
+/// `object_land.h`; el resto conserva el resolver compartido.
+#[must_use]
+pub(crate) fn direct_tile_layout_object_sequence(
+    layer: &ResolvedTileLayoutSprite,
+    assets: &WorldAssets,
+) -> Option<DirectTileLayoutGround> {
+    if layer.action1_sprite().is_some() || layer.sprite_modifiers != 0 || layer.direct_palette != 0
+    {
+        return None;
+    }
+    if let Some(sprite_id) = layer.base_sprite_id()
+        && let Some(geometry) = direct_tile_layout_object_geometry(sprite_id)
+        && let Some(atlas) = direct_tile_layout_object_atlas(sprite_id, assets)
+    {
+        return Some(DirectTileLayoutGround {
+            atlas,
+            width: geometry.width,
+            height: geometry.height,
+            x_offs: geometry.x_offs,
+            y_offs: geometry.y_offs,
+        });
+    }
+    direct_tile_layout_sequence(layer, assets)
 }
 
 /// Listas de vars Action2 que entran en el fingerprint por dominio.
@@ -965,6 +1048,84 @@ mod tests {
             })
         );
         assert_eq!(direct_tile_layout_house_geometry(1419), None);
+    }
+
+    #[test]
+    fn direct_base_build_uses_object_namespace_geometry() {
+        assert_eq!(
+            direct_tile_layout_object_geometry(1420),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 64.0,
+                height: 31.0,
+                x_offs: -31.0,
+                y_offs: 0.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_object_geometry(2601),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 54.0,
+                height: 94.0,
+                x_offs: -26.0,
+                y_offs: -80.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_object_geometry(2602),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 21.0,
+                height: 64.0,
+                x_offs: -9.0,
+                y_offs: -52.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_object_geometry(2632),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 60.0,
+                height: 45.0,
+                x_offs: -30.0,
+                y_offs: -42.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_object_geometry(4790),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 32.0,
+                height: 48.0,
+                x_offs: -16.0,
+                y_offs: -40.0,
+            })
+        );
+        assert_eq!(direct_tile_layout_object_geometry(2600), None);
+    }
+
+    #[test]
+    fn direct_object_build_ids_are_renderable_without_palette_modifiers() {
+        let direct_ground = ResolvedTileLayoutSprite {
+            sprite: None,
+            base_sprite: Some(3981),
+            sprite_modifiers: 0,
+            direct_palette: 0,
+            origin: [0, 0, 0],
+            extent: [0, 0, 0],
+        };
+        let mut layout = ResolvedTileLayout {
+            ground: Some(direct_ground),
+            sequence: vec![action1_sprite()],
+            complete: true,
+        };
+        for sprite_id in [1420, 2601, 2602, 2632, 4790] {
+            layout.sequence[0].sprite = None;
+            layout.sequence[0].base_sprite = Some(sprite_id);
+            assert!(
+                tile_layout_is_renderable(&layout),
+                "sprite de objeto vanilla {sprite_id} debe conservarse como BUILD"
+            );
+        }
+        layout.sequence[0].base_sprite = Some(2601);
+        layout.sequence[0].direct_palette = 1;
+        assert!(!tile_layout_is_renderable(&layout));
     }
 
     #[test]

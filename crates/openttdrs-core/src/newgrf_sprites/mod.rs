@@ -48,7 +48,7 @@ pub(crate) use model::{map_tile_layout_sprite_modifiers, tile_layout_flags_valid
 // Re-exportar funciones de runtime de pixel_codec
 pub use pixel_codec::{
     SPRITE_V2_ZOOM_PREFERENCE, apply_company_colour_mask, bake_sprite_company_mask,
-    bake_sprite_company_palette, bake_sprite_crash, bake_sprite_palette_map,
+    bake_sprite_company_palette, bake_sprite_crash, bake_sprite_newspaper, bake_sprite_palette_map,
     bake_sprite_two_company_palette, bake_sprite_two_company_palette_with_map, decode_chunked_8bpp,
     decode_chunked_pixels, decode_real_sprite_v1, decode_real_sprite_v1_uncompressed,
     decode_real_sprite_v2_section, decode_real_sprite_v2_section_zoom, decompress_grf_lz77,
@@ -1310,6 +1310,24 @@ mod tests {
         let dark = u8::try_from((100_u32 * 13_063 + 150 * 25_647 + 200 * 4_981) / 65_536)
             .unwrap_or(u8::MAX);
         assert_eq!(bake_sprite_crash(&sprite), vec![dark, dark, dark, 255]);
+    }
+
+    #[test]
+    fn bake_newspaper_palette_matches_openttd_make_grey() {
+        let sprite = DecodedSprite {
+            width: 2,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![100, 150, 200, 255, 1, 2, 3, 0],
+            mask: Vec::new(),
+        };
+        let grey = u8::try_from((100_u32 * 19_595 + 150 * 38_470 + 200 * 7_471) / 65_536)
+            .unwrap_or(u8::MAX);
+        assert_eq!(
+            bake_sprite_newspaper(&sprite),
+            vec![grey, grey, grey, 255, 1, 2, 3, 0]
+        );
     }
 
     #[test]

@@ -630,6 +630,33 @@ pub fn bake_sprite_crash(sprite: &DecodedSprite) -> Vec<u8> {
     rgba
 }
 
+/// Hornea `PALETTE_NEWSPAPER` para un sprite `NewGRF`.
+///
+/// El blitter 32bpp de `OpenTTD` aplica `MakeGrey` a cada píxel visible. La
+/// conversión se mantiene en enteros con los mismos coeficientes de 16 bits
+/// que el código nativo y conserva el canal alpha del sprite.
+#[must_use]
+pub fn bake_sprite_newspaper(sprite: &DecodedSprite) -> Vec<u8> {
+    let mut rgba = sprite.rgba.clone();
+    let (pixels, _) = rgba.as_chunks_mut::<4>();
+    for pixel in pixels {
+        if pixel[3] == 0 {
+            continue;
+        }
+        let grey = u8::try_from(
+            (u32::from(pixel[0]) * 19_595
+                + u32::from(pixel[1]) * 38_470
+                + u32::from(pixel[2]) * 7_471)
+                / 65_536,
+        )
+        .unwrap_or(u8::MAX);
+        pixel[0] = grey;
+        pixel[1] = grey;
+        pixel[2] = grey;
+    }
+    rgba
+}
+
 /// Decodifica imagen de sprite section v2 (8bpp / 32bpp / máscara / chunked).
 ///
 /// Devuelve `(zoom, sprite)`.

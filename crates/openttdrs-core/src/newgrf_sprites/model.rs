@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::action2::{eval_action2_random, eval_action2_var, resolve_callback_chain};
-use super::pixel_codec::{bake_sprite_company_palette, bake_sprite_crash, bake_sprite_palette_map};
+use super::pixel_codec::{
+    bake_sprite_company_palette, bake_sprite_crash, bake_sprite_newspaper, bake_sprite_palette_map,
+};
 
 /// Rango `PALETTE_RECOLOUR_START..=+15` que puede hornearse sin conservar un
 /// identificador de paleta en el cliente. Otras paletas directas necesitan
@@ -15,6 +17,8 @@ const PALETTE_RECOLOUR_START: u16 = 775;
 const PALETTE_RECOLOUR_END: u16 = PALETTE_RECOLOUR_START + 15;
 /// Paleta nativa de sprites en estado de choque (`PALETTE_CRASH`).
 const PALETTE_CRASH: u16 = 804;
+/// Paleta nativa de sprites de periódico (`PALETTE_NEWSPAPER`).
+const PALETTE_NEWSPAPER: u16 = 803;
 /// Paletas nativas que recolorean sprites compartidos de estructuras.
 /// `1438`/`1439` son las variantes de iglesias de ciudad.
 const PALETTE_TO_STRUCT_START: u16 = 795;
@@ -527,6 +531,13 @@ fn resolve_layout_sprite_asset(
         }
         if direct_palette == PALETTE_CRASH {
             sprite.rgba = bake_sprite_crash(&sprite);
+            // El remapeo ya quedó materializado; no debe reaplicarse sobre la
+            // máscara de paleta al subir la textura al cliente.
+            sprite.mask.clear();
+            return Some((Some(sprite), None, 0));
+        }
+        if direct_palette == PALETTE_NEWSPAPER {
+            sprite.rgba = bake_sprite_newspaper(&sprite);
             // El remapeo ya quedó materializado; no debe reaplicarse sobre la
             // máscara de paleta al subir la textura al cliente.
             sprite.mask.clear();

@@ -6698,3 +6698,14 @@ compartir una imagen entre tonos estructurales; las paletas de destino, 2CC y
 las referencias directas del baseset siguen con fallback atómico. La regresión
 `tile_layout_preserves_structure_palette_on_action1_sprite` fija el contrato de
 resolución y #326/#329 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-NEWSPAPER-PALETTE (2026-09-13): las entradas
+Action1 de `TileLayout` que seleccionan `PALETTE_NEWSPAPER` (`803`) aplican en
+el core la misma conversión entera `MakeGrey` del blitter 32bpp nativo,
+conservando alpha y limpiando la máscara después del horneado. Así no se
+reaplica la paleta en el cliente ni se confunde esta transformación de píxeles
+con `PALETTE_TO_TRANSPARENT` (que depende del destino). `PALETTE_TO_BARE_LAND`,
+`PALETTE_TO_TRANSPARENT`, 2CC y las referencias directas del baseset siguen en
+fallback atómico hasta verificar sus tablas/compositor; la regresión
+`tile_layout_honours_newspaper_palette_on_action1_sprite` fija el alcance y
+#326/#329 continúan abiertas.

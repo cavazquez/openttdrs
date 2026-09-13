@@ -79,6 +79,53 @@ pub struct TileLayoutSpriteRef {
     pub extent: [u8; 3],
 }
 
+/// Valida las combinaciones que `ReadSpriteLayout` acepta antes de consumir
+/// los registros que siguen a una entrada.
+///
+/// El formato comparte los mismos ocho flags entre los layouts Action0 de
+/// Stations y los grupos Action2. Los dos lectores sólo difieren en que
+/// Stations permite las cadenas `var10`; mantener la regla aquí evita que un
+/// parser específico acepte una entrada que el lector nativo deshabilitaría o
+/// que el cursor quede corrido por flags imposibles en el ground.
+#[must_use]
+#[allow(clippy::fn_params_excessive_bools)] // Replica los estados separados de ReadSpriteLayout.
+pub(crate) const fn tile_layout_flags_valid(
+    flags: u8,
+    is_ground: bool,
+    custom_sprite: bool,
+    custom_palette: bool,
+    sprite_var10: Option<u8>,
+    palette_var10: Option<u8>,
+    allow_var10: bool,
+) -> bool {
+    // TLF_BB_XY_OFFSET/TLF_BB_Z_OFFSET y los bits child no existen para el
+    // primer sprite de la secuencia. OpenTTD los considera un layout inválido
+    // en vez de intentar consumir registros que no están presentes.
+    if is_ground && flags & 0x30 != 0 {
+        return false;
+    }
+    if !allow_var10 && flags & 0xC0 != 0 {
+        return false;
+    }
+    if matches!(sprite_var10, Some(value) if value > 7)
+        || matches!(palette_var10, Some(value) if value > 7)
+    {
+        return false;
+    }
+    // TLF_SPRITE_VAR10 sólo puede seleccionar una referencia Action1 o una
+    // entrada que ya depende de los registros de sprite (DODRAW, SPRITE o
+    // offsets de caja). Es la misma guarda de ReadSpriteLayoutSprite.
+    if flags & 0x40 != 0 && !custom_sprite && flags & 0x33 == 0 {
+        return false;
+    }
+    // TLF_PALETTE_VAR10 necesita una paleta Action1 o TLF_PALETTE para que la
+    // cadena tenga un sprite/paleta que resolver.
+    if flags & 0x80 != 0 && !custom_palette && flags & 0x04 == 0 {
+        return false;
+    }
+    true
+}
+
 impl TileLayoutSpriteRef {
     /// `true` si la entrada crea un parent sortable con caja 3D.
     #[must_use]

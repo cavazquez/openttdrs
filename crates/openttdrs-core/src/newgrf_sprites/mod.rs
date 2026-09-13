@@ -42,6 +42,8 @@ pub use model::{
     WagonOverrideAssign,
 };
 
+pub(crate) use model::tile_layout_flags_valid;
+
 // Re-exportar funciones de runtime de pixel_codec
 pub use pixel_codec::{
     SPRITE_V2_ZOOM_PREFERENCE, apply_company_colour_mask, bake_sprite_company_mask,

@@ -1,6 +1,7 @@
 //! Parsing compartido de cabeceras y metadatos Action0.
 
 use crate::newgrf_config::{GrfScanError, parse_grf_container};
+use crate::newgrf_sprites::tile_layout_flags_valid;
 use crate::newgrf_sprites::{TileLayout, TileLayoutRegisterRefs, TileLayoutSpriteRef};
 use crate::newgrf_walk::for_each_pseudo_sprite;
 use crate::road_type::RoadTramType;
@@ -1503,6 +1504,22 @@ fn read_station_advanced_sprite(
     let palette_action1_set = custom_palette.then_some(palette & 0x3FFF);
     let direct_palette = if custom_palette { 0 } else { palette & 0x7FFF };
 
+    // Validate structural flags before consuming origin/register payloads.
+    // The var10 bytes themselves come after the origin and box registers for
+    // building sprites, so their range is checked again after that payload
+    // has been consumed below.
+    if !tile_layout_flags_valid(
+        flags,
+        is_ground,
+        custom_sprite,
+        custom_palette,
+        None,
+        None,
+        true,
+    ) {
+        return None;
+    }
+
     let mut origin = [0_i8; 3];
     let mut extent = [0_u8; 3];
     if !is_ground {
@@ -1556,6 +1573,18 @@ fn read_station_advanced_sprite(
         if flags & 0x80 != 0 {
             registers.palette_var10 = Some(read_u8(payload, i)?);
         }
+    }
+
+    if !tile_layout_flags_valid(
+        flags,
+        is_ground,
+        custom_sprite,
+        custom_palette,
+        registers.sprite_var10,
+        registers.palette_var10,
+        true,
+    ) {
+        return None;
     }
 
     Some(TileLayoutSpriteRef {

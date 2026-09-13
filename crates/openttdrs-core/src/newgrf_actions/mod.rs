@@ -3185,6 +3185,33 @@ mod tests {
     }
 
     #[test]
+    fn parse_station_advanced_layout_drops_invalid_ground_flags() {
+        let mut payload = vec![0x00, ACTION0_FEATURE_STATIONS, 0x02, 0x01, 0x00];
+        payload.extend_from_slice(&[0x08, b'B', b'A', b'D', b'F']);
+        payload.extend_from_slice(&[0x1A, 0x01, 0x40]); // ground only, flags present
+        payload.extend_from_slice(&0_u16.to_le_bytes());
+        payload.extend_from_slice(&0_u16.to_le_bytes());
+        payload.extend_from_slice(&0x0010_u16.to_le_bytes()); // BB_XY is non-ground-only
+
+        let meta = parse_action0_station_meta(&payload).expect("station metadata");
+        assert!(meta.action0_layouts.is_none());
+    }
+
+    #[test]
+    fn parse_station_advanced_layout_drops_var10_above_native_limit() {
+        let mut payload = vec![0x00, ACTION0_FEATURE_STATIONS, 0x02, 0x01, 0x00];
+        payload.extend_from_slice(&[0x08, b'V', b'A', b'R', b'X']);
+        payload.extend_from_slice(&[0x1A, 0x01, 0x40]); // ground only, flags present
+        payload.extend_from_slice(&0_u16.to_le_bytes());
+        payload.extend_from_slice(&0x8000_u16.to_le_bytes());
+        payload.extend_from_slice(&0x0042_u16.to_le_bytes()); // SPRITE + SPRITE_VAR10
+        payload.extend_from_slice(&[0, 8]); // sprite register, var10 > 7
+
+        let meta = parse_action0_station_meta(&payload).expect("station metadata");
+        assert!(meta.action0_layouts.is_none());
+    }
+
+    #[test]
     fn apply_station_badges_uses_globalvar_translation_table() {
         let badge = build_action0_badge_payload(b"GATE", 0, None);
         let badge_translation = vec![

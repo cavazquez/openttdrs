@@ -11,6 +11,7 @@ use crate::newgrf_actions::{
 use crate::newgrf_config::{GrfContainerVersion, GrfScanError, parse_grf_full};
 use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
 
+use super::model::tile_layout_flags_valid;
 use super::model::{
     ACTION2_PARENT_SCOPE_MARKER, Action2RandomEntry, Action2VarAdjust, Action2VarEntry,
     Action2VarOp, Action2VarTerm, DecodedSprite, IndustryProductionGroup, TileLayout,
@@ -87,7 +88,7 @@ fn parse_action2_tile_layout(payload: &[u8], feature: u8) -> Option<(u8, TileLay
             // it as a WORD. Keep the low byte used by OpenTTD and consume the
             // full word here so the following origin and sequence records
             // remain aligned.
-            u8::try_from(u16::from_le_bytes([flag_bytes[0], flag_bytes[1]])).unwrap_or_default()
+            u8::try_from(u16::from_le_bytes([flag_bytes[0], flag_bytes[1]])).ok()?
         } else {
             0
         };
@@ -104,6 +105,22 @@ fn parse_action2_tile_layout(payload: &[u8], feature: u8) -> Option<(u8, TileLay
         let custom_palette = flags & 0x08 != 0;
         let palette_action1_set = custom_palette.then_some(palette & 0x3FFF);
         let direct_palette = if custom_palette { 0 } else { palette & 0x7FFF };
+
+        // Action2 layouts use ReadSpriteLayout(..., allow_var10=false). Do
+        // this validation before reading the optional origin/register bytes;
+        // a ground flag such as BB_XY would otherwise make the cursor consume
+        // the next sprite as if it were a register.
+        if !tile_layout_flags_valid(
+            flags,
+            is_ground,
+            custom_sprite,
+            custom_palette,
+            None,
+            None,
+            false,
+        ) {
+            return None;
+        }
 
         let mut origin = [0_i8; 3];
         let mut extent = [0_u8; 3];
@@ -1085,6 +1102,26 @@ mod tests {
             layout.sequence[0].registers.parent_delta,
             [Some(9), Some(10), None]
         );
+    }
+
+    #[test]
+    fn parse_roadstop_tile_layout_rejects_invalid_ground_flags() {
+        let mut payload = vec![0x02, ACTION0_FEATURE_ROADSTOPS, 7, 0x40];
+        payload.extend_from_slice(&0_u16.to_le_bytes());
+        payload.extend_from_slice(&0_u16.to_le_bytes());
+        payload.extend_from_slice(&0x0010_u16.to_le_bytes()); // BB_XY is not valid on ground
+
+        assert!(parse_action2_tile_layout(&payload, ACTION0_FEATURE_ROADSTOPS).is_none());
+    }
+
+    #[test]
+    fn parse_roadstop_tile_layout_rejects_unknown_flag_word() {
+        let mut payload = vec![0x02, ACTION0_FEATURE_ROADSTOPS, 7, 0x40];
+        payload.extend_from_slice(&0_u16.to_le_bytes());
+        payload.extend_from_slice(&0_u16.to_le_bytes());
+        payload.extend_from_slice(&0x0100_u16.to_le_bytes()); // flags above the native byte
+
+        assert!(parse_action2_tile_layout(&payload, ACTION0_FEATURE_ROADSTOPS).is_none());
     }
 
     #[test]

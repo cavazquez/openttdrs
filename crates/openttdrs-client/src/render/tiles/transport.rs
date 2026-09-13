@@ -704,8 +704,9 @@ fn spawn_vanilla_tram_underlay(
 /// Emite una vista `ROTSG_*` manteniendo juntas la textura y su metadata NFO.
 ///
 /// Las superficies específicas de roadtypes llegan por `DrawGroundSprite` en
-/// OpenTTD. En plano conservan la posición del sprite decodificado; sobre una
-/// fundación se convierten en hijos del mismo parent que el asfalto vanilla.
+/// OpenTTD. Conservan la posición del sprite decodificado tanto en plano como
+/// sobre una pendiente; sobre una fundación se convierten en hijos del mismo
+/// parent que el asfalto vanilla.
 #[allow(clippy::too_many_arguments)]
 fn spawn_road_specific_layer(
     commands: &mut Commands,
@@ -713,8 +714,6 @@ fn spawn_road_specific_layer(
     map_width: u32,
     ctx: &TileRenderContext,
     base_z: u8,
-    tileh: u8,
-    half_h: f32,
     def: &RoadTypeDef,
     selector: u8,
     view_idx: usize,
@@ -744,21 +743,22 @@ fn spawn_road_specific_layer(
     ) else {
         return false;
     };
-    let position = if tileh == 0 {
-        overlay_pos(
-            ctx.iso_pos,
-            f32::from(view.x_offs),
-            f32::from(view.y_offs),
-            f32::from(view.width),
-            f32::from(view.height),
-            base_z,
-            layer,
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-        )
-    } else {
-        tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, layer, half_h)
-    };
+    // `DrawGroundSprite` siempre parte de `TileInfo::x/y/z` y el blitter
+    // agrega el ancla NFO del sprite. La pendiente cambia `tileh`, pero no
+    // convierte la superficie en un sprite centrado de 64x31: perder aquí
+    // `x_offs/y_offs/width/height` desplaza las superficies custom sobre
+    // foundations y pendientes inclinadas.
+    let position = overlay_pos(
+        ctx.iso_pos,
+        f32::from(view.x_offs),
+        f32::from(view.y_offs),
+        f32::from(view.width),
+        f32::from(view.height),
+        base_z,
+        layer,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
     if let Some(parent) = foundation_child_parent {
         spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
     } else {
@@ -1306,8 +1306,6 @@ pub(crate) fn spawn_road_tile(
                 mw,
                 ctx,
                 base_z,
-                tileh,
-                road_half_h,
                 def,
                 ROTSG_GROUND,
                 tram_view_idx,
@@ -1356,8 +1354,6 @@ pub(crate) fn spawn_road_tile(
                 mw,
                 ctx,
                 base_z,
-                tileh,
-                road_half_h,
                 def,
                 ROTSG_GROUND,
                 view_idx,
@@ -1378,8 +1374,6 @@ pub(crate) fn spawn_road_tile(
                     mw,
                     ctx,
                     base_z,
-                    tileh,
-                    road_half_h,
                     def,
                     ROTSG_OVERLAY,
                     view_idx,
@@ -1417,21 +1411,20 @@ pub(crate) fn spawn_road_tile(
             };
             if let Some(view) = view {
                 let handle = cache.handle_for_resolved_view(def, view_idx, &a2, &view, images);
-                let position = if tileh == 0 {
-                    overlay_pos(
-                        ctx.iso_pos,
-                        f32::from(view.x_offs),
-                        f32::from(view.y_offs),
-                        f32::from(view.width),
-                        f32::from(view.height),
-                        base_z,
-                        0.02,
-                        ctx.tx_i32(),
-                        ctx.ty_i32(),
-                    )
-                } else {
-                    tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.02, road_half_h)
-                };
+                // Un sprite NewGRF de carretera llega por `DrawGroundSprite`:
+                // también en una pendiente el origen visual es el ancla NFO,
+                // no el centro geométrico del sprite vanilla.
+                let position = overlay_pos(
+                    ctx.iso_pos,
+                    f32::from(view.x_offs),
+                    f32::from(view.y_offs),
+                    f32::from(view.width),
+                    f32::from(view.height),
+                    base_z,
+                    0.02,
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                );
                 let sprite = Sprite {
                     image: handle,
                     color: Color::WHITE,
@@ -1600,27 +1593,17 @@ pub(crate) fn spawn_road_tile(
                         &mut images,
                     )
                 {
-                    let pos3 = if tileh == 0 {
-                        overlay_pos(
-                            ctx.iso_pos,
-                            f32::from(view.x_offs),
-                            f32::from(view.y_offs),
-                            f32::from(view.width),
-                            f32::from(view.height),
-                            base_z,
-                            TRAM_OVERLAY_LAYER_FRAC,
-                            ctx.tx_i32(),
-                            ctx.ty_i32(),
-                        )
-                    } else {
-                        tile_pos_half(
-                            ctx.tx_i32(),
-                            ctx.ty_i32(),
-                            base_z,
-                            TRAM_OVERLAY_LAYER_FRAC,
-                            tram_half_h,
-                        )
-                    };
+                    let pos3 = overlay_pos(
+                        ctx.iso_pos,
+                        f32::from(view.x_offs),
+                        f32::from(view.y_offs),
+                        f32::from(view.width),
+                        f32::from(view.height),
+                        base_z,
+                        TRAM_OVERLAY_LAYER_FRAC,
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                    );
                     if let Some(parent) = foundation_child_parent {
                         // El overlay de tranvía sigue a `DrawFoundation` igual
                         // que el asfalto: una vista NewGRF no puede quedar como
@@ -1660,27 +1643,17 @@ pub(crate) fn spawn_road_tile(
                 };
                 if let Some(view) = view {
                     let handle = cache.handle_for_resolved_view(def, tfi, &a2, &view, images);
-                    let pos3 = if tileh == 0 {
-                        overlay_pos(
-                            ctx.iso_pos,
-                            f32::from(view.x_offs),
-                            f32::from(view.y_offs),
-                            f32::from(view.width),
-                            f32::from(view.height),
-                            base_z,
-                            TRAM_OVERLAY_LAYER_FRAC,
-                            ctx.tx_i32(),
-                            ctx.ty_i32(),
-                        )
-                    } else {
-                        tile_pos_half(
-                            ctx.tx_i32(),
-                            ctx.ty_i32(),
-                            base_z,
-                            TRAM_OVERLAY_LAYER_FRAC,
-                            tram_half_h,
-                        )
-                    };
+                    let pos3 = overlay_pos(
+                        ctx.iso_pos,
+                        f32::from(view.x_offs),
+                        f32::from(view.y_offs),
+                        f32::from(view.width),
+                        f32::from(view.height),
+                        base_z,
+                        TRAM_OVERLAY_LAYER_FRAC,
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                    );
                     let sprite = Sprite {
                         image: handle,
                         color: Color::WHITE,

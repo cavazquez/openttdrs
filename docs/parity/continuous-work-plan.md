@@ -6963,3 +6963,14 @@ geometría plana NFO de OpenGFX (`64×31`, `(-31,0)`), tanto en `ground` como en
 una entrada `BUILD`; el resolver global sigue rechazándolas como ground para
 no ampliar otros consumidores. La regresión cubre los seis IDs, sus atlas y
 el rechazo de paletas explícitas; #326/#329 continúan abiertas.
+
+Corrección #326/#565-TRAMTYPE-SLOPED-NFO-ANCHOR (2026-09-13): las superficies
+custom de roadtypes y tramtypes vuelven a usar `x_offs/y_offs/width/height`
+del sprite resuelto también sobre pendientes y foundations. La ruta anterior
+las recentraba con la media altura vanilla (`tile_pos_half`), desplazando
+sprites pequeños o HD aunque en plano conservaran el ancla nativa; la
+referencia de OpenTTD las emite siempre mediante `DrawGroundSprite`, cuyo
+blitter mantiene esos offsets. La regresión de tranvía inclinado comprueba
+textura, relación child/foundation y posición exacta; #326/#565 continúan
+abiertas por la matriz restante de superficies, depósitos, clipping y
+aceptación raster.

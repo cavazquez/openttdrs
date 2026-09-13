@@ -7824,8 +7824,8 @@ fn sloped_newgrf_tram_overlay_attaches_to_its_foundation_parent() {
     let surface = openttdrs_core::DecodedSprite {
         width: 8,
         height: 8,
-        x_offs: 0,
-        y_offs: 0,
+        x_offs: -3,
+        y_offs: -5,
         rgba: [255, 255, 0, 255].repeat(8 * 8),
         mask: Vec::new(),
     };
@@ -7939,6 +7939,45 @@ fn sloped_newgrf_tram_overlay_attaches_to_its_foundation_parent() {
             "la superficie custom del tramtype debe conservar su texture sobre foundation"
         );
     }
+    let surface_candidates: Vec<_> = world
+        .query::<(&ViewportSortableChild, &Sprite, &Transform)>()
+        .iter(&world)
+        .filter(|(child, sprite, _)| {
+            foundation_parents.contains(&child.parent) && sprite.image.path().is_none()
+        })
+        .map(|(_, sprite, transform)| (sprite.image.clone(), transform.translation))
+        .collect();
+    let images = world.resource::<Assets<Image>>();
+    let surface_position = surface_candidates
+        .into_iter()
+        .find_map(|(handle, position)| {
+            (images.get(&handle).and_then(|image| image.data.as_deref())
+                == Some(surface.rgba.as_slice()))
+            .then_some(position)
+        })
+        .expect("la superficie custom debe quedar como child de la foundation");
+    let ctx = {
+        let map = &world.resource::<TsMap>().0;
+        let grid = &world.resource::<TsGrid>().0;
+        TileRenderContext::new(map, grid, 1, 1)
+    };
+    let mut expected_surface_position = overlay_pos(
+        ctx.iso_pos,
+        f32::from(surface.x_offs),
+        f32::from(surface.y_offs),
+        f32::from(surface.width),
+        f32::from(surface.height),
+        ctx.info.base_z.saturating_add(1),
+        crate::render::tiles::TRAM_OVERLAY_LAYER_FRAC,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    expected_surface_position.z =
+        crate::render::viewport_source_depth(expected_surface_position.z, ctx.tx, 8);
+    assert_eq!(
+        surface_position, expected_surface_position,
+        "la superficie custom inclinada debe conservar el ancla NFO"
+    );
 
     let catenary_handles: Vec<_> = world
         .query::<(&ViewportSortableParent, &Sprite)>()

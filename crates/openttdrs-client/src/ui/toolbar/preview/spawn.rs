@@ -179,6 +179,7 @@ pub(crate) fn spawn_preview_plan(
                     asset_server,
                     atlas,
                     company,
+                    world_assets,
                     &sim.state.map,
                     action,
                     anim_cursor_frame,
@@ -416,6 +417,7 @@ fn spawn_tile_preview(
     asset_server: &AssetServer,
     atlas: Option<&TileAtlas>,
     company: Option<&CompanyColoredSprites>,
+    world_assets: Option<&WorldAssets>,
     map: &Map,
     action: crate::ui::toolbar::BuildMenuAction,
     anim_cursor_frame: u8,
@@ -519,6 +521,7 @@ fn spawn_tile_preview(
                     tint,
                     asset_server,
                     company,
+                    world_assets,
                 },
             );
         }

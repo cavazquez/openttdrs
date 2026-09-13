@@ -4,9 +4,13 @@ use bevy::prelude::*;
 use openttdrs_core::RailType;
 
 use crate::iso::{iso, road_depot_build_sprite_center, tile_pos_half};
-use crate::render::{CompanyColoredSprites, sprite_from_company_or_asset};
+use crate::render::{
+    CompanyColoredSprites, WorldAssets, sprite_from_atlas_or_company_colour,
+    sprite_from_company_or_asset,
+};
 use crate::sprites::{
-    RAIL_DEPOT_GROUND_TRACK, rail_depot_build_layers, rail_depot_seq_gfx, remap_rail_sprite_id,
+    RAIL_DEPOT_GROUND_TRACK, rail_depot_build_layers, rail_depot_seq_gfx,
+    rail_depot_visual_type_index, remap_rail_sprite_id,
 };
 use crate::ui::toolbar::preview::BuildGhostPreview;
 
@@ -23,6 +27,7 @@ pub(crate) struct RailDepotPreviewSpawn<'a> {
     pub tint: Color,
     pub asset_server: &'a AssetServer,
     pub company: Option<&'a CompanyColoredSprites>,
+    pub world_assets: Option<&'a WorldAssets>,
 }
 
 pub(crate) fn spawn_rail_depot_preview(commands: &mut Commands, spawn: RailDepotPreviewSpawn<'_>) {
@@ -36,20 +41,27 @@ pub(crate) fn spawn_rail_depot_preview(commands: &mut Commands, spawn: RailDepot
         tint,
         asset_server,
         company,
+        world_assets,
     } = spawn;
     let dir = dir.min(3);
 
     if let Some(track_id) =
         RAIL_DEPOT_GROUND_TRACK[dir].map(|id| remap_rail_sprite_id(id, rail_type))
     {
+        let track_sprite = world_assets
+            .and_then(|assets| assets.rail.get(&track_id))
+            .map_or_else(
+                || Sprite {
+                    image: asset_server
+                        .load::<Image>(format!("assets/opengfx/tiles/rail_{track_id}.png")),
+                    color: tint,
+                    ..default()
+                },
+                |asset| asset.sprite_colored(tint),
+            );
         commands.spawn((
             BuildGhostPreview,
-            Sprite {
-                image: asset_server
-                    .load::<Image>(format!("assets/opengfx/tiles/rail_{track_id}.png")),
-                color: tint,
-                ..default()
-            },
+            track_sprite,
             Transform::from_translation(tile_pos_half(
                 px,
                 py,
@@ -61,7 +73,7 @@ pub(crate) fn spawn_rail_depot_preview(commands: &mut Commands, spawn: RailDepot
         ));
     }
 
-    for spec in rail_depot_build_layers(rail_type, dir) {
+    for (layer_index, spec) in rail_depot_build_layers(rail_type, dir).iter().enumerate() {
         let layer_z = PREVIEW_Z_BASE + spec.z;
         let center = road_depot_build_sprite_center(
             iso(px, py),
@@ -73,9 +85,24 @@ pub(crate) fn spawn_rail_depot_preview(commands: &mut Commands, spawn: RailDepot
             spec.w,
             spec.h,
         );
+        let sprite = world_assets
+            .and_then(|assets| {
+                assets.rail_depot_builds[rail_depot_visual_type_index(rail_type)][dir]
+                    .get(layer_index)
+            })
+            .map_or_else(
+                || sprite_from_company_or_asset(company, asset_server, spec.path, tint),
+                |asset| {
+                    // El runtime usa el atlas de la variante rail/mono/maglev
+                    // y aplica el recolor antes de la transparencia de
+                    // construcción; el fallback mantiene aislados los tests
+                    // que no montan WorldAssets.
+                    sprite_from_atlas_or_company_colour(company, None, asset, spec.path, tint)
+                },
+            );
         commands.spawn((
             BuildGhostPreview,
-            sprite_from_company_or_asset(company, asset_server, spec.path, tint),
+            sprite,
             Transform::from_translation(center).with_scale(Vec3::splat(PREVIEW_SCALE)),
         ));
     }

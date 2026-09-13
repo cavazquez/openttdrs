@@ -7056,6 +7056,15 @@ las fachadas `6099/6100` y exige cero overlays duplicados. #326/#565 siguen
 abiertas por la selección Action5 de tramtypes custom, clipping, pivotes y
 framebuffer.
 
+Corrección #326-RAIL-DEPOT-PREVIEW-ASSET-PARITY (2026-09-13): el preview de
+depósitos ferroviarios usa las mismas entradas de `WorldAssets.rail` y
+`rail_depot_builds` que `DrawRailTile`, incluyendo los bancos de rail normal,
+eléctrico, monorriel y maglev; el PNG suelto queda sólo como fallback de
+fixtures sin atlas. La recoloración de compañía se ejecuta antes del alpha del
+ghost y la vía de salida conserva su sprite tipado remapeado. #326 continúa
+abierta por orden global del preview, catenaria, Action5/NewGRF, clipping y
+aceptación raster.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

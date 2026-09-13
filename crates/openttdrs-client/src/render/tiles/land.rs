@@ -2230,6 +2230,7 @@ fn resolve_newgrf_object_layout<'a>(
     openttdrs_core::newgrf_sprites::ResolvedTileLayout,
     u32,
     usize,
+    u8,
 )> {
     let def =
         crate::render::object_newgrf::newgrf_object_def_for_type(object_catalog, object_type)?;
@@ -2275,7 +2276,12 @@ fn resolve_newgrf_object_layout<'a>(
         .newgrf_runtime
         .as_ref()
         .map_or(0, |_| runtime_fingerprint(&action2, vars::OBJECT, false));
-    Some((def, layout, runtime_fp, view_idx))
+    let object_colour = action2
+        .vars
+        .get(&0x47)
+        .and_then(|value| u8::try_from(*value).ok())
+        .unwrap_or_default();
+    Some((def, layout, runtime_fp, view_idx, object_colour))
 }
 
 fn requested_object_neighbor_vars(
@@ -2322,6 +2328,7 @@ fn spawn_newgrf_object_layout_ground(
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     def: &ObjectSpecDef,
+    object_colour: u8,
     runtime_fp: u32,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
     cache: &mut crate::render::NewGrfObjectSpriteCache,
@@ -2335,7 +2342,7 @@ fn spawn_newgrf_object_layout_ground(
         return true;
     };
     let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
-        let handle = cache.handle_for_layout(def, 0, runtime_fp, decoded, images);
+        let handle = cache.handle_for_layout(def, 0, object_colour, runtime_fp, decoded, images);
         (
             Sprite {
                 image: handle,
@@ -2388,6 +2395,7 @@ fn spawn_newgrf_object_layout_sequence(
     ctx: &TileRenderContext,
     map_width: u32,
     def: &ObjectSpecDef,
+    object_colour: u8,
     runtime_fp: u32,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
     cache: &mut crate::render::NewGrfObjectSpriteCache,
@@ -2403,7 +2411,7 @@ fn spawn_newgrf_object_layout_sequence(
             return false;
         };
         let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
-        let handle = cache.handle_for_layout(def, slot, runtime_fp, decoded, images);
+        let handle = cache.handle_for_layout(def, slot, object_colour, runtime_fp, decoded, images);
         let width = f32::from(decoded.width);
         let height = f32::from(decoded.height);
         let seq = RoadStopSeqGfx {
@@ -2800,7 +2808,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
         | TileKind::Void => unreachable!(),
     };
     let mut used_newgrf_layout_ground = false;
-    if let Some((def, layout, runtime_fp, _view_idx)) = object_layout.as_ref()
+    if let Some((def, layout, runtime_fp, _view_idx, object_colour)) = object_layout.as_ref()
         && let Some(tile) = ctx.tile
     {
         if object_layout_ground_uses_water(def, layout, tile) {
@@ -2822,6 +2830,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
                 assets,
                 ctx,
                 def,
+                *object_colour,
                 *runtime_fp,
                 layout,
                 cache,
@@ -2948,7 +2957,8 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
                     )
                 },
             );
-            if let Some((layout_def, layout, runtime_fp, _layout_view_idx)) = object_layout.as_ref()
+            if let Some((layout_def, layout, runtime_fp, _layout_view_idx, object_colour)) =
+                object_layout.as_ref()
                 && tile_layout_is_renderable(layout)
             {
                 if spawn_newgrf_object_layout_sequence(
@@ -2956,6 +2966,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
                     ctx,
                     map_width,
                     layout_def,
+                    *object_colour,
                     *runtime_fp,
                     layout,
                     cache,

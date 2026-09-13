@@ -1,6 +1,7 @@
 //! Colocar objetos vanilla jugables y `NewGRF` multitile (`object_cmd.cpp` simplificado).
 #![allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
 
+use crate::company::{LIVERY_SCHEME_DEFAULT, company_livery_colours};
 use crate::economy::build_object_cost_factored;
 use crate::game_state::GameState;
 use crate::map::{
@@ -8,7 +9,9 @@ use crate::map::{
     is_map_object_tile, is_newgrf_object_type, object_footprint_tiles, object_tile_offset_byte,
     object_type_dims, object_type_from_tile, tile_slope_and_z,
 };
-use crate::object_spec::{DEFAULT_OBJECT_BUILD_COST_FACTOR, ObjectSpecDef, object_spec_def};
+use crate::object_spec::{
+    DEFAULT_OBJECT_BUILD_COST_FACTOR, OBJECT_FLAG_USES_2CC, ObjectSpecDef, object_spec_def,
+};
 use crate::town::Town;
 use crate::world_gen::Climate;
 
@@ -44,6 +47,34 @@ fn object_build_cost_params(object_type: u8, catalog: &[ObjectSpecDef]) -> (u8, 
         return (def.build_cost_factor, def.tile_count().max(1));
     }
     (DEFAULT_OBJECT_BUILD_COST_FACTOR, 1)
+}
+
+/// Color inicial que `BuildObject` guarda en la instancia `OBJS`.
+///
+/// Para objetos 2CC `OpenTTD` serializa ambos canales compactados en un byte;
+/// para el resto sólo se usa la rampa primaria. Los saves sin compañía en el
+/// pool conservan el espejo histórico de `GameState::company_colour`.
+fn object_initial_colour(state: &GameState, object_type: u8) -> u8 {
+    let fallback = state.company_colour & 0x0F;
+    let Some(company) = state
+        .companies
+        .iter()
+        .find(|company| company.id == state.active_company)
+    else {
+        return fallback;
+    };
+    let (primary, secondary) = company_livery_colours(company, LIVERY_SCHEME_DEFAULT);
+    let primary = primary & 0x0F;
+    if state
+        .object_spec_catalog
+        .iter()
+        .find(|def| def.id == u16::from(object_type))
+        .is_some_and(|def| def.flags & OBJECT_FLAG_USES_2CC != 0)
+    {
+        primary | ((secondary & 0x0F) << 4)
+    } else {
+        primary
+    }
 }
 
 fn check_single_object_tile(map: &Map, c: TileCoord) -> Result<(), CommandError> {
@@ -293,7 +324,7 @@ pub(crate) fn build_object(
                 .min_by_key(|town| crate::house_spec::distance_square(town.pos, c))
                 .map_or(0, |town| town.id),
             build_date: state.calendar.date,
-            colour: state.company_colour,
+            colour: object_initial_colour(state, object_type),
             view: 0,
             object_type: u16::from(object_type),
         });
@@ -391,7 +422,7 @@ mod tests {
     };
     use crate::object_spec::{
         DEFAULT_OBJECT_CLIMATE_MASK, NEW_OBJECT_OFFSET, OBJECT_CALLBACK_SLOPE_CHECK_MASK,
-        OBJECT_SIZE_1X1, ObjectSpecDef,
+        OBJECT_FLAG_USES_2CC, OBJECT_SIZE_1X1, ObjectSpecDef,
     };
 
     fn push_spec(state: &mut GameState, size: u8, cost_factor: u8, climate_mask: u8) -> u8 {
@@ -419,6 +450,23 @@ mod tests {
             associated_badges: Vec::new(),
         });
         u8::try_from(id).expect("id fits m5")
+    }
+
+    #[test]
+    fn object_initial_colour_keeps_default_2cc_livery() {
+        let mut state = GameState::new(6, 6);
+        state.companies[0].liveries[0] = crate::CompanyLivery {
+            in_use: crate::COMPANY_LIVERY_FLAG_PRIMARY | crate::COMPANY_LIVERY_FLAG_SECONDARY,
+            colour1: 4,
+            colour2: 9,
+        };
+        let object_type = push_spec(&mut state, OBJECT_SIZE_1X1, 1, DEFAULT_OBJECT_CLIMATE_MASK);
+        state.object_spec_catalog[0].flags = OBJECT_FLAG_USES_2CC;
+
+        assert_eq!(object_initial_colour(&state, object_type), 4 | (9 << 4));
+
+        state.object_spec_catalog[0].flags = 0;
+        assert_eq!(object_initial_colour(&state, object_type), 4);
     }
 
     fn parent_psto_runtime(reg: u8, value: u8, result: u8) -> TrainSpriteGraphics {

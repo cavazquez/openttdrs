@@ -3,17 +3,36 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use openttdrs_core::{DecodedSprite, ObjectSpecDef};
+use openttdrs_core::{DecodedSprite, OBJECT_FLAG_USES_2CC, ObjectSpecDef};
 
 use crate::render::newgrf_cache::{
     DecodedSpriteImagePolicy, decoded_sprite_image, runtime_fingerprint, vars,
 };
+use crate::sprites::CompanyColour;
 
-/// `(spec_id, slot, runtime_fp)` → textura RGBA. El bit alto del slot separa
-/// piezas TileSeq de vistas planas para no reutilizar una textura por error.
+/// `(spec_id, slot, object_colour, runtime_fp)` → textura RGBA. El bit alto
+/// del slot separa piezas TileSeq de vistas planas para no reutilizar una
+/// textura por error; `object_colour` conserva el offset 2CC de la instancia.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfObjectSpriteCache {
-    handles: HashMap<(u16, u16, u32), Handle<Image>>,
+    handles: HashMap<(u16, u16, u8, u32), Handle<Image>>,
+}
+
+/// Convierte `Object::colour` al palette id que recibiría
+/// `DrawNewGRFTileSeq`. El byte de un objeto 2CC es
+/// `colour1 + colour2 * 16`; los objetos de una sola rampa sólo conservan el
+/// nibble bajo.
+fn object_image_policy(def: &ObjectSpecDef, object_colour: u8) -> DecodedSpriteImagePolicy {
+    if def.flags & OBJECT_FLAG_USES_2CC != 0 {
+        DecodedSpriteImagePolicy::TwoCompany {
+            primary: CompanyColour::from_u8(object_colour & 0x0F),
+            secondary: CompanyColour::from_u8(object_colour >> 4),
+        }
+    } else {
+        DecodedSpriteImagePolicy::CompanyPalette {
+            colour: CompanyColour::from_u8(object_colour & 0x0F),
+        }
+    }
 }
 
 impl NewGrfObjectSpriteCache {
@@ -30,7 +49,10 @@ impl NewGrfObjectSpriteCache {
         images: &mut Assets<Image>,
     ) -> Handle<Image> {
         let idx = u16::try_from(view_idx % def.views.len().max(1)).unwrap_or(0);
-        let key = (def.id, idx, 0);
+        // Keep the picker namespace apart from a runtime view with
+        // `object_colour=0` and `runtime_fp=0`; both otherwise look like the
+        // same cache entry even though the picker intentionally stays raw.
+        let key = (def.id, 0x4000 | idx, 0, 0);
         self.handles
             .entry(key)
             .or_insert_with(|| {
@@ -58,13 +80,17 @@ impl NewGrfObjectSpriteCache {
             def.view(view_idx)?.clone()
         };
         let idx = u16::try_from(view_idx % def.views.len().max(1)).unwrap_or(0);
-        let key = (def.id, idx, fp);
+        let object_colour = ctx
+            .vars
+            .get(&0x47)
+            .and_then(|value| u8::try_from(*value).ok())
+            .unwrap_or_default();
+        let key = (def.id, idx, object_colour, fp);
+        let policy = object_image_policy(def, object_colour);
         Some(
             self.handles
                 .entry(key)
-                .or_insert_with(|| {
-                    images.add(decoded_sprite_image(&view, DecodedSpriteImagePolicy::Raw))
-                })
+                .or_insert_with(|| images.add(decoded_sprite_image(&view, policy)))
                 .clone(),
         )
     }
@@ -74,16 +100,16 @@ impl NewGrfObjectSpriteCache {
         &mut self,
         def: &ObjectSpecDef,
         slot: u16,
+        object_colour: u8,
         runtime_fp: u32,
         sprite: &DecodedSprite,
         images: &mut Assets<Image>,
     ) -> Handle<Image> {
-        let key = (def.id, 0x8000 | (slot & 0x7FFF), runtime_fp);
+        let key = (def.id, 0x8000 | (slot & 0x7FFF), object_colour, runtime_fp);
+        let policy = object_image_policy(def, object_colour);
         self.handles
             .entry(key)
-            .or_insert_with(|| {
-                images.add(decoded_sprite_image(sprite, DecodedSpriteImagePolicy::Raw))
-            })
+            .or_insert_with(|| images.add(decoded_sprite_image(sprite, policy)))
             .clone()
     }
 }
@@ -146,6 +172,62 @@ mod tests {
         let mut cache = NewGrfObjectSpriteCache::default();
         let handle = cache.handle_for(&def, 0, &view, &mut images);
         assert!(images.get(&handle).is_some());
+    }
+
+    #[test]
+    fn object_sprite_cache_bakes_instance_2cc_and_separates_liveries() {
+        let sprite = DecodedSprite {
+            width: 2,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![40, 40, 40, 255, 120, 120, 120, 255],
+            // Author CC (C6) and secondary CC (50).
+            mask: vec![0xC6, 0x50],
+        };
+        let def = ObjectSpecDef {
+            id: 5,
+            class_label: "2CC ".into(),
+            name: "2CC object".into(),
+            size: OBJECT_SIZE_1X1,
+            from_newgrf: true,
+            local_id: 0,
+            grfid: 0,
+            newgrf_grf_version: 0,
+            climate_mask: openttdrs_core::DEFAULT_OBJECT_CLIMATE_MASK,
+            build_cost_factor: openttdrs_core::DEFAULT_OBJECT_BUILD_COST_FACTOR,
+            clear_cost_factor: openttdrs_core::DEFAULT_OBJECT_CLEAR_COST_FACTOR,
+            flags: OBJECT_FLAG_USES_2CC,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            callback_mask: 0,
+            views: vec![sprite.clone()],
+            newgrf_runtime: None,
+            associated_badges: Vec::new(),
+        };
+        let mut images = Assets::<Image>::default();
+        let mut cache = NewGrfObjectSpriteCache::default();
+
+        let mut first = openttdrs_core::Action2EvalCtx::default();
+        first.vars.insert(0x47, 4 + 9 * 16);
+        let first_handle = cache
+            .handle_for_runtime(&def, 0, &mut first, &mut images)
+            .expect("2CC object view");
+        let first_image = images.get(&first_handle).expect("2CC image");
+        assert_eq!(
+            first_image.data.as_deref(),
+            Some(&openttdrs_core::bake_sprite_two_company_palette(&sprite, 4, 9)[..])
+        );
+
+        let mut second = openttdrs_core::Action2EvalCtx::default();
+        second.vars.insert(0x47, 4 + 2 * 16);
+        let second_handle = cache
+            .handle_for_runtime(&def, 0, &mut second, &mut images)
+            .expect("second 2CC object view");
+        assert_ne!(first_handle, second_handle);
+        assert_eq!(cache.handles.len(), 2);
     }
 
     #[test]

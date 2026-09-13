@@ -1788,3 +1788,13 @@ repetía el primario, por lo que una librea personalizada perdía su color
 secundario. La regresión `vehicle_preview_uses_secondary_company_livery_for_2cc`
 contrasta `2/9` con `2/2`; callbacks de remapeo que requieren una unidad real
 y otros layouts GUI siguen pendientes.
+
+### #329-VEHICLE-SIDE-CONTEXT — contexto real en tiras laterales
+
+Actualizado: 2026-09-12 (`166062cf`). Las tiras laterales de lista, depósito
+y detalles conservan una dirección visual fija, pero ya no llaman al resolver
+de preview de compra: una unidad NewGRF se resuelve con su id real, cargo,
+consist, callbacks y librea de grupo. La regresión
+`vehicle_side_layers_use_actual_group_livery` verifica una máscara 2CC con
+colores de grupo `4/9`; image types específicos de cada ventana, callbacks de
+remapeo sin unidad y otros consumidores GUI siguen pendientes.

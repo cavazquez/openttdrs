@@ -6377,3 +6377,13 @@ el resultado incorrecto `2/2`; callbacks de remapeo de color que requieren
 una unidad real y otros layouts GUI siguen pendientes. Pasaron 36 tests de
 `render::vehicles`, Clippy estricto de cliente y core, formato y
 `git diff --check`. #329 continúa abierta; #326/#567 permanecen abiertas.
+
+Corrección #329-VEHICLE-SIDE-CONTEXT (2026-09-12, `166062cf`): las tiras
+laterales de lista, depósito y detalles dejan de reutilizar la preview de
+compra para unidades ya construidas. Mantienen la orientación fija de la UI,
+pero resuelven la primera capa con el vehículo real y su cargo, consist,
+callbacks y librea de grupo; la regresión `vehicle_side_layers_use_actual_group_livery`
+contrasta una librea de grupo 2CC `4/9` con el resultado de compra. Pasaron 37
+tests de `render::vehicles`, Clippy estricto de cliente y core, formato y
+`git diff --check`. #329 continúa abierta por image types, callbacks y
+consumidores legacy restantes; #326/#567 permanecen abiertas.

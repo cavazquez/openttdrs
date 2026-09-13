@@ -6605,3 +6605,14 @@ pendiente y animación. La regresión importa los IDs `300..301` y verifica que
 la identidad de wire llegue al catálogo. Esto elimina la colisión byte/WORD,
 pero no cubre todavía todos los layouts dinámicos, paletas especiales,
 transparencia, relocación ni scopes restantes; #326/#329 continúan abiertas.
+
+Corrección #326/#329-STATION-LEGACY-LAYOUT (2026-09-13, `83068c26`): el
+parser y runtime materializan la propiedad Action0 `0x09` con el contrato
+clásico de `Stations`: ground, secuencias BUILD/child, cajas de parents y
+terminador variable. El bit histórico de selección Action1 se interpreta con
+la inversión nativa de los sprites de building; `0x0A` copia esa tabla por ID
+local, y un layout vanilla que depende de la tabla interna conserva el
+fallback atómico en vez de inventar un sprite base. Las regresiones cubren
+propiedades posteriores, child sin caja, copia local y materialización contra
+Action1. Continúan pendientes las paletas no representables, callbacks/scopes
+completos y la cobertura de layouts dinámicos; #326/#329 siguen abiertas.

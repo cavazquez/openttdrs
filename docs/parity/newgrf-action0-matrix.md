@@ -174,7 +174,7 @@ Fuente: `newgrf_act0_stations.cpp`.
 | Props | Estado |
 |---|---|
 | `08` class label | **runtime** |
-| `0A` copy sprite layout | consumida (extended-byte id) |
+| `0A` copy sprite layout | **runtime parcial**: copia la tabla `0x09`/`0x1A` por id local `ExtendedByte`; si el origen no está definido conserva el fallback nativo |
 | `0B` callback mask | **runtime parcial**: se conserva en el spec; `Avail` ejecuta CB13, `DrawTileLayout` ejecuta CB14 en el renderer, `AnimationNextFrame`/`AnimationSpeed` habilitan CB141/CB142 y `SlopeCheck` ejecuta CB149 por tesela al consultar/construir, incluida la inversión de bit 10 para GRF <8. Restan otros bits, scopes/layouts dinámicos completos y strings. |
 | `0C` disallowed platforms bitmask | **runtime** |
 | `0D` disallowed lengths bitmask | **runtime** |
@@ -184,7 +184,7 @@ Fuente: `newgrf_act0_stations.cpp`.
 | `16` animation info | **runtime parcial**: frames y estado de loop alimentan el scheduler CB140–142 por tesela (`m7`) |
 | `17` animation speed | **runtime parcial**: velocidad base `2^speed` del scheduler CB140–142 |
 | `18` animation triggers | **runtime parcial**: máscara CB140 para `Built`, `TileLoop`, `NewCargo`, `CargoTaken`, `VehicleLoads`, `VehicleArrives` y `VehicleDeparts` de tren (`TA_PLATFORM` al entrar en `BeginLoading` y al ejecutar `LeaveStation`), `AcceptanceTick` (`TA_WHOLE`, cada 250 ticks escalonado por StationID) y `PathReservation` (`TA_PLATFORM` al reservar por primera vez una tesela de estación). El disparador entrega el ordinal correcto en el byte bajo de `param2`; para carga, el byte alto usa la CTT Action0 GlobalVar `0x09` (o el bitnum/clima según versión GRF). Restan scopes de estación y sonidos propios de tesela. |
-| `09` sprite layouts | pendiente (variable; no bloquea AC de catálogo/construcción) |
+| `09` sprite layouts | **runtime parcial**: lee `ExtendedByte`, ground y secuencias BUILD/child clásicas con cajas de parents, interpreta la inversión histórica de Action1 y las materializa por Action1/3; las tablas vanilla internas y paletas no representables conservan fallback |
 | short label del spec | derivado del nombre (no hay prop Action0 15.3) |
 | Action3 cargo group / default | **runtime** (`views_for_local_id_cargo_ctx`; fallback verificable) |
 | vars/CB dinámicas (`40`/`42`/`43`/`4A`/`5F`/`10`/`67`, CB24) | **runtime** vía `Action2EvalCtx` compartido; `4A` lee el frame `m7`; CB24 call site (#228) |

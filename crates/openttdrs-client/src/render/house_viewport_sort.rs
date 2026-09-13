@@ -70,6 +70,21 @@ pub(crate) struct ViewportSortableChild {
     pub(crate) source_depth: f32,
 }
 
+/// Metadatos de un `AddCombinedSprite` que puede convertirse en parent si el
+/// primer sprite del bloque queda fuera del recorte de la banda actual.
+///
+/// OpenTTD no descarta el bloque completo en ese caso: `AddSortableSpriteToDraw`
+/// deja que el primer sprite no recortado asuma el parent del `SpriteCombine`.
+/// Bevy conserva la relación child→parent original, por lo que el sorter usa
+/// esta sonda para materializar sólo esa promoción cuando hace falta.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ViewportSortablePromotableChild {
+    pub(crate) sprite_id: u32,
+    pub(crate) bounds: ParentSpriteBounds,
+    pub(crate) insertion_key: u64,
+    pub(crate) combine_ordinal: u8,
+}
+
 /// Límite superior de la secuencia de children de cada parent ordenado.
 ///
 /// `ViewportDrawParentSprites` emite un parent y todos sus children como un
@@ -192,6 +207,7 @@ pub(crate) struct ViewportSortScopeInputs<'w, 's> {
             With<PrimaryGameCamera>,
             Without<MapPreviewCamera>,
             Without<ViewportSortableParent>,
+            Without<ViewportSortablePromotableChild>,
         ),
     >,
 }
@@ -388,6 +404,25 @@ impl DiagonalViewportSortScope {
             && projected_bottom < self.screen_top
     }
 
+    #[must_use]
+    fn parent_source_reaches_viewport(
+        self,
+        parent: &ViewportSortableParent,
+        scope: Option<TileViewportBounds>,
+    ) -> bool {
+        let Some(scope) = scope else {
+            return true;
+        };
+        let Some((tx, ty)) = viewport_parent_source_tile(parent.insertion_key) else {
+            return false;
+        };
+        scope.tx0 <= tx
+            && tx < scope.tx1
+            && scope.ty0 <= ty
+            && ty < scope.ty1
+            && self.contains_source_tile(tx, ty)
+    }
+
     /// Reproduce el test de clipping de `AddSortableSpriteToDraw` para un PNG
     /// real. Sus rectángulos son semiabiertos: si sólo tocan el borde no se
     /// agrega ningún parent al sorter nativo.
@@ -410,6 +445,7 @@ fn viewport_sort_scope(
             With<PrimaryGameCamera>,
             Without<MapPreviewCamera>,
             Without<ViewportSortableParent>,
+            Without<ViewportSortablePromotableChild>,
         ),
     >,
 ) -> Option<TileViewportBounds> {
@@ -451,6 +487,7 @@ fn viewport_precise_sort_scope(
             With<PrimaryGameCamera>,
             Without<MapPreviewCamera>,
             Without<ViewportSortableParent>,
+            Without<ViewportSortablePromotableChild>,
         ),
     >,
 ) -> Option<DiagonalViewportSortScope> {
@@ -489,24 +526,61 @@ fn parent_is_in_viewport_sort_scope(
         // recibe explícitamente todos los producers.
         return true;
     };
-    let Some((tx, ty)) = viewport_parent_source_tile(parent.insertion_key) else {
-        return false;
+    let source_in_scope = match precise_scope {
+        Some(precise_scope) => precise_scope.parent_source_reaches_viewport(parent, Some(scope)),
+        None => {
+            let Some((tx, ty)) = viewport_parent_source_tile(parent.insertion_key) else {
+                return false;
+            };
+            scope.tx0 <= tx && tx < scope.tx1 && scope.ty0 <= ty && ty < scope.ty1
+        }
     };
-    if !(scope.tx0 <= tx && tx < scope.tx1 && scope.ty0 <= ty && ty < scope.ty1) {
+    if !source_in_scope {
         return false;
     }
     let Some(precise_scope) = precise_scope else {
         return true;
     };
-    precise_scope.contains_source_tile(tx, ty)
-        && if parent.sprite_id == EMPTY_BOUNDING_BOX_SPRITE_ID {
-            precise_scope.parent_bounds_reach_viewport(parent.bounds)
-        } else {
-            sprite_bounds.map_or_else(
-                || precise_scope.parent_bounds_reach_viewport(parent.bounds),
-                |sprite| precise_scope.sprite_reaches_viewport(sprite),
-            )
-        }
+    if parent.sprite_id == EMPTY_BOUNDING_BOX_SPRITE_ID {
+        precise_scope.parent_bounds_reach_viewport(parent.bounds)
+    } else {
+        sprite_bounds.map_or_else(
+            || precise_scope.parent_bounds_reach_viewport(parent.bounds),
+            |sprite| precise_scope.sprite_reaches_viewport(sprite),
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ViewportParentSortState {
+    included: bool,
+    can_promote_child: bool,
+}
+
+impl ViewportParentSortState {
+    fn can_promote_child(self) -> bool {
+        self.can_promote_child
+    }
+}
+
+fn child_promotion_is_before(
+    candidate: &ViewportSortablePromotableChild,
+    entity: Entity,
+    current: &(u8, u64),
+) -> bool {
+    (candidate.combine_ordinal, entity.to_bits()) < *current
+}
+
+fn child_promotion_parent(
+    child: &ViewportSortablePromotableChild,
+    source_depth: f32,
+) -> ViewportSortableParent {
+    ViewportSortableParent {
+        sprite_id: child.sprite_id,
+        bounds: child.bounds,
+        insertion_key: child.insertion_key,
+        source_depth,
+    }
 }
 
 /// IDs de assets cuyo tamaño o contenido cambió desde el último pase.
@@ -638,6 +712,20 @@ pub(crate) fn sort_viewport_sortable_parents(
         &mut Transform,
         Option<(Ref<Sprite>, Ref<Anchor>)>,
     )>,
+    mut promotable_children: Query<
+        (
+            Entity,
+            Ref<ViewportSortableChild>,
+            Ref<ViewportSortablePromotableChild>,
+            Option<Ref<Visibility>>,
+            &mut Transform,
+            Option<(Ref<Sprite>, Ref<Anchor>)>,
+        ),
+        (
+            With<ViewportSortablePromotableChild>,
+            Without<ViewportSortableParent>,
+        ),
+    >,
     mut removed: RemovedComponents<ViewportSortableParent>,
     mut child_depth_windows: ResMut<ViewportSortableChildDepthWindows>,
     viewport: ViewportSortScopeInputs,
@@ -695,6 +783,16 @@ pub(crate) fn sort_viewport_sortable_parents(
                 .as_ref()
                 .is_some_and(|(sprite, anchor)| sprite.is_changed() || anchor.is_changed());
     }
+    for (_, child, promotable, visibility, _, sprite) in &mut promotable_children {
+        needs_sort |= child.is_added()
+            || child.is_changed()
+            || promotable.is_added()
+            || promotable.is_changed()
+            || visibility.as_ref().is_some_and(DetectChanges::is_changed)
+            || sprite
+                .as_ref()
+                .is_some_and(|(sprite, anchor)| sprite.is_changed() || anchor.is_changed());
+    }
     if !needs_sort {
         return;
     }
@@ -707,10 +805,12 @@ pub(crate) fn sort_viewport_sortable_parents(
     // consist; en una partida normal el stream permanece sin cambios.
     let clean_capture = crate::bevy_app::clean_map_capture_requested();
     let mut input = Vec::new();
+    let mut parent_states = HashMap::new();
     for (entity, parent, visibility, transform, sprite) in &mut parents {
-        if parent_excluded_from_clean_map_capture(&parent, clean_capture) {
-            continue;
-        }
+        let parent = *parent;
+        let visible = visibility
+            .as_ref()
+            .is_none_or(|visibility| **visibility != Visibility::Hidden);
         let sprite_bounds = precise_scope.and_then(|_| {
             sprite.and_then(|(sprite, anchor)| {
                 sprite_screen_bounds(
@@ -722,12 +822,96 @@ pub(crate) fn sort_viewport_sortable_parents(
                 )
             })
         });
-        if visibility.is_some_and(|visibility| *visibility == Visibility::Hidden)
-            || !parent_is_in_viewport_sort_scope(&parent, sprite_bounds, scope, precise_scope)
-        {
+        let in_scope = !parent_excluded_from_clean_map_capture(&parent, clean_capture)
+            && visible
+            && parent_is_in_viewport_sort_scope(&parent, sprite_bounds, scope, precise_scope);
+        let can_promote_child = precise_scope.is_some_and(|precise_scope| {
+            !parent_excluded_from_clean_map_capture(&parent, clean_capture)
+                && visible
+                && sprite_bounds
+                    .is_some_and(|sprite| !precise_scope.sprite_reaches_viewport(sprite))
+                && precise_scope.parent_source_reaches_viewport(&parent, scope)
+        });
+        parent_states.insert(
+            entity,
+            ViewportParentSortState {
+                included: in_scope,
+                can_promote_child,
+            },
+        );
+        if !in_scope {
             continue;
         }
-        input.push((entity, *parent, transform.translation.z));
+        input.push((entity, parent, transform.translation.z));
+    }
+
+    // En un `SpriteCombine`, el primer sprite que cruza la banda se vuelve
+    // parent local de esa llamada nativa. El child sigue apuntando al parent
+    // ECS original para conservar el bloque completo; al final del sort se
+    // mueve también ese parent original y la sincronización habitual mantiene
+    // unidos los restantes children.
+    let mut promotion_by_parent: HashMap<Entity, (u8, u64, Entity, ViewportSortableParent, f32)> =
+        HashMap::new();
+    if precise_scope.is_some() {
+        for (entity, child, promotable, visibility, transform, sprite) in &mut promotable_children {
+            let Some(parent_state) = parent_states.get(&child.parent).copied() else {
+                continue;
+            };
+            if parent_state.included
+                || !parent_state.can_promote_child()
+                || visibility
+                    .as_ref()
+                    .is_some_and(|visibility| **visibility == Visibility::Hidden)
+            {
+                continue;
+            }
+            let Some(child_sprite_bounds) = precise_scope.and_then(|_| {
+                sprite.and_then(|(sprite, anchor)| {
+                    sprite_screen_bounds(
+                        &sprite,
+                        &anchor,
+                        &transform,
+                        images.as_deref(),
+                        texture_atlases.as_deref(),
+                    )
+                })
+            }) else {
+                continue;
+            };
+            if !parent_is_in_viewport_sort_scope(
+                &child_promotion_parent(&promotable, transform.translation.z),
+                Some(child_sprite_bounds),
+                scope,
+                precise_scope,
+            ) {
+                continue;
+            }
+            let candidate_rank = (promotable.combine_ordinal, entity.to_bits());
+            let replace = promotion_by_parent
+                .get(&child.parent)
+                .is_none_or(|current| {
+                    child_promotion_is_before(&promotable, entity, &(current.0, current.1))
+                });
+            if replace {
+                promotion_by_parent.insert(
+                    child.parent,
+                    (
+                        candidate_rank.0,
+                        candidate_rank.1,
+                        entity,
+                        child_promotion_parent(&promotable, transform.translation.z),
+                        transform.translation.z,
+                    ),
+                );
+            }
+        }
+    }
+    let mut promoted_origins = HashMap::new();
+    for (original_parent, (_, _, child_entity, promoted_parent, current_depth)) in
+        promotion_by_parent
+    {
+        promoted_origins.insert(child_entity, original_parent);
+        input.push((child_entity, promoted_parent, current_depth));
     }
 
     #[cfg(test)]
@@ -775,11 +959,37 @@ pub(crate) fn sort_viewport_sortable_parents(
             .insert(input[parent_index].0, sorted_depths[next_parent_index]);
     }
 
-    for ((entity, _, current_depth), sorted_depth) in input.into_iter().zip(sorted_depths) {
-        if (current_depth - sorted_depth).abs() > f32::EPSILON
-            && let Ok((_, _, _, mut transform, _)) = parents.get_mut(entity)
+    // `sync_viewport_sortable_children` indexes its windows by the original
+    // ECS parent. Alias the promoted child slot there and move the invisible
+    // original parent to the same slot so all children preserve their block.
+    for (&promoted_entity, &original_parent) in &promoted_origins {
+        let Some(promoted_index) = input
+            .iter()
+            .position(|(entity, _, _)| *entity == promoted_entity)
+        else {
+            continue;
+        };
+        if let Some(next_parent_depth) = child_depth_windows
+            .next_parent_depth
+            .get(&promoted_entity)
+            .copied()
         {
-            transform.translation.z = sorted_depth;
+            child_depth_windows
+                .next_parent_depth
+                .insert(original_parent, next_parent_depth);
+        }
+        if let Ok((_, _, _, mut transform, _)) = parents.get_mut(original_parent) {
+            transform.translation.z = sorted_depths[promoted_index];
+        }
+    }
+
+    for ((entity, _, current_depth), sorted_depth) in input.into_iter().zip(sorted_depths) {
+        if (current_depth - sorted_depth).abs() > f32::EPSILON {
+            if let Ok((_, _, _, mut transform, _)) = parents.get_mut(entity) {
+                transform.translation.z = sorted_depth;
+            } else if let Ok((_, _, _, _, mut transform, _)) = promotable_children.get_mut(entity) {
+                transform.translation.z = sorted_depth;
+            }
         }
     }
 }
@@ -1050,6 +1260,41 @@ mod tests {
         );
     }
 
+    #[test]
+    fn combined_child_promotion_preserves_native_bounds_and_draw_order() {
+        let bounds = ParentSpriteBounds::new(2_720, 1_968, 12, 2_735, 1_983, 59);
+        let first_visible_child = ViewportSortablePromotableChild {
+            sprite_id: 1_649,
+            bounds,
+            insertion_key: viewport_insertion_key(170, 123, 1),
+            combine_ordinal: 1,
+        };
+        let later_child = ViewportSortablePromotableChild {
+            combine_ordinal: 2,
+            ..first_visible_child
+        };
+
+        assert!(child_promotion_is_before(
+            &first_visible_child,
+            Entity::PLACEHOLDER,
+            &(2, u64::MAX),
+        ));
+        assert!(!child_promotion_is_before(
+            &later_child,
+            Entity::PLACEHOLDER,
+            &(1, 0),
+        ));
+        assert_eq!(
+            child_promotion_parent(&first_visible_child, 3.25),
+            ViewportSortableParent {
+                sprite_id: 1_649,
+                bounds,
+                insertion_key: first_visible_child.insertion_key,
+                source_depth: 3.25,
+            }
+        );
+    }
+
     fn scope_around_parent_bounds(bounds: ParentSpriteBounds) -> DiagonalViewportSortScope {
         let xmin = i64::from(bounds.xmin.min(bounds.xmax));
         let xmax = i64::from(bounds.xmin.max(bounds.xmax));
@@ -1143,16 +1388,14 @@ mod tests {
         let mut transform = Transform::from_xyz(10.0, 20.0, 0.0);
         transform.scale = Vec3::new(2.0, 3.0, 1.0);
 
-        let bounds = sprite_screen_bounds(&sprite, &Anchor::TOP_LEFT, &transform, None, None)
-            .expect("un Sprite con custom_size siempre tiene un rectángulo de pantalla");
         assert_eq!(
-            bounds,
-            SpriteScreenBounds {
+            sprite_screen_bounds(&sprite, &Anchor::TOP_LEFT, &transform, None, None),
+            Some(SpriteScreenBounds {
                 left: 10.0,
                 right: 26.0,
                 bottom: 8.0,
                 top: 20.0,
-            }
+            })
         );
     }
 
@@ -1165,16 +1408,14 @@ mod tests {
         let mut transform = Transform::from_xyz(10.0, 20.0, 0.0);
         transform.rotation = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2);
 
-        let bounds = sprite_screen_bounds(&sprite, &Anchor::CENTER, &transform, None, None)
-            .expect("un rect custom aporta bounds aunque no haya Assets<Image>");
         assert_eq!(
-            bounds,
-            SpriteScreenBounds {
+            sprite_screen_bounds(&sprite, &Anchor::CENTER, &transform, None, None),
+            Some(SpriteScreenBounds {
                 left: 8.0,
                 right: 12.0,
                 bottom: 16.0,
                 top: 24.0,
-            }
+            })
         );
     }
 

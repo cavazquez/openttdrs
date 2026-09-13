@@ -7485,3 +7485,14 @@ raster pasó de `94775/921600` a `77258/921600` píxeles distintos
 (`10,283745660 %` → `8,383029514 %`) y el delta medio de canal bajó de
 `3,610982` a `2,814533`. El trace dejó la caja de la valla presente y no
 introdujo bounds candidatos fuera de la referencia; #326 continúa abierta.
+
+Corrección #326-COMBINED-CLIPPING-PROMOTION (2026-09-13): los primeros
+`AddCombinedSprite` que quedan fuera del recorte ya publican metadatos de
+sprite, bounds, clave de inserción y ordinal de combinación. El sorter puede
+promover el primer child visible a parent sin romper el vínculo ECS del resto
+del bloque; la regresión conserva la caja `(2720,1968,12)-(2735,1983,59)` y
+el orden de las capas. En Kale la cobertura global pasó de 1571 a 1572
+parents y la caja del árbol `1649` dejó de faltar; el raster se mantuvo en
+`77258/921600` porque la capa ya se rasterizaba con su profundidad histórica.
+Las dos bocas ferroviarias que aparecen en bandas distintas siguen pendientes
+de un compositor segmentado; no se cierra #326.

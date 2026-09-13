@@ -58,8 +58,9 @@ use crate::render::viewport_sort::{
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     AirportStationAnim, AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext,
-    ViewportSortableChild, ViewportSortableParent, WaterTile, WorldAssets,
-    sprite_from_atlas_or_company_white_colour, viewport_insertion_key, viewport_source_depth,
+    ViewportSortableChild, ViewportSortableParent, ViewportSortablePromotableChild, WaterTile,
+    WorldAssets, sprite_from_atlas_or_company_white_colour, viewport_insertion_key,
+    viewport_source_depth,
 };
 use crate::sprites::{
     CatenarySpriteDraw, CatenaryWireDraw, CompanyColour, DockTileLayer,
@@ -5662,10 +5663,28 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
             if let Some(parent) = front_sortable_parent {
                 front_entity.insert(parent);
             } else if let Some(parent) = tunnel_catenary_parent {
-                front_entity.insert(ViewportSortableChild {
-                    parent,
-                    source_depth: front_source_depth,
-                });
+                front_entity.insert((
+                    ViewportSortableChild {
+                        parent,
+                        source_depth: front_source_depth,
+                    },
+                    ViewportSortablePromotableChild {
+                        sprite_id: front_sprite_id,
+                        bounds: tile_seq_parent_bounds(
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                            base_z,
+                            front_bounds.ox,
+                            front_bounds.oy,
+                            front_bounds.oz,
+                            front_bounds.ex,
+                            front_bounds.ey,
+                            front_bounds.ez,
+                        ),
+                        insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 1),
+                        combine_ordinal: 1,
+                    },
+                ));
             }
             let front_parent_entity = front_entity.id();
             if let Some(resolved) = custom_tunnel_portal {
@@ -5708,10 +5727,28 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                 if let (Some(parent), Some(source_depth)) =
                     (tunnel_catenary_parent, catenary_overlay_source_depth)
                 {
-                    overlay_entity.insert(ViewportSortableChild {
-                        parent,
-                        source_depth,
-                    });
+                    overlay_entity.insert((
+                        ViewportSortableChild {
+                            parent,
+                            source_depth,
+                        },
+                        ViewportSortablePromotableChild {
+                            sprite_id: vanilla_front_sprite_id,
+                            bounds: tile_seq_parent_bounds(
+                                ctx.tx_i32(),
+                                ctx.ty_i32(),
+                                base_z,
+                                front_bounds.ox,
+                                front_bounds.oy,
+                                front_bounds.oz,
+                                front_bounds.ex,
+                                front_bounds.ey,
+                                front_bounds.ez,
+                            ),
+                            insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 1),
+                            combine_ordinal: 2,
+                        },
+                    ));
                 } else if front_has_sortable_parent {
                     overlay_entity.insert(ViewportSortableChild {
                         parent: front_parent_entity,

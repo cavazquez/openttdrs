@@ -1733,6 +1733,60 @@ mod tests {
     }
 
     #[test]
+    fn tile_layout_preserves_direct_2cc_palette_for_recolour_modifier() {
+        let sprite = DecodedSprite {
+            width: 2,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: crate::newgrf_sprites::indices_to_rgba(&[0xC6, 0x50], 2, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![sprite]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 7,
+                set_id: 9,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: TileLayoutSpriteRef::default(),
+                sequence: vec![TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    direct_palette: crate::newgrf_sprites::TWOCC_PALETTE_BASE + 2 + 3 * 16,
+                    sprite_modifiers: crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+                    ..TileLayoutSpriteRef::default()
+                }],
+            },
+        );
+
+        let mut ctx = Action2EvalCtx::default();
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("direct 2CC TileLayout");
+        assert!(layout.complete);
+        assert_eq!(
+            layout.sequence[0].direct_palette,
+            crate::newgrf_sprites::TWOCC_PALETTE_BASE + 2 + 3 * 16
+        );
+
+        let mut unsupported = graphics.tile_layouts.get(&9).cloned().unwrap();
+        unsupported.sequence[0].sprite_modifiers =
+            crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT;
+        graphics.tile_layouts.insert(9, unsupported);
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("2CC transparent TileLayout result");
+        assert!(
+            !layout.complete,
+            "2CC destination remap needs the framebuffer and keeps atomic fallback"
+        );
+    }
+
+    #[test]
     fn tile_layout_preserves_structure_palette_on_action1_sprite() {
         let sprite = DecodedSprite {
             width: 1,

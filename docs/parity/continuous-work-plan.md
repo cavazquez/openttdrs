@@ -6733,3 +6733,16 @@ mantienen fallback atómico. Las regresiones cubren la resolución core, la
 máscara RGBA y la ausencia de doble alpha; 2CC, referencias directas del
 baseset y el resto de compositor siguen pendientes, por lo que #326/#329
 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-2CC (2026-09-13): los registros
+`BUILD` de `TileLayout` que usan una paleta directa del rango
+`SPR_2CCMAP_BASE` (`5680..5935`) junto al modifier `recolour` conservan el
+par primario/secundario codificado en la paleta y reutilizan el horneado 2CC
+existente, incluida la tabla Action5 del slot exacto. En objetos, el cache
+elige esa tabla por la paleta del layout y no por el color por defecto de la
+instancia. Sin `recolour` la paleta se ignora como en el transformador nativo;
+la combinación `transparent + 2CC`, que remapea el destino del framebuffer,
+mantiene fallback atómico. Las regresiones cubren resolución core, mapa
+Action5 y separación de caches; `PALETTE_TO_TRANSPARENT` ya tiene su propia
+subetapa, las referencias directas del baseset y el resto del compositor
+siguen pendientes, por lo que #326/#329 continúan abiertas.

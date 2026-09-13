@@ -58,11 +58,7 @@ impl NewGrfObjectSpriteCache {
         }
     }
 
-    fn twocc_map_for(&self, def: &ObjectSpecDef, object_colour: u8) -> Option<DecodedSprite> {
-        if def.flags & OBJECT_FLAG_USES_2CC == 0 {
-            return None;
-        }
-        let palette_id = TWOCC_PALETTE_BASE + u16::from(object_colour);
+    fn twocc_map_for_palette(&self, palette_id: u16) -> Option<DecodedSprite> {
         let slot = palette_id.checked_sub(TWOCC_PALETTE_BASE)?;
         if slot >= TWOCC_ACTION5_SLOT_COUNT as u16 {
             return None;
@@ -71,6 +67,13 @@ impl NewGrfObjectSpriteCache {
             .get(usize::from(slot))
             .and_then(Option::as_ref)
             .cloned()
+    }
+
+    fn twocc_map_for(&self, def: &ObjectSpecDef, object_colour: u8) -> Option<DecodedSprite> {
+        if def.flags & OBJECT_FLAG_USES_2CC == 0 {
+            return None;
+        }
+        self.twocc_map_for_palette(TWOCC_PALETTE_BASE + u16::from(object_colour))
     }
 
     /// Textura Raw para una vista del spec (mirror industry/road NewGRF Raw).
@@ -157,7 +160,14 @@ impl NewGrfObjectSpriteCache {
             direct_palette,
         );
         let policy = object_image_policy(def, object_colour);
-        let twocc_map = self.twocc_map_for(def, object_colour);
+        let twocc_map = if (TWOCC_PALETTE_BASE
+            ..TWOCC_PALETTE_BASE + TWOCC_ACTION5_SLOT_COUNT as u16)
+            .contains(&direct_palette)
+        {
+            self.twocc_map_for_palette(direct_palette)
+        } else {
+            self.twocc_map_for(def, object_colour)
+        };
         self.handles
             .entry(key)
             .or_insert_with(|| {
@@ -294,6 +304,8 @@ mod tests {
         let object_colour: u8 = 4 + 9 * 16;
         let mut maps = vec![None; TWOCC_ACTION5_SLOT_COUNT];
         maps[usize::from(object_colour)] = Some(map.clone());
+        let direct_palette = TWOCC_PALETTE_BASE + 2 + 3 * 16;
+        maps[usize::from(direct_palette - TWOCC_PALETTE_BASE)] = Some(map.clone());
         cache.set_twocc_maps(&maps);
         let mapped_handle = cache
             .handle_for_runtime(&def, 0, &mut first, &mut images)
@@ -338,6 +350,31 @@ mod tests {
                 .as_deref(),
             Some(&sprite.rgba[..])
         );
+        let direct_layout_handle = cache.handle_for_layout(
+            &def,
+            0,
+            object_colour,
+            0,
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+            direct_palette,
+            &sprite,
+            &mut images,
+        );
+        assert_eq!(
+            images
+                .get(&direct_layout_handle)
+                .expect("direct 2CC TileSeq image")
+                .data
+                .as_deref(),
+            Some(
+                &openttdrs_core::bake_sprite_two_company_palette_with_map(
+                    &sprite,
+                    2,
+                    3,
+                    Some(&map),
+                )[..]
+            )
+        );
 
         let mut second = openttdrs_core::Action2EvalCtx::default();
         second.vars.insert(0x47, 4 + 2 * 16);
@@ -345,7 +382,7 @@ mod tests {
             .handle_for_runtime(&def, 0, &mut second, &mut images)
             .expect("second 2CC object view");
         assert_ne!(first_handle, second_handle);
-        assert_eq!(cache.handles.len(), 4);
+        assert_eq!(cache.handles.len(), 5);
     }
 
     #[test]

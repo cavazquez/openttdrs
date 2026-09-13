@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::action2::{eval_action2_random, eval_action2_var, resolve_callback_chain};
+use super::action5::TWOCC_PALETTE_BASE;
 use super::pixel_codec::{
     bake_sprite_bare_land, bake_sprite_company_palette, bake_sprite_crash, bake_sprite_newspaper,
     bake_sprite_palette_map,
@@ -22,6 +23,8 @@ const PALETTE_CRASH: u16 = 804;
 const PALETTE_TO_BARE_LAND: u16 = 791;
 /// Paleta nativa que oscurece el destino (`PALETTE_TO_TRANSPARENT`).
 const PALETTE_TO_TRANSPARENT: u16 = 802;
+/// Rango de paletas 2CC seleccionables por `primary + secondary * 16`.
+const PALETTE_2CC_END: u16 = TWOCC_PALETTE_BASE + 0x100;
 /// Paleta nativa de sprites de periódico (`PALETTE_NEWSPAPER`).
 const PALETTE_NEWSPAPER: u16 = 803;
 /// Paletas nativas que recolorean sprites compartidos de estructuras.
@@ -478,6 +481,7 @@ fn resolve_custom_layout_palette(
     Some(sprite)
 }
 
+#[allow(clippy::too_many_lines)] // Centraliza las paletas directas y su fallback atómico.
 fn resolve_layout_sprite_asset(
     reference: &TileLayoutSpriteRef,
     is_ground: bool,
@@ -569,6 +573,20 @@ fn resolve_layout_sprite_asset(
             }
             *complete = false;
             return None;
+        }
+        if (TWOCC_PALETTE_BASE..PALETTE_2CC_END).contains(&direct_palette) {
+            // A direct 2CC palette is a normal source recolour only when the
+            // layout marks the sprite with `recolour`. With `transparent`,
+            // OpenTTD instead uses the selected map as a destination remap;
+            // that needs the framebuffer and remains atomic fallback here.
+            if reference.sprite_modifiers & TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT != 0 {
+                *complete = false;
+                return None;
+            }
+            if reference.sprite_modifiers & TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR != 0 {
+                return Some((Some(sprite), None, direct_palette));
+            }
+            return Some((Some(sprite), None, 0));
         }
         if direct_palette == PALETTE_CRASH {
             sprite.rgba = bake_sprite_crash(&sprite);

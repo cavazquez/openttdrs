@@ -84,6 +84,20 @@ pub(crate) fn decoded_tile_layout_image_with_palette_and_twocc_map(
             != 0
     {
         DecodedSpriteImagePolicy::Transparent
+    } else if (openttdrs_core::TWOCC_PALETTE_BASE
+        ..openttdrs_core::TWOCC_PALETTE_BASE + openttdrs_core::TWOCC_ACTION5_SLOT_COUNT as u16)
+        .contains(&direct_palette)
+        && sprite_modifiers & openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR
+            != 0
+        && sprite_modifiers
+            & openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
+            == 0
+    {
+        let slot = direct_palette - openttdrs_core::TWOCC_PALETTE_BASE;
+        DecodedSpriteImagePolicy::TwoCompany {
+            primary: CompanyColour::from_u8((slot & 0x0F) as u8),
+            secondary: CompanyColour::from_u8((slot >> 4) as u8),
+        }
     } else if let Some(palette) =
         BridgeStructurePalette::from_openttd_palette_id(u32::from(direct_palette))
     {
@@ -344,6 +358,47 @@ mod tests {
         assert!((rgba.green - 1.0).abs() < f32::EPSILON);
         assert!((rgba.blue - 1.0).abs() < f32::EPSILON);
         assert_eq!(rgba.alpha, 1.0);
+    }
+
+    #[test]
+    fn tile_layout_applies_direct_2cc_palette_and_action5_map() {
+        let sprite = DecodedSprite {
+            width: 2,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: openttdrs_core::newgrf_sprites::indices_to_rgba(&[0xC6, 0x50], 2, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let mut map_indices: Vec<u8> = (0..=u8::MAX).collect();
+        map_indices[0xC6] = 174;
+        map_indices[0x50] = 175;
+        let map = DecodedSprite {
+            width: 256,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: openttdrs_core::newgrf_sprites::indices_to_rgba(&map_indices, 256, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let img = decoded_tile_layout_image_with_palette_and_twocc_map(
+            &sprite,
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+            openttdrs_core::TWOCC_PALETTE_BASE + 2 + 3 * 16,
+            DecodedSpriteImagePolicy::Raw,
+            Some(&map),
+        );
+        assert_eq!(
+            img.data.as_deref(),
+            Some(
+                &openttdrs_core::bake_sprite_two_company_palette_with_map(
+                    &sprite,
+                    2,
+                    3,
+                    Some(&map),
+                )[..]
+            )
+        );
     }
 
     #[test]

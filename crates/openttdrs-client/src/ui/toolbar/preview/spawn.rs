@@ -80,7 +80,15 @@ pub(crate) fn spawn_preview_plan(
             );
         }
         PreviewPlan::RailWaypoint { coord, valid } => {
-            spawn_rail_waypoint_preview(commands, atlas, company, &sim.state.map, *coord, *valid);
+            spawn_rail_waypoint_preview(
+                commands,
+                atlas,
+                world_assets,
+                company,
+                &sim.state.map,
+                *coord,
+                *valid,
+            );
         }
         PreviewPlan::RoadWaypoint { coord, valid } => {
             spawn_road_waypoint_preview(commands, asset_server, &sim.state.map, *coord, *valid);

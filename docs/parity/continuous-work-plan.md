@@ -7118,6 +7118,15 @@ como fallback. La ruta de vidrio mantiene su máscara translúcida y el preview
 sigue sin fabricar capas cuando ninguna fuente tiene el sprite. #326 continúa
 abierta por fundaciones/catenaria del preview y aceptación raster.
 
+Corrección #326-RAIL-WAYPOINT-PREVIEW-SORT-ASSET (2026-09-13): el ghost de
+waypoint ferroviario publica los dos cuerpos `TILE_SEQ` como parents del
+compositor global, con los mismos prismas, profundidad de columna y ordinales
+`16 + layer_index` que el renderer del mapa. Los toldos CC de OpenGFX2 quedan
+como hijos del cuerpo correspondiente, evitando que se separen al cruzarse con
+otra pieza del mapa. La vía y las capas consultan primero `WorldAssets.rail` y
+mantienen `TileAtlas` como fallback. Fundaciones inclinadas, catenaria y
+aceptación raster siguen separadas; #326 continúa abierta.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

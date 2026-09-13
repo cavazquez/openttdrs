@@ -24,7 +24,7 @@ use crate::iso::{ground_draw_z, overlay_pos};
 use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
 use crate::render::newgrf_cache::{
     direct_tile_layout_object_sequence, direct_tile_layout_road_stop_sequence,
-    direct_tile_layout_sequence,
+    direct_tile_layout_road_waypoint_sequence, direct_tile_layout_sequence,
 };
 use crate::render::tiles::{
     FLAT_WATER_LAYER_FRAC, HouseSpawnResources, TramwayDepotAction5, flush_map_batches,
@@ -13493,6 +13493,42 @@ fn direct_road_stop_build_uses_road_stop_atlas_and_namespace_geometry() {
         assert_eq!(resolved.height, height, "sprite {sprite_id}");
         assert_eq!(resolved.x_offs, x_offs, "sprite {sprite_id}");
         assert_eq!(resolved.y_offs, y_offs, "sprite {sprite_id}");
+    }
+}
+
+#[test]
+fn direct_road_waypoint_build_uses_waypoint_atlas_and_nfo_geometry() {
+    let assets = boot_assets_app();
+
+    for axis in 0..2 {
+        for layer in crate::sprites::road_waypoint_build_layers(axis) {
+            let sprite_id = u16::try_from(layer.sprite_id).expect("waypoint SpriteID");
+            let atlas_index = crate::sprites::road_waypoint_sprite_index(layer.sprite_id)
+                .expect("waypoint atlas index");
+            let resolved = direct_tile_layout_road_waypoint_sequence(
+                &openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+                    sprite: None,
+                    base_sprite: Some(sprite_id),
+                    sprite_modifiers: 0,
+                    direct_palette: 0,
+                    origin: [0, 0, 0],
+                    extent: [16, 16, 16],
+                },
+                &assets,
+            )
+            .unwrap_or_else(|| panic!("road waypoint BUILD sprite {sprite_id}"));
+
+            assert!(
+                resolved
+                    .atlas
+                    .matches(&assets.road_waypoint[atlas_index].sprite()),
+                "sprite {sprite_id}"
+            );
+            assert_eq!(resolved.width, layer.w, "sprite {sprite_id}");
+            assert_eq!(resolved.height, layer.h, "sprite {sprite_id}");
+            assert_eq!(resolved.x_offs, layer.x_offs, "sprite {sprite_id}");
+            assert_eq!(resolved.y_offs, layer.y_offs, "sprite {sprite_id}");
+        }
     }
 }
 

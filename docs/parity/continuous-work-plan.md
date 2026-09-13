@@ -6912,3 +6912,13 @@ tablas viales vanilla. La selección es contextual a `DrawRoadStop`, por lo que
 el resolver global conserva sus namespaces y fallback atómico ante modifiers,
 paletas o IDs no auditados. La regresión cubre ground, BUILD y ambos ejes de
 bus/truck; #326/#329 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-ROADWAYPOINT (2026-09-13): los
+`TileLayout` de `RoadWaypoint` pueden materializar las cuatro referencias
+directas de postes vanilla (`6141..6144`) con el atlas `road_waypoint` y los
+anchos/anclas NFO de `station_land.h`. El contrato contextual se mantiene
+separado de las paradas bus/truck, aunque comparte la validación de slots
+Action1 y la emisión de parents/children; paletas, modifiers e IDs fuera de
+las tablas auditadas conservan el fallback atómico. Las regresiones cubren
+ambos ejes, el aislamiento de namespaces y la geometría de los cuatro
+sprites; #326/#329 continúan abiertas.

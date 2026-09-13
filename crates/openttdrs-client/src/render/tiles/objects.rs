@@ -36,9 +36,10 @@ use crate::render::catenary_newgrf::{
     catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
 };
 use crate::render::newgrf_cache::{
-    direct_tile_layout_ground, direct_tile_layout_road_stop_sequence, direct_tile_layout_sequence,
-    runtime_fingerprint, tile_layout_entry_is_hidden, tile_layout_is_renderable,
-    tile_layout_is_road_stop_renderable, tile_layout_sprite_color_with_palette, vars,
+    direct_tile_layout_ground, direct_tile_layout_road_stop_sequence,
+    direct_tile_layout_road_waypoint_sequence, direct_tile_layout_sequence, runtime_fingerprint,
+    tile_layout_entry_is_hidden, tile_layout_is_renderable, tile_layout_is_road_stop_renderable,
+    tile_layout_is_road_waypoint_renderable, tile_layout_sprite_color_with_palette, vars,
 };
 use crate::render::road_newgrf::{
     newgrf_road_def_for_tile, newgrf_tram_def_for_tile, road_newgrf_view_index,
@@ -2281,6 +2282,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     dims.0,
                     foundation_child_parent,
                     *spec_id,
+                    false,
                     owner_colour,
                     *runtime_fp,
                     layout,
@@ -2625,6 +2627,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     dims.0,
                     foundation_child_parent,
                     *spec_id,
+                    true,
                     owner_colour,
                     *runtime_fp,
                     layout,
@@ -2683,6 +2686,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     dims.0,
                     waypoint_building_parent_ordinal,
                     *spec_id,
+                    true,
                     owner_colour,
                     *runtime_fp,
                     layout,
@@ -3654,8 +3658,14 @@ fn resolve_road_stop_layout_for_tile(
 fn road_stop_layout_is_static(
     spec_id: u16,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    waypoint: bool,
 ) -> bool {
-    tile_layout_is_road_stop_renderable(layout)
+    let renderable = if waypoint {
+        tile_layout_is_road_waypoint_renderable(layout)
+    } else {
+        tile_layout_is_road_stop_renderable(layout)
+    };
+    renderable
         && layout.ground.as_ref().is_none_or(|ground| {
             ground.action1_sprite().is_none() || road_stop_layout_ground_slot(spec_id).is_some()
         })
@@ -3678,13 +3688,14 @@ fn spawn_newgrf_road_stop_layout_ground(
     map_width: u32,
     foundation_child_parent: Option<Entity>,
     spec_id: u16,
+    waypoint: bool,
     owner_colour: Option<CompanyColour>,
     runtime_fp: u32,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
     cache: &mut crate::render::NewGrfAction5SpriteCache,
     images: &mut Assets<Image>,
 ) -> bool {
-    if !road_stop_layout_is_static(spec_id, layout) {
+    if !road_stop_layout_is_static(spec_id, layout, waypoint) {
         return false;
     }
     let Some(ground) = layout.ground.as_ref() else {
@@ -3717,7 +3728,11 @@ fn spawn_newgrf_road_stop_layout_ground(
             f32::from(decoded.width),
             f32::from(decoded.height),
         )
-    } else if let Some(base) = direct_tile_layout_road_stop_sequence(ground, assets) {
+    } else if let Some(base) = if waypoint {
+        direct_tile_layout_road_waypoint_sequence(ground, assets)
+    } else {
+        direct_tile_layout_road_stop_sequence(ground, assets)
+    } {
         (
             base.atlas.sprite(),
             base.x_offs,
@@ -3793,13 +3808,14 @@ fn spawn_newgrf_road_stop_layout_sequence(
     map_width: u32,
     parent_ordinal: u8,
     spec_id: u16,
+    waypoint: bool,
     owner_colour: Option<CompanyColour>,
     runtime_fp: u32,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
     cache: &mut crate::render::NewGrfAction5SpriteCache,
     images: &mut Assets<Image>,
 ) -> bool {
-    if !road_stop_layout_is_static(spec_id, layout) {
+    if !road_stop_layout_is_static(spec_id, layout, waypoint) {
         return false;
     }
     // A resolved TileLayout with no BUILD entries is still a complete result:
@@ -3877,7 +3893,11 @@ fn spawn_newgrf_road_stop_layout_sequence(
                     f32::from(decoded.x_offs),
                     f32::from(decoded.y_offs),
                 )
-            } else if let Some(base) = direct_tile_layout_road_stop_sequence(layer, assets) {
+            } else if let Some(base) = if waypoint {
+                direct_tile_layout_road_waypoint_sequence(layer, assets)
+            } else {
+                direct_tile_layout_road_stop_sequence(layer, assets)
+            } {
                 (
                     tint_building_sprite(base.atlas.sprite()),
                     base.width,
@@ -4078,6 +4098,7 @@ fn spawn_road_stop_buildings(
                 map.dimensions().0,
                 vanilla_parent_ordinal,
                 spec_id,
+                false,
                 owner_colour,
                 runtime_fp,
                 &layout,
@@ -7647,9 +7668,9 @@ mod tests {
             complete: true,
         };
 
-        assert!(road_stop_layout_is_static(1023, &layout));
+        assert!(road_stop_layout_is_static(1023, &layout, false));
         assert!(
-            !road_stop_layout_is_static(1024, &layout),
+            !road_stop_layout_is_static(1024, &layout, false),
             "el layout que no cabe en caché no puede reservar el sort global"
         );
 
@@ -7667,7 +7688,7 @@ mod tests {
             complete: true,
         };
         assert!(
-            road_stop_layout_is_static(1024, &direct_only),
+            road_stop_layout_is_static(1024, &direct_only, false),
             "un layout sólo de baseset no necesita reservar un slot de caché"
         );
         let mixed = openttdrs_core::newgrf_sprites::ResolvedTileLayout {
@@ -7676,7 +7697,7 @@ mod tests {
             complete: true,
         };
         assert!(
-            !road_stop_layout_is_static(1024, &mixed),
+            !road_stop_layout_is_static(1024, &mixed, false),
             "una mezcla con Action1 debe seguir respetando la capacidad de caché"
         );
     }

@@ -576,6 +576,35 @@ fn direct_tile_layout_road_stop_geometry(sprite_id: u16) -> Option<DirectTileLay
     None
 }
 
+/// Geometría NFO de las dos capas por eje que `DrawTile_Station` publica para
+/// un waypoint vial vanilla. Este namespace no comparte las tablas de
+/// marquesinas bus/truck: los mismos layouts pueden seleccionar los cuatro
+/// sprites de postes `6141..6144` directamente.
+fn direct_tile_layout_road_waypoint_geometry(
+    sprite_id: u16,
+) -> Option<DirectTileLayoutGroundGeometry> {
+    let sprite_id = u32::from(sprite_id);
+    (0..2).find_map(|axis| {
+        crate::sprites::road_waypoint_build_layers(axis)
+            .iter()
+            .find(|layer| layer.sprite_id == sprite_id)
+            .map(|layer| DirectTileLayoutGroundGeometry {
+                width: layer.w,
+                height: layer.h,
+                x_offs: layer.x_offs,
+                y_offs: layer.y_offs,
+            })
+    })
+}
+
+fn direct_tile_layout_road_waypoint_atlas(
+    sprite_id: u16,
+    assets: &WorldAssets,
+) -> Option<AtlasSprite> {
+    let index = crate::sprites::road_waypoint_sprite_index(u32::from(sprite_id))?;
+    assets.road_waypoint.get(index).cloned()
+}
+
 fn direct_tile_layout_road_stop_atlas(sprite_id: u16, assets: &WorldAssets) -> Option<AtlasSprite> {
     let sprite_id = u32::from(sprite_id);
     if (2692..=2695).contains(&sprite_id) {
@@ -675,6 +704,16 @@ fn direct_tile_layout_road_stop_sequence_sprite_is_supported(sprite_id: u16) -> 
 fn direct_tile_layout_road_stop_ground_sprite_is_supported(sprite_id: u16) -> bool {
     direct_tile_layout_ground_sprite_is_supported(sprite_id)
         || direct_tile_layout_road_stop_geometry(sprite_id).is_some()
+}
+
+fn direct_tile_layout_road_waypoint_sequence_sprite_is_supported(sprite_id: u16) -> bool {
+    direct_tile_layout_sequence_sprite_is_supported(sprite_id)
+        || direct_tile_layout_road_waypoint_geometry(sprite_id).is_some()
+}
+
+fn direct_tile_layout_road_waypoint_ground_sprite_is_supported(sprite_id: u16) -> bool {
+    direct_tile_layout_ground_sprite_is_supported(sprite_id)
+        || direct_tile_layout_road_waypoint_geometry(sprite_id).is_some()
 }
 
 fn direct_tile_layout_object_sequence_sprite_is_supported(sprite_id: u16) -> bool {
@@ -792,6 +831,36 @@ pub(crate) fn tile_layout_is_road_stop_renderable(layout: &ResolvedTileLayout) -
                     ground.sprite_modifiers == 0
                         && ground.direct_palette == 0
                         && direct_tile_layout_road_stop_ground_sprite_is_supported(id)
+                })
+        }
+    }
+}
+
+/// Variante contextual para `DrawTile_Station` cuando la estación es un
+/// waypoint vial. Sus postes usan un atlas distinto al de bus/truck, aunque
+/// compartan el mismo contrato Action2/TileLayout y los mismos slots de caché.
+#[must_use]
+pub(crate) fn tile_layout_is_road_waypoint_renderable(layout: &ResolvedTileLayout) -> bool {
+    if !layout.complete
+        || layout.sequence.iter().any(|entry| {
+            entry.action1_sprite().is_none()
+                && !entry.base_sprite_id().is_some_and(|id| {
+                    entry.sprite_modifiers == 0
+                        && entry.direct_palette == 0
+                        && direct_tile_layout_road_waypoint_sequence_sprite_is_supported(id)
+                })
+        })
+    {
+        return false;
+    }
+    match layout.ground.as_ref() {
+        None => true,
+        Some(ground) => {
+            ground.action1_sprite().is_some()
+                || ground.base_sprite_id().is_some_and(|id| {
+                    ground.sprite_modifiers == 0
+                        && ground.direct_palette == 0
+                        && direct_tile_layout_road_waypoint_ground_sprite_is_supported(id)
                 })
         }
     }
@@ -941,6 +1010,34 @@ pub(crate) fn direct_tile_layout_road_stop_sequence(
     if let Some(sprite_id) = layer.base_sprite_id()
         && let Some(geometry) = direct_tile_layout_road_stop_geometry(sprite_id)
         && let Some(atlas) = direct_tile_layout_road_stop_atlas(sprite_id, assets)
+    {
+        return Some(DirectTileLayoutGround {
+            atlas,
+            width: geometry.width,
+            height: geometry.height,
+            x_offs: geometry.x_offs,
+            y_offs: geometry.y_offs,
+        });
+    }
+    direct_tile_layout_sequence(layer, assets)
+}
+
+/// Resuelve una referencia directa desde el namespace de `RoadWaypoint`.
+/// Primero se consultan las tablas de los cuatro postes vanilla; sólo si el
+/// ID no pertenece a ellas se reutiliza el resolver compartido de terreno,
+/// estaciones e industrias.
+#[must_use]
+pub(crate) fn direct_tile_layout_road_waypoint_sequence(
+    layer: &ResolvedTileLayoutSprite,
+    assets: &WorldAssets,
+) -> Option<DirectTileLayoutGround> {
+    if layer.action1_sprite().is_some() || layer.sprite_modifiers != 0 || layer.direct_palette != 0
+    {
+        return None;
+    }
+    if let Some(sprite_id) = layer.base_sprite_id()
+        && let Some(geometry) = direct_tile_layout_road_waypoint_geometry(sprite_id)
+        && let Some(atlas) = direct_tile_layout_road_waypoint_atlas(sprite_id, assets)
     {
         return Some(DirectTileLayoutGround {
             atlas,
@@ -1182,6 +1279,60 @@ mod tests {
             direct_tile_layout_ground_geometry(3981)
         );
         assert_eq!(direct_tile_layout_sequence_geometry(2692), None);
+    }
+
+    #[test]
+    fn direct_road_waypoint_layout_uses_its_own_namespace_and_geometry() {
+        let direct_ground = ResolvedTileLayoutSprite {
+            sprite: None,
+            base_sprite: Some(3981),
+            sprite_modifiers: 0,
+            direct_palette: 0,
+            origin: [0, 0, 0],
+            extent: [1, 1, 1],
+        };
+        let mut layout = ResolvedTileLayout {
+            ground: Some(direct_ground),
+            sequence: vec![action1_sprite()],
+            complete: true,
+        };
+        let expected = [
+            (6141, 64.0, 40.0, -5.0, -22.0),
+            (6142, 64.0, 40.0, -31.0, -9.0),
+            (6143, 64.0, 35.0, -31.0, -4.0),
+            (6144, 64.0, 35.0, -57.0, -17.0),
+        ];
+
+        for (sprite_id, width, height, x_offs, y_offs) in expected {
+            assert_eq!(
+                direct_tile_layout_road_waypoint_geometry(sprite_id),
+                Some(DirectTileLayoutGroundGeometry {
+                    width,
+                    height,
+                    x_offs,
+                    y_offs,
+                }),
+                "geometría NFO del waypoint {sprite_id}"
+            );
+            layout.sequence[0].sprite = None;
+            layout.sequence[0].base_sprite = Some(sprite_id);
+            assert!(
+                !tile_layout_is_road_stop_renderable(&layout),
+                "el namespace de paradas no debe aceptar el poste {sprite_id}"
+            );
+            assert!(
+                tile_layout_is_road_waypoint_renderable(&layout),
+                "el namespace de waypoint debe aceptar el poste {sprite_id}"
+            );
+        }
+
+        layout.sequence[0].sprite = None;
+        layout.sequence[0].base_sprite = Some(6145);
+        assert_eq!(direct_tile_layout_road_waypoint_geometry(6145), None);
+        assert!(!tile_layout_is_road_waypoint_renderable(&layout));
+        layout.sequence[0].base_sprite = Some(6143);
+        layout.sequence[0].direct_palette = 1;
+        assert!(!tile_layout_is_road_waypoint_renderable(&layout));
     }
 
     #[test]

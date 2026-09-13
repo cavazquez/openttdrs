@@ -7081,3 +7081,11 @@ para el vano y conserva aliases Action5/OpenGFX, pendientes y transparencia.
 La cota del tablero fantasma usa la misma superficie efectiva de la fundación
 en los extremos; las fundaciones visuales completas y las rampas de otros
 transportes siguen siendo trabajo separado. #326 continúa abierta.
+
+Corrección #326-BRIDGE-PREVIEW-RAMP-HEAD (2026-09-13): los extremos de la
+preview ya seleccionan `bridge_ramp_sprite_id` con la dirección persistida y
+la superficie posterior a la fundación, en lugar de reutilizar el sprite
+trasero del vano. Esto conserva las variantes vanilla de rail, eléctrico,
+monorriel, maglev y carretera tanto en los ejes X/Y como al invertir el drag;
+las capas de fundación visibles y la aceptación raster siguen abiertas. #326
+continúa abierta.

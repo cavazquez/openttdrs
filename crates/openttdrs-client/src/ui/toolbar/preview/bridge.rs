@@ -15,7 +15,7 @@ use crate::render::{
 };
 use crate::sprites::{
     BridgeDeckSpriteIds, OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, bridge_deck_sprite_ids,
-    bridge_sprite_meta, catenary_sprite_atlas_key, catenary_sprite_color,
+    bridge_ramp_sprite_id, bridge_sprite_meta, catenary_sprite_atlas_key, catenary_sprite_color,
     catenary_tile_location_group, collect_catenary_bridge_draws,
     collect_catenary_ramp_draws_from_map,
 };
@@ -559,20 +559,37 @@ pub(crate) fn spawn_bridge_span_preview(
         let is_middle = total > 2 && index > 0 && index + 1 < total;
         let bridge_offset = bridge_preview_road_sprite_offset(axis_y, index, total, tileh);
         let ids = bridge_deck_sprite_ids(bridge_type, piece);
+        let ramp_direction = (!is_middle && total >= 2)
+            .then(|| bridge_preview_ramp_direction(axis_y, index + 1 == total));
+        let ramp_foundation = ramp_direction.map(|direction| {
+            bridge_foundation_decision_at(map, coord, map_dims, tileh, base_z, direction)
+        });
         let (sprite_id, shift, layer) = if is_middle {
             (ids.front[axis], bridge_front_shift(axis), FRONT_LAYER)
         } else {
-            (ids.rear(is_rail, axis), Vec2::ZERO, DECK_LAYER)
+            (
+                ramp_foundation
+                    .zip(ramp_direction)
+                    .map(|(foundation, direction)| {
+                        bridge_ramp_sprite_id(
+                            bridge_type,
+                            is_rail,
+                            rail_type,
+                            foundation.surface_tileh,
+                            direction,
+                        )
+                    })
+                    .unwrap_or_else(|| ids.rear(is_rail, axis)),
+                Vec2::ZERO,
+                DECK_LAYER,
+            )
         };
-        let ramp_foundation_base_z = (!is_middle && total >= 2).then(|| {
-            let direction = bridge_preview_ramp_direction(axis_y, index + 1 == total);
-            bridge_foundation_decision_at(map, coord, map_dims, tileh, base_z, direction)
-                .surface_base_z
-        });
         let surface_z = if is_middle {
             deck_z.unwrap_or(base_z)
         } else {
-            ramp_foundation_base_z.unwrap_or(base_z)
+            ramp_foundation
+                .map(|foundation| foundation.surface_base_z)
+                .unwrap_or(base_z)
         };
         let path = format!(
             "assets/opengfx/tiles/{}",

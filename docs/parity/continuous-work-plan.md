@@ -7424,5 +7424,13 @@ visual explícito. Los SAV importados pasan por el valor nativo y una traza
 completa de `mvp_openttd_ship.sav` volvió a
 seleccionar `3924` en `(2,2)`, igual que OpenTTD, en lugar de `3981`. La
 regresión cubre el selector de densidad cero y conserva el default visual de
-preview; #326
-continúa abierta por las capas restantes y la aceptación raster completa.
+preview; #326 continúa abierta por las capas restantes y la aceptación raster
+completa.
+
+Evidencia #267/#326-SHIP-DEPOT-REAL-FIXTURE (2026-09-13): `mvp_ship_state`
+materializa un depósito naval con `PlaceShipDepotDir` antes de exportar el SAV.
+La carga dedicada de OpenTTD pasó; la comparación completa confirmó la familia
+`ship-depot` (3 capas) y `ship-depot-water` (2 fondos) con IDs, geometría,
+paleta y orden relativos equivalentes. La cobertura naval queda respaldada por
+una partida real; #326 permanece abierta por las familias no cubiertas y el
+gate raster completo.

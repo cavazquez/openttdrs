@@ -4857,3 +4857,12 @@ explícitamente densidad tres. La traza completa de
 selecciones de `3924`; antes la candidata emitía `3981`. La preview sin tesela
 mantiene el default visual de césped pleno. #326 sigue abierta por composición
 global y aceptación raster de las familias restantes.
+
+Evidencia #267/#326-SHIP-DEPOT-REAL-FIXTURE (2026-09-13):
+`mvp_openttd_ship.sav` ahora contiene un `DEPT` y una huella naval real de dos
+teselas creada por `PlaceShipDepotDir`, además del barco y el muelle que ya
+ejercitaba. OpenTTD acepta el save; en la traza completa de 64×64 las 3 capas
+`ship-depot`, sus 2 fondos de agua y sus IDs, geometrías, paletas y orden
+relativo coinciden con la referencia. Esto cubre la evidencia que faltaba para
+el depósito naval, pero no cierra #326: siguen pendientes la aceptación raster
+amplia y otras familias/callbacks NewGRF.

@@ -3215,6 +3215,19 @@ mod tests {
             let c = TileCoord::new(x, 32);
             let _ = make_water_tile(&mut state.map, c, WaterClass::Sea);
         }
+        // Depósito naval real de dos teselas. Mantenerlo separado del muelle
+        // permite que la fixture de vehículo también ejerza DrawWaterDepot,
+        // DrawWaterEdges y las capas `TILE_SEQ` del depósito (4070..4075).
+        let ship_depot = TileCoord::new(30, 31);
+        for x in 29..=30 {
+            make_water_tile(&mut state.map, TileCoord::new(x, 31), WaterClass::Sea)
+                .expect("depot sea");
+        }
+        crate::apply_command(
+            &mut state,
+            &crate::Command::PlaceShipDepotDir(ship_depot, 2),
+        )
+        .expect("ship depot");
         let mut dock_tile = state.map.get(dock_pos).expect("in bounds");
         dock_tile.kind = TileKind::Station;
         dock_tile.mapt = 0x50;

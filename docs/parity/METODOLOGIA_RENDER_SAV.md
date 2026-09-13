@@ -556,3 +556,11 @@ real respeta el byte nativo de un SAV. La
 repetición completa de `mvp_openttd_ship.sav` produjo `3924` en `(2,2)` y
 eliminó el `3981` que no existía en la traza de OpenTTD. Este caso es un gate
 de selección/semántica; no sustituye el gate raster ni cierra #326.
+
+Evidencia #267/#326-SHIP-DEPOT-REAL-FIXTURE (2026-09-13): la fixture de barco
+incluye ahora un `DEPT` y las dos teselas de `DrawWaterDepot`, por lo que el
+oráculo se ejecuta sobre una huella naval real y no sólo sobre fixtures ECS.
+`validate_sav_openttd.sh` confirmó la carga por OpenTTD. El comparador world-draw
+registró 3 selecciones de depósito y 2 de agua con IDs, geometrías, paletas y
+orden contenido en la referencia; cualquier diferencia restante de esa corrida
+pertenece a otra familia y debe aislarse por separado.

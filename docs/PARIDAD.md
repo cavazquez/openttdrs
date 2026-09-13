@@ -729,14 +729,19 @@ abierto.
 
 La contención `--strict-reference` de `world-draw` sigue siendo útil, pero
 compara decisiones y orden relativo por tesela antes de atlas/composición. El
-oráculo complementario `world-sort` sí captura ahora el vector final de
+oráculo complementario `world-sort` captura el vector final de
 `ViewportSortParentSprites`: en la región mínima de Kale `(225,2)..(226,2)`
 el sorter invierte cada pareja de capas de parada vial (`5982 → 5983` pasa a
-`5983 → 5982`). `compare_world_sort.py` vincula las mismas cajas candidatas y
-encuentra esa primera inversión, aun cuando `world-draw` por tesela coincide.
+`5983 → 5982`). El modo histórico de `compare_world_sort.py` contrasta ese
+vector final con el stream `world-draw` candidato, que por contrato conserva
+la inserción *pre-sort*; por eso informa esa inversión aunque el runtime ya la
+aplique. Para validar el resultado efectivo de Bevy se debe pasar también
+`--candidate-sort /ruta/a/trace-de-viewport.json`, generado con
+`OPENTTDRS_VIEWPORT_SORT_TRACE_OUT`; en la misma región la traza candidata
+confirma `5983 → 5982`. No queda una brecha de orden para esa pareja.
 
-Eso prueba la brecha de composición de forma acotada; no declara paridad
-raster. El puente runtime ya aplica el vector final a las capas BUILD de
+Esto acota una falsa alarma de composición, pero no declara paridad raster. El
+puente runtime ya aplica el vector final a las capas BUILD de
 paradas viales, depósitos viales y a los postes `TILE_SEQ_LINE` vanilla de
 waypoints viales planos, a los parents globales de depósito ferroviario
 eléctrico (cable de entrada + fachadas BUILD), a los faroles viales, a la

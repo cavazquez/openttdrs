@@ -99,6 +99,13 @@ class CandidateParent:
         return value
 
 
+@dataclass(frozen=True)
+class CandidateSortedParent:
+    final_ordinal: int
+    identity: tuple[int, tuple[int, int, int, int, int, int]]
+    row: Row
+
+
 @dataclass
 class WorldSort:
     path: Path
@@ -115,6 +122,13 @@ class CandidateWorldDraw:
     parents: list[CandidateParent]
     complete: Row
     geometry_errors: list[str]
+
+
+@dataclass
+class CandidateViewportSort:
+    path: Path
+    document: dict[str, Any]
+    parents: list[CandidateSortedParent]
 
 
 def is_int(value: object) -> bool:
@@ -312,6 +326,41 @@ def load_candidate_world_draw(path: Path) -> CandidateWorldDraw:
     return CandidateWorldDraw(path, head, parents, tail, geometry_errors)
 
 
+def load_candidate_viewport_sort(path: Path) -> CandidateViewportSort:
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise StreamError(f"{path}: no se pudo leer el documento JSON: {error}") from error
+    if not isinstance(document, dict):
+        raise StreamError(f"{path}: la traza candidata post-sort debe ser un objeto JSON")
+    if document.get("contract") != "openttdrs-viewport-sort":
+        raise StreamError(f"{path}: se esperaba contract='openttdrs-viewport-sort'")
+    if document.get("stage") != "post_viewport_sprite_sorter":
+        raise StreamError(f"{path}: stage no es post_viewport_sprite_sorter")
+    raw_parents = document.get("parents")
+    if not isinstance(raw_parents, list):
+        raise StreamError(f"{path}: parents debe ser una lista")
+
+    parents: list[CandidateSortedParent] = []
+    for index, raw_parent in enumerate(raw_parents, start=1):
+        row = Row(index, raw_parent) if isinstance(raw_parent, dict) else Row(index, {})
+        if not isinstance(raw_parent, dict):
+            raise StreamError(f"{path}:{index}: cada parent post-sort debe ser un objeto")
+        final_ordinal = integer(row, "final_ordinal", raw_parent.get("final_ordinal"))
+        if final_ordinal != len(parents):
+            raise StreamError(
+                f"{path}:{index}: final_ordinal={final_ordinal}, se esperaba {len(parents)}"
+            )
+        sprite = integer(row, "sprite_id", raw_parent.get("sprite_id"))
+        bounds = raw_parent.get("world_bounds")
+        if not isinstance(bounds, dict):
+            raise StreamError(f"{path}:{index}: world_bounds debe ser un objeto")
+        fields = ("xmin", "ymin", "zmin", "xmax", "ymax", "zmax")
+        values = tuple(integer(row, f"world_bounds.{field}", bounds.get(field)) for field in fields)
+        parents.append(CandidateSortedParent(final_ordinal, (sprite, values), row))  # type: ignore[arg-type]
+    return CandidateViewportSort(path, document, parents)
+
+
 def metadata_differences(reference: WorldSort, candidate: CandidateWorldDraw) -> list[str]:
     differences: list[str] = []
     for field in ("schema_version", "width", "height", "region"):
@@ -333,6 +382,7 @@ def compare(
     candidate: CandidateWorldDraw,
     strict_reference: bool,
     max_diffs: int,
+    check_candidate_order: bool = True,
 ) -> tuple[list[str], dict[str, object], dict[str, object] | None, Counter[ParentIdentity], Counter[ParentIdentity]]:
     failures = metadata_differences(reference, candidate)
     failures.extend(candidate.geometry_errors)
@@ -359,21 +409,22 @@ def compare(
             matched.append((parent, available.popleft()))
 
     first_inversion: dict[str, object] | None = None
-    furthest: tuple[CandidateParent, int] | None = None
-    for parent, expected in matched:
-        if furthest is not None and expected < furthest[1]:
-            first_inversion = {
-                "before": furthest[0].json(furthest[1]),
-                "after": parent.json(expected),
-            }
-            failures.append(
-                "candidate_order_inversion: "
-                f"{parent.describe()} espera final={expected}, pero se emite después de "
-                f"final={furthest[1]} ({furthest[0].describe()})"
-            )
-            break
-        if furthest is None or expected > furthest[1]:
-            furthest = (parent, expected)
+    if check_candidate_order:
+        furthest: tuple[CandidateParent, int] | None = None
+        for parent, expected in matched:
+            if furthest is not None and expected < furthest[1]:
+                first_inversion = {
+                    "before": furthest[0].json(furthest[1]),
+                    "after": parent.json(expected),
+                }
+                failures.append(
+                    "candidate_order_inversion: "
+                    f"{parent.describe()} espera final={expected}, pero se emite después de "
+                    f"final={furthest[1]} ({furthest[0].describe()})"
+                )
+                break
+            if furthest is None or expected > furthest[1]:
+                furthest = (parent, expected)
 
     moved = [parent for parent in reference.parents if parent.parent_id != parent.final_ordinal]
     summary: dict[str, object] = {
@@ -397,10 +448,79 @@ def compare(
     return failures, summary, first_inversion, uncovered_reference, unmatched_candidate
 
 
+def compare_candidate_viewport_sort(
+    reference: WorldSort,
+    candidate: CandidateViewportSort,
+    max_diffs: int,
+) -> tuple[list[str], dict[str, object], dict[str, object] | None]:
+    """Comprueba el vector final de Bevy, no el stream pre-sort de world-draw.
+
+    La captura candidata suele tener un scope de viewport más amplio que la
+    región mínima usada para el world-sort del oráculo. Por eso se comparan
+    sólo las identidades que ambos documentos comparten; las demás siguen
+    siendo informativas y no se confunden con padres ausentes.
+    """
+    reference_ordinals: defaultdict[tuple[int, tuple[int, int, int, int, int, int]], deque[int]] = defaultdict(deque)
+    for parent in reference.parents:
+        reference_ordinals[(parent.identity.sprite, parent.identity.bounds)].append(parent.final_ordinal)
+
+    matched: list[tuple[CandidateSortedParent, int]] = []
+    unmatched = 0
+    for parent in candidate.parents:
+        available = reference_ordinals[parent.identity]
+        if available:
+            matched.append((parent, available.popleft()))
+        else:
+            unmatched += 1
+
+    failures: list[str] = []
+    first_inversion: dict[str, object] | None = None
+    furthest: tuple[CandidateSortedParent, int] | None = None
+    for parent, expected in matched:
+        if furthest is not None and expected < furthest[1]:
+            first_inversion = {
+                "before": {
+                    "candidate_final_ordinal": furthest[0].final_ordinal,
+                    "expected_final_ordinal": furthest[1],
+                    "sprite": furthest[0].identity[0],
+                    "world_bounds": dict(zip(("xmin", "ymin", "zmin", "xmax", "ymax", "zmax"), furthest[0].identity[1])),
+                },
+                "after": {
+                    "candidate_final_ordinal": parent.final_ordinal,
+                    "expected_final_ordinal": expected,
+                    "sprite": parent.identity[0],
+                    "world_bounds": dict(zip(("xmin", "ymin", "zmin", "xmax", "ymax", "zmax"), parent.identity[1])),
+                },
+            }
+            failures.append(
+                "candidate_sorted_order_inversion: "
+                f"candidate final={parent.final_ordinal} espera referencia final={expected}, "
+                f"pero aparece después de referencia final={furthest[1]}"
+            )
+            break
+        if furthest is None or expected > furthest[1]:
+            furthest = (parent, expected)
+
+    summary = {
+        "candidate_sorted_parents": len(candidate.parents),
+        "matched_sorted_parents": len(matched),
+        "unmatched_sorted_parents": unmatched,
+        "reference_parents_considered": len(reference.parents),
+    }
+    if len(failures) > max_diffs:
+        failures = failures[:max_diffs] + [f"… {len(failures) - max_diffs} diferencias adicionales omitidas"]
+    return failures, summary, first_inversion
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("reference", type=Path, help="JSONL world-sort de OpenTTD")
     parser.add_argument("candidate", type=Path, help="JSONL world-draw de openttdrs")
+    parser.add_argument(
+        "--candidate-sort",
+        type=Path,
+        help="documento JSON de OPENTTDRS_VIEWPORT_SORT_TRACE_OUT; contrasta el orden final real de Bevy",
+    )
     parser.add_argument("--strict-reference", action="store_true", help="falla también si OpenTTD tiene padres aún no instrumentados por el candidato")
     parser.add_argument("--max-diffs", type=int, default=20)
     parser.add_argument("--json-report", type=Path, help="escribe el diagnóstico estructurado")
@@ -411,9 +531,24 @@ def main(argv: list[str] | None = None) -> int:
     try:
         reference = load_world_sort(args.reference)
         candidate = load_candidate_world_draw(args.candidate)
-        failures, summary, first_inversion, uncovered, unmatched = compare(
-            reference, candidate, args.strict_reference, args.max_diffs
+        candidate_sort = (
+            load_candidate_viewport_sort(args.candidate_sort) if args.candidate_sort else None
         )
+        failures, summary, first_inversion, uncovered, unmatched = compare(
+            reference,
+            candidate,
+            args.strict_reference,
+            args.max_diffs,
+            check_candidate_order=candidate_sort is None,
+        )
+        sorted_failures: list[str] = []
+        sorted_summary: dict[str, object] | None = None
+        sorted_inversion: dict[str, object] | None = None
+        if candidate_sort is not None:
+            sorted_failures, sorted_summary, sorted_inversion = compare_candidate_viewport_sort(
+                reference, candidate_sort, args.max_diffs
+            )
+            failures.extend(sorted_failures)
     except StreamError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
@@ -432,6 +567,14 @@ def main(argv: list[str] | None = None) -> int:
         "unmatched_candidate": count_descriptions(unmatched),
         "failures": failures,
     }
+    if candidate_sort is not None:
+        report["candidate_sort"] = {
+            "path": str(candidate_sort.path),
+            "document": candidate_sort.document,
+            "summary": sorted_summary,
+            "first_inversion": sorted_inversion,
+            "failures": sorted_failures,
+        }
     if args.json_report:
         args.json_report.parent.mkdir(parents=True, exist_ok=True)
         args.json_report.write_text(
@@ -462,6 +605,13 @@ def main(argv: list[str] | None = None) -> int:
         for failure in failures:
             print(f"DIFF: {failure}")
         return 1
+    if candidate_sort is not None:
+        print(
+            "Padres candidatos post-sort vinculados al orden final: "
+            f"{sorted_summary['matched_sorted_parents']}"
+        )
+        print("OK: el vector final candidato coincide con el orden de OpenTTD en la intersección")
+        return 0
     print("OK: los padres candidatos son una subsecuencia del orden final de OpenTTD")
     return 0
 

@@ -155,7 +155,8 @@ OPENTTDRS_WORLD_SORT_OUT=/tmp/openttd-sort.jsonl \
 ./scripts/export_openttdrs_world_draw.sh save/Kale_TitleGame.sav \
   /tmp/openttdrs-draw.jsonl 225,2,226,2
 python3 scripts/compare_world_sort.py \
-  /tmp/openttd-sort.jsonl /tmp/openttdrs-draw.jsonl
+  /tmp/openttd-sort.jsonl /tmp/openttdrs-draw.jsonl \
+  --candidate-sort /tmp/openttdrs-viewport-sort.json
 ```
 
 El stream empieza con `contract:"world-sort"`,
@@ -179,6 +180,15 @@ subsecuencia del orden final C++. Un padre candidato desconocido siempre falla;
 los parents C++ aún no instrumentados se informan y sólo se vuelven gate con
 `--strict-reference`. El reporte JSON deja el primer par invertido y los
 parents sin cobertura.
+
+El exportador de captura de Bevy puede producir además un documento JSON único
+con `OPENTTDRS_VIEWPORT_SORT_TRACE_OUT`. Sus `parents` ya están en el vector
+post-sort y conservan `final_ordinal`, `sprite_id` y `world_bounds`. Al pasarlo
+como `--candidate-sort`, el comparador ignora la inserción previa del
+`world-draw` y contrasta el orden final candidato contra la intersección de
+identidades del oráculo. Esto evita reportar como fallo una inversión que el
+compositor candidato sí corrigió; los padres fuera de la región de referencia
+se informan, pero no se convierten en falsos negativos.
 
 Es deliberadamente un diagnóstico de selección/orden de parents, no de
 framebuffer. La traza candidata conserva el orden de emisión previo al sort

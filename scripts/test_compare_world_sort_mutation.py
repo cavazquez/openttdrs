@@ -101,6 +101,25 @@ def candidate_stream(draws: list[dict[str, object]]) -> list[dict[str, object]]:
     ]
 
 
+def candidate_sort_document(parents: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "contract": "openttdrs-viewport-sort",
+        "schema_version": 1,
+        "stage": "post_viewport_sprite_sorter",
+        "parents_before_sort": len(parents),
+        "parents": parents,
+    }
+
+
+def candidate_sorted_parent(final_ordinal: int, sprite: int, xmin: int) -> dict[str, object]:
+    return {
+        "final_ordinal": final_ordinal,
+        "input_index": final_ordinal,
+        "sprite_id": sprite,
+        "world_bounds": bounds(xmin),
+    }
+
+
 def run(reference: Path, candidate: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(COMPARE), str(reference), str(candidate), *extra],
@@ -142,6 +161,42 @@ def main() -> int:
             or report["first_inversion"]["after"]["expected_final_ordinal"] != 0
         ):
             print(json.dumps(report, indent=2), file=sys.stderr)
+            return 1
+
+        # El stream runtime ya contiene el resultado post-sort. Al pasarlo
+        # explícitamente, la inversión del world-draw de entrada no debe
+        # confundirse con una inversión efectiva de Bevy.
+        candidate_sort_path = root / "candidate-sort.json"
+        candidate_sort_path.write_text(
+            json.dumps(
+                candidate_sort_document(
+                    [
+                        candidate_sorted_parent(0, 5983, 0),
+                        candidate_sorted_parent(1, 5982, 13),
+                    ]
+                )
+            ),
+            encoding="utf-8",
+        )
+        sorted_ok = run(reference, candidate, "--candidate-sort", str(candidate_sort_path))
+        if sorted_ok.returncode != 0 or "vector final candidato coincide" not in sorted_ok.stdout:
+            print(sorted_ok.stdout, sorted_ok.stderr, file=sys.stderr)
+            return 1
+
+        candidate_sort_path.write_text(
+            json.dumps(
+                candidate_sort_document(
+                    [
+                        candidate_sorted_parent(0, 5982, 13),
+                        candidate_sorted_parent(1, 5983, 0),
+                    ]
+                )
+            ),
+            encoding="utf-8",
+        )
+        sorted_inverted = run(reference, candidate, "--candidate-sort", str(candidate_sort_path))
+        if sorted_inverted.returncode != 1 or "candidate_sorted_order_inversion" not in sorted_inverted.stdout:
+            print(sorted_inverted.stdout, sorted_inverted.stderr, file=sys.stderr)
             return 1
 
         # La cobertura parcial es informativa por defecto y se vuelve gate al

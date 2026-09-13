@@ -1825,3 +1825,14 @@ respectivamente una paleta explícita distinta del color activo y la variante
 de API con contexto preparado. Quedan pendientes layouts/call sites GUI
 adicionales, invalidación global fuera de la caché de vehículos y callbacks
 avanzados; #329 sigue abierta.
+
+### #329-VEHICLE-BUY-ROW-RUNTIME — filas compactas de compra
+
+Actualizado: 2026-09-12 (`3a0e67f1`). Las filas compactas de “Nuevos
+vehículos” consultan primero `vehicle_preview_layers`, igual que el panel
+grande de detalle, y conservan `newgrf_preview()` como fallback únicamente
+cuando el runtime no devuelve una capa. Así una misma ventana no mezcla el
+sprite estático con otra vista por `EngineImageType`, SpriteStack, cargo,
+callback o paleta del catálogo activo. La suite `ui::buy_window` mantiene 12
+tests aprobados; quedan pendientes layouts GUI adicionales y consumidores
+legacy fuera del resolver de vehículos.

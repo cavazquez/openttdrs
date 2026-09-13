@@ -6414,3 +6414,12 @@ contexto preparado. Pasaron 39 tests de `render::vehicles`, el callback core
 dirigido, Clippy estricto de cliente y core, formato y `git diff --check`.
 #329 continúa abierta por layouts/call sites GUI restantes, callbacks de
 vehículos sin consumidor y consumidores legacy; #326/#567 permanecen abiertas.
+
+Corrección #329-VEHICLE-BUY-ROW-RUNTIME (2026-09-12, `3a0e67f1`): las filas
+compactas de la ventana de compra dejan de tomar siempre `newgrf_preview()`
+directo. Primero consultan `vehicle_preview_layers`, por lo que comparten con
+el panel grande los image types, SpriteStack, cargo, callbacks y paletas del
+catálogo/runtime; sólo usan el sprite estático como fallback cuando no hay una
+capa resoluble. La suite de `ui::buy_window` conserva 12 tests aprobados y
+Clippy estricto de cliente; #329 continúa abierta por layouts GUI adicionales
+y consumidores legacy.

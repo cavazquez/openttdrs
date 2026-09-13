@@ -875,6 +875,14 @@ preferencia global de ocultar catenaria, el flag de catenaria del roadtype y
 el fallback independiente de cada grupo; #326/#565 continúan abiertas por
 catenaria vanilla de preview, clipping, pivotes y aceptación raster.
 
+Corrección #326-BRIDGE-PREVIEW-VANILLA-CATENARY (2026-09-13): cuando el
+roadtype seleccionado publica catenaria pero no grupos específicos, la preview
+usa el bloque vanilla `SPR_TRAMWAY` con la tabla de `GetBridgeRoadCatenary`,
+los PNG y anclajes NFO de cada mitad, y las capas posterior/delantera del
+tablero. La rama custom conserva prioridad y la opción de ocultar catenaria
+se aplica a ambas rutas; #326/#565 siguen abiertas por catenaria ferroviaria
+de preview, clipping, pivotes y aceptación raster.
+
 Actualización #326-ROAD-CATENARY-GLOBAL (2026-09-09): las calles normales
 publican ya los cuatro `AddSortableSpriteToDraw` de cada
 `DrawRoadTypeCatenary` como parents globales: tres recortes traseros con sus

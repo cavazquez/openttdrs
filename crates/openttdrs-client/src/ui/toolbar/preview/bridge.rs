@@ -34,7 +34,7 @@ pub(crate) struct BridgeSpanPreviewSpawn<'a> {
     pub tiles: &'a [(i32, i32)],
     pub map: &'a Map,
     pub valid: bool,
-    pub custom_road_def: Option<&'a RoadTypeDef>,
+    pub road_def: Option<&'a RoadTypeDef>,
     pub road_catalog: &'a [RoadTypeDef],
     pub climate: Climate,
     pub newgrf_stack: &'a [NewGrfEntry],
@@ -173,6 +173,58 @@ fn custom_bridge_preview_layer(
     ))
 }
 
+/// Fallback vanilla de `GetBridgeRoadCatenary`: ambos sprites pertenecen al
+/// bloque Action5 `SPR_TRAMWAY`, pero mantienen cajas NFO distintas.
+fn bridge_road_catenary_sprite_ids(offset: usize) -> (u32, u32) {
+    let offset = offset.min(5);
+    (
+        crate::sprites::TRAMWAY_SPRITE_BASE
+            + u32::try_from(BRIDGE_ROAD_CATENARY_BACK_OFFSETS[offset]).unwrap_or(0),
+        crate::sprites::TRAMWAY_SPRITE_BASE
+            + u32::try_from(BRIDGE_ROAD_CATENARY_FRONT_OFFSETS[offset]).unwrap_or(0),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_vanilla_bridge_catenary(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    px: i32,
+    py: i32,
+    surface_z: u8,
+    layer: f32,
+    sprite_id: u32,
+    tint: Color,
+) {
+    let (Some(path), Some(gfx)) = (
+        crate::sprites::tramway_sprite_atlas_key(sprite_id),
+        crate::sprites::catenary_sprite_gfx(sprite_id),
+    ) else {
+        return;
+    };
+    let catenary_tint = crate::sprites::catenary_sprite_color();
+    commands.spawn((
+        BuildGhostPreview,
+        Sprite {
+            image: asset_server.load::<Image>(format!("assets/opengfx/tiles/{path}")),
+            color: tint.with_alpha(tint.alpha() * catenary_tint.alpha()),
+            ..default()
+        },
+        Transform::from_translation(overlay_pos(
+            iso(px, py),
+            gfx.x_offs,
+            gfx.y_offs,
+            gfx.width,
+            gfx.height,
+            surface_z,
+            layer,
+            px,
+            py,
+        ))
+        .with_scale(Vec3::splat(1.002)),
+    ));
+}
+
 /// Posición en pantalla con offsets NFO, como `spawn_layer` en `bridge_draw.rs`.
 fn bridge_ghost_translation(
     px: i32,
@@ -202,7 +254,7 @@ pub(crate) fn spawn_bridge_span_preview(
         tiles,
         map,
         valid,
-        custom_road_def,
+        road_def,
         road_catalog,
         climate,
         newgrf_stack,
@@ -224,7 +276,7 @@ pub(crate) fn spawn_bridge_span_preview(
         let (tileh, min_z) = tile_slope_and_min_z(map, px as u32, py as u32);
         bridge_preview_deck_z(tileh, min_z, axis)
     });
-    let custom_source = custom_road_def.and_then(|def| {
+    let road_source = road_def.and_then(|def| {
         bridge_preview_source_tile(map, &ordered_tiles, def).map(|(coord, tile)| (def, coord, tile))
     });
     for (index, &(px, py)) in ordered_tiles.iter().enumerate() {
@@ -244,7 +296,7 @@ pub(crate) fn spawn_bridge_span_preview(
         } else {
             (ids.rear(is_rail, axis), Vec2::ZERO, DECK_LAYER)
         };
-        let draw_z = if is_middle {
+        let surface_z = if is_middle {
             deck_z.unwrap_or(base_z)
         } else {
             base_z
@@ -261,12 +313,12 @@ pub(crate) fn spawn_bridge_span_preview(
                 ..default()
             },
             Transform::from_translation(bridge_ghost_translation(
-                px, py, draw_z, sprite_id, shift, layer,
+                px, py, surface_z, sprite_id, shift, layer,
             ))
             .with_scale(Vec3::new(1.002, 1.002, 1.0)),
         ));
 
-        if let Some((def, source_coord, source_tile)) = custom_source
+        if let Some((def, source_coord, source_tile)) = road_source
             && let Some((sprite, view)) = custom_bridge_preview_layer(
                 def,
                 map,
@@ -282,11 +334,6 @@ pub(crate) fn spawn_bridge_span_preview(
                 tint,
             )
         {
-            let custom_z = if is_middle {
-                deck_z.unwrap_or(base_z)
-            } else {
-                base_z
-            };
             commands.spawn((
                 BuildGhostPreview,
                 sprite,
@@ -296,7 +343,7 @@ pub(crate) fn spawn_bridge_span_preview(
                     f32::from(view.y_offs),
                     f32::from(view.width),
                     f32::from(view.height),
-                    custom_z,
+                    surface_z,
                     CUSTOM_BRIDGE_LAYER,
                     px,
                     py,
@@ -305,7 +352,7 @@ pub(crate) fn spawn_bridge_span_preview(
             ));
         }
 
-        if let Some((def, source_coord, source_tile)) = custom_source
+        if let Some((def, source_coord, source_tile)) = road_source
             && def.has_newgrf_specific_group(ROTSG_OVERLAY)
             && (def.class == RoadTramType::Road || source_tile.m3 & 0x0F != 0)
             && let Some((sprite, view)) = custom_bridge_preview_layer(
@@ -346,86 +393,102 @@ pub(crate) fn spawn_bridge_span_preview(
             ));
         }
 
-        if let Some((def, source_coord, source_tile)) = custom_source
+        if let Some((def, source_coord, source_tile)) = road_source
             && def.has_catenary()
             && !crate::sprites::catenary_hidden()
         {
             let offset = bridge_offset.min(BRIDGE_ROAD_CATENARY_BACK_OFFSETS.len() - 1);
-            if def.has_newgrf_specific_group(ROTSG_CATENARY_BACK)
-                && let Some((sprite, view)) = custom_bridge_preview_layer(
-                    def,
-                    map,
-                    source_coord,
-                    source_tile,
-                    ROTSG_CATENARY_BACK,
-                    23 + BRIDGE_ROAD_CATENARY_BACK_OFFSETS[offset],
-                    climate,
-                    road_catalog,
-                    newgrf_stack,
-                    road_sprites,
-                    images,
+            let has_custom_catenary = def.has_newgrf_specific_group(ROTSG_CATENARY_BACK)
+                || def.has_newgrf_specific_group(ROTSG_CATENARY_FRONT);
+            if has_custom_catenary {
+                if def.has_newgrf_specific_group(ROTSG_CATENARY_BACK)
+                    && let Some((sprite, view)) = custom_bridge_preview_layer(
+                        def,
+                        map,
+                        source_coord,
+                        source_tile,
+                        ROTSG_CATENARY_BACK,
+                        23 + BRIDGE_ROAD_CATENARY_BACK_OFFSETS[offset],
+                        climate,
+                        road_catalog,
+                        newgrf_stack,
+                        road_sprites,
+                        images,
+                        tint,
+                    )
+                {
+                    commands.spawn((
+                        BuildGhostPreview,
+                        sprite,
+                        Transform::from_translation(overlay_pos(
+                            iso(px, py),
+                            f32::from(view.x_offs),
+                            f32::from(view.y_offs),
+                            f32::from(view.width),
+                            f32::from(view.height),
+                            surface_z,
+                            CUSTOM_CATENARY_BACK_LAYER,
+                            px,
+                            py,
+                        ))
+                        .with_scale(Vec3::splat(1.002)),
+                    ));
+                }
+                if def.has_newgrf_specific_group(ROTSG_CATENARY_FRONT)
+                    && let Some((sprite, view)) = custom_bridge_preview_layer(
+                        def,
+                        map,
+                        source_coord,
+                        source_tile,
+                        ROTSG_CATENARY_FRONT,
+                        23 + BRIDGE_ROAD_CATENARY_FRONT_OFFSETS[offset],
+                        climate,
+                        road_catalog,
+                        newgrf_stack,
+                        road_sprites,
+                        images,
+                        tint,
+                    )
+                {
+                    commands.spawn((
+                        BuildGhostPreview,
+                        sprite,
+                        Transform::from_translation(overlay_pos(
+                            iso(px, py),
+                            f32::from(view.x_offs),
+                            f32::from(view.y_offs),
+                            f32::from(view.width),
+                            f32::from(view.height),
+                            surface_z,
+                            CUSTOM_CATENARY_FRONT_LAYER,
+                            px,
+                            py,
+                        ))
+                        .with_scale(Vec3::splat(1.002)),
+                    ));
+                }
+            } else {
+                let (back_id, front_id) = bridge_road_catenary_sprite_ids(bridge_offset);
+                spawn_vanilla_bridge_catenary(
+                    commands,
+                    asset_server,
+                    px,
+                    py,
+                    surface_z,
+                    CUSTOM_CATENARY_BACK_LAYER,
+                    back_id,
                     tint,
-                )
-            {
-                let custom_z = if is_middle {
-                    deck_z.unwrap_or(base_z)
-                } else {
-                    base_z
-                };
-                commands.spawn((
-                    BuildGhostPreview,
-                    sprite,
-                    Transform::from_translation(overlay_pos(
-                        iso(px, py),
-                        f32::from(view.x_offs),
-                        f32::from(view.y_offs),
-                        f32::from(view.width),
-                        f32::from(view.height),
-                        custom_z,
-                        CUSTOM_CATENARY_BACK_LAYER,
-                        px,
-                        py,
-                    ))
-                    .with_scale(Vec3::splat(1.002)),
-                ));
-            }
-            if def.has_newgrf_specific_group(ROTSG_CATENARY_FRONT)
-                && let Some((sprite, view)) = custom_bridge_preview_layer(
-                    def,
-                    map,
-                    source_coord,
-                    source_tile,
-                    ROTSG_CATENARY_FRONT,
-                    23 + BRIDGE_ROAD_CATENARY_FRONT_OFFSETS[offset],
-                    climate,
-                    road_catalog,
-                    newgrf_stack,
-                    road_sprites,
-                    images,
+                );
+                spawn_vanilla_bridge_catenary(
+                    commands,
+                    asset_server,
+                    px,
+                    py,
+                    surface_z,
+                    CUSTOM_CATENARY_FRONT_LAYER,
+                    front_id,
                     tint,
-                )
-            {
-                let custom_z = if is_middle {
-                    deck_z.unwrap_or(base_z)
-                } else {
-                    base_z
-                };
-                commands.spawn((
-                    BuildGhostPreview,
-                    sprite,
-                    Transform::from_translation(overlay_pos(
-                        iso(px, py),
-                        f32::from(view.x_offs),
-                        f32::from(view.y_offs),
-                        f32::from(view.width),
-                        f32::from(view.height),
-                        custom_z,
-                        CUSTOM_CATENARY_FRONT_LAYER,
-                        px,
-                        py,
-                    ))
-                    .with_scale(Vec3::splat(1.002)),
-                ));
+                );
             }
         }
     }
@@ -607,5 +670,16 @@ mod tests {
         assert_eq!(23 + BRIDGE_ROAD_CATENARY_FRONT_OFFSETS[0], 120);
         assert_eq!(23 + BRIDGE_ROAD_CATENARY_BACK_OFFSETS[5], 124);
         assert_eq!(23 + BRIDGE_ROAD_CATENARY_FRONT_OFFSETS[5], 128);
+    }
+
+    #[test]
+    fn vanilla_bridge_catenary_uses_tramway_assets_and_native_geometry() {
+        let (back, front) = bridge_road_catenary_sprite_ids(0);
+        assert_eq!((back, front), (6081, 6083));
+        assert_eq!(
+            crate::sprites::tramway_sprite_atlas_key(back).as_deref(),
+            Some("tramway_095.png")
+        );
+        assert!(crate::sprites::catenary_sprite_gfx(front).is_some());
     }
 }

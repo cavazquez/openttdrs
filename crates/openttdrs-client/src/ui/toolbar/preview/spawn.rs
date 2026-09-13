@@ -111,19 +111,14 @@ pub(crate) fn spawn_preview_plan(
             );
         }
         PreviewPlan::BridgeSpan { tiles, valid } => {
-            let custom_road_def = (action == crate::ui::toolbar::BuildMenuAction::RoadBridge)
+            let road_def = (action == crate::ui::toolbar::BuildMenuAction::RoadBridge)
                 .then(|| {
                     openttdrs_core::road_type_def(
                         &sim.state.road_type_catalog,
                         sim.state.current_road_type,
                     )
                 })
-                .flatten()
-                .filter(|def| {
-                    [1, 4, 5, 6]
-                        .into_iter()
-                        .any(|selector| def.has_newgrf_specific_group(selector))
-                });
+                .flatten();
             spawn_bridge_span_preview(
                 commands,
                 BridgeSpanPreviewSpawn {
@@ -132,7 +127,7 @@ pub(crate) fn spawn_preview_plan(
                     tiles,
                     map: &sim.state.map,
                     valid: *valid,
-                    custom_road_def,
+                    road_def,
                     road_catalog: &sim.state.road_type_catalog,
                     climate: sim.state.climate,
                     newgrf_stack: &sim.state.newgrf_stack,

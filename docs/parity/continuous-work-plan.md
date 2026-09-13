@@ -7127,6 +7127,15 @@ otra pieza del mapa. La vía y las capas consultan primero `WorldAssets.rail` y
 mantienen `TileAtlas` como fallback. Fundaciones inclinadas, catenaria y
 aceptación raster siguen separadas; #326 continúa abierta.
 
+Corrección #326-ROAD-WAYPOINT-PREVIEW-SORT-ASSET (2026-09-13): el ghost de
+waypoint vial ya no muestra sólo una carretera plana cargada por ruta directa:
+consulta primero `WorldAssets.road_flat` y `WorldAssets.road_waypoint`, con
+fallback al atlas/PNG, y dibuja los dos postes vanilla del eje elegido. Cada
+poste conserva sus offsets NFO y bounds `TILE_SEQ_LINE`, con los ordinales 2 y
+3 del camino sin catenaria en el compositor global. Fundación nivelada,
+catenaria y layouts NewGRF del preview quedan como unidades posteriores; #326
+continúa abierta.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

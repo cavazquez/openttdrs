@@ -91,7 +91,15 @@ pub(crate) fn spawn_preview_plan(
             );
         }
         PreviewPlan::RoadWaypoint { coord, valid } => {
-            spawn_road_waypoint_preview(commands, asset_server, &sim.state.map, *coord, *valid);
+            spawn_road_waypoint_preview(
+                commands,
+                asset_server,
+                atlas,
+                world_assets,
+                &sim.state.map,
+                *coord,
+                *valid,
+            );
         }
         PreviewPlan::ShipDepot { origin, dir, valid } => {
             spawn_ship_depot_preview(

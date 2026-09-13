@@ -75,7 +75,9 @@ pub(crate) fn tile_layout_is_renderable(layout: &ResolvedTileLayout) -> bool {
         Some(ground) => {
             ground.action1_sprite().is_some()
                 || ground.base_sprite_id().is_some_and(|id| {
-                    ground.sprite_modifiers == 0 && DIRECT_FLAT_GROUND_SPRITES.contains(&id)
+                    ground.sprite_modifiers == 0
+                        && ground.direct_palette == 0
+                        && DIRECT_FLAT_GROUND_SPRITES.contains(&id)
                 })
         }
     }
@@ -88,7 +90,7 @@ pub(crate) fn direct_tile_layout_ground(
     ground: &ResolvedTileLayoutSprite,
     assets: &WorldAssets,
 ) -> Option<DirectTileLayoutGround> {
-    if ground.action1_sprite().is_some() {
+    if ground.action1_sprite().is_some() || ground.direct_palette != 0 {
         return None;
     }
     let atlas = match ground.base_sprite_id()? {
@@ -209,6 +211,14 @@ mod tests {
                 "sprite plano vanilla {sprite_id} debe conservarse como ground"
             );
         }
+
+        let mut direct_palette = layout.clone();
+        direct_palette
+            .ground
+            .as_mut()
+            .expect("ground")
+            .direct_palette = 791;
+        assert!(!tile_layout_is_renderable(&direct_palette));
 
         let mut direct_build = layout;
         direct_build.sequence[0].sprite = None;

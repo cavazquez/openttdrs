@@ -6759,3 +6759,12 @@ entrada se enlaza con su asset atlas real (`grass_density`, `rough_flat`,
 siguen en fallback hasta tener un contrato de ancla/paleta independiente; la
 regresión cubre todos los IDs admitidos y rechaza `4062`. #326/#329 continúan
 abiertas.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-GROUND-PALETTE-GUARD (2026-09-13): el
+cliente vuelve a exigir `direct_palette == 0` antes de materializar un ground
+directo del baseset. El core ya marca como incompleto el caso en producción,
+pero el guard adicional evita que una entrada construida desde un registro
+parcial o un consumidor futuro ignore una paleta explícita y pinte el suelo
+crudo. La regresión cubre `PALETTE_TO_BARE_LAND` y conserva el fallback
+atómico; las paletas de ground custom siguen su contrato separado. #326/#329
+continúan abiertas.

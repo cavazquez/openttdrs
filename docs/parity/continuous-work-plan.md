@@ -7064,6 +7064,13 @@ Action5 usan el ID `TRAMWAY` correspondiente para sus desempates; suelo y
 overlay permanecen en el pase ground. #326 continúa abierta por clipping,
 pivotes y aceptación raster.
 
+Corrección #326-ROAD-DEPOT-PREVIEW-ASSET-PARITY (2026-09-13): el ghost vial
+consume ahora `WorldAssets.road_depot_ground`, `tram_flat` y las fachadas
+`road_depot_builds` cuando el atlas está disponible, manteniendo los PNG como
+fallback de arranque/tests y sin alterar los resolutores `ROTSG_DEPOT` ni
+Action5. El recolor de compañía queda en el mismo punto que el renderer del
+mapa. #326 continúa abierta por clipping, pivotes y aceptación raster.
+
 Corrección #326-RAIL-DEPOT-PREVIEW-ASSET-PARITY (2026-09-13): el preview de
 depósitos ferroviarios usa las mismas entradas de `WorldAssets.rail` y
 `rail_depot_builds` que `DrawRailTile`, incluyendo los bancos de rail normal,

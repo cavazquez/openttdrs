@@ -8,8 +8,9 @@ use openttdrs_core::{
 use crate::iso::{iso, road_depot_build_sprite_center, tile_pos_half};
 use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
 use crate::render::{
-    CompanyColoredSprites, NewGrfRoadSpriteCache, ViewportSortableParent,
-    sprite_from_company_or_asset, viewport_insertion_key, viewport_source_depth,
+    CompanyColoredSprites, NewGrfRoadSpriteCache, ViewportSortableParent, WorldAssets,
+    sprite_from_atlas_or_company_colour, sprite_from_company_or_asset, viewport_insertion_key,
+    viewport_source_depth,
 };
 use crate::sprites::{
     ROAD_DEPOT_GROUND_PATH, RoadDepotLayerGfx, road_depot_build_layers,
@@ -41,6 +42,7 @@ pub(crate) struct RoadDepotPreviewSpawn<'a> {
     pub road_sprites: &'a mut NewGrfRoadSpriteCache,
     pub images: &'a mut Assets<Image>,
     pub map_width: u32,
+    pub world_assets: Option<&'a WorldAssets>,
 }
 
 pub(crate) fn spawn_road_depot_preview(commands: &mut Commands, spawn: RoadDepotPreviewSpawn<'_>) {
@@ -60,16 +62,29 @@ pub(crate) fn spawn_road_depot_preview(commands: &mut Commands, spawn: RoadDepot
         road_sprites,
         images,
         map_width,
+        world_assets,
     } = spawn;
     let dir = dir.min(3);
 
-    commands.spawn((
-        BuildGhostPreview,
-        Sprite {
+    let ground = world_assets.map_or_else(
+        || Sprite {
             image: asset_server.load::<Image>(ROAD_DEPOT_GROUND_PATH),
             color: tint,
             ..default()
         },
+        |assets| {
+            sprite_from_atlas_or_company_colour(
+                company,
+                None,
+                &assets.road_depot_ground,
+                ROAD_DEPOT_GROUND_PATH,
+                tint,
+            )
+        },
+    );
+    commands.spawn((
+        BuildGhostPreview,
+        ground,
         Transform::from_translation(tile_pos_half(px, py, base_z, PREVIEW_Z_BASE, half_h))
             .with_scale(Vec3::splat(PREVIEW_SCALE)),
     ));
@@ -77,14 +92,20 @@ pub(crate) fn spawn_road_depot_preview(commands: &mut Commands, spawn: RoadDepot
     if show_tram_overlay {
         let road_bits = road_depot_entrance_road_bits(dir as u8);
         let fi = road_flat_sprite_index(0, road_bits);
+        let overlay = world_assets
+            .and_then(|assets| assets.tram_flat.get(fi))
+            .map_or_else(
+                || Sprite {
+                    image: asset_server
+                        .load::<Image>(format!("assets/opengfx/tiles/tram_flat_{fi:02}.png")),
+                    color: tint,
+                    ..default()
+                },
+                |asset| asset.sprite_colored(tint),
+            );
         commands.spawn((
             BuildGhostPreview,
-            Sprite {
-                image: asset_server
-                    .load::<Image>(format!("assets/opengfx/tiles/tram_flat_{fi:02}.png")),
-                color: tint,
-                ..default()
-            },
+            overlay,
             Transform::from_translation(tile_pos_half(
                 px,
                 py,
@@ -115,12 +136,21 @@ pub(crate) fn spawn_road_depot_preview(commands: &mut Commands, spawn: RoadDepot
         };
         let (sprite, seq, width, height) = custom_layer.unwrap_or_else(|| {
             let (path, seq, width, height) = preview_layer_asset(action5_replacement, spec);
-            (
-                sprite_from_company_or_asset(company, asset_server, &path, tint),
-                seq,
-                width,
-                height,
-            )
+            let sprite = if action5_replacement.is_none() {
+                world_assets
+                    .and_then(|assets| assets.road_depot_builds[dir].get(layer_index))
+                    .map_or_else(
+                        || sprite_from_company_or_asset(company, asset_server, &path, tint),
+                        |asset| {
+                            sprite_from_atlas_or_company_colour(
+                                company, None, asset, spec.path, tint,
+                            )
+                        },
+                    )
+            } else {
+                sprite_from_company_or_asset(company, asset_server, &path, tint)
+            };
+            (sprite, seq, width, height)
         });
         let layer_z = PREVIEW_Z_BASE + spec.z;
         let center = road_depot_build_sprite_center(

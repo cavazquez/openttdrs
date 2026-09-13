@@ -7,7 +7,7 @@ use openttdrs_core::{RailType, rail_station_footprint, rail_station_layout};
 use crate::iso::{TILE_HALF_H, iso, overlay_pos, tile_pos_half, tile_slope_and_min_z};
 use crate::render::viewport_sort::tile_seq_parent_bounds;
 use crate::render::{
-    CompanyColoredSprites, TileAtlas, ViewportSortableParent, viewport_insertion_key,
+    CompanyColoredSprites, TileAtlas, ViewportSortableParent, WorldAssets, viewport_insertion_key,
     viewport_source_depth,
 };
 use crate::sprites::{
@@ -24,6 +24,7 @@ const PREVIEW_SCALE: f32 = 1.002;
 pub(crate) fn spawn_rail_station_area_sprite_preview(
     commands: &mut Commands,
     atlas: Option<&TileAtlas>,
+    world_assets: Option<&WorldAssets>,
     company: Option<&CompanyColoredSprites>,
     map: &Map,
     origin: TileCoord,
@@ -33,9 +34,9 @@ pub(crate) fn spawn_rail_station_area_sprite_preview(
     rail_type: RailType,
     valid: bool,
 ) {
-    let Some(atlas) = atlas else {
+    if atlas.is_none() && world_assets.is_none() {
         return;
-    };
+    }
     let platforms = platforms.clamp(1, 7);
     let length = length.clamp(1, 7);
     let _footprint = rail_station_footprint(axis_y, platforms, length);
@@ -58,7 +59,17 @@ pub(crate) fn spawn_rail_station_area_sprite_preview(
             }
             let idx = usize::from(n) * usize::from(length) + usize::from(l);
             let m5 = layout[idx] + u8::from(axis_y);
-            spawn_one_tile(commands, atlas, company, map, c, m5, rail_type, tint);
+            spawn_one_tile(
+                commands,
+                atlas,
+                world_assets,
+                company,
+                map,
+                c,
+                m5,
+                rail_type,
+                tint,
+            );
         }
     }
 }
@@ -66,7 +77,8 @@ pub(crate) fn spawn_rail_station_area_sprite_preview(
 #[allow(clippy::too_many_arguments)]
 fn spawn_one_tile(
     commands: &mut Commands,
-    atlas: &TileAtlas,
+    atlas: Option<&TileAtlas>,
+    world_assets: Option<&WorldAssets>,
     company: Option<&CompanyColoredSprites>,
     map: &Map,
     coord: TileCoord,
@@ -77,10 +89,18 @@ fn spawn_one_tile(
     let (_, base_z) = tile_slope_and_min_z(map, coord.x as u32, coord.y as u32);
     let origin = iso(coord.x, coord.y);
     let track_sid = rail_station_ground_track_sprite_for_type(m5, 0, rail_type);
-    if let Some(img) = atlas.try_get(&format!("rail_{track_sid}.png")) {
+    let track_sprite = world_assets
+        .and_then(|assets| assets.rail.get(&track_sid))
+        .map(|img| img.sprite_colored(tint))
+        .or_else(|| {
+            atlas
+                .and_then(|atlas| atlas.try_get(&format!("rail_{track_sid}.png")))
+                .map(|img| img.sprite_colored(tint))
+        });
+    if let Some(track_sprite) = track_sprite {
         commands.spawn((
             BuildGhostPreview,
-            img.sprite_colored(tint),
+            track_sprite,
             Transform::from_translation(tile_pos_half(
                 coord.x,
                 coord.y,
@@ -93,7 +113,13 @@ fn spawn_one_tile(
     }
     for base_layer in rail_station_draw_layers(m5) {
         let layer = rail_station_layer_for_type(*base_layer, rail_type);
-        let Some(img) = atlas.try_get(&format!("rail_{}.png", layer.sprite_id)) else {
+        let img = world_assets
+            .and_then(|assets| assets.rail.get(&layer.sprite_id))
+            .cloned()
+            .or_else(|| {
+                atlas.and_then(|atlas| atlas.try_get(&format!("rail_{}.png", layer.sprite_id)))
+            });
+        let Some(img) = img else {
             continue;
         };
         let Some((w, h, nfo_xrel, nfo_yrel)) = rail_station_sprite_meta(layer.sprite_id) else {

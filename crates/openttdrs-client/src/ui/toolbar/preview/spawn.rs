@@ -58,6 +58,7 @@ pub(crate) fn spawn_preview_plan(
                 commands,
                 asset_server,
                 atlas,
+                world_assets,
                 company,
                 sim,
                 station_state,
@@ -202,6 +203,7 @@ fn spawn_rail_station_area_preview(
     commands: &mut Commands,
     asset_server: &AssetServer,
     atlas: Option<&TileAtlas>,
+    world_assets: Option<&WorldAssets>,
     company: Option<&CompanyColoredSprites>,
     sim: &SimWorld,
     station_state: &StationBuildState,
@@ -235,6 +237,7 @@ fn spawn_rail_station_area_preview(
     spawn_rail_station_area_sprite_preview(
         commands,
         atlas,
+        world_assets,
         company,
         &sim.state.map,
         origin,

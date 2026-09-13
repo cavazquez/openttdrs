@@ -7111,6 +7111,13 @@ y ordinal del renderer materializado. El suelo de vía continúa siendo ground
 y las capas sin metadatos conservan el fallback previo; la fundación virtual,
 catenaria del preview y la aceptación raster quedan como trabajo separado.
 
+Corrección #326-RAIL-STATION-PREVIEW-ASSET-PARITY (2026-09-13): el ghost de
+estación ferroviaria consulta primero `WorldAssets.rail` para vía y capas de
+plataforma —incluidas las variantes rail, mono y maglev— y conserva `TileAtlas`
+como fallback. La ruta de vidrio mantiene su máscara translúcida y el preview
+sigue sin fabricar capas cuando ninguna fuente tiene el sprite. #326 continúa
+abierta por fundaciones/catenaria del preview y aceptación raster.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

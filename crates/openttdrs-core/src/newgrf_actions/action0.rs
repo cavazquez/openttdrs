@@ -194,6 +194,8 @@ pub struct ParsedRoadTypeMeta {
 /// Metadatos `Stations` leídos de un Action0 (antes de asignar IDs).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedStationMeta {
+    /// Primer id local declarado por el bloque Action0.
+    pub local_id: u8,
     pub class_short_label: String,
     pub class_label: String,
     pub short_label: String,
@@ -1572,6 +1574,7 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
     if payload.len() < 5 {
         return None;
     }
+    let local_id = payload[4];
     let mut i = 5usize;
     let mut class_short = String::from("NGRF");
     let mut label = String::new();
@@ -1718,6 +1721,7 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
         }
     }
     Some(finish_parsed_station_meta(
+        local_id,
         class_short,
         label,
         disallowed_platforms,
@@ -1737,6 +1741,7 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
 
 #[allow(clippy::too_many_arguments)] // Agrupa exactamente los campos Action0 ya validados.
 fn finish_parsed_station_meta(
+    local_id: u8,
     class_short: String,
     mut label: String,
     disallowed_platforms: u8,
@@ -1773,6 +1778,7 @@ fn finish_parsed_station_meta(
         class_short.clone()
     };
     ParsedStationMeta {
+        local_id,
         class_short_label: class_short,
         class_label,
         short_label,

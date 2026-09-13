@@ -59,37 +59,34 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
         let mut gfx =
             crate::newgrf_sprites::collect_station_sprite_graphics(&data).unwrap_or_default();
         let metas = collect_station_metas_from_grf(&data);
-        for (local_idx, meta) in metas.iter().enumerate() {
-            if !meta.advanced_layouts.is_empty()
-                && let Ok(local_id) = u8::try_from(local_idx)
-            {
+        for meta in &metas {
+            if !meta.advanced_layouts.is_empty() {
                 gfx.station_advanced_layouts
-                    .insert(local_id, meta.advanced_layouts.clone());
+                    .insert(meta.local_id, meta.advanced_layouts.clone());
             }
         }
-        // Resolver copy_layout (0x0F) dentro del mismo GRF por índice local.
-        let mut layouts_by_local: Vec<std::collections::HashMap<(u8, u8), Vec<u8>>> =
-            Vec::with_capacity(metas.len());
+        // Resolver copy_layout (0x0F) dentro del mismo GRF por id local, no
+        // por la posición del bloque Action0 en el archivo.
+        let mut layouts_by_local =
+            std::collections::HashMap::<u16, std::collections::HashMap<(u8, u8), Vec<u8>>>::new();
         for meta in &metas {
             let mut layouts = meta.custom_layouts.clone();
             if layouts.is_empty()
                 && let Some(src) = meta.copy_layout_from
+                && let Some(src_layouts) = layouts_by_local.get(&src)
             {
-                let idx = usize::from(src);
-                if let Some(src_layouts) = layouts_by_local.get(idx) {
-                    layouts.clone_from(src_layouts);
-                }
+                layouts.clone_from(src_layouts);
             }
-            layouts_by_local.push(layouts);
+            layouts_by_local.insert(u16::from(meta.local_id), layouts);
         }
-        for (local_idx, meta) in metas.into_iter().enumerate() {
+        for meta in metas {
             let Some(class_id) = resolve_or_create_station_class(&mut classes, &meta) else {
                 break;
             };
             let Some(spec_id) = next_free_station_spec_id(&specs) else {
                 break;
             };
-            let local_id = u8::try_from(local_idx).unwrap_or(0);
+            let local_id = meta.local_id;
             let views = gfx
                 .views_for_local_id(local_id)
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
@@ -118,7 +115,10 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
                     entry.filename, meta.label
                 ));
             }
-            let custom_layouts = layouts_by_local.get(local_idx).cloned().unwrap_or_default();
+            let custom_layouts = layouts_by_local
+                .get(&u16::from(local_id))
+                .cloned()
+                .unwrap_or_default();
             specs.push(StationSpecDef {
                 id: spec_id,
                 class: class_id,

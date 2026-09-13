@@ -6490,3 +6490,10 @@ de aeropuerto filtradas, Clippy estricto de cliente y core, formato y
 `git diff --check`. Esto cubre sólo máscaras de compañía en sprites custom:
 #326/#329 siguen abiertas por paletas base/custom no representadas, rotaciones
 exhaustivas, sonidos y callbacks restantes.
+
+Corrección #326/#329-AIRPORT-TILE-TRACE-PALETTE (2026-09-12, `8c42260f`):
+`world-draw` registra ahora `PALETTE_RECOLOUR_START + owner_colour` para la
+vista plana Action1/3 de `AirportTile`, alineando la evidencia exportada con
+la textura que el renderer ya hornea. Clippy estricto de cliente, formato y
+`git diff --check` pasan; no se amplía el alcance de la subetapa visual ni se
+cierran #326/#329.

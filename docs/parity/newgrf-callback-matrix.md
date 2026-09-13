@@ -1906,3 +1906,9 @@ textura cruda. La cobertura de aeropuerto pasa 4 tests, además de Clippy
 estricto, formato y `git diff --check`. Permanecen pendientes las paletas base
 o custom que no usan esta máscara, la matriz exhaustiva de rotaciones/
 foundations, sonidos y callbacks de aeropuerto aún no representados.
+
+Corrección posterior (`8c42260f`): la traza `world-draw` de la vista plana
+Action1/3 de `AirportTile` conserva el mismo `PALETTE_RECOLOUR_START +
+owner_colour` que usa la textura horneada. Así el diagnóstico de paleta no
+vuelve a reportar `PAL_NONE` después de aplicar la máscara; las limitaciones
+de layouts, paletas restantes, foundations, sonidos y callbacks continúan.

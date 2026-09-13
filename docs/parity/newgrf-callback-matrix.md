@@ -1891,3 +1891,18 @@ Las regresiones `pick_vehicle_uses_catalog_sprite_offsets` y
 35 px dentro de un sprite custom de 80 px, otro a 41 px fuera y una segunda
 capa runtime separada de la primera; quedan pendientes callbacks y
 consumidores legacy fuera de esta ruta.
+
+### #326/#329-AIRPORT-TILE-COMPANY-PALETTE — máscara de compañía en AirportTile
+
+Actualizado: 2026-09-12 (`f0b31430`). Los sprites Action1/TileSeq de un
+`AirportTile` custom comparten ahora la política `MaskedAndRecolored` de
+estaciones e industrias. El color del dueño forma parte de la clave del caché
+sintético y se aplica a suelo, parents/children BUILD y vistas Action1/3 planas;
+la ruta conserva los offsets, la selección Action2 y la relación child con la
+fundación. La regresión
+`rotated_newgrf_airport_layout_selects_relative_runtime_and_action5_foundation`
+comprueba una máscara de rampa autora recoloreada a Green sin aceptar la
+textura cruda. La cobertura de aeropuerto pasa 4 tests, además de Clippy
+estricto, formato y `git diff --check`. Permanecen pendientes las paletas base
+o custom que no usan esta máscara, la matriz exhaustiva de rotaciones/
+foundations, sonidos y callbacks de aeropuerto aún no representados.

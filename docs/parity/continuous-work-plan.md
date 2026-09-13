@@ -6477,3 +6477,16 @@ runtime separada de la primera. Pasaron 43 tests de `render::vehicles`,
 Clippy estricto de cliente y core, formato y `git diff --check`. #329 continúa
 abierta por callbacks, efectos avanzados, layouts GUI y consumidores legacy
 restantes.
+
+Corrección #326/#329-AIRPORT-TILE-COMPANY-PALETTE (2026-09-12, `f0b31430`):
+los sprites Action1/TileSeq de `AirportTile` ya no se suben como RGBA crudo.
+El caché conserva el color del dueño en la clave y hornea la máscara de
+compañía para suelo, BUILD/children y la vista Action1/3 plana, igual que las
+rutas NewGRF de estaciones e industrias. La regresión
+`rotated_newgrf_airport_layout_selects_relative_runtime_and_action5_foundation`
+usa una rampa autora en la variante E/O, comprueba el color Green y conserva
+la relación ground-child con la fundación Action5; pasaron las cuatro pruebas
+de aeropuerto filtradas, Clippy estricto de cliente y core, formato y
+`git diff --check`. Esto cubre sólo máscaras de compañía en sprites custom:
+#326/#329 siguen abiertas por paletas base/custom no representadas, rotaciones
+exhaustivas, sonidos y callbacks restantes.

@@ -80,6 +80,10 @@ ground se adjunta al cimiento Action5 cuando corresponde.
 Esto resuelve la selección y geometría Action0 de construcción y cubre un
 camino runtime representativo de layout/posición, no la presentación completa:
 permanecen la matriz exhaustiva de rotaciones/foundations de compositor,
-paletas, sonidos, callbacks de nombres/texto de layout y la FTA propia de
-aeropuertos NewGRF. Por eso #326, #328 y #329 siguen abiertos; esta nota no
-afirma paridad raster ni interoperabilidad SAV global.
+paletas base y custom no enmascaradas, sonidos, callbacks de nombres/texto de
+layout y la FTA propia de aeropuertos NewGRF. La subetapa
+`#326/#329-AIRPORT-TILE-COMPANY-PALETTE` cubre ahora la máscara de compañía de
+los sprites Action1/TileSeq custom y conserva el color por dueño en el caché,
+pero no amplía ese resultado a las paletas restantes. Por eso #326, #328 y
+#329 siguen abiertos; esta nota no afirma paridad raster ni interoperabilidad
+SAV global.

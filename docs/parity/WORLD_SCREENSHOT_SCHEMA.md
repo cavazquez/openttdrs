@@ -73,6 +73,21 @@ scope seleccionado, los parents de entrada, su orden resultante y profundidad.
 Son instrumentos de diagnóstico: no sustituyen `report.json`, no se publican
 como baseline y no permiten declarar paridad por una sola región.
 
+Para separar una promoción por clipping de una caja realmente ausente se puede
+resumir la traza nativa junto con la candidata:
+
+```bash
+python3 scripts/analyze_viewport_sort_bands.py \
+  /tmp/reference-sort.jsonl \
+  --candidate-sort /tmp/candidate-sort.json \
+  --json-report /tmp/viewport-sort-bands.json
+```
+
+El informe cuenta segmentos, parents acumulados, cajas de mundo repetidas con
+distintos sprites y cajas que no aparecen en la pasada global candidata. Una
+misma caja con varios sprites no implica un asset divergente: puede ser el
+primer child visible de una secuencia `StartSpriteCombine` en otra banda.
+
 ## Métricas y registro
 
 El comparador calcula primero el diff sin corrección y luego busca una

@@ -3,10 +3,14 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use openttdrs_core::{DecodedSprite, OBJECT_FLAG_USES_2CC, ObjectSpecDef};
+use openttdrs_core::{
+    DecodedSprite, OBJECT_FLAG_USES_2CC, ObjectSpecDef, TWOCC_ACTION5_SLOT_COUNT,
+    TWOCC_PALETTE_BASE,
+};
 
 use crate::render::newgrf_cache::{
-    DecodedSpriteImagePolicy, decoded_sprite_image, runtime_fingerprint, vars,
+    DecodedSpriteImagePolicy, decoded_sprite_image, decoded_sprite_image_with_twocc_map,
+    runtime_fingerprint, vars,
 };
 use crate::sprites::CompanyColour;
 
@@ -16,6 +20,7 @@ use crate::sprites::CompanyColour;
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfObjectSpriteCache {
     handles: HashMap<(u16, u16, u8, u32), Handle<Image>>,
+    twocc_maps: Vec<Option<DecodedSprite>>,
 }
 
 /// Convierte `Object::colour` al palette id que recibiría
@@ -38,6 +43,33 @@ fn object_image_policy(def: &ObjectSpecDef, object_colour: u8) -> DecodedSpriteI
 impl NewGrfObjectSpriteCache {
     pub(crate) fn clear(&mut self) {
         self.handles.clear();
+    }
+
+    /// Instala la tabla Action5 `0x0A` vigente para los objetos.
+    ///
+    /// Las texturas horneadas dependen del mapa además de la librea; si el
+    /// runtime reemplaza los slots, descartar los handles evita conservar una
+    /// imagen de una versión anterior del GRF.
+    pub(crate) fn set_twocc_maps(&mut self, maps: &[Option<DecodedSprite>]) {
+        if self.twocc_maps != maps {
+            self.handles.clear();
+            self.twocc_maps = maps.to_vec();
+        }
+    }
+
+    fn twocc_map_for(&self, def: &ObjectSpecDef, object_colour: u8) -> Option<DecodedSprite> {
+        if def.flags & OBJECT_FLAG_USES_2CC == 0 {
+            return None;
+        }
+        let palette_id = TWOCC_PALETTE_BASE + u16::from(object_colour);
+        let slot = palette_id.checked_sub(TWOCC_PALETTE_BASE)?;
+        if slot >= TWOCC_ACTION5_SLOT_COUNT as u16 {
+            return None;
+        }
+        self.twocc_maps
+            .get(usize::from(slot))
+            .and_then(Option::as_ref)
+            .cloned()
     }
 
     /// Textura Raw para una vista del spec (mirror industry/road NewGRF Raw).
@@ -87,10 +119,17 @@ impl NewGrfObjectSpriteCache {
             .unwrap_or_default();
         let key = (def.id, idx, object_colour, fp);
         let policy = object_image_policy(def, object_colour);
+        let twocc_map = self.twocc_map_for(def, object_colour);
         Some(
             self.handles
                 .entry(key)
-                .or_insert_with(|| images.add(decoded_sprite_image(&view, policy)))
+                .or_insert_with(|| {
+                    images.add(decoded_sprite_image_with_twocc_map(
+                        &view,
+                        policy,
+                        twocc_map.as_ref(),
+                    ))
+                })
                 .clone(),
         )
     }
@@ -107,9 +146,16 @@ impl NewGrfObjectSpriteCache {
     ) -> Handle<Image> {
         let key = (def.id, 0x8000 | (slot & 0x7FFF), object_colour, runtime_fp);
         let policy = object_image_policy(def, object_colour);
+        let twocc_map = self.twocc_map_for(def, object_colour);
         self.handles
             .entry(key)
-            .or_insert_with(|| images.add(decoded_sprite_image(sprite, policy)))
+            .or_insert_with(|| {
+                images.add(decoded_sprite_image_with_twocc_map(
+                    sprite,
+                    policy,
+                    twocc_map.as_ref(),
+                ))
+            })
             .clone()
     }
 }
@@ -221,13 +267,53 @@ mod tests {
             Some(&openttdrs_core::bake_sprite_two_company_palette(&sprite, 4, 9)[..])
         );
 
+        let mut map_indices: Vec<u8> = (0..=u8::MAX).collect();
+        map_indices[0xC6] = 174;
+        map_indices[0x50] = 175;
+        let map = DecodedSprite {
+            width: 256,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: openttdrs_core::newgrf_sprites::indices_to_rgba(&map_indices, 256, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let object_colour: u8 = 4 + 9 * 16;
+        let mut maps = vec![None; TWOCC_ACTION5_SLOT_COUNT];
+        maps[usize::from(object_colour)] = Some(map.clone());
+        cache.set_twocc_maps(&maps);
+        let mapped_handle = cache
+            .handle_for_runtime(&def, 0, &mut first, &mut images)
+            .expect("mapped 2CC object view");
+        let mapped_data = images
+            .get(&mapped_handle)
+            .expect("mapped 2CC image")
+            .data
+            .clone();
+        assert_ne!(first_handle, mapped_handle);
+        assert_eq!(
+            mapped_data.as_deref(),
+            Some(
+                &openttdrs_core::bake_sprite_two_company_palette_with_map(
+                    &sprite,
+                    4,
+                    9,
+                    Some(&map),
+                )[..]
+            )
+        );
+        let layout_handle =
+            cache.handle_for_layout(&def, 0, object_colour, 0, &sprite, &mut images);
+        let layout_image = images.get(&layout_handle).expect("mapped TileSeq image");
+        assert_eq!(layout_image.data, mapped_data);
+
         let mut second = openttdrs_core::Action2EvalCtx::default();
         second.vars.insert(0x47, 4 + 2 * 16);
         let second_handle = cache
             .handle_for_runtime(&def, 0, &mut second, &mut images)
             .expect("second 2CC object view");
         assert_ne!(first_handle, second_handle);
-        assert_eq!(cache.handles.len(), 2);
+        assert_eq!(cache.handles.len(), 3);
     }
 
     #[test]

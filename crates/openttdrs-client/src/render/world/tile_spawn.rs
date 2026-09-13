@@ -920,6 +920,7 @@ pub(crate) fn setup(
     let mut industry_sprites = crate::render::NewGrfIndustrySpriteCache::default();
     let mut house_sprites = crate::render::NewGrfHouseSpriteCache::default();
     let mut object_sprites = crate::render::NewGrfObjectSpriteCache::default();
+    object_sprites.set_twocc_maps(&sim.state.runtime.twocc_action5_newgrf_sprites);
     let mut action5_sprites = crate::render::NewGrfAction5SpriteCache::default();
     spawn_world_layer(
         &mut commands,
@@ -1024,6 +1025,7 @@ pub(crate) fn spawn_intro_map_render(
     let mut industry_sprites = crate::render::NewGrfIndustrySpriteCache::default();
     let mut house_sprites = crate::render::NewGrfHouseSpriteCache::default();
     let mut object_sprites = crate::render::NewGrfObjectSpriteCache::default();
+    object_sprites.set_twocc_maps(&sim.state.runtime.twocc_action5_newgrf_sprites);
     let mut action5_sprites = crate::render::NewGrfAction5SpriteCache::default();
     let label_index = MapLabelSpatialIndex::from_state(&sim.state);
     spawn_world_layer(

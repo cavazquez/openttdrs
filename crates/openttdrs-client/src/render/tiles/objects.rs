@@ -3303,6 +3303,7 @@ fn spawn_newgrf_station_layout_ground(
             owner_colour,
             runtime_fp,
             ground.sprite_modifiers,
+            ground.direct_palette,
             decoded,
             images,
         );
@@ -3404,6 +3405,7 @@ fn spawn_newgrf_station_layout_sequence(
             owner_colour,
             runtime_fp,
             layer.sprite_modifiers,
+            layer.direct_palette,
             decoded,
             images,
         );
@@ -3674,6 +3676,7 @@ fn spawn_newgrf_road_stop_layout_ground(
             runtime_fp,
             owner_colour,
             ground.sprite_modifiers,
+            ground.direct_palette,
             decoded,
             images,
         );
@@ -3821,6 +3824,7 @@ fn spawn_newgrf_road_stop_layout_sequence(
             runtime_fp,
             owner_colour,
             layer.sprite_modifiers,
+            layer.direct_palette,
             decoded,
             images,
         );
@@ -4467,6 +4471,7 @@ fn spawn_newgrf_airport_layout_ground(
             runtime_fp,
             owner_colour,
             ground.sprite_modifiers,
+            ground.direct_palette,
             decoded,
             images,
         );
@@ -4571,6 +4576,7 @@ fn spawn_newgrf_airport_layout_sequence(
             runtime_fp,
             owner_colour,
             layer.sprite_modifiers,
+            layer.direct_palette,
             decoded,
             images,
         );
@@ -7552,6 +7558,7 @@ mod tests {
             }),
             base_sprite: None,
             sprite_modifiers: 0,
+            direct_palette: 0,
             origin: [0, 0, 0],
             extent: [1, 1, 1],
         };

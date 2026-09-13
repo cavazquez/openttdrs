@@ -15,6 +15,12 @@ const PALETTE_RECOLOUR_START: u16 = 775;
 const PALETTE_RECOLOUR_END: u16 = PALETTE_RECOLOUR_START + 15;
 /// Paleta nativa de sprites en estado de choque (`PALETTE_CRASH`).
 const PALETTE_CRASH: u16 = 804;
+/// Paletas nativas que recolorean sprites compartidos de estructuras.
+/// `1438`/`1439` son las variantes de iglesias de ciudad.
+const PALETTE_TO_STRUCT_START: u16 = 795;
+const PALETTE_TO_STRUCT_END: u16 = 801;
+const PALETTE_TO_CHURCH_RED: u16 = 1438;
+const PALETTE_TO_CHURCH_CREAM: u16 = 1439;
 
 /// Sprite RGBA decodificado (índice 0 → alpha 0).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -184,6 +190,9 @@ pub struct ResolvedTileLayoutSprite {
     pub base_sprite: Option<u16>,
     /// Modificadores nativos conservados desde la pareja GRF original.
     pub sprite_modifiers: u8,
+    /// Paleta directa que el cliente todavía debe aplicar. Las paletas que el
+    /// core puede hornear (`775..=790` y `804`) quedan en cero aquí.
+    pub direct_palette: u16,
     pub origin: [i8; 3],
     pub extent: [u8; 3],
 }
@@ -336,7 +345,8 @@ fn resolve_layout_sprite(
         *complete = false;
         return None;
     }
-    let (sprite, base_sprite) = resolve_layout_sprite_asset(reference, graphics, ctx, complete)?;
+    let (sprite, base_sprite, direct_palette) =
+        resolve_layout_sprite_asset(reference, graphics, ctx, complete)?;
 
     let mut origin = reference.origin;
     if !is_ground {
@@ -376,6 +386,7 @@ fn resolve_layout_sprite(
         sprite,
         base_sprite,
         sprite_modifiers: reference.sprite_modifiers,
+        direct_palette,
         origin,
         extent: reference.extent,
     })
@@ -463,7 +474,7 @@ fn resolve_layout_sprite_asset(
     graphics: &TrainSpriteGraphics,
     ctx: &Action2EvalCtx,
     complete: &mut bool,
-) -> Option<(Option<DecodedSprite>, Option<u16>)> {
+) -> Option<(Option<DecodedSprite>, Option<u16>, u16)> {
     if let Some(set) = reference.action1_set {
         let Some(sprites) = graphics.sets.get(usize::from(set)) else {
             *complete = false;
@@ -501,7 +512,7 @@ fn resolve_layout_sprite_asset(
         let direct_palette = resolve_layout_direct_palette(reference, ctx, complete)?;
         let mut sprite = resolve_custom_layout_palette(reference, sprite, graphics, ctx, complete)?;
         if direct_palette == 0 {
-            return Some((Some(sprite), None));
+            return Some((Some(sprite), None, 0));
         }
         if (PALETTE_RECOLOUR_START..=PALETTE_RECOLOUR_END).contains(&direct_palette) {
             let Some(colour) = u8::try_from(direct_palette - PALETTE_RECOLOUR_START).ok() else {
@@ -512,14 +523,20 @@ fn resolve_layout_sprite_asset(
             // La paleta explícita ya quedó horneada. Evitar que el cliente
             // vuelva a tratarla como máscara del color del dueño.
             sprite.mask.clear();
-            return Some((Some(sprite), None));
+            return Some((Some(sprite), None, 0));
         }
         if direct_palette == PALETTE_CRASH {
             sprite.rgba = bake_sprite_crash(&sprite);
             // El remapeo ya quedó materializado; no debe reaplicarse sobre la
             // máscara de paleta al subir la textura al cliente.
             sprite.mask.clear();
-            return Some((Some(sprite), None));
+            return Some((Some(sprite), None, 0));
+        }
+        if is_structure_palette(direct_palette) {
+            // La tabla `PALETTE_TO_STRUCT_*` vive en el cliente porque se
+            // aplica sobre los RGB ya decodificados. Conservamos el id para
+            // que cada caché pueda recolorear sin perderlo en el fallback.
+            return Some((Some(sprite), None, direct_palette));
         }
         // No entregar una textura cruda cuando el layout pidió una paleta
         // que este cliente aún no puede representar (2CC, transparencia,
@@ -543,7 +560,14 @@ fn resolve_layout_sprite_asset(
         *complete = false;
         return None;
     }
-    Some((None, Some(reference.direct_sprite)))
+    Some((None, Some(reference.direct_sprite), 0))
+}
+
+#[must_use]
+const fn is_structure_palette(palette: u16) -> bool {
+    palette >= PALETTE_TO_STRUCT_START && palette <= PALETTE_TO_STRUCT_END
+        || palette == PALETTE_TO_CHURCH_RED
+        || palette == PALETTE_TO_CHURCH_CREAM
 }
 
 fn register_value(ctx: &Action2EvalCtx, index: Option<u8>) -> u32 {

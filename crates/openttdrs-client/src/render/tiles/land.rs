@@ -1163,8 +1163,15 @@ fn spawn_newgrf_house_layout_ground(
         return true;
     };
     let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
-        let handle =
-            cache.handle_for_layout(def, 0, runtime_fp, ground.sprite_modifiers, decoded, images);
+        let handle = cache.handle_for_layout(
+            def,
+            0,
+            runtime_fp,
+            ground.sprite_modifiers,
+            ground.direct_palette,
+            decoded,
+            images,
+        );
         (
             Sprite {
                 image: handle,
@@ -1260,6 +1267,7 @@ fn spawn_newgrf_house_layout_sequence(
             slot,
             runtime_fp,
             layer.sprite_modifiers,
+            layer.direct_palette,
             decoded,
             images,
         );
@@ -2012,6 +2020,7 @@ fn spawn_newgrf_industry_layout_ground(
             Some(palette_colour),
             runtime_fp,
             ground.sprite_modifiers,
+            ground.direct_palette,
             decoded,
             images,
         );
@@ -2113,6 +2122,7 @@ fn spawn_newgrf_industry_layout_sequence(
             Some(palette_colour),
             runtime_fp,
             layer.sprite_modifiers,
+            layer.direct_palette,
             decoded,
             images,
         );
@@ -2403,6 +2413,7 @@ fn spawn_newgrf_object_layout_ground(
             object_colour,
             runtime_fp,
             ground.sprite_modifiers,
+            ground.direct_palette,
             decoded,
             images,
         );
@@ -2495,6 +2506,7 @@ fn spawn_newgrf_object_layout_sequence(
             object_colour,
             runtime_fp,
             layer.sprite_modifiers,
+            layer.direct_palette,
             decoded,
             images,
         );

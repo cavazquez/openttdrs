@@ -7,20 +7,20 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{StationSpecDef, StationSpecId};
 
 use crate::render::newgrf_cache::{
-    DecodedSpriteImagePolicy, decoded_sprite_image, decoded_tile_layout_image, runtime_fingerprint,
-    vars,
+    DecodedSpriteImagePolicy, decoded_sprite_image, decoded_tile_layout_image_with_palette,
+    runtime_fingerprint, vars,
 };
 use crate::sprites::CompanyColour;
 
-/// `(station_spec_id, slot, company_colour, runtime_fp, sprite_modifiers)` →
-/// textura RGBA.
+/// `(station_spec_id, slot, company_colour, runtime_fp, sprite_modifiers,
+/// direct_palette)` → textura RGBA.
 ///
 /// Los slots de layouts usan el bit alto, separado de los índices de vista,
 /// para que un TileSeq y una vista plana nunca compartan accidentalmente una
 /// textura aunque ambos pertenezcan al mismo spec.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfStationSpriteCache {
-    handles: HashMap<(u16, u16, u8, u32, u8), Handle<Image>>,
+    handles: HashMap<(u16, u16, u8, u32, u8, u16), Handle<Image>>,
 }
 
 impl NewGrfStationSpriteCache {
@@ -49,7 +49,7 @@ impl NewGrfStationSpriteCache {
             def.newgrf_view(view_idx)?.clone()
         };
         let idx = u16::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0);
-        let key = (def.id.as_u16(), idx, colour_key, fp, 0);
+        let key = (def.id.as_u16(), idx, colour_key, fp, 0, 0);
         Some(
             self.handles
                 .entry(key)
@@ -72,6 +72,7 @@ impl NewGrfStationSpriteCache {
         colour: Option<CompanyColour>,
         runtime_fp: u32,
         sprite_modifiers: u8,
+        direct_palette: u16,
         sprite: &openttdrs_core::DecodedSprite,
         images: &mut Assets<Image>,
     ) -> Handle<Image> {
@@ -82,13 +83,15 @@ impl NewGrfStationSpriteCache {
             colour_key,
             runtime_fp,
             sprite_modifiers,
+            direct_palette,
         );
         self.handles
             .entry(key)
             .or_insert_with(|| {
-                images.add(decoded_tile_layout_image(
+                images.add(decoded_tile_layout_image_with_palette(
                     sprite,
                     sprite_modifiers,
+                    direct_palette,
                     DecodedSpriteImagePolicy::MaskedAndRecolored { colour },
                 ))
             })

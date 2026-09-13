@@ -6,14 +6,14 @@ use bevy::prelude::*;
 use openttdrs_core::DecodedSprite;
 
 use crate::render::newgrf_cache::{
-    DecodedSpriteImagePolicy, decoded_sprite_image, decoded_tile_layout_image,
+    DecodedSpriteImagePolicy, decoded_sprite_image, decoded_tile_layout_image_with_palette,
 };
 use crate::sprites::CompanyColour;
 
-type Action5CacheKey = (u8, u16, u32, Option<CompanyColour>, u8);
+type Action5CacheKey = (u8, u16, u32, Option<CompanyColour>, u8, u16);
 
-/// Clave `(type_id, slot, runtime_fp, company_colour, sprite_modifiers)` →
-/// textura RGBA.
+/// Clave `(type_id, slot, runtime_fp, company_colour, sprite_modifiers,
+/// direct_palette)` → textura RGBA.
 ///
 /// Action5 usa siempre `runtime_fp=0`; los RoadStops Action3 reutilizan la
 /// caché con el fingerprint de su contexto Action2 para no congelar la primera
@@ -48,7 +48,7 @@ impl NewGrfAction5SpriteCache {
         images: &mut Assets<Image>,
     ) -> Handle<Image> {
         self.handle_for_policy(
-            (type_id, slot, runtime_fp, None, 0),
+            (type_id, slot, runtime_fp, None, 0, 0),
             sprite,
             DecodedSpriteImagePolicy::Raw,
             images,
@@ -69,7 +69,7 @@ impl NewGrfAction5SpriteCache {
         images: &mut Assets<Image>,
     ) -> Handle<Image> {
         self.handle_for_policy(
-            (type_id, slot, runtime_fp, colour, 0),
+            (type_id, slot, runtime_fp, colour, 0, 0),
             sprite,
             DecodedSpriteImagePolicy::MaskedAndRecolored { colour },
             images,
@@ -85,13 +85,22 @@ impl NewGrfAction5SpriteCache {
         runtime_fp: u32,
         colour: Option<CompanyColour>,
         sprite_modifiers: u8,
+        direct_palette: u16,
         sprite: &DecodedSprite,
         images: &mut Assets<Image>,
     ) -> Handle<Image> {
         self.handle_for_layout_policy(
-            (type_id, slot, runtime_fp, colour, sprite_modifiers),
+            (
+                type_id,
+                slot,
+                runtime_fp,
+                colour,
+                sprite_modifiers,
+                direct_palette,
+            ),
             sprite,
             sprite_modifiers,
+            direct_palette,
             DecodedSpriteImagePolicy::MaskedAndRecolored { colour },
             images,
         )
@@ -115,13 +124,19 @@ impl NewGrfAction5SpriteCache {
         key: Action5CacheKey,
         sprite: &DecodedSprite,
         sprite_modifiers: u8,
+        direct_palette: u16,
         policy: DecodedSpriteImagePolicy,
         images: &mut Assets<Image>,
     ) -> Handle<Image> {
         self.handles
             .entry(key)
             .or_insert_with(|| {
-                images.add(decoded_tile_layout_image(sprite, sprite_modifiers, policy))
+                images.add(decoded_tile_layout_image_with_palette(
+                    sprite,
+                    sprite_modifiers,
+                    direct_palette,
+                    policy,
+                ))
             })
             .clone()
     }
@@ -139,7 +154,7 @@ impl NewGrfAction5SpriteCache {
     ) -> Option<Sprite> {
         let slot = u16::try_from(slot).ok()?;
         let handle = self.handle_for_policy(
-            (type_id, slot, 0, Some(colour), 0),
+            (type_id, slot, 0, Some(colour), 0, 0),
             sprite,
             DecodedSpriteImagePolicy::CompanyPalette { colour },
             images,

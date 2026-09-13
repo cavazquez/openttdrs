@@ -6686,3 +6686,15 @@ paletas 2CC, transparencia de destino y demás tablas especiales continúan
 conservando fallback atómico hasta tener su compositor/tabla correspondiente;
 la regresión `tile_layout_honours_crash_palette_on_action1_sprite` fija el
 alcance de esta subetapa y #326/#329 siguen abiertas.
+
+Corrección #326/#329-TILELAYOUT-STRUCTURE-PALETTE (2026-09-13): las entradas
+Action1 de `TileLayout` que seleccionan `PALETTE_TO_STRUCT_BLUE..YELLOW`
+(`795..801`) o las variantes de iglesia (`1438..1439`) ya no se descartan. El
+core conserva la paleta directa que no puede hornear sin conocer las tablas de
+sprites, y el cliente reutiliza las tablas DOS verificadas de estructuras para
+recolorear la textura RGBA. Las cachés de estaciones, road-stops,
+airport-tiles, casas, industrias y objetos incluyen ese id en su clave para no
+compartir una imagen entre tonos estructurales; las paletas de destino, 2CC y
+las referencias directas del baseset siguen con fallback atómico. La regresión
+`tile_layout_preserves_structure_palette_on_action1_sprite` fija el contrato de
+resolución y #326/#329 continúan abiertas.

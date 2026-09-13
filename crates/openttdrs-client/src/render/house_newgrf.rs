@@ -6,14 +6,15 @@ use bevy::prelude::*;
 use openttdrs_core::HouseSpecDef;
 
 use crate::render::newgrf_cache::{
-    DecodedSpriteImagePolicy, decoded_sprite_image, runtime_fingerprint, vars,
+    DecodedSpriteImagePolicy, decoded_sprite_image, decoded_tile_layout_image_with_palette,
+    runtime_fingerprint, vars,
 };
 
-/// `(house_id, slot, runtime_fp, sprite_modifiers)` → textura RGBA. El bit
-/// alto de `slot` separa piezas `TileSeq` de vistas planas.
+/// `(house_id, slot, runtime_fp, sprite_modifiers, direct_palette)` → textura
+/// RGBA. El bit alto de `slot` separa piezas `TileSeq` de vistas planas.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfHouseSpriteCache {
-    handles: HashMap<(u16, u16, u32, u8), Handle<Image>>,
+    handles: HashMap<(u16, u16, u32, u8, u16), Handle<Image>>,
 }
 
 impl NewGrfHouseSpriteCache {
@@ -40,7 +41,7 @@ impl NewGrfHouseSpriteCache {
             def.newgrf_view(view_idx)?.clone()
         };
         let idx = u16::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0);
-        let key = (def.id, idx, fp, 0);
+        let key = (def.id, idx, fp, 0, 0);
         Some(
             self.handles
                 .entry(key)
@@ -56,12 +57,14 @@ impl NewGrfHouseSpriteCache {
     }
 
     /// Materializa una pieza ya resuelta de un layout `TileSeq` de casa.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_for_layout(
         &mut self,
         def: &HouseSpecDef,
         slot: u16,
         runtime_fp: u32,
         sprite_modifiers: u8,
+        direct_palette: u16,
         sprite: &openttdrs_core::DecodedSprite,
         images: &mut Assets<Image>,
     ) -> Handle<Image> {
@@ -70,11 +73,17 @@ impl NewGrfHouseSpriteCache {
             0x8000 | (slot & 0x7FFF),
             runtime_fp,
             sprite_modifiers,
+            direct_palette,
         );
         self.handles
             .entry(key)
             .or_insert_with(|| {
-                images.add(decoded_sprite_image(sprite, DecodedSpriteImagePolicy::Raw))
+                images.add(decoded_tile_layout_image_with_palette(
+                    sprite,
+                    sprite_modifiers,
+                    direct_palette,
+                    DecodedSpriteImagePolicy::Raw,
+                ))
             })
             .clone()
     }

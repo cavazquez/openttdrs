@@ -10,17 +10,17 @@ use openttdrs_core::{
 
 use crate::render::newgrf_cache::{
     DecodedSpriteImagePolicy, decoded_sprite_image, decoded_sprite_image_with_twocc_map,
-    decoded_tile_layout_image_with_twocc_map, runtime_fingerprint, vars,
+    decoded_tile_layout_image_with_palette_and_twocc_map, runtime_fingerprint, vars,
 };
 use crate::sprites::CompanyColour;
 
-/// `(spec_id, slot, object_colour, runtime_fp, sprite_modifiers)` → textura
-/// RGBA. El bit alto del slot separa piezas TileSeq de vistas planas para no
-/// reutilizar una textura por error; `object_colour` conserva el offset 2CC de
-/// la instancia.
+/// `(spec_id, slot, object_colour, runtime_fp, sprite_modifiers, direct_palette)`
+/// → textura RGBA. El bit alto del slot separa piezas TileSeq de vistas planas
+/// para no reutilizar una textura por error; `object_colour` conserva el
+/// offset 2CC de la instancia.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfObjectSpriteCache {
-    handles: HashMap<(u16, u16, u8, u32, u8), Handle<Image>>,
+    handles: HashMap<(u16, u16, u8, u32, u8, u16), Handle<Image>>,
     twocc_maps: Vec<Option<DecodedSprite>>,
 }
 
@@ -85,7 +85,7 @@ impl NewGrfObjectSpriteCache {
         // Keep the picker namespace apart from a runtime view with
         // `object_colour=0` and `runtime_fp=0`; both otherwise look like the
         // same cache entry even though the picker intentionally stays raw.
-        let key = (def.id, 0x4000 | idx, 0, 0, 0);
+        let key = (def.id, 0x4000 | idx, 0, 0, 0, 0);
         self.handles
             .entry(key)
             .or_insert_with(|| {
@@ -118,7 +118,7 @@ impl NewGrfObjectSpriteCache {
             .get(&0x47)
             .and_then(|value| u8::try_from(*value).ok())
             .unwrap_or_default();
-        let key = (def.id, idx, object_colour, fp, 0);
+        let key = (def.id, idx, object_colour, fp, 0, 0);
         let policy = object_image_policy(def, object_colour);
         let twocc_map = self.twocc_map_for(def, object_colour);
         Some(
@@ -144,6 +144,7 @@ impl NewGrfObjectSpriteCache {
         object_colour: u8,
         runtime_fp: u32,
         sprite_modifiers: u8,
+        direct_palette: u16,
         sprite: &DecodedSprite,
         images: &mut Assets<Image>,
     ) -> Handle<Image> {
@@ -153,15 +154,17 @@ impl NewGrfObjectSpriteCache {
             object_colour,
             runtime_fp,
             sprite_modifiers,
+            direct_palette,
         );
         let policy = object_image_policy(def, object_colour);
         let twocc_map = self.twocc_map_for(def, object_colour);
         self.handles
             .entry(key)
             .or_insert_with(|| {
-                images.add(decoded_tile_layout_image_with_twocc_map(
+                images.add(decoded_tile_layout_image_with_palette_and_twocc_map(
                     sprite,
                     sprite_modifiers,
+                    direct_palette,
                     policy,
                     twocc_map.as_ref(),
                 ))
@@ -318,13 +321,14 @@ mod tests {
             object_colour,
             0,
             openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+            0,
             &sprite,
             &mut images,
         );
         let layout_image = images.get(&layout_handle).expect("mapped TileSeq image");
         assert_eq!(layout_image.data, mapped_data);
         let raw_layout_handle =
-            cache.handle_for_layout(&def, 0, object_colour, 0, 0, &sprite, &mut images);
+            cache.handle_for_layout(&def, 0, object_colour, 0, 0, 0, &sprite, &mut images);
         assert_ne!(layout_handle, raw_layout_handle);
         assert_eq!(
             images

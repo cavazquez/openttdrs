@@ -8,6 +8,7 @@ use openttdrs_core::{
 };
 
 use crate::sprites::CompanyColour;
+use crate::sprites::bridge_structure_palette::{BridgeStructurePalette, recolor_structure_rgba8};
 
 const TILE_LAYOUT_PALETTE_MODIFIERS: u8 =
     openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
@@ -31,6 +32,8 @@ pub(crate) enum DecodedSpriteImagePolicy {
     },
     /// Remapeo gris oscuro de un vehículo en estado de choque (`804`).
     Crash,
+    /// Paleta `PALETTE_TO_STRUCT_*` aplicada sobre un sprite compartido.
+    Structure { palette: BridgeStructurePalette },
 }
 
 pub(crate) fn decoded_sprite_image(
@@ -42,24 +45,41 @@ pub(crate) fn decoded_sprite_image(
 
 /// Selecciona la paleta por defecto de `DrawCommonTileSeq` sólo cuando el
 /// wire activa `transparent` o `recolour`. `opaque` controla la visibilidad y
-/// no debe convertir por sí solo una textura en una rampa de compañía.
-pub(crate) fn decoded_tile_layout_image(
+/// no debe convertir por sí solo una textura en una rampa de compañía. También
+/// conserva una paleta directa que el core no puede hornear, como
+/// `PALETTE_TO_STRUCT_*`.
+///
+/// `direct_palette=0` conserva la ruta histórica para layouts sin paleta
+/// explícita.
+pub(crate) fn decoded_tile_layout_image_with_palette(
     sprite: &DecodedSprite,
     sprite_modifiers: u8,
+    direct_palette: u16,
     default_policy: DecodedSpriteImagePolicy,
 ) -> Image {
-    decoded_tile_layout_image_with_twocc_map(sprite, sprite_modifiers, default_policy, None)
+    decoded_tile_layout_image_with_palette_and_twocc_map(
+        sprite,
+        sprite_modifiers,
+        direct_palette,
+        default_policy,
+        None,
+    )
 }
 
-/// Variante de [`decoded_tile_layout_image`] para layouts de objetos que
-/// pueden depender de un mapa Action5 `2CC`.
-pub(crate) fn decoded_tile_layout_image_with_twocc_map(
+/// Variante de [`decoded_tile_layout_image_with_palette`] que conserva una
+/// paleta directa y un mapa Action5 `2CC`.
+pub(crate) fn decoded_tile_layout_image_with_palette_and_twocc_map(
     sprite: &DecodedSprite,
     sprite_modifiers: u8,
+    direct_palette: u16,
     default_policy: DecodedSpriteImagePolicy,
     twocc_map: Option<&DecodedSprite>,
 ) -> Image {
-    let policy = if sprite_modifiers & TILE_LAYOUT_PALETTE_MODIFIERS != 0 {
+    let policy = if let Some(palette) =
+        BridgeStructurePalette::from_openttd_palette_id(u32::from(direct_palette))
+    {
+        DecodedSpriteImagePolicy::Structure { palette }
+    } else if sprite_modifiers & TILE_LAYOUT_PALETTE_MODIFIERS != 0 {
         default_policy
     } else {
         DecodedSpriteImagePolicy::Raw
@@ -135,6 +155,11 @@ pub(crate) fn decoded_sprite_image_with_twocc_map(
             }
         }
         DecodedSpriteImagePolicy::Crash => bake_sprite_crash(sprite),
+        DecodedSpriteImagePolicy::Structure { palette } => {
+            let mut rgba = sprite.rgba.clone();
+            recolor_structure_rgba8(&mut rgba, palette);
+            rgba
+        }
     };
     Image::new(
         Extent3d {
@@ -209,24 +234,34 @@ mod tests {
     }
 
     #[test]
+    fn tile_layout_applies_direct_structure_palette_after_decode() {
+        let sprite = sprite_with_rgba(vec![64, 20, 8, 255]);
+        let img =
+            decoded_tile_layout_image_with_palette(&sprite, 0, 801, DecodedSpriteImagePolicy::Raw);
+        assert_eq!(img.data.as_deref(), Some(&[96, 44, 4, 255][..]));
+    }
+
+    #[test]
     fn tile_layout_uses_default_palette_only_for_palette_modifiers() {
         let sprite = sprite_with_rgba(vec![8, 24, 88, 255]);
         let policy = DecodedSpriteImagePolicy::CompanyPalette {
             colour: CompanyColour::Green,
         };
-        let raw = decoded_tile_layout_image(&sprite, 0, policy);
+        let raw = decoded_tile_layout_image_with_palette(&sprite, 0, 0, policy);
         assert_eq!(raw.data.as_deref(), Some(&[8, 24, 88, 255][..]));
 
-        let opaque = decoded_tile_layout_image(
+        let opaque = decoded_tile_layout_image_with_palette(
             &sprite,
             openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE,
+            0,
             policy,
         );
         assert_eq!(opaque.data.as_deref(), Some(&[8, 24, 88, 255][..]));
 
-        let recoloured = decoded_tile_layout_image(
+        let recoloured = decoded_tile_layout_image_with_palette(
             &sprite,
             openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+            0,
             policy,
         );
         assert_ne!(recoloured.data.as_deref(), Some(&[8, 24, 88, 255][..]));

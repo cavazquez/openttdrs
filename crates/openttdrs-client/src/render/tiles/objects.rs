@@ -36,8 +36,8 @@ use crate::render::catenary_newgrf::{
     catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
 };
 use crate::render::newgrf_cache::{
-    direct_tile_layout_ground, runtime_fingerprint, tile_layout_is_renderable,
-    tile_layout_sprite_color, vars,
+    direct_tile_layout_ground, runtime_fingerprint, tile_layout_entry_is_hidden,
+    tile_layout_is_renderable, tile_layout_sprite_color, vars,
 };
 use crate::render::road_newgrf::{
     newgrf_road_def_for_tile, newgrf_tram_def_for_tile, road_newgrf_view_index,
@@ -1734,21 +1734,17 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             // Resolver antes del suelo vanilla: un `TileLayout` completo es
             // autoritativo y puede suprimir `SPR_RAIL_TRACK_*` con
             // `DODRAW=0` o reemplazarlo por su propio sprite de ground.
-            let station_layout = if !buildings_hidden() {
-                resolve_station_layout_for_tile(
-                    map,
-                    stations,
-                    ctx,
-                    m5,
-                    owner_colour,
-                    station_catalog,
-                    climate,
-                    newgrf_stack,
-                    world,
-                )
-            } else {
-                None
-            };
+            let station_layout = resolve_station_layout_for_tile(
+                map,
+                stations,
+                ctx,
+                m5,
+                owner_colour,
+                station_catalog,
+                climate,
+                newgrf_stack,
+                world,
+            );
             let mut used_newgrf_layout_ground = false;
             if let Some((def, layout, runtime_fp, _view_idx)) = station_layout.as_ref()
                 && let (Some(cache), Some(image_store)) =
@@ -2691,7 +2687,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     image_store,
                 );
             }
-            if !used_newgrf_waypoint_layout {
+            if !used_newgrf_waypoint_layout && !buildings_hidden() {
                 spawn_road_waypoint_buildings(
                     commands,
                     assets,
@@ -3382,7 +3378,22 @@ fn spawn_newgrf_station_layout_sequence(
 
     let mut last_parent: Option<(Entity, Vec2)> = None;
     let mut emitted = false;
+    let category_hidden = buildings_hidden();
+    let mut skip_children = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
+        if skip_children {
+            if !layer.is_parent() {
+                continue;
+            }
+            skip_children = false;
+        }
+        if tile_layout_entry_is_hidden(layer.sprite_modifiers, category_hidden) {
+            if layer.is_parent() {
+                last_parent = None;
+                skip_children = true;
+            }
+            continue;
+        }
         let Some(decoded) = layer.action1_sprite() else {
             return false;
         };
@@ -3779,7 +3790,22 @@ fn spawn_newgrf_road_stop_layout_sequence(
     };
     let mut last_parent: Option<(Entity, Vec2)> = None;
     let mut emitted = false;
+    let category_hidden = buildings_hidden();
+    let mut skip_children = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
+        if skip_children {
+            if !layer.is_parent() {
+                continue;
+            }
+            skip_children = false;
+        }
+        if tile_layout_entry_is_hidden(layer.sprite_modifiers, category_hidden) {
+            if layer.is_parent() {
+                last_parent = None;
+                skip_children = true;
+            }
+            continue;
+        }
         let Some(decoded) = layer.action1_sprite() else {
             return false;
         };
@@ -3940,9 +3966,6 @@ fn spawn_road_stop_buildings(
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
     world: Option<openttdrs_core::RoadStopWorldContext<'_>>,
 ) {
-    if buildings_hidden() {
-        return;
-    }
     // Action3/2: vista NewGRF del spec persistido en la estación. La
     // randomización Action2 vive en la entidad `Station`, por lo que resolver
     // con un contexto vacío congelaba el primer sprite aun después de recibir
@@ -4040,6 +4063,9 @@ fn spawn_road_stop_buildings(
         }
         // El índice sintético no puede saturarse sin aliasar otro spec.
         // Dejar continuar el flujo conserva la capa vanilla completa.
+    }
+    if buildings_hidden() {
+        return;
     }
     let orientation = u8::try_from(dir).unwrap_or_default();
     let drive_through = road_stop_drive_through_layers(class, orientation);
@@ -4517,7 +4543,22 @@ fn spawn_newgrf_airport_layout_sequence(
 
     let mut last_parent: Option<(Entity, Vec2)> = None;
     let mut emitted = false;
+    let category_hidden = buildings_hidden();
+    let mut skip_children = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
+        if skip_children {
+            if !layer.is_parent() {
+                continue;
+            }
+            skip_children = false;
+        }
+        if tile_layout_entry_is_hidden(layer.sprite_modifiers, category_hidden) {
+            if layer.is_parent() {
+                last_parent = None;
+                skip_children = true;
+            }
+            continue;
+        }
         let Some(decoded) = layer.action1_sprite() else {
             return false;
         };

@@ -21,8 +21,8 @@ use crate::iso::{
 };
 use crate::render::atlas::AtlasSprite;
 use crate::render::newgrf_cache::{
-    direct_tile_layout_ground, runtime_fingerprint, tile_layout_is_renderable,
-    tile_layout_sprite_color, vars,
+    direct_tile_layout_ground, runtime_fingerprint, tile_layout_entry_is_hidden,
+    tile_layout_is_renderable, tile_layout_sprite_color, vars,
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
@@ -780,7 +780,7 @@ pub(crate) fn spawn_house_tile(
     // La invisibilidad de casas sólo afecta la parte superior. OpenTTD ya
     // dibujó `s1` y la fundación al llegar a este punto.
     use crate::sprites::{TransparencyOption, is_hidden, sprite_color};
-    if is_hidden(TransparencyOption::Houses) {
+    if is_hidden(TransparencyOption::Houses) && !custom_house_layout {
         return;
     }
     let tint = sprite_color(TransparencyOption::Houses);
@@ -1235,7 +1235,22 @@ fn spawn_newgrf_house_layout_sequence(
         return false;
     }
     let mut last_parent: Option<(Entity, Vec2)> = None;
+    let category_hidden = crate::sprites::is_hidden(crate::sprites::TransparencyOption::Houses);
+    let mut skip_children = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
+        if skip_children {
+            if !layer.is_parent() {
+                continue;
+            }
+            skip_children = false;
+        }
+        if tile_layout_entry_is_hidden(layer.sprite_modifiers, category_hidden) {
+            if layer.is_parent() {
+                last_parent = None;
+                skip_children = true;
+            }
+            continue;
+        }
         let Some(decoded) = layer.action1_sprite() else {
             return false;
         };
@@ -1631,7 +1646,7 @@ pub(crate) fn spawn_industry_tile_with_world(
         }
     };
     let overlay_ctx = crate::render::IndustryOverlayContext::from_tile_ctx(ctx, overlay_z);
-    if industries_hidden {
+    if industries_hidden && !custom_industry_layout {
         return;
     }
     // Un layout completo reemplaza la secuencia vanilla completa, aunque no
@@ -2070,7 +2085,24 @@ fn spawn_newgrf_industry_layout_sequence(
     let tint =
         crate::sprites::with_to_alpha(Color::WHITE, crate::sprites::TransparencyOption::Industries);
     let mut last_parent: Option<(Entity, Vec2)> = None;
+    let mut skip_children = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
+        if skip_children {
+            if !layer.is_parent() {
+                continue;
+            }
+            skip_children = false;
+        }
+        if tile_layout_entry_is_hidden(
+            layer.sprite_modifiers,
+            crate::sprites::is_hidden(crate::sprites::TransparencyOption::Industries),
+        ) {
+            if layer.is_parent() {
+                last_parent = None;
+                skip_children = true;
+            }
+            continue;
+        }
         let Some(decoded) = layer.action1_sprite() else {
             return false;
         };
@@ -2437,7 +2469,22 @@ fn spawn_newgrf_object_layout_sequence(
         return false;
     }
     let mut last_parent: Option<(Entity, Vec2)> = None;
+    let category_hidden = crate::sprites::is_hidden(crate::sprites::TransparencyOption::Structures);
+    let mut skip_children = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
+        if skip_children {
+            if !layer.is_parent() {
+                continue;
+            }
+            skip_children = false;
+        }
+        if tile_layout_entry_is_hidden(layer.sprite_modifiers, category_hidden) {
+            if layer.is_parent() {
+                last_parent = None;
+                skip_children = true;
+            }
+            continue;
+        }
         let Some(decoded) = layer.action1_sprite() else {
             return false;
         };
@@ -2901,7 +2948,10 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
     // ObjectType de OpenTTD: 0=Transmisor, 1=Faro; ≥5 = NewGRF.
     if ottd_type == 10 {
         use crate::sprites::{TransparencyOption, is_hidden, sprite_color};
-        if is_hidden(TransparencyOption::Structures) {
+        let custom_object_layout = object_layout.as_ref().is_some_and(|(_, layout, _, _, _)| {
+            tile_layout_is_renderable(layout) && object_sprites.is_some() && images.is_some()
+        });
+        if is_hidden(TransparencyOption::Structures) && !custom_object_layout {
             return;
         }
         let tint = sprite_color(TransparencyOption::Structures);

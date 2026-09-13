@@ -11,7 +11,8 @@ use crate::render::{AtlasSprite, WorldAssets};
 pub(crate) use fingerprint::runtime_fingerprint;
 pub(crate) use image_factory::{
     DecodedSpriteImagePolicy, decoded_sprite_image, decoded_sprite_image_with_twocc_map,
-    decoded_tile_layout_image, decoded_tile_layout_image_with_twocc_map, tile_layout_sprite_color,
+    decoded_tile_layout_image, decoded_tile_layout_image_with_twocc_map,
+    tile_layout_entry_is_hidden, tile_layout_sprite_color,
 };
 
 /// Baseset sprites that are safe to use as a `TileLayout` ground without

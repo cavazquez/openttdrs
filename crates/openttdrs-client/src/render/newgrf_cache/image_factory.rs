@@ -82,6 +82,21 @@ pub(crate) fn tile_layout_sprite_color(color: Color, sprite_modifiers: u8) -> Co
     Color::srgba(rgba.red, rgba.green, rgba.blue, 1.0)
 }
 
+/// Decide si `IsInvisibilitySet` suprime una entrada de la secuencia.
+///
+/// El filtro se aplica al stream `BUILD`, no al ground que cada feature dibuja
+/// por separado antes de `DrawCommonTileSeq`. Un parent suprimido debe además
+/// limpiar el parent activo en el caller para que sus children no reaparezcan.
+#[must_use]
+pub(crate) const fn tile_layout_entry_is_hidden(
+    sprite_modifiers: u8,
+    category_hidden: bool,
+) -> bool {
+    category_hidden
+        && sprite_modifiers & openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE
+            == 0
+}
+
 pub(crate) fn decoded_sprite_image_with_twocc_map(
     sprite: &DecodedSprite,
     policy: DecodedSpriteImagePolicy,
@@ -232,5 +247,15 @@ mod tests {
             (rgba.red, rgba.green, rgba.blue, rgba.alpha),
             (0.2, 0.3, 0.4, 1.0)
         );
+    }
+
+    #[test]
+    fn tile_layout_hidden_entry_respects_opaque_modifier() {
+        assert!(tile_layout_entry_is_hidden(0, true));
+        assert!(!tile_layout_entry_is_hidden(
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE,
+            true,
+        ));
+        assert!(!tile_layout_entry_is_hidden(0, false));
     }
 }

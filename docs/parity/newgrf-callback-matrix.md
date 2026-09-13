@@ -1857,3 +1857,13 @@ evitando que la ausencia de una vista runtime vuelva silenciosamente a la
 librea primaria. La regresión de preview cubre tanto la ruta runtime como la
 estática; quedan pendientes layouts/call sites GUI adicionales y consumidores
 legacy fuera del resolver de vehículos.
+
+### #329-VEHICLE-STATIC-VIEW-AFTER-RUNTIME-MISS — vista estática tras fallo runtime
+
+Actualizado: 2026-09-12 (`07008e0a`). Un motor con runtime NewGRF puede no
+devolver capas para una combinación concreta de pose, carga o callback aunque
+conserve vistas Action1 estáticas. El resolver de entidades usa ahora esa vista
+antes del sprite vanilla y aplica el mismo contrato de paleta 2CC/Action5 y sus
+metadatos geométricos. `runtime_empty_layers_fall_back_to_static_catalog_view`
+verifica píxeles, handle no vanilla, offsets y dimensiones; siguen pendientes
+las capas avanzadas y los consumidores fuera de este call site.

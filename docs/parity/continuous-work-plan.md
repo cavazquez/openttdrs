@@ -6441,3 +6441,14 @@ runtime se mantiene el fallback de catálogo vanilla. La regresión
 `aircraft_shadow_reuses_custom_body_layer` verifica textura y alineación X/Y.
 Pasaron 40 tests de `render::vehicles` y Clippy estricto de cliente; #329
 continúa abierta por sombras/efectos NewGRF avanzados y otros call sites.
+
+Corrección #329-VEHICLE-STATIC-VIEW-AFTER-RUNTIME-MISS (2026-09-12,
+`07008e0a`): si un motor conserva runtime NewGRF para callbacks, SpriteStack o
+grupos de carga pero la pose actual no produce una capa, el render consulta
+ahora la vista estática `newgrf_views` antes de caer al sprite vanilla. El
+fallback conserva la paleta calculada, los mapas 2CC Action5 y los offsets y
+dimensiones de Action1. `runtime_empty_layers_fall_back_to_static_catalog_view`
+reproduce el caso con runtime vacío y vista custom. Pasaron 41 tests de
+`render::vehicles`, Clippy estricto de cliente y `git diff --check`; #329
+continúa abierta por layouts/call sites GUI, efectos avanzados y consumidores
+legacy restantes.

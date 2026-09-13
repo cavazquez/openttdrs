@@ -7136,6 +7136,13 @@ poste conserva sus offsets NFO y bounds `TILE_SEQ_LINE`, con los ordinales 2 y
 catenaria y layouts NewGRF del preview quedan como unidades posteriores; #326
 continúa abierta.
 
+Corrección #326-ROAD-WAYPOINT-PREVIEW-TRAM-OVERLAY (2026-09-13): cuando la
+tesela del waypoint vial declara un tipo de tranvía, el preview superpone ahora
+el `tram_flat` vanilla con la misma orientación del waypoint y la prioridad de
+capa del renderer. La selección consulta primero `WorldAssets.tram_flat`, luego
+el atlas y finalmente el PNG directo; los grupos/overlays NewGRF y la
+aceptación raster quedan fuera de esta unidad. #326 continúa abierta.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

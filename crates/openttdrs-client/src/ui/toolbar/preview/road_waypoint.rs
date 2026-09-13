@@ -1,7 +1,7 @@
 //! Fantasma de colocación de waypoint road (carretera recta).
 
 use bevy::prelude::*;
-use openttdrs_core::prelude::*;
+use openttdrs_core::{prelude::*, tram_road_type_from_tile};
 
 use crate::iso::{TILE_HALF_H, tile_pos_half, tile_slope_and_min_z};
 use crate::iso::{iso, road_stop_build_sprite_center};
@@ -67,6 +67,37 @@ pub(crate) fn spawn_road_waypoint_preview(
         ground,
         Transform::from_translation(tile_pos_half(coord.x, coord.y, base_z, 2.4, TILE_HALF_H)),
     ));
+
+    if map
+        .get(coord)
+        .is_some_and(|tile| tram_road_type_from_tile(&tile).is_some())
+    {
+        let tram_overlay = world_assets
+            .and_then(|assets| assets.tram_flat.get(idx))
+            .map(|image| image.sprite_colored(tint))
+            .or_else(|| {
+                atlas
+                    .and_then(|atlas| atlas.try_get(&format!("tram_flat_{idx:02}.png")))
+                    .map(|image| image.sprite_colored(tint))
+            })
+            .unwrap_or_else(|| Sprite {
+                image: asset_server
+                    .load::<Image>(format!("assets/opengfx/tiles/tram_flat_{idx:02}.png")),
+                color: tint,
+                ..default()
+            });
+        commands.spawn((
+            BuildGhostPreview,
+            tram_overlay,
+            Transform::from_translation(tile_pos_half(
+                coord.x,
+                coord.y,
+                base_z,
+                2.425,
+                TILE_HALF_H,
+            )),
+        ));
+    }
 
     for (layer_index, layer) in road_waypoint_build_layers(u8::from(idx == 5))
         .iter()

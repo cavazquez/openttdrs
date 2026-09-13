@@ -7105,3 +7105,13 @@ cuando el bit de paisaje lo exige. La dirección virtual se instala sólo en una
 copia del tile para que la preview no mutile el mapa; la posición usa la cota y
 la altura visual resultantes de la fundación. #326 continúa abierta por
 sprites custom restantes y aceptación raster.
+
+Corrección #326-BRIDGE-PREVIEW-PILLARS (2026-09-13): la preview de los vanos
+intermedios ya dibuja los pilares de madera en ambos lados del puente. Reutiliza
+las alturas de borde, los segmentos completos/medios y los recortes de
+`SubSprite` del renderer materializado; para tiles que todavía no son puente
+calcula la pendiente/superficie virtual que recibirán al confirmar la obra.
+La capa trasera conserva su desplazamiento y orden de sorting, y el eje X/Y usa
+los PNG vanilla específicos. Quedan fuera de esta unidad la supresión por
+road-stop, los pilares custom por tipo de puente y la aceptación raster; #326
+continúa abierta.

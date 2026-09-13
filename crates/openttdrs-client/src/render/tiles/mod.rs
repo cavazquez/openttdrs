@@ -20,8 +20,9 @@ pub(crate) use bridge::spawn_bridge_middle;
 pub(crate) use bridge::spawn_bridge_middle_with_road_types;
 pub(crate) use bridge::spawn_bridge_middle_with_road_types_and_stations;
 pub(crate) use bridge_draw::{
-    BridgeRampGround, bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta,
-    bridge_ramp_ground_kind, catenary_under_low_bridge, roadside_detail_visible_under_bridge,
+    BridgeRampGround, PillarHalf, bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta,
+    bridge_ramp_ground_kind, catenary_under_low_bridge, pillar_ground_heights, pillar_half_crop,
+    pillar_segments, roadside_detail_visible_under_bridge,
 };
 pub(crate) use helpers::{
     FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, TRAM_OVERLAY_LAYER_FRAC,

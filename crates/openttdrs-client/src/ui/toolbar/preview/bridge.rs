@@ -13,9 +13,10 @@ use crate::iso::{
 };
 use crate::render::{
     BridgeRampGround, CatenarySpriteAnchor, NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache,
-    NewGrfRoadSpriteCache, bridge_foundation_decision_at, bridge_ramp_catenary_slope,
+    NewGrfRoadSpriteCache, PillarHalf, bridge_foundation_decision_at, bridge_ramp_catenary_slope,
     bridge_ramp_catenary_world_z_delta, bridge_ramp_ground_kind, catenary_local_z_delta,
-    catenary_sprite_anchor, catenary_sprite_center,
+    catenary_sprite_anchor, catenary_sprite_center, pillar_ground_heights, pillar_half_crop,
+    pillar_segments,
 };
 use crate::sprites::{
     BridgeDeckSpriteIds, OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, TILEH_TO_SHORE_SPRITE,
@@ -34,6 +35,8 @@ const FRONT_LAYER: f32 = 0.045;
 /// de una pendiente empinada cuando comparten tesela.
 const FOUNDATION_LAYER: f32 = DECK_LAYER - 0.006;
 const RAMP_GROUND_LAYER: f32 = DECK_LAYER - 0.001;
+const PILLAR_BACK_LAYER: f32 = DECK_LAYER - 0.003;
+const PILLAR_LAYER: f32 = DECK_LAYER - 0.002;
 const CUSTOM_BRIDGE_LAYER: f32 = DECK_LAYER + 0.001;
 const CUSTOM_OVERLAY_LAYER: f32 = DECK_LAYER + 0.002;
 const CUSTOM_CATENARY_BACK_LAYER: f32 = DECK_LAYER + 0.003;
@@ -86,6 +89,15 @@ fn bridge_front_shift(axis: usize) -> Vec2 {
         remap_tile_offset(0.0, 12.0, 0.0) * 0.5
     } else {
         remap_tile_offset(12.0, 0.0, 0.0) * 0.5
+    }
+}
+
+/// Desplazamiento del pilar trasero, compartido con `DrawBridgePillars`.
+fn bridge_back_shift(axis: usize) -> Vec2 {
+    if axis == 0 {
+        remap_tile_offset(0.0, 3.0, 0.0) * 0.5
+    } else {
+        remap_tile_offset(3.0, 0.0, 0.0) * 0.5
     }
 }
 
@@ -662,6 +674,124 @@ fn spawn_bridge_ramp_ground(
     ));
 }
 
+/// Dibuja una pieza de pilar usando el mismo PNG, ancla NFO y recorte de media
+/// columna que el renderer del mapa. `z_px` es la cota de pantalla del extremo
+/// superior de ese segmento, no la altura base de la tesela.
+#[allow(clippy::too_many_arguments)]
+fn spawn_bridge_pillar_preview(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    px: i32,
+    py: i32,
+    surface_z: u8,
+    pillar_id: u32,
+    axis: usize,
+    shift: Vec2,
+    z_px: i32,
+    layer: f32,
+    half: Option<PillarHalf>,
+    tint: Color,
+) {
+    let Some((width, height, xrel, yrel)) = bridge_sprite_meta(pillar_id) else {
+        return;
+    };
+    let path = format!(
+        "assets/opengfx/tiles/{}",
+        BridgeDeckSpriteIds::atlas_name(pillar_id)
+    );
+    let mut sprite = Sprite {
+        image: asset_server.load::<Image>(path),
+        color: tint,
+        ..default()
+    };
+    let crop_x_shift = if let Some(half) = half {
+        let Some((rect, x_shift)) = pillar_half_crop(axis, half, width, height, xrel) else {
+            return;
+        };
+        sprite.rect = Some(rect);
+        x_shift
+    } else {
+        0.0
+    };
+    let iso_pos = iso(px, py);
+    let position = Vec3::new(
+        iso_pos.x + shift.x + xrel + width / 2.0 + crop_x_shift,
+        iso_pos.y + shift.y - yrel - height / 2.0 + z_px as f32,
+        crate::iso::sortable_draw_z(px, py, surface_z, layer),
+    );
+    commands.spawn((
+        BuildGhostPreview,
+        sprite,
+        Transform::from_translation(position).with_scale(Vec3::splat(1.002)),
+    ));
+}
+
+/// Materializa visualmente los dos pilares que `DrawBridgePillars` dibujaría
+/// para un vano. Durante el drag los middle tiles aún conservan su terreno;
+/// `bridge_surface_slope_and_z` calcula la superficie virtual que recibirían
+/// al quedar materializados como puente.
+#[allow(clippy::too_many_arguments)]
+fn spawn_bridge_pillars_preview(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    map: &Map,
+    px: i32,
+    py: i32,
+    axis_y: bool,
+    surface_z: u8,
+    pillar_id: u32,
+    tint: Color,
+) {
+    let coord = TileCoord::new(px, py);
+    let Some(tile) = map.get(coord) else {
+        return;
+    };
+    if tile.kind == TileKind::Void || pillar_id == 0 {
+        return;
+    }
+    let (raw_tileh, raw_base_z) = tile_slope_and_min_z(map, px as u32, py as u32);
+    let (pillar_tileh, z_delta) = openttdrs_core::bridge_surface_slope_and_z(raw_tileh, !axis_y);
+    let pillar_base_z = raw_base_z.saturating_add(z_delta);
+    let ground = pillar_ground_heights(pillar_tileh, pillar_base_z, usize::from(axis_y));
+    let top_px = i32::from(surface_z) * HEIGHT_PX as i32 - 3;
+    let axis = usize::from(axis_y);
+    for segment in pillar_segments(top_px, ground.front_north, ground.front_south) {
+        spawn_bridge_pillar_preview(
+            commands,
+            asset_server,
+            px,
+            py,
+            surface_z,
+            pillar_id,
+            axis,
+            bridge_front_shift(axis),
+            segment.z_px,
+            PILLAR_LAYER,
+            segment.half,
+            tint,
+        );
+    }
+    let back_top_px = top_px - 2 * HEIGHT_PX as i32;
+    if ground.back_north <= back_top_px || ground.back_south <= back_top_px {
+        for segment in pillar_segments(back_top_px, ground.back_north, ground.back_south) {
+            spawn_bridge_pillar_preview(
+                commands,
+                asset_server,
+                px,
+                py,
+                surface_z,
+                pillar_id,
+                axis,
+                bridge_back_shift(axis),
+                segment.z_px,
+                PILLAR_BACK_LAYER,
+                segment.half,
+                tint,
+            );
+        }
+    }
+}
+
 /// Posición en pantalla con offsets NFO, como `spawn_layer` en `bridge_draw.rs`.
 fn bridge_ghost_translation(
     px: i32,
@@ -806,6 +936,19 @@ pub(crate) fn spawn_bridge_span_preview(
                 .map(|foundation| foundation.surface_base_z)
                 .unwrap_or(base_z)
         };
+        if is_middle {
+            spawn_bridge_pillars_preview(
+                commands,
+                asset_server,
+                map,
+                px,
+                py,
+                axis_y,
+                surface_z,
+                ids.pillar[axis],
+                tint,
+            );
+        }
         let path = format!(
             "assets/opengfx/tiles/{}",
             BridgeDeckSpriteIds::atlas_name(sprite_id)
@@ -1274,6 +1417,38 @@ mod tests {
         assert_eq!(
             bridge_ramp_ground_asset_path(BridgeRampGround::SnowOrDesert, 12),
             format!("assets/opengfx/tiles/terrain_snow_desert_3_{offset:02}.png")
+        );
+    }
+
+    #[test]
+    fn bridge_preview_pillars_keep_axis_assets_and_segment_contract() {
+        let ids =
+            bridge_deck_sprite_ids(BridgeType::Wooden, openttdrs_core::BridgePiece::MiddleOdd);
+        assert_eq!(ids.pillar, [2552, 2551]);
+        assert_eq!(
+            BridgeDeckSpriteIds::atlas_name(ids.pillar[0]),
+            "bridge_wood_x_pillar.png"
+        );
+        assert_eq!(
+            BridgeDeckSpriteIds::atlas_name(ids.pillar[1]),
+            "bridge_wood_y_pillar.png"
+        );
+        assert!(bridge_sprite_meta(ids.pillar[0]).is_some());
+        assert!(bridge_sprite_meta(ids.pillar[1]).is_some());
+
+        let ground = pillar_ground_heights(0, 0, 0);
+        assert_eq!(
+            (
+                ground.front_north,
+                ground.front_south,
+                ground.back_north,
+                ground.back_south
+            ),
+            (0, 0, 0, 0)
+        );
+        assert_eq!(
+            pillar_segments(13, ground.front_north, ground.front_south).len(),
+            2
         );
     }
 }

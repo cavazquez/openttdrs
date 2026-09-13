@@ -1242,26 +1242,26 @@ fn spawn_bridge_ramp_catenary(
 /// meramente estética: OpenTTD corta el mismo PNG por la mitad en lugar de
 /// dibujar una columna adicional completa.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum PillarHalf {
+pub(crate) enum PillarHalf {
     North,
     South,
 }
 
 /// Un tramo que `DrawBridgePillars` entrega a `DrawPillar`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct PillarSegment {
-    z_px: i32,
-    half: Option<PillarHalf>,
+pub(crate) struct PillarSegment {
+    pub(crate) z_px: i32,
+    pub(crate) half: Option<PillarHalf>,
 }
 
 /// Las cuatro alturas que OpenTTD obtiene mediante dos llamadas a
 /// `GetSlopePixelZOnEdge`: norte/sur del pilar frontal y del trasero.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct PillarGroundHeights {
-    front_north: i32,
-    front_south: i32,
-    back_north: i32,
-    back_south: i32,
+pub(crate) struct PillarGroundHeights {
+    pub(crate) front_north: i32,
+    pub(crate) front_south: i32,
+    pub(crate) back_north: i32,
+    pub(crate) back_south: i32,
 }
 
 const PILLAR_SLOPE_HALFTILE: u8 = 0x20;
@@ -1317,7 +1317,7 @@ fn pillar_edge_heights(
 }
 
 /// Alturas bajo ambos pilares, con el mismo eje que `DrawBridgePillars`.
-fn pillar_ground_heights(tileh: u8, base_z: u8, axis: usize) -> PillarGroundHeights {
+pub(crate) fn pillar_ground_heights(tileh: u8, base_z: u8, axis: usize) -> PillarGroundHeights {
     match axis {
         // `AxisToDiagDir(Axis::X) == SW`; la arista inversa es NE.
         0 => {
@@ -1376,7 +1376,7 @@ fn pillar_ground_heights(tileh: u8, base_z: u8, axis: usize) -> PillarGroundHeig
 /// Devuelve las columnas completas y las medias columnas terminales que
 /// OpenTTD dibuja para un pilar. Incluso si el extremo superior queda bajo la
 /// arista más alta, puede haber una media columna sobre la arista baja.
-fn pillar_segments(z_top: i32, z_north: i32, z_south: i32) -> Vec<PillarSegment> {
+pub(crate) fn pillar_segments(z_top: i32, z_north: i32, z_south: i32) -> Vec<PillarSegment> {
     let ground = z_north.max(z_south);
     let mut z = z_top;
     let mut segments = Vec::new();
@@ -1407,7 +1407,7 @@ fn pillar_segments(z_top: i32, z_north: i32, z_south: i32) -> Vec<PillarSegment>
 ///
 /// El rectángulo es relativo al sprite, por lo que Bevy lo puede aplicar tanto
 /// a una entrada del atlas como a la imagen recoloreada de un puente.
-fn pillar_half_crop(
+pub(crate) fn pillar_half_crop(
     axis: usize,
     half: PillarHalf,
     width: f32,

@@ -6355,3 +6355,13 @@ tabla vanilla; la prueba confirma el error específico y que la tesela queda
 intacta. Pasaron 21 pruebas de `railtypes`, Clippy estricto de core, formato y
 `git diff --check`. #329 continúa abierta por callbacks y consumidores
 legacy restantes; #326/#567 permanecen abiertas.
+
+Corrección #329-VEHICLE-RENDER-TRACE-CATALOG (2026-09-12, `1e6342c4`): la
+traza CSV opt-in de render resuelve ahora la posición del vehículo con el
+`EngineDef` del catálogo activo, igual que el dibujo y el picking. Esto evita
+que un diagnóstico de interpolación atribuya a la simulación un desplazamiento
+que en realidad proviene de offsets NewGRF custom; la regresión compara la
+posición registrada con un motor custom desplazado 96 px. Pasaron los 2 tests
+dirigidos de `render_trace`, Clippy estricto de cliente y core, formato y
+`git diff --check`. #329 continúa abierta por callbacks, vistas runtime
+completas y consumidores legacy restantes; #326/#567 permanecen abiertas.

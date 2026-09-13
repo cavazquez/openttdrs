@@ -1767,3 +1767,12 @@ Actualizado: 2026-09-12 (`443b1ebb`). `check_convert_rail` consulta el
 tren que ocupa la tesela. Esto conserva la conversión atómica y el error
 `TrainIncompatibleWithRailType` para un motor NewGRF maglev/monorail frente a
 una vía incompatible; los IDs desconocidos siguen usando el fallback vanilla.
+
+### #329-VEHICLE-RENDER-TRACE-CATALOG — posiciones de diagnóstico catalog-aware
+
+Actualizado: 2026-09-12 (`1e6342c4`). `record_render_trace` usa ahora
+`vehicle_sprite_pos_at_with_catalog` para las posiciones lógica y extrapolada,
+por lo que el CSV opt-in coincide con el sprite que se dibuja cuando un motor
+NewGRF aporta offsets o dimensiones custom. La regresión verifica un bus cuyo
+offset activo desplaza la posición más de 30 px respecto del fallback vanilla;
+la traza conserva sus columnas y semántica de interpolación.

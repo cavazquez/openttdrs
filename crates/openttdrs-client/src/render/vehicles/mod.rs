@@ -76,6 +76,44 @@ pub(crate) fn vehicle_preview_layers(
     assets::custom_vehicle_layers_for_preview(engine, sim, primary, secondary, cache, images)
 }
 
+/// Capas de una unidad real para las tiras laterales de las ventanas.
+///
+/// La orientación visual de una tira sigue siendo fija (`DIR_E`), pero la
+/// resolución conserva el vehículo real: cargo, consist, callbacks y librea
+/// de grupo. Reutilizar [`vehicle_preview_layers`] aquí hace que una unidad
+/// comprada con una librea de grupo vuelva a aparecer con la librea de compra.
+pub(crate) fn vehicle_side_layers_for_sim(
+    trucks: &TruckHandles,
+    sim: &SimWorld,
+    vehicle: &openttdrs_core::Vehicle,
+    cache: &mut NewGrfTrainSpriteCache,
+    images: &mut Assets<Image>,
+) -> Vec<NewGrfVehicleLayer> {
+    let Some(engine_id) = vehicle.engine_id else {
+        return Vec::new();
+    };
+    if engine_in_sim(sim, engine_id).is_none() {
+        return Vec::new();
+    }
+
+    // `for_vehicle_with_newgrf_layers` usa la dirección de la pose para
+    // seleccionar la vista. Clonar sólo para la orientación evita mutar la
+    // simulación y mantiene el id real para todos los scopes Action2.
+    let mut side_vehicle = vehicle.clone();
+    side_vehicle.direction = openttdrs_core::DIR_E;
+    let pose = openttdrs_core::VehiclePose::from_vehicle(&side_vehicle)
+        .with_drive_on_right(sim.state.construction.road_drive_on_right());
+    trucks.for_vehicle_with_newgrf_layers(
+        &side_vehicle,
+        pose,
+        None,
+        Some(vehicle_livery_colour(sim, vehicle)),
+        sim,
+        cache,
+        images,
+    )
+}
+
 /// Devuelve la librea que OpenTTD usa para un motor todavía no construido.
 ///
 /// `GetEnginePalette` resuelve el esquema de la compañía activa con una
@@ -460,6 +498,64 @@ mod tests {
         assert_eq!(
             vehicle_livery_colour(&sim, &sim.state.vehicles[0]).as_u8(),
             5
+        );
+    }
+
+    #[test]
+    fn vehicle_side_layers_use_actual_group_livery() {
+        let view = openttdrs_core::DecodedSprite {
+            width: 2,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![120, 120, 120, 255, 120, 120, 120, 255],
+            mask: vec![0xC6, 0x50],
+        };
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_BUS_MPS)
+            .expect("vanilla bus")
+            .clone();
+        engine.id = openttdrs_core::NEWGRF_ENGINE_ID_BASE + 74;
+        engine.from_newgrf = true;
+        engine.uses_2cc = true;
+        engine.newgrf_views = vec![view.clone()];
+
+        let mut sim = SimWorld {
+            state: GameState::new(8, 8),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        sim.state.engine_catalog.push(engine);
+        let mut group = VehicleGroup::new(9, "grupo azul");
+        group.livery_in_use = COMPANY_LIVERY_FLAG_PRIMARY | COMPANY_LIVERY_FLAG_SECONDARY;
+        group.livery_colour1 = 4;
+        group.livery_colour2 = 9;
+        sim.state.vehicle_groups.push(group);
+        let mut vehicle = Vehicle::new(
+            701,
+            VehicleKind::Bus,
+            TileCoord::new(2, 2),
+            TileCoord::new(3, 2),
+        );
+        vehicle.engine_id = Some(openttdrs_core::NEWGRF_ENGINE_ID_BASE + 74);
+        vehicle.group_id = Some(9);
+        sim.state.vehicles.push(vehicle);
+
+        let mut cache = NewGrfTrainSpriteCache::default();
+        let mut images = Assets::<Image>::default();
+        let handles = default_handles();
+        let layers = vehicle_side_layers_for_sim(
+            &handles,
+            &sim,
+            &sim.state.vehicles[0],
+            &mut cache,
+            &mut images,
+        );
+        let image = images
+            .get(&layers.first().expect("group-livery layer").handle)
+            .expect("group-livery image");
+        assert_eq!(
+            image.data.as_deref(),
+            Some(openttdrs_core::bake_sprite_two_company_palette(&view, 4, 9).as_slice())
         );
     }
 

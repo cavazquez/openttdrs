@@ -36,6 +36,32 @@ fn bridge_front_shift(axis: usize) -> Vec2 {
     }
 }
 
+/// Orden canónico de las piezas del puente: norte → sur según el eje del
+/// tramo. El drag de la UI puede empezar en cualquiera de las dos cabezas,
+/// pero `calc_bridge_piece` y las tablas de OpenTTD siempre reciben ese orden.
+fn bridge_preview_render_order(tiles: &[(i32, i32)]) -> Vec<(i32, i32)> {
+    let axis_y = bridge_span_axis_y(tiles);
+    let mut ordered = tiles.to_vec();
+    ordered.sort_unstable_by_key(|&(px, py)| if axis_y { py } else { px });
+    ordered
+}
+
+/// Misma selección de altura que `DrawTile_TunnelBridge::GetBridgeDeckZ`.
+/// El vano usa la cota del tablero de la cabeza sur, no la cota local del
+/// agua o del terreno que todavía ocupa esa tesela durante el drag.
+fn bridge_preview_deck_z(ramp_tileh: u8, ramp_min_z: u8, axis: usize) -> u8 {
+    let aligned = if axis == 0 {
+        ramp_tileh == 12 || ramp_tileh == 3
+    } else {
+        ramp_tileh == 9 || ramp_tileh == 6
+    };
+    if ramp_tileh == 0 || aligned {
+        return ramp_min_z.saturating_add(1);
+    }
+    let one_corner = matches!(ramp_tileh, 1 | 2 | 4 | 8);
+    ramp_min_z.saturating_add(if one_corner { 1 } else { 2 })
+}
+
 /// Posición en pantalla con offsets NFO, como `spawn_layer` en `bridge_draw.rs`.
 fn bridge_ghost_translation(
     px: i32,
@@ -65,16 +91,21 @@ pub(crate) fn spawn_bridge_span_preview(
     valid: bool,
 ) {
     let is_rail = action == BuildMenuAction::RailBridge;
-    let axis_y = bridge_span_axis_y(tiles);
+    let ordered_tiles = bridge_preview_render_order(tiles);
+    let axis_y = bridge_span_axis_y(&ordered_tiles);
     let axis = usize::from(axis_y);
-    let total = tiles.len();
+    let total = ordered_tiles.len();
     let bridge_type = BridgeType::Wooden;
     let tint = if valid {
         Color::srgba(1.0, 1.0, 1.0, 0.58)
     } else {
         Color::srgba(1.0, 0.28, 0.22, 0.58)
     };
-    for (index, &(px, py)) in tiles.iter().enumerate() {
+    let deck_z = ordered_tiles.last().map(|&(px, py)| {
+        let (tileh, min_z) = tile_slope_and_min_z(map, px as u32, py as u32);
+        bridge_preview_deck_z(tileh, min_z, axis)
+    });
+    for (index, &(px, py)) in ordered_tiles.iter().enumerate() {
         let coord = openttdrs_core::TileCoord::new(px, py);
         if map.get(coord).is_none() {
             continue;
@@ -90,6 +121,11 @@ pub(crate) fn spawn_bridge_span_preview(
         } else {
             (ids.rear(is_rail, axis), Vec2::ZERO, DECK_LAYER)
         };
+        let draw_z = if is_middle {
+            deck_z.unwrap_or(base_z)
+        } else {
+            base_z
+        };
         let path = format!(
             "assets/opengfx/tiles/{}",
             BridgeDeckSpriteIds::atlas_name(sprite_id)
@@ -102,7 +138,7 @@ pub(crate) fn spawn_bridge_span_preview(
                 ..default()
             },
             Transform::from_translation(bridge_ghost_translation(
-                px, py, base_z, sprite_id, shift, layer,
+                px, py, draw_z, sprite_id, shift, layer,
             ))
             .with_scale(Vec3::new(1.002, 1.002, 1.0)),
         ));
@@ -111,7 +147,7 @@ pub(crate) fn spawn_bridge_span_preview(
 
 #[cfg(test)]
 mod tests {
-    use super::bridge_span_axis_y;
+    use super::{bridge_preview_deck_z, bridge_preview_render_order, bridge_span_axis_y};
 
     #[test]
     fn bridge_axis_y_when_span_runs_north_south() {
@@ -123,5 +159,21 @@ mod tests {
     fn bridge_axis_x_when_span_runs_east_west() {
         let tiles = vec![(2, 4), (3, 4), (4, 4), (5, 4)];
         assert!(!bridge_span_axis_y(&tiles));
+    }
+
+    #[test]
+    fn bridge_preview_reorders_a_drag_started_at_the_south_head() {
+        let tiles = vec![(3, 5), (3, 4), (3, 3), (3, 2)];
+        assert_eq!(
+            bridge_preview_render_order(&tiles),
+            vec![(3, 2), (3, 3), (3, 4), (3, 5)]
+        );
+    }
+
+    #[test]
+    fn bridge_preview_deck_z_matches_flat_and_corner_ramps() {
+        assert_eq!(bridge_preview_deck_z(0, 4, 0), 5);
+        assert_eq!(bridge_preview_deck_z(1, 4, 0), 5);
+        assert_eq!(bridge_preview_deck_z(5, 4, 0), 6);
     }
 }

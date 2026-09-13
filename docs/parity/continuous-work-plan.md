@@ -841,6 +841,15 @@ dimensiones entre capas. La cobertura de selección/atlas/anchos queda
 probada; #326/#565 siguen abiertas por callbacks variables, clipping, pivotes
 y aceptación raster.
 
+Corrección #326-BRIDGE-PREVIEW-Z-ORDER (2026-09-13): la preview de puentes
+normaliza el orden del drag a norte→sur antes de elegir `BridgePiece`, de modo
+que arrastrar desde la cabeza opuesta no intercambia rampas ni segmentos del
+vano. Las piezas intermedias usan además la misma cota `GetBridgeDeckZ` que el
+renderer del mapa, en lugar de la altura local del agua/terreno previo a la
+construcción. Las regresiones cubren arrastre invertido y rampas planas,
+alineadas y de esquina; #326 continúa abierta por capas NewGRF específicas de
+preview, clipping, pivotes y aceptación raster.
+
 Actualización #326-ROAD-CATENARY-GLOBAL (2026-09-09): las calles normales
 publican ya los cuatro `AddSortableSpriteToDraw` de cada
 `DrawRoadTypeCatenary` como parents globales: tres recortes traseros con sus

@@ -195,7 +195,7 @@ pub struct ParsedRoadTypeMeta {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedStationMeta {
     /// Primer id local declarado por el bloque Action0.
-    pub local_id: u8,
+    pub local_id: u16,
     /// Cantidad de IDs consecutivos a los que se aplica el bloque Action0.
     pub num_ids: u8,
     pub class_short_label: String,
@@ -1577,11 +1577,10 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
         return None;
     }
     let mut i = 4usize;
-    // Action0 encodes the first id as ExtendedByte. The current station
-    // catalog stores byte IDs, so reject an extended value explicitly rather
-    // than interpreting its WORD bytes as the first property.
-    let local_id = u8::try_from(read_station_extended_byte(payload, &mut i)?).ok()?;
-    if usize::from(local_id).checked_add(usize::from(header.num_ids))? > 256 {
+    // Action0 encodes the first id as ExtendedByte. Read it before the
+    // properties so an extended station id cannot be mistaken for a prop.
+    let local_id = u16::try_from(read_station_extended_byte(payload, &mut i)?).ok()?;
+    if usize::from(local_id).checked_add(usize::from(header.num_ids))? > 0x1_0000 {
         return None;
     }
     let mut class_short = String::from("NGRF");
@@ -1750,7 +1749,7 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
 
 #[allow(clippy::too_many_arguments)] // Agrupa exactamente los campos Action0 ya validados.
 fn finish_parsed_station_meta(
-    local_id: u8,
+    local_id: u16,
     num_ids: u8,
     class_short: String,
     mut label: String,

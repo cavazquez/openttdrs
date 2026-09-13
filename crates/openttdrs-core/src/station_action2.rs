@@ -1365,7 +1365,7 @@ mod tests {
             from_newgrf: true,
             newgrf_preview: None,
             newgrf_views: Vec::new(),
-            newgrf_local_id: local_id,
+            newgrf_local_id: u16::from(local_id),
             newgrf_runtime: Some(runtime),
             newgrf_grfid: grfid,
             newgrf_grf_version: 8,

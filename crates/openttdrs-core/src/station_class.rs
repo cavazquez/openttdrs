@@ -109,7 +109,7 @@ pub struct StationSpecDef {
     pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
     /// Id local Action3 en el GRF (re-resolver Action2 en runtime).
     #[serde(default, skip)]
-    pub newgrf_local_id: u8,
+    pub newgrf_local_id: u16,
     /// Graphics completas si Action2 var/random requiere runtime.
     #[serde(default, skip)]
     pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
@@ -301,7 +301,7 @@ impl StationSpecDef {
         ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
     ) -> Option<crate::newgrf_sprites::DecodedSprite> {
         let runtime = self.newgrf_runtime.as_ref()?;
-        let views = runtime.views_for_local_id_ctx(self.newgrf_local_id, ctx)?;
+        let views = runtime.views_for_local_id_u16_ctx(self.newgrf_local_id, ctx)?;
         if views.is_empty() {
             return None;
         }
@@ -321,11 +321,9 @@ impl StationSpecDef {
         // referencia apunta al primer sprite del set Action1. En cambio,
         // Action0 `0x1A` guarda una pareja X/Y de layouts y usa `view` para
         // seleccionar la entrada correspondiente.
-        self.newgrf_runtime.as_ref()?.tile_layout_for_local_id_ctx(
-            u16::from(self.newgrf_local_id),
-            view,
-            ctx,
-        )
+        self.newgrf_runtime
+            .as_ref()?
+            .tile_layout_for_local_id_ctx(self.newgrf_local_id, view, ctx)
     }
 
     #[must_use]
@@ -553,7 +551,7 @@ pub fn apply_station_build_tile_layout_callback(
         return base_gfx;
     };
     let platinfo = station_platform_info(base_gfx, platforms, length, platform, position);
-    let cb = runtime.resolve_callback(
+    let cb = runtime.resolve_callback_u16(
         def.newgrf_local_id,
         crate::newgrf_sprites::CBID_STATION_BUILD_TILE_LAYOUT,
         platinfo,
@@ -584,7 +582,7 @@ pub fn apply_station_draw_tile_layout_callback(
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
         return base_gfx;
     };
-    let cb = runtime.resolve_callback_ctx(
+    let cb = runtime.resolve_callback_ctx_u16(
         def.newgrf_local_id,
         crate::newgrf_sprites::CBID_STATION_DRAW_TILE_LAYOUT,
         0,

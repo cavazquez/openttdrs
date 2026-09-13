@@ -3492,7 +3492,7 @@ pub fn apply_station_availability_callback_for_build_with_context(
         owner_colour,
         calendar_date,
     );
-    let result = runtime.resolve_callback_ctx(
+    let result = runtime.resolve_callback_ctx_u16(
         def.newgrf_local_id,
         CBID_STATION_AVAILABILITY,
         0,
@@ -3680,7 +3680,7 @@ fn resolve_station_slope_callback_for_build_impl(
             def.newgrf_grf_version,
         );
     }
-    let result = runtime.resolve_callback_ctx(
+    let result = runtime.resolve_callback_ctx_u16(
         def.newgrf_local_id,
         CBID_STATION_LAND_SLOPE_CHECK,
         param1,

@@ -787,7 +787,7 @@ pub struct TrainSpriteGraphics {
     pub tile_layouts: HashMap<u8, TileLayout>,
     /// Layouts avanzados de Action0 `Stations`, indexados por id local. Cada
     /// pareja consecutiva corresponde a las orientaciones X/Y nativas.
-    pub station_advanced_layouts: HashMap<u8, Vec<TileLayout>>,
+    pub station_advanced_layouts: HashMap<u16, Vec<TileLayout>>,
 }
 
 impl TrainSpriteGraphics {
@@ -852,9 +852,7 @@ impl TrainSpriteGraphics {
         view: usize,
         ctx: &mut Action2EvalCtx,
     ) -> Option<ResolvedTileLayout> {
-        if let Ok(local_id) = u8::try_from(local_id)
-            && let Some(layouts) = self.station_advanced_layouts.get(&local_id)
-        {
+        if let Some(layouts) = self.station_advanced_layouts.get(&local_id) {
             let layout = layouts.get(view).or_else(|| layouts.get(view & 1))?;
             return Some(layout.resolve_with_palette_var10(self, ctx, view, true));
         }

@@ -1611,6 +1611,36 @@ mod tests {
     }
 
     #[test]
+    fn apply_station_extended_id_range_keeps_wire_identity() {
+        let mut a0 = build_action0_station_payload(b"EXTS", b"Plat", 0, 0, "Extended station");
+        a0[3] = 2;
+        a0[4] = 0xFF;
+        a0.insert(5, 0x2C); // 300 little-endian, after the ExtendedByte marker.
+        a0.insert(6, 0x01);
+
+        let parsed = parse_action0_station_meta(&a0).expect("extended station metadata");
+        assert_eq!(parsed.local_id, 300);
+        assert_eq!(parsed.num_ids, 2);
+
+        let bytes =
+            build_grf_v2_with_action0_and_action8(&a0, [b'E', b'X', 0, 1], "extended-station", "");
+        let dir = tempfile_dir_with("extended-station.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("extended-station.grf", 2));
+        apply_newgrf_stations(&mut state, &[&dir]);
+
+        let ids: Vec<_> = state
+            .station_spec_catalog
+            .iter()
+            .filter(|candidate| candidate.from_newgrf)
+            .map(|candidate| candidate.newgrf_local_id)
+            .collect();
+        assert_eq!(ids, vec![300, 301]);
+    }
+
+    #[test]
     fn apply_station_with_action2_chain_attaches_views() {
         let a0 = build_action0_station_payload(b"A2ST", b"Plat", 0, 0, "A2 Andén");
         let mut indices = vec![0u8; 8 * 8];

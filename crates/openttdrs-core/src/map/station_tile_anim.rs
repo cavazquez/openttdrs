@@ -1117,7 +1117,8 @@ fn resolve_station_animation_callback(
         return CALLBACK_FAILED;
     };
     ctx.random_bits = param1;
-    let result = runtime.resolve_callback_ctx(def.newgrf_local_id, callback, param1, param2, ctx);
+    let result =
+        runtime.resolve_callback_ctx_u16(def.newgrf_local_id, callback, param1, param2, ctx);
     writeback_station_persistent_registers(station, ctx);
     result
 }

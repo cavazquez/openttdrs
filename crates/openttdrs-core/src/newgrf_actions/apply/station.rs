@@ -62,7 +62,7 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
         for meta in &metas {
             if !meta.advanced_layouts.is_empty() {
                 for offset in 0..meta.num_ids {
-                    let Some(local_id) = meta.local_id.checked_add(offset) else {
+                    let Some(local_id) = meta.local_id.checked_add(u16::from(offset)) else {
                         break;
                     };
                     gfx.station_advanced_layouts
@@ -83,10 +83,10 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
                 layouts.clone_from(src_layouts);
             }
             for offset in 0..meta.num_ids {
-                let Some(local_id) = meta.local_id.checked_add(offset) else {
+                let Some(local_id) = meta.local_id.checked_add(u16::from(offset)) else {
                     break;
                 };
-                layouts_by_local.insert(u16::from(local_id), layouts.clone());
+                layouts_by_local.insert(local_id, layouts.clone());
             }
         }
         for meta in metas {
@@ -109,14 +109,14 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
                 ));
             }
             for offset in 0..meta.num_ids {
-                let Some(local_id) = meta.local_id.checked_add(offset) else {
+                let Some(local_id) = meta.local_id.checked_add(u16::from(offset)) else {
                     break;
                 };
                 let Some(spec_id) = next_free_station_spec_id(&specs) else {
                     break;
                 };
                 let views = gfx
-                    .views_for_local_id(local_id)
+                    .views_for_local_id_u16(local_id)
                     .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                     .unwrap_or_default();
                 let preview = views.first().cloned();
@@ -128,10 +128,7 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
                 } else {
                     None
                 };
-                let custom_layouts = layouts_by_local
-                    .get(&u16::from(local_id))
-                    .cloned()
-                    .unwrap_or_default();
+                let custom_layouts = layouts_by_local.get(&local_id).cloned().unwrap_or_default();
                 specs.push(StationSpecDef {
                     id: spec_id,
                     class: class_id,

@@ -3012,6 +3012,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects(
         images,
         &[],
         &[],
+        &[],
         None,
         &mut batches,
     );
@@ -3036,9 +3037,10 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
     object_counts: Option<&openttdrs_core::ObjectScopeCounts>,
     mut object_sprites: Option<&mut crate::render::NewGrfObjectSpriteCache>,
     mut images: Option<&mut Assets<Image>>,
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     canal_features: &[openttdrs_core::CanalFeatureDef],
     canal_action5: &[Option<openttdrs_core::DecodedSprite>],
-    water_action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     batches: &mut MapSpriteBatches,
 ) {
     let tileh = ctx.info.tileh;
@@ -3086,9 +3088,9 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
                 tileh,
                 "object-newgrf",
                 "object-newgrf-foundation",
-                &[],
-                None,
-                None,
+                foundation_newgrf,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
             )
         });
     let object_surface_base_z = object_foundation
@@ -3271,7 +3273,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
                 batches,
                 canal_features,
                 canal_action5,
-                water_action5_sprites,
+                action5_sprites,
                 images.as_deref_mut(),
             );
         } else if let (Some(cache), Some(image_store)) = (object_sprites.as_mut(), images.as_mut())

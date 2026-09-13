@@ -518,6 +518,15 @@ El estado exacto y la validación de la pausa se mantienen en el
 son los contratos de largo plazo; este documento es el método operativo para
 aplicarlos.
 
+Corrección #326-NEWGRF-OBJECT-ACTION5-FOUNDATIONS (2026-09-13): el draw
+genérico de objetos NewGRF ya consume la tabla Action5 de fundaciones activa y
+la caché compartida del runtime. Las fundaciones niveladas virtuales se
+materializan con el slot, offsets y textura custom del save antes de entrar al
+compositor. La regresión ECS fuerza el bloque 3 (`sprite_id` 5471, slot 58) y
+verifica su imagen en el parent sortable. La ausencia de un slot sigue siendo
+un fallback trazable; callbacks/layouts/children dinámicos completos y la
+aceptación raster sobre saves reales quedan como trabajo posterior.
+
 Corrección #326/#567-BUOY-GLOBAL-SORT (2026-09-12): la línea de boya con
 extensión cero se conserva como parent sortable, no como sprite directo. La
 regresión valida la caja `TILE_SEQ_LINE`, la clave de inserción y el spawn

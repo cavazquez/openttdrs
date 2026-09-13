@@ -12624,6 +12624,183 @@ fn sloped_newgrf_object_tile_layout_matches_foundation_and_no_foundation_flags()
 }
 
 #[test]
+fn sloped_newgrf_object_uses_active_action5_foundation_table() {
+    use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
+
+    let assets = boot_assets_app();
+    let object_type = openttdrs_core::NEW_OBJECT_OFFSET;
+    let coord = TileCoord::new(3, 2);
+    let mut map = Map::new_flat(6, 6, 0);
+    for x in 0..6 {
+        for y in 0..6 {
+            let tile = TileCoord::new(x, y);
+            map.set_height(tile, 4)
+                .expect("foundation neighbour height");
+            // Las construcciones niveladas de los vecinos dejan ambas aristas
+            // de la tesela central sin pared, que selecciona el bloque Action5
+            // virtual 3 igual que DrawFoundation en OpenTTD.
+            map.set_kind(tile, TileKind::Airport)
+                .expect("foundation neighbour kind");
+        }
+    }
+    map.set_height(coord, 5).expect("object slope height");
+    let mut object_tile = tile_template();
+    object_tile.kind = TileKind::Grass;
+    object_tile.mapt = 0xA0;
+    object_tile.m5 = u8::try_from(object_type).expect("NewGRF object type byte");
+    map.set_tile(coord, object_tile)
+        .expect("sloped object tile");
+
+    let ground = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: [240, 10, 10, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let foundation = DecodedSprite {
+        width: 4,
+        height: 4,
+        x_offs: -2,
+        y_offs: -3,
+        rgba: [10, 240, 10, 255].repeat(16),
+        mask: Vec::new(),
+    };
+    let mut runtime = TrainSpriteGraphics {
+        sets: vec![vec![ground.clone()]],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 4,
+            set_id: 9,
+        }],
+        ..Default::default()
+    };
+    runtime.tile_layouts.insert(
+        9,
+        TileLayout {
+            ground: TileLayoutSpriteRef {
+                action1_set: Some(0),
+                ..Default::default()
+            },
+            sequence: Vec::new(),
+        },
+    );
+    let object_def = ObjectSpecDef {
+        id: object_type,
+        class_label: "TEST".into(),
+        name: "Action5 foundation object".into(),
+        size: openttdrs_core::OBJECT_SIZE_1X1,
+        from_newgrf: true,
+        local_id: 4,
+        grfid: 0x4F42_4A54,
+        newgrf_grf_version: 8,
+        climate_mask: openttdrs_core::DEFAULT_OBJECT_CLIMATE_MASK,
+        build_cost_factor: openttdrs_core::DEFAULT_OBJECT_BUILD_COST_FACTOR,
+        clear_cost_factor: openttdrs_core::DEFAULT_OBJECT_CLEAR_COST_FACTOR,
+        flags: 0,
+        animation_frames: 0,
+        animation_status: 0xFF,
+        animation_speed: 2,
+        animation_triggers: 0,
+        callback_mask: 0,
+        views: vec![ground.clone()],
+        newgrf_runtime: Some(Box::new(runtime)),
+        associated_badges: Vec::new(),
+    };
+
+    let foundation_sprite_id = 5471;
+    let foundation_slot =
+        openttdrs_core::foundation_action5_slot_for_sprite_id(foundation_sprite_id)
+            .expect("virtual Action5 foundation slot");
+    assert_eq!(foundation_slot, 58);
+    let mut foundation_newgrf = vec![None; openttdrs_core::FOUNDATION_ACTION5_SLOT_COUNT];
+    foundation_newgrf[foundation_slot] = Some(foundation.clone());
+
+    let grid = RenderGrid::from_map(&map, 6, 6);
+    let ctx = TileRenderContext::new(&map, &grid, coord.x as u32, coord.y as u32);
+    assert_eq!(ctx.info.tileh, 7, "fixture slope must select SLOPE_NES");
+    let decision = crate::render::tiles::forced_leveled_foundation_decision_at(
+        &map,
+        coord,
+        map.dimensions(),
+        ctx.info.tileh,
+        ctx.info.base_z,
+    );
+    assert_eq!(decision.sprite_block, 3);
+    let plan = openttdrs_core::foundation_draw_plan(
+        ctx.info.tileh,
+        openttdrs_core::FOUNDATION_LEVELED,
+        decision.sprite_block,
+    );
+    assert_eq!(
+        plan.sprites[0].expect("Action5 foundation draw").sprite_id,
+        foundation_sprite_id
+    );
+
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfObjectSpriteCache::default());
+    world.insert_resource(crate::render::NewGrfAction5SpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut object_cache: ResMut<crate::render::NewGrfObjectSpriteCache>,
+                  mut action5_cache: ResMut<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                let mut ctx = TileRenderContext::new(&m.0, &g.0, coord.x as u32, coord.y as u32);
+                ctx.object_type = Some(object_type);
+                let mut batches = MapSpriteBatches::default();
+                spawn_generic_land_tile_with_objects_and_water(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &ctx,
+                    &m.0,
+                    4.0,
+                    TEST_CLIMATE,
+                    TEST_WORLD_SEED,
+                    6,
+                    std::slice::from_ref(&object_def),
+                    &[],
+                    &[],
+                    None,
+                    Some(&mut object_cache),
+                    Some(&mut images),
+                    &foundation_newgrf,
+                    &[],
+                    &[],
+                    Some(&mut action5_cache),
+                    &mut batches,
+                );
+                flush_map_batches(&mut commands, batches);
+            },
+        )
+        .expect("sloped object Action5 foundation spawn");
+
+    let parents: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Sprite)>()
+        .iter(&world)
+        .map(|(parent, sprite)| (*parent, sprite.image.clone()))
+        .collect();
+    let images = world.resource::<Assets<Image>>();
+    assert!(
+        parents.iter().any(|(parent, handle)| {
+            parent.sprite_id == foundation_sprite_id
+                && images.get(handle).and_then(|image| image.data.as_deref())
+                    == Some(foundation.rgba.as_slice())
+        }),
+        "el objeto NewGRF debe materializar el bloque de foundation Action5 activo"
+    );
+}
+
+#[test]
 fn newgrf_object_draw_water_uses_persisted_canal_ground_and_edges() {
     use openttdrs_core::map::MP_OBJECT_MAPT;
     use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
@@ -12722,6 +12899,7 @@ fn newgrf_object_draw_water_uses_persisted_canal_ground_and_edges() {
                     None,
                     Some(&mut object_cache),
                     Some(&mut images),
+                    &[],
                     &[],
                     &[],
                     Some(&mut action5_cache),
@@ -12851,6 +13029,7 @@ fn newgrf_object_draw_water_matches_sea_canal_and_river_ground() {
                         None,
                         Some(&mut object_cache),
                         Some(&mut images),
+                        &[],
                         &[],
                         &[],
                         Some(&mut action5_cache),
@@ -12996,6 +13175,7 @@ fn newgrf_object_direct_water_ground_matches_water_classes() {
                         None,
                         Some(&mut object_cache),
                         Some(&mut images),
+                        &[],
                         &[],
                         &[],
                         Some(&mut action5_cache),
@@ -13167,6 +13347,7 @@ fn newgrf_object_draw_water_applies_canal_feature_callback() {
                     None,
                     Some(&mut object_cache),
                     Some(&mut images),
+                    &[],
                     &features,
                     &[],
                     Some(&mut action5_cache),
@@ -13346,6 +13527,7 @@ fn newgrf_object_draw_water_applies_river_edge_feature_callback() {
                     None,
                     Some(&mut object_cache),
                     Some(&mut images),
+                    &[],
                     &features,
                     &[],
                     Some(&mut action5_cache),
@@ -14082,6 +14264,7 @@ fn company_hq_uses_persisted_2x2_footprint_level_and_build_sorting() {
                             None,
                             None,
                             None,
+                            &[],
                             &[],
                             &[],
                             None,

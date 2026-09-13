@@ -354,6 +354,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     Some(&object_counts),
                     Some(object_sprites),
                     Some(images),
+                    &sim.state.runtime.foundation_newgrf_sprites,
                     &sim.state.canal_feature_catalog,
                     &sim.state.runtime.canal_action5_newgrf_sprites,
                     Some(&mut *action5_sprites),

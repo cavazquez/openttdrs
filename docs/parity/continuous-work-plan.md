@@ -7397,6 +7397,14 @@ inclinados consultan ahora `ObjectFlag::HasNoFoundation`, aplican
 ground, las entradas `BUILD` y las vistas de fallback. El ground se vincula al
 último parent de la fundación cuando OpenTTD lo deja activo; con
 `HasNoFoundation` conserva la pendiente y no crea ese parent. La regresión ECS
-cubre `SLOPE_W` en ambas variantes. Las tablas de fundación Action5 específicas
-del objeto, layouts/children dinámicos completos y la aceptación raster sobre
-saves reales siguen pendientes; #326 continúa abierta.
+cubre `SLOPE_W` en ambas variantes.
+
+Corrección #326-NEWGRF-OBJECT-ACTION5-FOUNDATIONS (2026-09-13): el draw
+genérico de objetos NewGRF ya consume la tabla Action5 de fundaciones activa y
+la caché compartida del runtime. Las fundaciones niveladas virtuales se
+materializan con el slot, offsets y textura custom del save; un slot ausente no
+se disfraza como un sprite válido y queda registrado como fallback. La
+regresión ECS usa el bloque 3 (`sprite_id` 5471, slot 58) y verifica la imagen
+en el parent sortable. Siguen abiertas las callbacks/layouts/children
+dinámicos completos y la aceptación raster sobre saves reales; #326 continúa
+abierta.

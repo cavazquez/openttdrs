@@ -990,7 +990,6 @@ pub(crate) fn canal_dike_slots(map: &Map, coord: TileCoord) -> [bool; 12] {
 
 /// Selecciona los slots de borde de `DrawWaterEdges(false, offset, tile)`.
 #[must_use]
-#[cfg(test)]
 pub(crate) fn river_edge_slots(map: &Map, coord: TileCoord) -> [bool; 12] {
     water_edge_slots(map, coord, WaterClass::River)
 }

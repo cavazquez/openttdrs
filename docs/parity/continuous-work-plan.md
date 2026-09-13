@@ -7193,9 +7193,16 @@ Corrección #326-SHIP-DEPOT-PREVIEW-CANAL-FEATURES (2026-09-13): el ghost
 naval resuelve ahora las vistas Action1/3 de `CF_RIVER_SLOPE` y `CF_DIKES` con
 el contexto real de la tesela —random, conectividad, clima y línea de nieve—,
 conservando el ancla de cada `DecodedSprite` y el fallback individual a
-Action5/OpenGFX`; también conserva el callback de desplazamiento de sprite de
+Action5/OpenGFX; también conserva el callback de desplazamiento de sprite de
 canales. Callbacks de aceptación, river edges y captura raster siguen fuera de
 esta unidad; #326 continúa abierta.
+
+Corrección #326-SHIP-DEPOT-PREVIEW-RIVER-EDGES (2026-09-13): el ghost naval
+materializa ahora los slots conectados de `CF_RIVER_EDGE`, aplicando el bloque
+de 12 sprites correspondiente a la pendiente y el mismo contexto Action2 que
+el renderer. Cuando la partida no publica ese feature no se dibuja un borde
+inventado, igual que `DrawWaterEdges(false, ...)`; aceptación raster y otros
+callbacks permanecen fuera de esta unidad; #326 continúa abierta.
 
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_

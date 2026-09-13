@@ -10,9 +10,9 @@ use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
 use crate::render::{
     CompanyColoredSprites, NewGrfAction5SpriteCache, RenderGrid, TileRenderContext,
     TileViewportBounds, ViewportSortableParent, WorldAssets, canal_dike_slots,
-    canal_feature_sprite_for_preview, river_slope_sprite_index,
-    sprite_from_atlas_or_company_colour, sprite_from_company_or_asset, viewport_insertion_key,
-    viewport_source_depth,
+    canal_feature_sprite_for_preview, river_edge_slots, river_edge_sprite_offset,
+    river_slope_sprite_index, sprite_from_atlas_or_company_colour, sprite_from_company_or_asset,
+    viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
     SHIP_DEPOT_PATHS, WATER_CANAL_DIKE_SPRITE_META, WATER_RIVER_SLOPE_SPRITE_META,
@@ -199,6 +199,17 @@ pub(crate) fn spawn_ship_depot_preview(
             action5_sprites,
             images,
         );
+        spawn_ship_depot_river_edges(
+            commands,
+            map,
+            coord,
+            &tile_context,
+            base_z,
+            tint,
+            canal_features,
+            action5_sprites,
+            images,
+        );
         let ref_pos = iso(coord.x, coord.y);
         for (layer_i, layer) in ship_depot_layers(axis_y, part_south).iter().enumerate() {
             let local = remap_tile_offset(layer.dx, layer.dy, 0.0) * 0.5;
@@ -261,6 +272,63 @@ pub(crate) fn spawn_ship_depot_preview(
                 },
             ));
         }
+    }
+}
+
+/// Dibuja los bordes `CF_RIVER_EDGE` que `DrawRiverWater` agrega al ground
+/// del depósito. No hay un fallback OpenGFX para este feature: si la partida
+/// no publica vistas Action1/3, OpenTTD tampoco emite esos sprites.
+#[allow(clippy::too_many_arguments)] // parámetros ECS/assets de spawn
+fn spawn_ship_depot_river_edges(
+    commands: &mut Commands,
+    map: &Map,
+    coord: TileCoord,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    tint: Color,
+    canal_features: &[openttdrs_core::CanalFeatureDef],
+    action5_sprites: &mut NewGrfAction5SpriteCache,
+    images: &mut Assets<Image>,
+) {
+    if map.get(coord).and_then(water_class) != Some(WaterClass::River) {
+        return;
+    }
+    let feature_offset = river_edge_sprite_offset(map, ctx, canal_features);
+    let origin = iso(coord.x, coord.y);
+    for (slot, selected) in river_edge_slots(map, coord).into_iter().enumerate() {
+        if !selected {
+            continue;
+        }
+        let Some((mut sprite, decoded, _)) = canal_feature_sprite_for_preview(
+            map,
+            ctx,
+            openttdrs_core::CF_RIVER_EDGE,
+            feature_offset.saturating_add(slot),
+            canal_features,
+            action5_sprites,
+            images,
+        ) else {
+            continue;
+        };
+        sprite.color = tint;
+        let layer = PREVIEW_WATER_LAYER + 0.010 + slot as f32 * 0.0001;
+        let mut position = overlay_pos(
+            origin,
+            f32::from(decoded.x_offs),
+            f32::from(decoded.y_offs),
+            f32::from(decoded.width),
+            f32::from(decoded.height),
+            base_z,
+            layer,
+            coord.x,
+            coord.y,
+        );
+        position.z = ground_draw_z(coord.x, coord.y, layer);
+        commands.spawn((
+            BuildGhostPreview,
+            sprite,
+            Transform::from_translation(position).with_scale(Vec3::splat(PREVIEW_SCALE)),
+        ));
     }
 }
 

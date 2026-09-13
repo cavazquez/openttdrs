@@ -11,7 +11,7 @@ use openttdrs_core::{EngineDef, VehicleKind};
 use crate::state::SimWorld;
 
 pub(crate) use assets::{NewGrfTrainSpriteCache, NewGrfVehicleLayer, TruckHandles};
-pub(crate) use picking::pick_vehicle_id_at_world;
+pub(crate) use picking::{pick_vehicle_id_at_world, pick_vehicle_id_at_world_with_newgrf};
 pub(crate) use plugin::VehicleRenderPlugin;
 pub(crate) use pose::{
     vehicle_draw_anchor_from_pose, vehicle_sprite_pos_at_with_catalog,
@@ -332,7 +332,7 @@ mod tests {
         TRAIN_WAGON_PASSENGER_LAYERS,
     };
     use assets::{TruckHandles, vehicle_layers};
-    use picking::pick_vehicle_id_at_world;
+    use picking::{pick_vehicle_id_at_world, pick_vehicle_id_at_world_with_newgrf};
     use pose::{
         vehicle_parent_bounds, vehicle_sprite_pos, vehicle_sprite_pos_at,
         vehicle_sprite_pos_at_with_catalog,
@@ -637,6 +637,59 @@ mod tests {
         assert!(catalog_pos.distance(vanilla_pos) > 34.0);
         assert_eq!(pick_vehicle_id_at_world(catalog_pos, &sim), Some(43));
         assert_eq!(pick_vehicle_id_at_world(vanilla_pos, &sim), None);
+    }
+
+    #[test]
+    fn pick_vehicle_uses_runtime_sprite_offsets() {
+        let mut sim = SimWorld {
+            state: openttdrs_core::GameState::new(16, 16),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let tile = TileCoord::new(4, 4);
+        sim.state
+            .map
+            .set_kind(tile, TileKind::Rail)
+            .expect("rail tile");
+
+        let engine = eight_layer_sprite_stack_engine(0x7F09, 96);
+        sim.state.engine_catalog.push(engine.clone());
+        let mut vehicle = Vehicle::new(44, VehicleKind::Train, tile, tile);
+        vehicle.engine_id = Some(engine.id);
+        sim.state.vehicles.push(vehicle);
+
+        let vehicle = &sim.state.vehicles[0];
+        let pose = openttdrs_core::extrapolate_vehicle_pose(vehicle, 0.0);
+        let vanilla_pos = vehicle_sprite_pos_at(vehicle, &sim.state.map, pose).truncate();
+        let handles = default_handles();
+        let mut cache = NewGrfTrainSpriteCache::default();
+        let mut images = Assets::<Image>::default();
+        let runtime_pos =
+            vehicle_world_position_with_newgrf(&sim, &handles, vehicle, &mut cache, &mut images)
+                .truncate();
+
+        assert!(runtime_pos.distance(vanilla_pos) > 34.0);
+        assert_eq!(pick_vehicle_id_at_world(runtime_pos, &sim), None);
+        assert_eq!(
+            pick_vehicle_id_at_world_with_newgrf(
+                runtime_pos,
+                &sim,
+                &handles,
+                &mut cache,
+                &mut images,
+            ),
+            Some(44)
+        );
+        assert_eq!(
+            pick_vehicle_id_at_world_with_newgrf(
+                vanilla_pos,
+                &sim,
+                &handles,
+                &mut cache,
+                &mut images,
+            ),
+            None
+        );
     }
 
     #[test]

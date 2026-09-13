@@ -6,7 +6,8 @@ use openttdrs_core::TileKind;
 
 use crate::iso::{world_pos_to_tile_coord, world_pos_to_tile_fract};
 use crate::render::{
-    MapPreviewCamera, PrimaryGameCamera, pick_vehicle_id_at_world, town_id_at_label_pos,
+    MapPreviewCamera, NewGrfTrainSpriteCache, PrimaryGameCamera, TruckHandles,
+    pick_vehicle_id_at_world, pick_vehicle_id_at_world_with_newgrf, town_id_at_label_pos,
 };
 use crate::state::{OrderPickState, order_pick_active};
 use crate::ui::hud::HoveredTileCoord;
@@ -49,6 +50,9 @@ pub(crate) fn handle_tile_click(
     >,
     hovered: Res<HoveredTileCoord>,
     time: Res<Time>,
+    trucks: Option<Res<TruckHandles>>,
+    mut newgrf_cache: Option<ResMut<NewGrfTrainSpriteCache>>,
+    mut images: Option<ResMut<Assets<Image>>>,
 ) {
     let minimap_layers = &*panels.minimap_layers;
 
@@ -152,7 +156,16 @@ pub(crate) fn handle_tile_click(
         )
     };
 
-    let vehicle_under_cursor = pick_vehicle_id_at_world(world_pos, &apply_ctx.sim);
+    let vehicle_under_cursor = match (
+        trucks.as_deref(),
+        newgrf_cache.as_deref_mut(),
+        images.as_deref_mut(),
+    ) {
+        (Some(trucks), Some(cache), Some(images)) => {
+            pick_vehicle_id_at_world_with_newgrf(world_pos, &apply_ctx.sim, trucks, cache, images)
+        }
+        _ => pick_vehicle_id_at_world(world_pos, &apply_ctx.sim),
+    };
     let town_label_under_cursor = town_id_at_label_pos(&apply_ctx.sim, world_pos);
     let tile_kind = apply_ctx.sim.state.map.get_kind(build_pos);
     let is_hangar = tile_kind == Some(TileKind::Airport)

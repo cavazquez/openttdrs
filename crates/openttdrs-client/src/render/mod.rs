@@ -115,10 +115,10 @@ pub(crate) use vehicles::{
     AircraftRotorSprite, AircraftShadowSprite, ConsistUnitSprite, NewGrfTrainSpriteCache,
     NewGrfVehicleLayer, TruckHandles, VEHICLE_IMAGE_TYPE_IN_DEPOT, VEHICLE_IMAGE_TYPE_IN_DETAILS,
     VEHICLE_IMAGE_TYPE_IN_LIST, VehicleCargoLabel, VehicleIndex, VehicleRenderPlugin,
-    VehicleSprite, aircraft_rotor_preview_layers, pick_vehicle_id_at_world, vehicle_preview_layers,
-    vehicle_preview_livery_colours, vehicle_side_layers_for_sim_with_image_type,
-    vehicle_sprite_pos_at_with_catalog, vehicle_world_position_with_catalog,
-    vehicle_world_position_with_newgrf,
+    VehicleSprite, aircraft_rotor_preview_layers, pick_vehicle_id_at_world,
+    pick_vehicle_id_at_world_with_newgrf, vehicle_preview_layers, vehicle_preview_livery_colours,
+    vehicle_side_layers_for_sim_with_image_type, vehicle_sprite_pos_at_with_catalog,
+    vehicle_world_position_with_catalog, vehicle_world_position_with_newgrf,
 };
 pub(crate) use viewport::{
     ABSOLUTE_MAX_ORTHO_SCALE, MIN_ORTHO_SCALE, TileViewportBounds, chunk_tile_bounds,

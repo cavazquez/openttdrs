@@ -485,6 +485,46 @@ fn sprite_palette_indices(sprite: &DecodedSprite) -> Option<Vec<u8>> {
     (indices.len() == pixel_count).then_some(indices)
 }
 
+/// Hornea un mapa de paleta Action1 sobre un sprite `NewGRF`.
+///
+/// `OpenTTD` representa estos mapas como un sprite `256×1`: cada píxel de la
+/// paleta contiene el índice DOS que reemplaza al índice del sprite fuente.
+/// El blitter deja intacto un píxel cuando el mapa devuelve cero, por lo que
+/// se conserva esa semántica aquí. La máscara 32bpp sigue aportando el índice
+/// fuente y su brillo, mientras que los sprites 8bpp se reconstruyen desde su
+/// RGBA DOS exacto.
+#[must_use]
+pub fn bake_sprite_palette_map(sprite: &DecodedSprite, map: &DecodedSprite) -> Option<Vec<u8>> {
+    let source_indices = sprite_palette_indices(sprite)?;
+    let map_indices = sprite_palette_indices(map)?;
+    if map_indices.len() < 256 {
+        return None;
+    }
+
+    let mut rgba = sprite.rgba.clone();
+    let pixel_count = source_indices.len().min(rgba.len() / 4);
+    let masked = !sprite.mask.is_empty();
+    for (pixel_index, &source) in source_indices.iter().take(pixel_count).enumerate() {
+        if source == 0 {
+            continue;
+        }
+        let target = map_indices[usize::from(source)];
+        if target == 0 {
+            continue;
+        }
+        let target_rgb = DOS_PALETTE_RGB[usize::from(target)];
+        let pixel = &mut rgba[pixel_index * 4..pixel_index * 4 + 4];
+        let tuned = if masked {
+            let brightness = pixel[0].max(pixel[1]).max(pixel[2]);
+            adjust_brightness_rgb(target_rgb, brightness)
+        } else {
+            target_rgb
+        };
+        pixel[..3].copy_from_slice(&tuned);
+    }
+    Some(rgba)
+}
+
 fn standard_twocc_colour(index: u8, primary: u8, secondary: u8) -> Option<[u8; 3]> {
     let (colour, shade) = if (0x50..=0x57).contains(&index) {
         (secondary, usize::from(index - 0x50))

@@ -45,12 +45,12 @@ pub use model::{
 // Re-exportar funciones de runtime de pixel_codec
 pub use pixel_codec::{
     SPRITE_V2_ZOOM_PREFERENCE, apply_company_colour_mask, bake_sprite_company_mask,
-    bake_sprite_company_palette, bake_sprite_crash, bake_sprite_two_company_palette,
-    bake_sprite_two_company_palette_with_map, decode_chunked_8bpp, decode_chunked_pixels,
-    decode_real_sprite_v1, decode_real_sprite_v1_uncompressed, decode_real_sprite_v2_section,
-    decode_real_sprite_v2_section_zoom, decompress_grf_lz77, encode_chunked_8bpp_full_rows,
-    encode_chunked_pixels_full_rows, index_sprite_section, indices_to_rgba, resolve_fd_sprite,
-    sprite_v2_bpp,
+    bake_sprite_company_palette, bake_sprite_crash, bake_sprite_palette_map,
+    bake_sprite_two_company_palette, bake_sprite_two_company_palette_with_map, decode_chunked_8bpp,
+    decode_chunked_pixels, decode_real_sprite_v1, decode_real_sprite_v1_uncompressed,
+    decode_real_sprite_v2_section, decode_real_sprite_v2_section_zoom, decompress_grf_lz77,
+    encode_chunked_8bpp_full_rows, encode_chunked_pixels_full_rows, index_sprite_section,
+    indices_to_rgba, resolve_fd_sprite, sprite_v2_bpp,
 };
 
 // Re-exportar funciones de runtime de action_graph

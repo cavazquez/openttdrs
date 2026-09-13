@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::action2::{eval_action2_random, eval_action2_var, resolve_callback_chain};
-use super::pixel_codec::bake_sprite_company_palette;
+use super::pixel_codec::{bake_sprite_company_palette, bake_sprite_palette_map};
 
 /// Rango `PALETTE_RECOLOUR_START..=+15` que puede hornearse sin conservar un
 /// identificador de paleta en el cliente. Otras paletas directas necesitan
@@ -184,10 +184,10 @@ fn resolve_layout_sprite(
     _view: usize,
     complete: &mut bool,
 ) -> Option<ResolvedTileLayoutSprite> {
-    // Palettes are still represented as raw ids by `DecodedSprite`. Do not
-    // draw a custom sprite with the wrong recolour: callers fall back
-    // atomically until the palette map is available.
-    if reference.flags & (0x04 | 0x08 | 0x80) != 0 {
+    // Register-driven palettes and var10 palette chains still need the
+    // original blitter metadata. Static custom Action1 palettes are baked
+    // below, so they can continue through the common TileLayout path.
+    if reference.flags & (0x04 | 0x80) != 0 {
         *complete = false;
         return None;
     }
@@ -288,10 +288,35 @@ fn resolve_layout_sprite_asset(
             *complete = false;
             return None;
         };
-        let Some(sprite) = sprites.get(sprite_index).cloned() else {
+        let Some(mut sprite) = sprites.get(sprite_index).cloned() else {
             *complete = false;
             return None;
         };
+        if reference.flags & 0x08 != 0 {
+            let Some(palette_set) = reference.palette_action1_set else {
+                *complete = false;
+                return None;
+            };
+            let Some(palettes) = graphics.sets.get(usize::from(palette_set)) else {
+                *complete = false;
+                return None;
+            };
+            let Some(palette) = palettes.first() else {
+                *complete = false;
+                return None;
+            };
+            let Some(rgba) = bake_sprite_palette_map(&sprite, palette) else {
+                *complete = false;
+                return None;
+            };
+            sprite.rgba = rgba;
+            // La paleta Action1 ya quedó horneada. Evitar que el cliente
+            // vuelva a aplicar la máscara de compañía por defecto.
+            sprite.mask.clear();
+        } else if reference.palette_action1_set.is_some() {
+            *complete = false;
+            return None;
+        }
         if reference.direct_palette == 0 {
             return Some((Some(sprite), None));
         }
@@ -322,7 +347,10 @@ fn resolve_layout_sprite_asset(
     // A direct baseset sprite can be materialized only while its identity stays
     // constant and uses PAL_NONE. Keep the atomic fallback for register-selected
     // or recoloured base sprites.
-    if reference.direct_palette != 0 || reference.flags & (0x02 | 0x40) != 0 {
+    if reference.direct_palette != 0
+        || reference.flags & (0x02 | 0x40 | 0x08) != 0
+        || reference.palette_action1_set.is_some()
+    {
         *complete = false;
         return None;
     }

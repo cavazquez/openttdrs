@@ -1433,6 +1433,71 @@ mod tests {
     }
 
     #[test]
+    fn tile_layout_honours_static_custom_action1_palette() {
+        let sprite = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: crate::newgrf_sprites::indices_to_rgba(&[198], 1, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let mut map_indices: Vec<u8> = (0..=u8::MAX).collect();
+        map_indices[198] = 175;
+        let palette = DecodedSprite {
+            width: 256,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: crate::newgrf_sprites::indices_to_rgba(&map_indices, 256, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![sprite.clone()], vec![palette]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 7,
+                set_id: 9,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    palette_action1_set: Some(1),
+                    flags: 0x08,
+                    ..TileLayoutSpriteRef::default()
+                },
+                sequence: Vec::new(),
+            },
+        );
+
+        let mut ctx = Action2EvalCtx::default();
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("custom Action1 palette TileLayout");
+        let ground = layout.ground.expect("ground");
+        assert!(layout.complete);
+        assert_eq!(
+            ground.action1_sprite().map(|decoded| decoded.rgba.clone()),
+            Some(
+                crate::newgrf_sprites::bake_sprite_palette_map(
+                    &sprite,
+                    graphics.sets[1].first().expect("palette map"),
+                )
+                .expect("valid palette map")
+            )
+        );
+        assert!(
+            ground
+                .action1_sprite()
+                .is_some_and(|decoded| decoded.mask.is_empty()),
+            "el mapa Action1 horneado no debe reaplicarse como máscara"
+        );
+    }
+
+    #[test]
     fn parse_industry_production_groups_all_versions() {
         // v0: 3 signed words, 2 unsigned words, again.
         let mut v0 = vec![0x02, ACTION0_FEATURE_INDUSTRIES, 4, 0];

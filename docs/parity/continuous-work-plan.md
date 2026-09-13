@@ -6641,3 +6641,15 @@ resuelto. Las regresiones cubren las tres entradas y verifican la resolución
 posterior. La aplicación efectiva de transparencia, recolour y la paleta por
 defecto en el blitter Bevy es una subetapa separada; #326/#329 permanecen
 abiertas.
+
+Corrección #326/#329-TILELAYOUT-PALETTE-POLICY (2026-09-13, `1c16316c`): las
+cachés de estaciones, industrias, casas, objetos, road-stops y airport-tiles
+incluyen los modifiers en su identidad para no reutilizar una textura de otra
+variante. La paleta por defecto se hornea sólo cuando el layout declara
+`transparent` o `recolour`; `opaque` por sí solo conserva los píxeles base.
+Road-stops y airport-tiles pasan además el color de compañía al mismo helper
+que usa el resto del renderer, y un ground directo del baseset con modifier no
+representable mantiene el fallback atómico. Esto cubre la selección de paleta
+y evita recolors espurios; la composición destino de `transparent`, la
+visibilidad de `opaque` frente a las preferencias de ocultar y las paletas
+especiales continúan pendientes, por lo que #326/#329 siguen abiertas.

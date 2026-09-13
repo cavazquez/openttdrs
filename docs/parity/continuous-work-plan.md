@@ -7140,3 +7140,12 @@ para puentes rojos, amarillos, marrones, blancos y concretos. El recurso es
 opcional para conservar el fallback PNG en escenas de arranque o tests aislados;
 cuando está disponible no se duplica el recolor ni se altera la textura original.
 #326 continúa abierta por sprites/callbacks NewGRF custom y aceptación raster.
+
+Corrección #326-BRIDGE-PREVIEW-ACTION5-DECK (2026-09-13): los vanos de la
+preview consultan ahora los 24 slots Action5 `0x1B` de tableros de puente con
+la misma combinación transporte/eje que el renderer materializado. El sprite
+NewGRF se compone sólo cuando no existe una superficie `ROTSG_BRIDGE` de
+roadtype, respetando la prioridad del contrato y conservando el fallback
+vanilla; las cabezas siguen usando sus Action5/atlas específicos. #326 continúa
+abierta por callbacks y sprites estructurales NewGRF custom restantes, además
+de la aceptación raster.

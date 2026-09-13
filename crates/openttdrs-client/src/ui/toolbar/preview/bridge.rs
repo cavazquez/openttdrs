@@ -9,7 +9,7 @@ use openttdrs_core::{
 
 use crate::iso::{
     HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half, iso, overlay_pos, remap_tile_offset,
-    slope_half_h, slope_sprite_offset, tile_slope_and_min_z,
+    slope_half_h, slope_sprite_offset, tile_pos_half, tile_slope_and_min_z,
 };
 use crate::render::{
     BridgeRampGround, CatenarySpriteAnchor, NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache,
@@ -39,6 +39,7 @@ const RAMP_GROUND_LAYER: f32 = DECK_LAYER - 0.001;
 const PILLAR_BACK_LAYER: f32 = DECK_LAYER - 0.003;
 const PILLAR_LAYER: f32 = DECK_LAYER - 0.002;
 const CUSTOM_BRIDGE_LAYER: f32 = DECK_LAYER + 0.001;
+const ACTION5_BRIDGE_DECK_LAYER: f32 = DECK_LAYER + 0.001;
 const CUSTOM_OVERLAY_LAYER: f32 = DECK_LAYER + 0.002;
 const CUSTOM_CATENARY_BACK_LAYER: f32 = DECK_LAYER + 0.003;
 const CUSTOM_CATENARY_FRONT_LAYER: f32 = FRONT_LAYER + 0.002;
@@ -68,6 +69,7 @@ pub(crate) struct BridgeSpanPreviewSpawn<'a> {
     pub action5_sprites: &'a mut NewGrfAction5SpriteCache,
     pub images: &'a mut Assets<Image>,
     pub bridge_assets: Option<&'a WorldAssets>,
+    pub bridge_decks_newgrf: &'a [Option<openttdrs_core::DecodedSprite>],
     pub bridge_type: BridgeType,
     pub stations: &'a [openttdrs_core::Station],
     pub road_stop_catalog: &'a [openttdrs_core::RoadStopSpecDef],
@@ -881,6 +883,7 @@ pub(crate) fn spawn_bridge_span_preview(
         action5_sprites,
         images,
         bridge_assets,
+        bridge_decks_newgrf,
         bridge_type,
         stations,
         road_stop_catalog,
@@ -1020,7 +1023,7 @@ pub(crate) fn spawn_bridge_span_preview(
             .with_scale(Vec3::new(1.002, 1.002, 1.0)),
         ));
 
-        if let Some((def, source_coord, source_tile)) = road_source
+        let custom_bridge_surface = if let Some((def, source_coord, source_tile)) = road_source
             && let Some((sprite, view)) = custom_bridge_preview_layer(
                 def,
                 map,
@@ -1034,8 +1037,7 @@ pub(crate) fn spawn_bridge_span_preview(
                 road_sprites,
                 images,
                 tint,
-            )
-        {
+            ) {
             commands.spawn((
                 BuildGhostPreview,
                 sprite,
@@ -1049,6 +1051,37 @@ pub(crate) fn spawn_bridge_span_preview(
                     CUSTOM_BRIDGE_LAYER,
                     px,
                     py,
+                ))
+                .with_scale(Vec3::splat(1.002)),
+            ));
+            true
+        } else {
+            false
+        };
+
+        // El Action5 `0x1B` reemplaza sólo la superficie vanilla del vano. Si
+        // un roadtype ya aporta `ROTSG_BRIDGE`, esa capa custom tiene prioridad
+        // igual que en `DrawTile_TunnelBridge` y no se duplica debajo.
+        if is_middle
+            && !custom_bridge_surface
+            && let Some(slot) = openttdrs_core::bridge_decks_action5_slot(is_rail, rail_type, axis)
+            && let Some(sprite) = action5_sprites.sprite_colored(
+                openttdrs_core::ACTION5_TYPE_BRIDGE_DECKS,
+                slot,
+                bridge_decks_newgrf,
+                tint,
+                images,
+            )
+        {
+            commands.spawn((
+                BuildGhostPreview,
+                sprite,
+                Transform::from_translation(tile_pos_half(
+                    px,
+                    py,
+                    surface_z,
+                    ACTION5_BRIDGE_DECK_LAYER,
+                    TILE_HALF_H,
                 ))
                 .with_scale(Vec3::splat(1.002)),
             ));

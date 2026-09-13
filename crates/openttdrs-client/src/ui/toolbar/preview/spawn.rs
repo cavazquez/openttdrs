@@ -141,6 +141,7 @@ pub(crate) fn spawn_preview_plan(
                     action5_sprites: &mut preview_newgrf.action5_sprites,
                     images: &mut preview_newgrf.images,
                     bridge_assets,
+                    bridge_decks_newgrf: &sim.state.runtime.bridge_decks_newgrf_sprites,
                     bridge_type,
                     stations: &sim.state.stations,
                     road_stop_catalog: &sim.state.road_stop_spec_catalog,

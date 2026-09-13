@@ -4386,6 +4386,7 @@ fn spawn_newgrf_airport_layout_ground(
     ctx: &TileRenderContext,
     base_z: u8,
     map_width: u32,
+    owner_colour: Option<CompanyColour>,
     foundation_child_parent: Option<Entity>,
     gfx: u16,
     runtime_fp: u32,
@@ -4405,10 +4406,11 @@ fn spawn_newgrf_airport_layout_ground(
         let Some(slot) = airport_tile_layout_cache_slot(gfx, 0) else {
             return false;
         };
-        let image = cache.handle_for_variant(
+        let image = cache.handle_for_variant_with_company_colour(
             AIRPORT_TILE_ACTION3_CACHE_TYPE,
             slot,
             runtime_fp,
+            owner_colour,
             decoded,
             images,
         );
@@ -4472,6 +4474,7 @@ fn spawn_newgrf_airport_layout_sequence(
     ctx: &TileRenderContext,
     base_z: u8,
     map_width: u32,
+    owner_colour: Option<CompanyColour>,
     gfx: u16,
     runtime_fp: u32,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
@@ -4491,10 +4494,11 @@ fn spawn_newgrf_airport_layout_sequence(
         let Some(slot) = airport_tile_layout_cache_slot(gfx, index.saturating_add(1)) else {
             return false;
         };
-        let handle = cache.handle_for_variant(
+        let handle = cache.handle_for_variant_with_company_colour(
             AIRPORT_TILE_ACTION3_CACHE_TYPE,
             slot,
             runtime_fp,
+            owner_colour,
             decoded,
             images,
         );
@@ -4625,6 +4629,7 @@ fn spawn_newgrf_airport_tile(
     commands: &mut Commands,
     ctx: &TileRenderContext,
     base_z: u8,
+    owner_colour: Option<CompanyColour>,
     gfx: u16,
     map: &Map,
     map_width: u32,
@@ -4680,10 +4685,11 @@ fn spawn_newgrf_airport_tile(
     let (Some(cache), Some(images)) = (cache, images) else {
         return false;
     };
-    let image = cache.handle_for_variant(
+    let image = cache.handle_for_variant_with_company_colour(
         AIRPORT_TILE_ACTION3_CACHE_TYPE,
         gfx,
         runtime_fp,
+        owner_colour,
         &view,
         images,
     );
@@ -5690,6 +5696,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                     ctx,
                     custom_base_z,
                     dims.0,
+                    owner_colour,
                     child_parent,
                     gfx,
                     runtime_fp,
@@ -5709,6 +5716,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                     ctx,
                     custom_base_z,
                     dims.0,
+                    owner_colour,
                     gfx,
                     runtime_fp,
                     &layout,
@@ -5763,6 +5771,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                     commands,
                     ctx,
                     custom_base_z,
+                    owner_colour,
                     gfx,
                     map,
                     dims.0,

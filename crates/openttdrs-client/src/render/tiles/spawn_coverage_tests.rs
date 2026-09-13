@@ -9731,7 +9731,9 @@ fn rotated_newgrf_airport_layout_selects_relative_runtime_and_action5_foundation
         x_offs: -1,
         y_offs: -2,
         rgba: [20, 220, 80, 255].repeat(4),
-        mask: Vec::new(),
+        // Rampa autora 198: el aeropuerto pertenece a la compañía Green y
+        // el renderer debe hornear esta máscara antes de subir la textura.
+        mask: vec![198; 4],
     };
     let fallback_ground = DecodedSprite {
         width: 2,
@@ -9887,7 +9889,7 @@ fn rotated_newgrf_airport_layout_selects_relative_runtime_and_action5_foundation
                     &mut commands,
                     &a.0,
                     None,
-                    None,
+                    Some(crate::sprites::CompanyColour::Green),
                     &TileRenderContext::new(&m.0, &g.0, 3, 2),
                     4.0,
                     false,
@@ -9931,6 +9933,10 @@ fn rotated_newgrf_airport_layout_selects_relative_runtime_and_action5_foundation
         .map(|(child, sprite)| (*child, sprite.image.clone()))
         .collect();
     let images = world.resource::<Assets<Image>>();
+    let selected_ground_recolored = openttdrs_core::bake_sprite_company_mask(
+        &selected_ground,
+        crate::sprites::CompanyColour::Green.as_u8(),
+    );
     let foundation_entity = parents
         .iter()
         .find(|(_, _, handle)| {
@@ -9956,10 +9962,16 @@ fn rotated_newgrf_airport_layout_selects_relative_runtime_and_action5_foundation
         "el BUILD del layout rotado debe conservar su parent independiente"
     );
     assert!(
-        images
+        images.iter().any(|(_, image)| {
+            image.data.as_deref() == Some(selected_ground_recolored.as_slice())
+        }),
+        "0x43 debe seleccionar el ground E/O y aplicar la paleta de compañía"
+    );
+    assert!(
+        !images
             .iter()
             .any(|(_, image)| { image.data.as_deref() == Some(selected_ground.rgba.as_slice()) }),
-        "0x43 debe seleccionar el ground de la posición directa E/O"
+        "el ground del aeropuerto no debe quedar en la rampa autora"
     );
     assert!(
         !images
@@ -9970,7 +9982,7 @@ fn rotated_newgrf_airport_layout_selects_relative_runtime_and_action5_foundation
     let ground_is_child = children.iter().any(|(child, handle)| {
         child.parent == foundation_entity
             && images.get(handle).and_then(|image| image.data.as_deref())
-                == Some(selected_ground.rgba.as_slice())
+                == Some(selected_ground_recolored.as_slice())
     });
     assert!(
         ground_is_child,

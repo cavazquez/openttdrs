@@ -52,6 +52,27 @@ impl NewGrfAction5SpriteCache {
         )
     }
 
+    /// Textura de una variante Action2 que conserva la máscara de color de
+    /// compañía. `AirportTile` usa este caché sintético para sus layouts, y
+    /// necesita la misma transformación que estaciones/industrias aunque no
+    /// pertenezca a una tabla Action5 real.
+    pub(crate) fn handle_for_variant_with_company_colour(
+        &mut self,
+        type_id: u8,
+        slot: u16,
+        runtime_fp: u32,
+        colour: Option<CompanyColour>,
+        sprite: &DecodedSprite,
+        images: &mut Assets<Image>,
+    ) -> Handle<Image> {
+        self.handle_for_policy(
+            (type_id, slot, runtime_fp, colour),
+            sprite,
+            DecodedSpriteImagePolicy::MaskedAndRecolored { colour },
+            images,
+        )
+    }
+
     fn handle_for_policy(
         &mut self,
         key: Action5CacheKey,

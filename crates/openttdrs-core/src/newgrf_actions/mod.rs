@@ -3212,6 +3212,56 @@ mod tests {
     }
 
     #[test]
+    fn parse_station_advanced_layout_maps_native_sprite_modifiers() {
+        let mut payload = vec![0x00, ACTION0_FEATURE_STATIONS, 0x02, 0x01, 0x00];
+        payload.extend_from_slice(&[0x08, b'M', b'O', b'D', b'S']);
+        payload.extend_from_slice(&[0x1A, 0x02]); // two orientations
+        for (sprite, palette) in [(0xC005_u16, 0x4000_u16), (0x0006, 0x0000)] {
+            payload.push(0x40); // flags present, ground only
+            payload.extend_from_slice(&sprite.to_le_bytes());
+            payload.extend_from_slice(&palette.to_le_bytes());
+            payload.extend_from_slice(&0_u16.to_le_bytes());
+        }
+
+        let meta = parse_action0_station_meta(&payload).expect("station metadata");
+        let layouts = meta.action0_layouts.expect("advanced layouts");
+        assert_eq!(layouts[0].ground.direct_sprite, 5);
+        assert_eq!(layouts[0].ground.direct_palette, 0);
+        assert_eq!(
+            layouts[0].ground.sprite_modifiers,
+            crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
+                | crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR
+                | crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE
+        );
+        assert_eq!(layouts[1].ground.direct_sprite, 6);
+        assert_eq!(layouts[1].ground.sprite_modifiers, 0);
+    }
+
+    #[test]
+    fn parse_station_legacy_layout_maps_native_sprite_modifiers() {
+        let mut payload = vec![0x00, ACTION0_FEATURE_STATIONS, 0x02, 0x01, 0x00];
+        payload.extend_from_slice(&[0x08, b'L', b'M', b'O', b'D']);
+        payload.extend_from_slice(&[0x09, 0x02]); // two orientations
+        for _ in 0..2 {
+            payload.extend_from_slice(&0xC005_u16.to_le_bytes());
+            payload.extend_from_slice(&0x4000_u16.to_le_bytes());
+            payload.push(0x80); // no building sprites
+        }
+
+        let meta = parse_action0_station_meta(&payload).expect("station metadata");
+        let layouts = meta.action0_layouts.expect("legacy layouts");
+        assert_eq!(layouts.len(), 2);
+        assert_eq!(layouts[0].ground.direct_sprite, 5);
+        assert_eq!(layouts[0].ground.direct_palette, 0);
+        assert_eq!(
+            layouts[0].ground.sprite_modifiers,
+            crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
+                | crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR
+                | crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE
+        );
+    }
+
+    #[test]
     fn apply_station_badges_uses_globalvar_translation_table() {
         let badge = build_action0_badge_payload(b"GATE", 0, None);
         let badge_translation = vec![

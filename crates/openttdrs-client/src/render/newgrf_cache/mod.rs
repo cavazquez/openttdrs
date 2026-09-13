@@ -131,6 +131,7 @@ mod tests {
                 mask: Vec::new(),
             }),
             base_sprite: None,
+            sprite_modifiers: 0,
             origin: [0, 0, 0],
             extent: [1, 1, 1],
         }
@@ -141,6 +142,7 @@ mod tests {
         let direct_ground = ResolvedTileLayoutSprite {
             sprite: None,
             base_sprite: Some(3981),
+            sprite_modifiers: 0,
             origin: [0, 0, 0],
             extent: [0, 0, 0],
         };

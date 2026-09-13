@@ -11,13 +11,13 @@ use crate::newgrf_actions::{
 use crate::newgrf_config::{GrfContainerVersion, GrfScanError, parse_grf_full};
 use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
 
-use super::model::tile_layout_flags_valid;
 use super::model::{
     ACTION2_PARENT_SCOPE_MARKER, Action2RandomEntry, Action2VarAdjust, Action2VarEntry,
     Action2VarOp, Action2VarTerm, DecodedSprite, IndustryProductionGroup, TileLayout,
     TileLayoutRegisterRefs, TileLayoutSpriteRef, TrainSpriteAssign, TrainSpriteGraphics,
     WagonOverrideAssign,
 };
+use super::model::{map_tile_layout_sprite_modifiers, tile_layout_flags_valid};
 use super::pixel_codec::{decode_real_sprite_entry, index_sprite_section, resolve_fd_sprite};
 
 fn parse_action1_feature(payload: &[u8], feature: u8) -> Option<(u8, u8)> {
@@ -76,10 +76,10 @@ fn parse_action2_tile_layout(payload: &[u8], feature: u8) -> Option<(u8, TileLay
 
     let mut read_sprite = |is_ground: bool| {
         let sprite_bytes = payload.get(cursor..cursor.checked_add(2)?)?;
-        let sprite = u16::from_le_bytes([sprite_bytes[0], sprite_bytes[1]]);
+        let mut sprite = u16::from_le_bytes([sprite_bytes[0], sprite_bytes[1]]);
         cursor += 2;
         let palette_bytes = payload.get(cursor..cursor.checked_add(2)?)?;
-        let palette = u16::from_le_bytes([palette_bytes[0], palette_bytes[1]]);
+        let mut palette = u16::from_le_bytes([palette_bytes[0], palette_bytes[1]]);
         cursor += 2;
         let flags = if has_flags {
             let flag_bytes = payload.get(cursor..cursor.checked_add(2)?)?;
@@ -93,18 +93,19 @@ fn parse_action2_tile_layout(payload: &[u8], feature: u8) -> Option<(u8, TileLay
             0
         };
 
+        let sprite_modifiers = map_tile_layout_sprite_modifiers(&mut sprite, &mut palette);
         // `ReadSpriteLayoutSprite` uses palette bit 15 as the Action1 marker
         // for the sprite itself. The palette reference is meaningful only
         // when TLF_CUSTOM_PALETTE is enabled, but retaining it here lets later
         // runtime work apply the same distinction without reparsing the GRF.
         let custom_sprite = palette & 0x8000 != 0;
         let action1_set = custom_sprite.then_some(sprite & 0x3FFF);
-        let direct_sprite = if custom_sprite { 0 } else { sprite };
+        let direct_sprite = if custom_sprite { 0 } else { sprite & 0x3FFF };
         // `TLF_CUSTOM_PALETTE` selects the palette Action1 set independently
         // of bit 15; the native reader clears that bit before the index.
         let custom_palette = flags & 0x08 != 0;
         let palette_action1_set = custom_palette.then_some(palette & 0x3FFF);
-        let direct_palette = if custom_palette { 0 } else { palette & 0x7FFF };
+        let direct_palette = if custom_palette { 0 } else { palette & 0x3FFF };
 
         // Action2 layouts use ReadSpriteLayout(..., allow_var10=false). Do
         // this validation before reading the optional origin/register bytes;
@@ -199,6 +200,7 @@ fn parse_action2_tile_layout(payload: &[u8], feature: u8) -> Option<(u8, TileLay
             direct_sprite,
             palette_action1_set,
             direct_palette,
+            sprite_modifiers,
             flags,
             registers,
             origin,
@@ -1122,6 +1124,64 @@ mod tests {
         payload.extend_from_slice(&0x0100_u16.to_le_bytes()); // flags above the native byte
 
         assert!(parse_action2_tile_layout(&payload, ACTION0_FEATURE_ROADSTOPS).is_none());
+    }
+
+    #[test]
+    fn parse_roadstop_tile_layout_maps_native_sprite_modifiers() {
+        let mut payload = vec![0x02, ACTION0_FEATURE_ROADSTOPS, 7, 0x40];
+        payload.extend_from_slice(&0xC005_u16.to_le_bytes()); // sprite id 5 + transparent/recolour
+        payload.extend_from_slice(&0x4000_u16.to_le_bytes()); // opaque palette modifier
+        payload.extend_from_slice(&0_u16.to_le_bytes());
+
+        let (_, layout) = parse_action2_tile_layout(&payload, ACTION0_FEATURE_ROADSTOPS)
+            .expect("modifier-bearing TileLayout");
+        assert_eq!(layout.ground.direct_sprite, 5);
+        assert_eq!(layout.ground.direct_palette, 0);
+        assert_eq!(
+            layout.ground.sprite_modifiers,
+            crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
+                | crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR
+                | crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE
+        );
+    }
+
+    #[test]
+    fn tile_layout_preserves_sprite_modifiers_through_resolution() {
+        let sprite = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![20, 30, 40, 255],
+            mask: Vec::new(),
+        };
+        let modifiers = crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
+            | crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR;
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![sprite]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 7,
+                set_id: 9,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    sprite_modifiers: modifiers,
+                    ..TileLayoutSpriteRef::default()
+                },
+                sequence: Vec::new(),
+            },
+        );
+
+        let mut ctx = Action2EvalCtx::default();
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("resolved TileLayout");
+        assert_eq!(layout.ground.expect("ground").sprite_modifiers, modifiers);
     }
 
     #[test]

@@ -52,6 +52,33 @@ pub struct TileLayoutRegisterRefs {
     pub palette_var10: Option<u8>,
 }
 
+/// Modificadores que `MapSpriteMappingRecolour` guarda en el `SpriteID`
+/// nativo después de leer una pareja sprite/paleta del GRF.
+pub const TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT: u8 = 1 << 0;
+pub const TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR: u8 = 1 << 1;
+pub const TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE: u8 = 1 << 2;
+
+/// Traduce los bits históricos de recolor de `TTDPatch` al metadato que el
+/// modelo Rust puede conservar junto al layout. Los bits 14/15 del wire
+/// nunca forman parte del id real: el lector nativo los limpia antes de
+/// decidir si la entrada usa Action1 o un sprite/paleta directos.
+pub(crate) fn map_tile_layout_sprite_modifiers(sprite: &mut u16, palette: &mut u16) -> u8 {
+    let mut modifiers = 0;
+    if *palette & 0x4000 != 0 {
+        *palette &= !0x4000;
+        modifiers |= TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE;
+    }
+    if *sprite & 0x4000 != 0 {
+        *sprite &= !0x4000;
+        modifiers |= TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT;
+    }
+    if *sprite & 0x8000 != 0 {
+        *sprite &= !0x8000;
+        modifiers |= TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR;
+    }
+    modifiers
+}
+
 /// Referencia a un sprite dentro de un layout `TileSeq` de Action2.
 ///
 /// En el formato `NewGRF`, el bit 15 de la paleta indica que el campo `sprite`
@@ -68,6 +95,8 @@ pub struct TileLayoutSpriteRef {
     pub palette_action1_set: Option<u16>,
     /// Paleta absoluta del layout cuando no referencia Action1.
     pub direct_palette: u16,
+    /// Modificadores nativos de `SpriteID` (`opaque`, `transparent`, `recolour`).
+    pub sprite_modifiers: u8,
     /// Flags `TileLayoutFlags` del registro de layout.
     pub flags: u8,
     /// Índices de los registros usados por `flags`.
@@ -151,6 +180,8 @@ pub struct TileLayout {
 pub struct ResolvedTileLayoutSprite {
     pub sprite: Option<DecodedSprite>,
     pub base_sprite: Option<u16>,
+    /// Modificadores nativos conservados desde la pareja GRF original.
+    pub sprite_modifiers: u8,
     pub origin: [i8; 3],
     pub extent: [u8; 3],
 }
@@ -342,6 +373,7 @@ fn resolve_layout_sprite(
     Some(ResolvedTileLayoutSprite {
         sprite,
         base_sprite,
+        sprite_modifiers: reference.sprite_modifiers,
         origin,
         extent: reference.extent,
     })

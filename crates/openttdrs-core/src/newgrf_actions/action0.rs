@@ -1,8 +1,8 @@
 //! Parsing compartido de cabeceras y metadatos Action0.
 
 use crate::newgrf_config::{GrfScanError, parse_grf_container};
-use crate::newgrf_sprites::tile_layout_flags_valid;
 use crate::newgrf_sprites::{TileLayout, TileLayoutRegisterRefs, TileLayoutSpriteRef};
+use crate::newgrf_sprites::{map_tile_layout_sprite_modifiers, tile_layout_flags_valid};
 use crate::newgrf_walk::for_each_pseudo_sprite;
 use crate::road_type::RoadTramType;
 use crate::vehicle::VehicleKind;
@@ -1406,13 +1406,15 @@ fn read_station_legacy_sprite(
     i: &mut usize,
     invert_action1_flag: bool,
 ) -> Option<TileLayoutSpriteRef> {
-    let sprite = read_u16(payload, i)?;
-    let palette = read_u16(payload, i)?;
+    let mut sprite = read_u16(payload, i)?;
+    let mut palette = read_u16(payload, i)?;
+    let sprite_modifiers = map_tile_layout_sprite_modifiers(&mut sprite, &mut palette);
     let custom_sprite = (palette & 0x8000 != 0) != invert_action1_flag;
     Some(TileLayoutSpriteRef {
         action1_set: custom_sprite.then_some(sprite & 0x3FFF),
-        direct_sprite: if custom_sprite { 0 } else { sprite },
-        direct_palette: palette & 0x7FFF,
+        direct_sprite: if custom_sprite { 0 } else { sprite & 0x3FFF },
+        direct_palette: palette & 0x3FFF,
+        sprite_modifiers,
         ..TileLayoutSpriteRef::default()
     })
 }
@@ -1490,19 +1492,20 @@ fn read_station_advanced_sprite(
     has_flags: bool,
     is_ground: bool,
 ) -> Option<TileLayoutSpriteRef> {
-    let sprite = read_u16(payload, i)?;
-    let palette = read_u16(payload, i)?;
+    let mut sprite = read_u16(payload, i)?;
+    let mut palette = read_u16(payload, i)?;
     let raw_flags = if has_flags { read_u16(payload, i)? } else { 0 };
     let flags = u8::try_from(raw_flags).ok()?;
+    let sprite_modifiers = map_tile_layout_sprite_modifiers(&mut sprite, &mut palette);
     let custom_sprite = palette & 0x8000 != 0;
     let action1_set = custom_sprite.then_some(sprite & 0x3FFF);
-    let direct_sprite = if custom_sprite { 0 } else { sprite };
+    let direct_sprite = if custom_sprite { 0 } else { sprite & 0x3FFF };
     // `TLF_CUSTOM_PALETTE` selects the palette Action1 set independently of
     // bit 15. That bit belongs to the sprite reference itself and the native
     // reader clears it before interpreting the palette index.
     let custom_palette = flags & 0x08 != 0;
     let palette_action1_set = custom_palette.then_some(palette & 0x3FFF);
-    let direct_palette = if custom_palette { 0 } else { palette & 0x7FFF };
+    let direct_palette = if custom_palette { 0 } else { palette & 0x3FFF };
 
     // Validate structural flags before consuming origin/register payloads.
     // The var10 bytes themselves come after the origin and box registers for
@@ -1592,6 +1595,7 @@ fn read_station_advanced_sprite(
         direct_sprite,
         palette_action1_set,
         direct_palette,
+        sprite_modifiers,
         flags,
         registers,
         origin,

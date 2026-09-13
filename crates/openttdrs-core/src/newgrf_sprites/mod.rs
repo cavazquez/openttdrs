@@ -37,12 +37,13 @@ pub use model::{
     CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_MODIFY_PROPERTY, CBID_VEHICLE_REFIT_CAPACITY,
     CBID_VEHICLE_REFIT_COST, CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_SPAWN_VISUAL_EFFECT,
     CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT, DecodedSprite,
-    IndustryProductionGroup, ResolvedTileLayout, ResolvedTileLayoutSprite, TileLayout,
-    TileLayoutRegisterRefs, TileLayoutSpriteRef, TrainSpriteAssign, TrainSpriteGraphics,
-    WagonOverrideAssign,
+    IndustryProductionGroup, ResolvedTileLayout, ResolvedTileLayoutSprite,
+    TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE, TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+    TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT, TileLayout, TileLayoutRegisterRefs,
+    TileLayoutSpriteRef, TrainSpriteAssign, TrainSpriteGraphics, WagonOverrideAssign,
 };
 
-pub(crate) use model::tile_layout_flags_valid;
+pub(crate) use model::{map_tile_layout_sprite_modifiers, tile_layout_flags_valid};
 
 // Re-exportar funciones de runtime de pixel_codec
 pub use pixel_codec::{

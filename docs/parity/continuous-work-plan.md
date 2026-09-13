@@ -6616,3 +6616,17 @@ fallback atómico en vez de inventar un sprite base. Las regresiones cubren
 propiedades posteriores, child sin caja, copia local y materialización contra
 Action1. Continúan pendientes las paletas no representables, callbacks/scopes
 completos y la cobertura de layouts dinámicos; #326/#329 siguen abiertas.
+
+Corrección #326/#329-TILELAYOUT-FLAG-GUARDS (2026-09-13, `ff9ebbe4`): los
+lectores de layouts de `Stations` `0x1A` y de grupos Action2 validan ahora el
+contrato nativo antes de consumir origen, cajas o registros. Se rechazan flags
+de caja en el ground, words de flags fuera del byte conocido, `var10` en
+Action2 (donde `allow_var10=false`), cadenas `var10` sin una referencia
+Action1/registro compatible y valores mayores que el máximo nativo `7`. En
+Stations los valores `var10` se comprueban después de origen/extensión, que es
+su posición real en el wire format; así no se confunde un origen válido con el
+registro siguiente. Las regresiones cubren ground inválido, flags desconocidos,
+consumo correcto de registros y límite `var10`. Esto evita layouts desalineados
+o materializados con un contrato que OpenTTD deshabilitaría; paletas especiales,
+transparencia, relocación y scopes restantes siguen pendientes, por lo que
+#326/#329 continúan abiertas.

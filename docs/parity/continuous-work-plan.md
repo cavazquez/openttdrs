@@ -7408,3 +7408,11 @@ regresión ECS usa el bloque 3 (`sprite_id` 5471, slot 58) y verifica la imagen
 en el parent sortable. Siguen abiertas las callbacks/layouts/children
 dinámicos completos y la aceptación raster sobre saves reales; #326 continúa
 abierta.
+
+Corrección #326-NEWGRF-OBJECT-ORPHAN-CHILD-GROUND (2026-09-13): un child de
+`TileLayout` sin parent visible previo se dibuja ahora con el ground pass de
+`DrawCommonTileSeq`, manteniendo sus offsets screen-space pero sin introducir
+una profundidad sortable ajena a la tesela. La regresión ECS verifica la
+profundidad contra `ground_draw_z`; los children que siguen a un parent
+conservan `ViewportSortableChild` y el orden global. #326 continúa abierta por
+callbacks/layouts/children dinámicos completos y aceptación raster real.

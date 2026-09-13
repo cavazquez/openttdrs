@@ -4839,3 +4839,11 @@ trazable. La regresión ECS usa el bloque 3 (`sprite_id` 5471, slot 58) sobre
 una pendiente y comprueba la imagen materializada en el parent sortable. Siguen
 pendientes callbacks/layouts/children dinámicos completos y la aceptación
 raster sobre saves reales; #326 continúa abierta.
+
+Corrección #326-NEWGRF-OBJECT-ORPHAN-CHILD-GROUND (2026-09-13): un child de
+`TileLayout` que aparece antes de cualquier parent visible sigue ahora la
+regla de `DrawCommonTileSeq`: conserva su ancla screen-space, pero entra al
+ground pass de la tesela mediante `DrawGroundSprite`. Así no puede adelantarse
+artificialmente a una fila diagonal por usar profundidad sortable. La regresión
+ECS cubre un child huérfano y verifica su profundidad junto al ground; los
+children posteriores a un parent mantienen el contrato sortable existente.

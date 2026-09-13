@@ -527,6 +527,13 @@ verifica su imagen en el parent sortable. La ausencia de un slot sigue siendo
 un fallback trazable; callbacks/layouts/children dinámicos completos y la
 aceptación raster sobre saves reales quedan como trabajo posterior.
 
+Corrección #326-NEWGRF-OBJECT-ORPHAN-CHILD-GROUND (2026-09-13): la ruta de
+objetos NewGRF replica el caso de `DrawCommonTileSeq` en que un child aparece
+antes del primer parent visible. El sprite mantiene sus offsets de
+`TILE_SEQ`, pero su profundidad pasa a la banda de `DrawGroundSprite`; los
+children asociados a un parent siguen en el sorter global. La regresión ECS
+comprueba el caso y evita que una capa huérfana altere el orden diagonal.
+
 Corrección #326/#567-BUOY-GLOBAL-SORT (2026-09-12): la línea de boya con
 extensión cero se conserva como parent sortable, no como sprite directo. La
 regresión valida la caja `TILE_SEQ_LINE`, la clave de inserción y el spawn

@@ -12272,8 +12272,16 @@ fn flat_newgrf_object_tile_layout_keeps_ground_in_ground_pass() {
         rgba: [240, 10, 10, 255].repeat(4),
         mask: Vec::new(),
     };
+    let orphan_child = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -3,
+        y_offs: -4,
+        rgba: [10, 240, 10, 255].repeat(4),
+        mask: Vec::new(),
+    };
     let mut runtime = TrainSpriteGraphics {
-        sets: vec![vec![ground.clone()]],
+        sets: vec![vec![ground.clone()], vec![orphan_child.clone()]],
         assigns: vec![TrainSpriteAssign {
             local_id: 4,
             set_id: 9,
@@ -12287,7 +12295,11 @@ fn flat_newgrf_object_tile_layout_keeps_ground_in_ground_pass() {
                 action1_set: Some(0),
                 ..Default::default()
             },
-            sequence: Vec::new(),
+            sequence: vec![TileLayoutSpriteRef {
+                action1_set: Some(1),
+                origin: [5, 6, i8::MIN],
+                ..Default::default()
+            }],
         },
     );
     let object_def = ObjectSpecDef {
@@ -12378,6 +12390,19 @@ fn flat_newgrf_object_tile_layout_keeps_ground_in_ground_pass() {
         ground_depths,
         vec![ground_draw_z(coord.x, coord.y, 0.55)],
         "DrawNewObjectTile debe dejar el ground TileLayout en DrawGroundSprite"
+    );
+    let orphan_child_depths: Vec<_> = sprites
+        .iter()
+        .filter_map(|(handle, translation)| {
+            (images.get(handle).and_then(|image| image.data.as_deref())
+                == Some(orphan_child.rgba.as_slice()))
+            .then_some(translation.z)
+        })
+        .collect();
+    assert_eq!(
+        orphan_child_depths,
+        vec![ground_draw_z(coord.x, coord.y, 0.55)],
+        "un child sin parent debe seguir el ground pass de DrawCommonTileSeq"
     );
 }
 

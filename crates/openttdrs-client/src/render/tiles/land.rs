@@ -2914,7 +2914,11 @@ fn spawn_newgrf_object_layout_sequence(
                 },
             ));
         } else {
-            let position = road_stop_build_sprite_center(
+            // `DrawCommonTileSeq` usa `DrawGroundSprite` para un child que
+            // aparece antes de cualquier parent visible. No es un overlay
+            // sortable independiente: debe compartir el ground pass de la
+            // tesela, aunque conserve el ancla screen-space de TILE_SEQ.
+            let mut position = road_stop_build_sprite_center(
                 ctx.iso_pos,
                 ctx.tx_i32(),
                 ctx.ty_i32(),
@@ -2924,6 +2928,7 @@ fn spawn_newgrf_object_layout_sequence(
                 width,
                 height,
             );
+            position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.55);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),

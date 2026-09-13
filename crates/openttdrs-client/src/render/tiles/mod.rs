@@ -49,6 +49,7 @@ pub(crate) use objects::{
     spawn_transport_object_tile, spawn_transport_object_tile_with_road_types,
 };
 pub(crate) use transport::{catenary_local_z_delta, spawn_rail_tile, spawn_road_tile};
+pub(crate) use water::canal_dike_slots;
 #[cfg(test)]
 pub(crate) use water::push_water_tile;
 pub(crate) use water::{push_object_water_ground_with_action5, push_water_tile_with_action5};

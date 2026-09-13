@@ -7159,6 +7159,14 @@ cuando el atlas no está disponible; diques de canal, pendientes/river edges,
 features NewGRF y aceptación raster quedan como subetapas separadas; #326
 continúa abierta.
 
+Corrección #326-SHIP-DEPOT-PREVIEW-CANAL-DIKES (2026-09-13): el ghost de
+depósito naval sobre canal dibuja ahora los bordes vanilla seleccionados por
+`DrawWaterEdges(true, 0, tile)`, con anclas NFO, prioridad local y conectividad
+de vecinos compartida con el renderer. El selector evita duplicar el borde
+interno cuando las dos mitades ya están materializadas; callbacks/features
+NewGRF de canales, ríos, pendientes y aceptación raster siguen fuera de esta
+unidad; #326 continúa abierta.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

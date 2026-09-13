@@ -1,21 +1,22 @@
 //! Fantasma de depósito naval: las dos secciones y las capas BUILD nativas.
 
 use bevy::prelude::*;
-use openttdrs_core::{Map, TileCoord, ship_depot_footprint};
+use openttdrs_core::{Map, TileCoord, WaterClass, ship_depot_footprint, water_class};
 
 use crate::iso::{full_tile_sprite_pos, iso, overlay_pos, remap_tile_offset, tile_slope_and_min_z};
 use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
 use crate::render::{
-    CompanyColoredSprites, ViewportSortableParent, WorldAssets,
+    CompanyColoredSprites, ViewportSortableParent, WorldAssets, canal_dike_slots,
     sprite_from_atlas_or_company_colour, sprite_from_company_or_asset, viewport_insertion_key,
     viewport_source_depth,
 };
-use crate::sprites::{SHIP_DEPOT_PATHS, ship_depot_layers};
+use crate::sprites::{SHIP_DEPOT_PATHS, WATER_CANAL_DIKE_SPRITE_META, ship_depot_layers};
 
 use super::BuildGhostPreview;
 
 const PREVIEW_Z_BASE: f32 = 3.0;
 const PREVIEW_WATER_LAYER: f32 = PREVIEW_Z_BASE - 0.030;
+const PREVIEW_DIKE_LAYER: f32 = PREVIEW_WATER_LAYER + 0.010;
 const PREVIEW_SCALE: f32 = 1.002;
 
 /// Spawn del depósito completo. `origin` conserva la tesela que recibe el
@@ -62,6 +63,15 @@ pub(crate) fn spawn_ship_depot_preview(
             ))
             .with_scale(Vec3::splat(PREVIEW_SCALE)),
         ));
+        spawn_ship_depot_canal_dikes(
+            commands,
+            asset_server,
+            world_assets,
+            map,
+            coord,
+            base_z,
+            tint,
+        );
         let ref_pos = iso(coord.x, coord.y);
         for (layer_i, layer) in ship_depot_layers(axis_y, part_south).iter().enumerate() {
             let local = remap_tile_offset(layer.dx, layer.dy, 0.0) * 0.5;
@@ -124,6 +134,58 @@ pub(crate) fn spawn_ship_depot_preview(
                 },
             ));
         }
+    }
+}
+
+/// Dibuja los bordes vanilla que `DrawWaterEdges(true, 0, tile)` agrega a un
+/// depósito sobre canal. El selector comparte la conectividad del renderer:
+/// un segundo depósito adyacente no vuelve a pintar el dique interno.
+fn spawn_ship_depot_canal_dikes(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    world_assets: Option<&WorldAssets>,
+    map: &Map,
+    coord: TileCoord,
+    base_z: u8,
+    tint: Color,
+) {
+    if map.get(coord).and_then(water_class) != Some(WaterClass::Canal) {
+        return;
+    }
+    let origin = iso(coord.x, coord.y);
+    for (slot, selected) in canal_dike_slots(map, coord).into_iter().enumerate() {
+        if !selected {
+            continue;
+        }
+        let Some(&(width, height, xrel, yrel)) = WATER_CANAL_DIKE_SPRITE_META.get(slot) else {
+            continue;
+        };
+        let sprite = world_assets.map_or_else(
+            || Sprite {
+                image: asset_server.load::<Image>(format!(
+                    "assets/opengfx/tiles/water_canal_dike_{slot:02}.png"
+                )),
+                color: tint,
+                ..default()
+            },
+            |assets| assets.canal_dikes[slot].sprite_colored(tint),
+        );
+        let position = overlay_pos(
+            origin,
+            f32::from(xrel),
+            f32::from(yrel),
+            f32::from(width),
+            f32::from(height),
+            base_z,
+            PREVIEW_DIKE_LAYER + slot as f32 * 0.0001,
+            coord.x,
+            coord.y,
+        );
+        commands.spawn((
+            BuildGhostPreview,
+            sprite,
+            Transform::from_translation(position).with_scale(Vec3::splat(PREVIEW_SCALE)),
+        ));
     }
 }
 

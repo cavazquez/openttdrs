@@ -6565,3 +6565,16 @@ ground y parent con propiedades de animación posteriores. Este corte sólo
 arregla el consumo del formato; la materialización visual runtime del layout
 legacy y la resolución dinámica de sus paletas siguen pendientes, por lo que
 #326/#329 permanecen abiertas.
+
+Corrección #326/#329-STATION-ADVANCED-LAYOUT-RUNTIME (2026-09-13, `3bb2a77b`):
+los layouts `Stations` Action0 `prop 0x1A` ya no se descartan después del parseo:
+se conservan por id local, se transfieren al runtime de `StationSpecDef` y se
+seleccionan por orientación X/Y antes de resolver suelo y secuencia de
+parents/children. La ruta avanzada admite el `PALETTE_VAR10` que OpenTTD permite
+en este lector, hornea el mapa Action1 elegido y mantiene la ruta Action2
+restrictiva (`allow_var10=false`) para no hacer permisivos otros layouts. La
+regresión integrada cubre las dos orientaciones, origen/extensión y la
+materialización de la secuencia; core (2707 tests), cliente, Clippy, formato y
+`git diff --check` quedaron verdes. Paletas no-Action1 dinámicas, transparencia,
+layouts 16-bit y la cobertura completa de Action3/relocación siguen pendientes;
+#326/#329 no se cierran.

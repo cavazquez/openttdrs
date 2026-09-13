@@ -8,6 +8,7 @@ use crate::render::{
 };
 use crate::state::SimWorld;
 
+use super::VEHICLE_SORT_SPRITE_ID;
 use super::assets::{
     NewGrfTrainSpriteCache, NewGrfVehicleLayer, TruckHandles, vehicle_layers_with_catalog,
 };
@@ -35,8 +36,6 @@ fn vehicle_owner_colour(sim: &SimWorld, v: &Vehicle) -> crate::sprites::CompanyC
 fn vehicle_cargo_label_pos(vehicle_pos: Vec3) -> Vec3 {
     Vec3::new(vehicle_pos.x, vehicle_pos.y + 21.0, vehicle_pos.z + 0.35)
 }
-
-const VEHICLE_SORT_SPRITE_ID: u32 = 0xFFFE_0000;
 
 #[allow(clippy::too_many_arguments)]
 fn spawn_newgrf_stack_children(

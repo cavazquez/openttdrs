@@ -7443,3 +7443,14 @@ resolver esa tesela como tipo `0x34`. Tras regenerar las fixtures derivadas,
 `mvp_openttd_ship.sav` compara 4104/4104 selecciones y 4104/4104 órdenes
 relativas, con `rail-track` y `ship-depot` alineados. Esto cierra la falsa
 divergencia de fixture, no el issue padre #326.
+
+Corrección #326-CLEAN-VIEWPORT-SORT (2026-09-13): las capturas limpias ahora
+excluyen los parents de cuerpos/unidades de vehículos antes de asignar slots
+de profundidad, igual que `ViewportDoDraw` cuando OpenTTD omite
+`ViewportAddVehicles`. La captura WGPU de `Kale_TitleGame.sav` en `(189,126)`
+pasó de `97.102` a `94.775` píxeles distintos sobre `921.600`
+(`10,536241319 %` → `10,283745660 %`), con `169 → 0` identificadores
+`0xFFFE0000` en el trace y delta medio `3,746445 → 3,610982`. El modo normal
+no cambia. Esto reduce una fuente concreta de desplazamiento de profundidad,
+pero #326 sigue abierta por los producers restantes, segmentación, clipping,
+pivotes y raster global.

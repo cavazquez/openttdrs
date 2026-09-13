@@ -4876,3 +4876,19 @@ completa de `mvp_openttd_ship.sav` queda en 4104/4104 selecciones, 4104/4104
 órdenes relativas y la familia `rail-track` pasa 2/2 con geometría exacta.
 La diferencia anterior no era un fallo del renderer; #326 sigue abierta por
 la cobertura raster y las familias aún no instrumentadas.
+
+Corrección #326-CLEAN-VIEWPORT-SORT (2026-09-13): el sorter de parents ya no
+reserva slots para cuerpos ni unidades de vehículos durante una captura
+`OPENTTDRS_MAP_SHOT_CLEAN=1`. OpenTTD los omite antes de
+`ViewportSortParentSprites`; ocultarlos después del sort podía desplazar la
+profundidad de edificios e infraestructura aunque los sprites no llegaran al
+framebuffer. El identificador reservado `0xFFFE0000` queda compartido entre
+spawner y sorter, y una partida normal conserva el stream completo. En
+`Kale_TitleGame.sav`, centro `(189,126)`, `1280×720`, `Normal`, la traza limpia
+pasó de `1741` parents (`169` de vehículos) a `1572` (`0` de vehículos). Con
+la misma referencia OpenTTD 8bpp y candidata WGPU RGBA, los píxeles distintos
+bajaron de `97.102/921.600` (`10,536241319 %`) a `94.775/921.600`
+(`10,283745660 %`) y el delta medio de canal de `3,746445` a `3,610982`.
+Es una corrección acotada del contrato de captura limpia, no paridad de
+framebuffer; #326 continúa abierta por composición global, clipping, pivotes,
+familias y layouts restantes.

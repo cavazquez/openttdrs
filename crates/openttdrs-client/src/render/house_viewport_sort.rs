@@ -30,6 +30,13 @@ use crate::render::viewport_sort::{
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
 
+fn parent_excluded_from_clean_map_capture(
+    parent: &ViewportSortableParent,
+    clean_capture: bool,
+) -> bool {
+    clean_capture && parent.sprite_id == crate::render::vehicles::VEHICLE_SORT_SPRITE_ID
+}
+
 /// `SPR_EMPTY_BOUNDING_BOX` de OpenTTD.
 ///
 /// No tiene imagen: entra en `ViewportSortParentSprites` sólo para separar
@@ -692,8 +699,18 @@ pub(crate) fn sort_viewport_sortable_parents(
         return;
     }
 
+    // `ViewportDoDraw` omite los vehículos antes de ordenar los parents cuando
+    // el exportador de OpenTTD prepara un raster limpio. Ocultarlos después de
+    // este sistema no alcanza: aunque no rastericen, todavía pueden reservar
+    // slots y cambiar la profundidad de edificios e infraestructura. El
+    // identificador reservado es compartido por cuerpos y unidades de
+    // consist; en una partida normal el stream permanece sin cambios.
+    let clean_capture = crate::bevy_app::clean_map_capture_requested();
     let mut input = Vec::new();
     for (entity, parent, visibility, transform, sprite) in &mut parents {
+        if parent_excluded_from_clean_map_capture(&parent, clean_capture) {
+            continue;
+        }
         let sprite_bounds = precise_scope.and_then(|_| {
             sprite.and_then(|(sprite, anchor)| {
                 sprite_screen_bounds(
@@ -909,6 +926,24 @@ mod tests {
             Some((73, 41))
         );
         assert_eq!(viewport_parent_source_tile(0), None);
+    }
+
+    #[test]
+    fn clean_map_capture_excludes_only_vehicle_sort_parents() {
+        let vehicle = ViewportSortableParent {
+            sprite_id: crate::render::vehicles::VEHICLE_SORT_SPRITE_ID,
+            bounds: ParentSpriteBounds::new(0, 0, 0, 1, 1, 1),
+            insertion_key: 0,
+            source_depth: 1.0,
+        };
+        let building = ViewportSortableParent {
+            sprite_id: 1422,
+            ..vehicle
+        };
+
+        assert!(parent_excluded_from_clean_map_capture(&vehicle, true));
+        assert!(!parent_excluded_from_clean_map_capture(&vehicle, false));
+        assert!(!parent_excluded_from_clean_map_capture(&building, true));
     }
 
     #[test]

@@ -10,6 +10,13 @@ use openttdrs_core::{EngineDef, VehicleKind};
 
 use crate::state::SimWorld;
 
+/// Identificador reservado para los parents de vehículos del viewport.
+///
+/// OpenTTD no agrega estos sprites al pase de paisaje cuando prepara una
+/// captura limpia; el sorter Bevy usa el mismo identificador para distinguir
+/// esa familia antes de asignar slots de profundidad.
+pub(crate) const VEHICLE_SORT_SPRITE_ID: u32 = 0xFFFE_0000;
+
 pub(crate) use assets::{NewGrfTrainSpriteCache, NewGrfVehicleLayer, TruckHandles};
 pub(crate) use picking::{pick_vehicle_id_at_world, pick_vehicle_id_at_world_with_newgrf};
 pub(crate) use plugin::VehicleRenderPlugin;

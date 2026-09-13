@@ -3647,8 +3647,9 @@ fn resolve_road_stop_layout_for_tile(
 }
 
 /// El renderer compacto admite Action1 en toda la secuencia y, además, los
-/// tres suelos base planos auditados. Cualquier sprite base BUILD, paleta o
-/// selector no representable conserva el fallback atómico OpenGFX/Action5.
+/// suelos base planos auditados. Un layout compuesto sólo por esos sprites no
+/// necesita reservar slots de caché; cualquier mezcla con Action1 sí conserva
+/// la validación de capacidad para evitar una emisión parcial.
 fn road_stop_layout_is_static(
     spec_id: u16,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
@@ -3657,7 +3658,10 @@ fn road_stop_layout_is_static(
         && layout.ground.as_ref().is_none_or(|ground| {
             ground.action1_sprite().is_none() || road_stop_layout_ground_slot(spec_id).is_some()
         })
-        && (layout.sequence.is_empty()
+        && (!layout
+            .sequence
+            .iter()
+            .any(|layer| layer.action1_sprite().is_some())
             || road_stop_layout_sequence_slot_range(spec_id, layout.sequence.len()).is_some())
 }
 
@@ -3808,10 +3812,19 @@ fn spawn_newgrf_road_stop_layout_sequence(
     // Validate the complete range before emitting anything. A saturated slot
     // would alias another spec and leave a partially spawned layout behind
     // if a later sequence entry did not fit in the cache key.
-    let Some((slot_base, _slot_last)) =
-        road_stop_layout_sequence_slot_range(spec_id, layout.sequence.len())
-    else {
-        return false;
+    let slot_base = if layout
+        .sequence
+        .iter()
+        .any(|layer| layer.action1_sprite().is_some())
+    {
+        let Some((slot_base, _slot_last)) =
+            road_stop_layout_sequence_slot_range(spec_id, layout.sequence.len())
+        else {
+            return false;
+        };
+        Some(slot_base)
+    } else {
+        None
     };
     let mut last_parent: Option<(Entity, Vec2)> = None;
     let mut emitted = false;
@@ -3834,11 +3847,14 @@ fn spawn_newgrf_road_stop_layout_sequence(
         let Some(index) = u16::try_from(index).ok() else {
             return false;
         };
-        let Some(slot) = slot_base.checked_add(index) else {
-            return false;
-        };
         let (mut sprite, width, height, x_offs, y_offs) =
             if let Some(decoded) = layer.action1_sprite() {
+                let Some(slot_base) = slot_base else {
+                    return false;
+                };
+                let Some(slot) = slot_base.checked_add(index) else {
+                    return false;
+                };
                 let handle = cache.handle_for_variant_with_company_colour_and_modifiers(
                     ROADSTOP_TILE_LAYOUT_CACHE_TYPE,
                     slot,
@@ -4426,11 +4442,10 @@ fn airport_tile_layout_is_renderable(
     {
         return false;
     }
-    layout
-        .sequence
-        .iter()
-        .enumerate()
-        .all(|(index, _)| airport_tile_layout_cache_slot(gfx, index.saturating_add(1)).is_some())
+    layout.sequence.iter().enumerate().all(|(index, layer)| {
+        layer.action1_sprite().is_none()
+            || airport_tile_layout_cache_slot(gfx, index.saturating_add(1)).is_some()
+    })
 }
 
 /// Resuelve el `TileLayoutSpriteGroup` de un `AirportTile` con el mismo scope
@@ -4606,43 +4621,44 @@ fn spawn_newgrf_airport_layout_sequence(
             }
             continue;
         }
-        let Some(slot) = airport_tile_layout_cache_slot(gfx, index.saturating_add(1)) else {
-            return false;
-        };
-        let (mut sprite, width, height, x_offs, y_offs) =
-            if let Some(decoded) = layer.action1_sprite() {
-                let handle = cache.handle_for_variant_with_company_colour_and_modifiers(
-                    AIRPORT_TILE_ACTION3_CACHE_TYPE,
-                    slot,
-                    runtime_fp,
-                    owner_colour,
-                    layer.sprite_modifiers,
-                    layer.direct_palette,
-                    decoded,
-                    images,
-                );
-                (
-                    tint_building_sprite(Sprite {
-                        image: handle,
-                        color: Color::WHITE,
-                        ..default()
-                    }),
-                    f32::from(decoded.width),
-                    f32::from(decoded.height),
-                    f32::from(decoded.x_offs),
-                    f32::from(decoded.y_offs),
-                )
-            } else if let Some(base) = direct_tile_layout_ground(layer, assets) {
-                (
-                    tint_building_sprite(base.atlas.sprite()),
-                    base.width,
-                    base.height,
-                    base.x_offs,
-                    base.y_offs,
-                )
-            } else {
+        let (mut sprite, width, height, x_offs, y_offs) = if let Some(decoded) =
+            layer.action1_sprite()
+        {
+            let Some(slot) = airport_tile_layout_cache_slot(gfx, index.saturating_add(1)) else {
                 return false;
             };
+            let handle = cache.handle_for_variant_with_company_colour_and_modifiers(
+                AIRPORT_TILE_ACTION3_CACHE_TYPE,
+                slot,
+                runtime_fp,
+                owner_colour,
+                layer.sprite_modifiers,
+                layer.direct_palette,
+                decoded,
+                images,
+            );
+            (
+                tint_building_sprite(Sprite {
+                    image: handle,
+                    color: Color::WHITE,
+                    ..default()
+                }),
+                f32::from(decoded.width),
+                f32::from(decoded.height),
+                f32::from(decoded.x_offs),
+                f32::from(decoded.y_offs),
+            )
+        } else if let Some(base) = direct_tile_layout_ground(layer, assets) {
+            (
+                tint_building_sprite(base.atlas.sprite()),
+                base.width,
+                base.height,
+                base.x_offs,
+                base.y_offs,
+            )
+        } else {
+            return false;
+        };
         let origin = crate::iso::RoadStopSeqGfx {
             dx: f32::from(layer.origin[0]),
             dy: f32::from(layer.origin[1]),
@@ -7436,8 +7452,9 @@ mod tests {
 
     use super::{
         INVALID_ROAD_TYPE_ID, ROTSG_DEPOT, TileRenderContext,
-        airport_station_ground_layer_trace_offset, buoy_parent_bounds, buoy_trace_bounds,
-        dock_clear_land_sprite_id, dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
+        airport_station_ground_layer_trace_offset, airport_tile_layout_is_renderable,
+        buoy_parent_bounds, buoy_trace_bounds, dock_clear_land_sprite_id,
+        dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
         rail_depot_build_parent_sprites, rail_depot_catenary_parent_sprite,
         rail_depot_foundation_child_offset, rail_depot_reservation_track_visible,
         rail_station_roof_glass_mask_color, road_depot_foundation_child_offset,
@@ -7625,7 +7642,7 @@ mod tests {
         };
         let layout = openttdrs_core::newgrf_sprites::ResolvedTileLayout {
             ground: Some(action1.clone()),
-            sequence: vec![action1],
+            sequence: vec![action1.clone()],
             complete: true,
         };
 
@@ -7634,6 +7651,73 @@ mod tests {
             !road_stop_layout_is_static(1024, &layout),
             "el layout que no cabe en caché no puede reservar el sort global"
         );
+
+        let direct = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+            sprite: None,
+            base_sprite: Some(3981),
+            sprite_modifiers: 0,
+            direct_palette: 0,
+            origin: [0, 0, 0],
+            extent: [1, 1, 1],
+        };
+        let direct_only = openttdrs_core::newgrf_sprites::ResolvedTileLayout {
+            ground: None,
+            sequence: vec![direct.clone()],
+            complete: true,
+        };
+        assert!(
+            road_stop_layout_is_static(1024, &direct_only),
+            "un layout sólo de baseset no necesita reservar un slot de caché"
+        );
+        let mixed = openttdrs_core::newgrf_sprites::ResolvedTileLayout {
+            ground: None,
+            sequence: vec![direct, action1],
+            complete: true,
+        };
+        assert!(
+            !road_stop_layout_is_static(1024, &mixed),
+            "una mezcla con Action1 debe seguir respetando la capacidad de caché"
+        );
+    }
+
+    #[test]
+    fn airport_tile_layout_base_sequence_does_not_need_cache_slot() {
+        let direct = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+            sprite: None,
+            base_sprite: Some(3981),
+            sprite_modifiers: 0,
+            direct_palette: 0,
+            origin: [0, 0, 0],
+            extent: [1, 1, 1],
+        };
+        let direct_only = openttdrs_core::newgrf_sprites::ResolvedTileLayout {
+            ground: None,
+            sequence: vec![direct.clone()],
+            complete: true,
+        };
+        assert!(airport_tile_layout_is_renderable(u16::MAX, &direct_only));
+
+        let action1 = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+            sprite: Some(DecodedSprite {
+                width: 1,
+                height: 1,
+                x_offs: 0,
+                y_offs: 0,
+                rgba: vec![255, 255, 255, 255],
+                mask: Vec::new(),
+            }),
+            base_sprite: None,
+            sprite_modifiers: 0,
+            direct_palette: 0,
+            origin: [0, 0, 0],
+            extent: [1, 1, 1],
+        };
+        let mixed = openttdrs_core::newgrf_sprites::ResolvedTileLayout {
+            ground: None,
+            sequence: vec![direct, action1],
+            complete: true,
+        };
+        assert!(!airport_tile_layout_is_renderable(u16::MAX, &mixed));
     }
 
     #[test]

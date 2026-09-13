@@ -6765,10 +6765,18 @@ entradas `BUILD` que referencian uno de esos mismos sprites planos vanilla ya
 no invalidan el layout completo. Las seis rutas de emisión reutilizan el
 atlas y el ancla auditados del ground (`64×31`, `(-31,0)`), mientras que la
 caja 3D/origen de la entrada sigue gobernando parent, child y profundidad; no
-se crean handles de caché para un sprite baseset que ya es global. La prueba
-de spawn recorre los 16 IDs admitidos y comprueba además una entrada BUILD
-directa separada del ground. Cualquier base sprite no auditado, paleta o
-modifier conserva fallback atómico; #326/#329 continúan abiertas.
+se crean handles ni se reservan slots de caché para un sprite baseset que ya es
+global. La prueba de spawn recorre los 16 IDs admitidos y comprueba además una
+entrada BUILD directa separada del ground. Cualquier base sprite no auditado,
+paleta o modifier conserva fallback atómico; #326/#329 continúan abiertas.
+
+Refinamiento #326/#329-TILELAYOUT-DIRECT-BUILD-CACHE (2026-09-13): una
+secuencia `BUILD` compuesta únicamente por esos sprites globales ya no exige
+un slot de Action1/Action5 que no va a utilizar. Road-stops y airport-tiles
+sólo validan capacidad cuando la secuencia contiene Action1; una secuencia
+mixta sigue rechazándose si no puede reservar todos sus handles antes de
+emitir. Las regresiones cubren `spec/gfx = 1024..u16::MAX` y mantienen el
+fallback para layouts mixtos que desbordan caché. #326/#329 continúan abiertas.
 
 Corrección #326/#329-TILELAYOUT-DIRECT-GROUND-PALETTE-GUARD (2026-09-13): el
 cliente vuelve a exigir `direct_palette == 0` antes de materializar un ground

@@ -7056,6 +7056,14 @@ las fachadas `6099/6100` y exige cero overlays duplicados. #326/#565 siguen
 abiertas por la selección Action5 de tramtypes custom, clipping, pivotes y
 framebuffer.
 
+Corrección #326-ROAD-DEPOT-PREVIEW-SORT (2026-09-13): las fachadas del ghost
+vial entran ahora en `ViewportSortableParent` con la caja inclusiva de cada
+`TILE_SEQ_LINE`, profundidad por columna y ordinal local del renderer del
+mapa. Las variantes `ROTSG_DEPOT` conservan el ID vial y las relocalizaciones
+Action5 usan el ID `TRAMWAY` correspondiente para sus desempates; suelo y
+overlay permanecen en el pase ground. #326 continúa abierta por clipping,
+pivotes y aceptación raster.
+
 Corrección #326-RAIL-DEPOT-PREVIEW-ASSET-PARITY (2026-09-13): el preview de
 depósitos ferroviarios usa las mismas entradas de `WorldAssets.rail` y
 `rail_depot_builds` que `DrawRailTile`, incluyendo los bancos de rail normal,

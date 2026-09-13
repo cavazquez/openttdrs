@@ -6,7 +6,11 @@ use openttdrs_core::{
 };
 
 use crate::iso::{iso, road_depot_build_sprite_center, tile_pos_half};
-use crate::render::{CompanyColoredSprites, NewGrfRoadSpriteCache, sprite_from_company_or_asset};
+use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
+use crate::render::{
+    CompanyColoredSprites, NewGrfRoadSpriteCache, ViewportSortableParent,
+    sprite_from_company_or_asset, viewport_insertion_key, viewport_source_depth,
+};
 use crate::sprites::{
     ROAD_DEPOT_GROUND_PATH, RoadDepotLayerGfx, road_depot_build_layers,
     road_depot_entrance_road_bits, road_depot_seq_gfx, road_flat_sprite_index,
@@ -36,6 +40,7 @@ pub(crate) struct RoadDepotPreviewSpawn<'a> {
     pub newgrf_stack: &'a [NewGrfEntry],
     pub road_sprites: &'a mut NewGrfRoadSpriteCache,
     pub images: &'a mut Assets<Image>,
+    pub map_width: u32,
 }
 
 pub(crate) fn spawn_road_depot_preview(commands: &mut Commands, spawn: RoadDepotPreviewSpawn<'_>) {
@@ -54,6 +59,7 @@ pub(crate) fn spawn_road_depot_preview(commands: &mut Commands, spawn: RoadDepot
         newgrf_stack,
         road_sprites,
         images,
+        map_width,
     } = spawn;
     let dir = dir.min(3);
 
@@ -102,6 +108,11 @@ pub(crate) fn spawn_road_depot_preview(commands: &mut Commands, spawn: RoadDepot
                 tint,
             )
         });
+        let parent_sprite_id = if custom_layer.is_some() {
+            spec.sprite_id
+        } else {
+            preview_layer_sprite_id(action5_replacement, spec)
+        };
         let (sprite, seq, width, height) = custom_layer.unwrap_or_else(|| {
             let (path, seq, width, height) = preview_layer_asset(action5_replacement, spec);
             (
@@ -122,12 +133,67 @@ pub(crate) fn spawn_road_depot_preview(commands: &mut Commands, spawn: RoadDepot
             width,
             height,
         );
+        let source_depth = viewport_source_depth(center.z, px as u32, map_width);
+        let mut position = center;
+        position.z = source_depth;
         commands.spawn((
             BuildGhostPreview,
             sprite,
-            Transform::from_translation(center).with_scale(Vec3::splat(PREVIEW_SCALE)),
+            Transform::from_translation(position).with_scale(Vec3::splat(PREVIEW_SCALE)),
+            ViewportSortableParent {
+                sprite_id: parent_sprite_id,
+                bounds: road_depot_parent_bounds(px, py, base_z, spec),
+                insertion_key: viewport_insertion_key(
+                    px as u32,
+                    py as u32,
+                    u8::try_from(layer_index + 1).unwrap_or(u8::MAX),
+                ),
+                source_depth,
+            },
         ));
     }
+}
+
+/// Caja inclusiva de la `TILE_SEQ_LINE` que usa `DrawRailTileSeq` para una
+/// fachada de depósito vial. El tamaño/ancla del PNG puede venir de NewGRF o
+/// Action5, pero el prisma de ordenación permanece en la línea vanilla.
+fn road_depot_parent_bounds(
+    px: i32,
+    py: i32,
+    base_z: u8,
+    layer: &RoadDepotLayerGfx,
+) -> ParentSpriteBounds {
+    tile_seq_parent_bounds(
+        px,
+        py,
+        base_z,
+        layer.dx as i32,
+        layer.dy as i32,
+        layer.dz as i32,
+        layer.sx,
+        layer.sy,
+        20,
+    )
+}
+
+/// ID lógico de la fachada cuando Action5 relocaliza el bloque al namespace
+/// `TRAMWAY_SPRITE_BASE`. Se usa sólo para conservar los desempates del
+/// sorter; si la relocalización no es válida, el fallback es el sprite vial.
+fn preview_layer_sprite_id(
+    replacement: Option<TramwayDepotReplacement>,
+    spec: &RoadDepotLayerGfx,
+) -> u32 {
+    let Some(replacement) = replacement else {
+        return spec.sprite_id;
+    };
+    let base = match replacement {
+        TramwayDepotReplacement::WithTrack => TRAM_DEPOT_WITH_TRACK_SPRITE_BASE,
+        TramwayDepotReplacement::NoTrack => TRAM_DEPOT_NO_TRACK_SPRITE_BASE,
+    };
+    let Some(offset) = spec.sprite_id.checked_sub(ROAD_DEPOT_SEQUENCE_SPRITE_BASE) else {
+        return spec.sprite_id;
+    };
+    base.checked_add(offset).unwrap_or(spec.sprite_id)
 }
 
 /// Resuelve una capa `ROTSG_DEPOT` con el contexto de GUI de OpenTTD
@@ -322,5 +388,19 @@ mod tests {
         assert_eq!((width, height), (7.0, 9.0));
         assert_eq!((seq.x_offs, seq.y_offs), (-3.0, -5.0));
         assert_eq!(images.len(), 1);
+    }
+
+    #[test]
+    fn preview_build_layers_keep_runtime_parent_bounds_and_action5_ids() {
+        let spec = road_depot_build_layers(1)[1];
+        assert_eq!(
+            road_depot_parent_bounds(2, 3, 4, &spec),
+            ParentSpriteBounds::new(47, 48, 32, 47, 63, 51)
+        );
+        assert_eq!(
+            preview_layer_sprite_id(Some(TramwayDepotReplacement::WithTrack), &spec),
+            TRAM_DEPOT_WITH_TRACK_SPRITE_BASE + 1
+        );
+        assert_eq!(preview_layer_sprite_id(None, &spec), spec.sprite_id);
     }
 }

@@ -513,6 +513,7 @@ fn spawn_tile_preview(
                     newgrf_stack,
                     road_sprites: &mut preview_newgrf.road_sprites,
                     images: &mut preview_newgrf.images,
+                    map_width: map.dimensions().0,
                 },
             );
         }

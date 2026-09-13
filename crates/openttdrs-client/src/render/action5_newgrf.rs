@@ -39,6 +39,20 @@ impl NewGrfAction5SpriteCache {
         }
     }
 
+    /// Recupera el mapa Action5 `0x0A` que corresponde a una paleta directa.
+    /// Los layouts de puentes usan `AddSortableSpriteToDraw` y no pasan por
+    /// `handle_for_layout_policy`, pero deben compartir exactamente la tabla
+    /// 2CC vigente con estaciones, industrias y casas.
+    pub(crate) fn twocc_map_for_palette(&self, palette_id: u16) -> Option<&DecodedSprite> {
+        let slot = palette_id.checked_sub(openttdrs_core::TWOCC_PALETTE_BASE)?;
+        if slot >= openttdrs_core::TWOCC_ACTION5_SLOT_COUNT as u16 {
+            return None;
+        }
+        self.twocc_maps
+            .get(usize::from(slot))
+            .and_then(Option::as_ref)
+    }
+
     pub(crate) fn handle_for(
         &mut self,
         type_id: u8,

@@ -7344,3 +7344,12 @@ ids sin imagen quedan como fallback trazable y no reactivan la capa vanilla.
 La cobertura está validada con regresiones de índices, materialización y
 paleta directa; #326 permanece abierta por paletas Action5 específicas,
 callbacks/layouts restantes y aceptación raster sobre saves reales.
+
+Corrección #326-BRIDGE-CUSTOM-2CC-MAP (2026-09-13): las referencias
+`BridgeSpriteRef` con paleta 2CC ya consultan el mapa Action5 `0x0A` vigente
+del runtime antes de crear la textura RGBA. El mismo vector de 256 mapas se
+comparte con estaciones, industrias, casas y layouts; si el slot no existe se
+mantiene el remapeo estándar y la entrada continúa siendo renderizable. La
+regresión compara el resultado de puente con `bake_sprite_two_company_palette`
+usando un mapa que altera ambos colores; #326 permanece abierta por los
+callbacks/layouts restantes y aceptación raster sobre saves reales.

@@ -54,10 +54,13 @@ pub(crate) fn decoded_sprite_image(
 /// la paleta explícita directamente a `AddSortableSpriteToDraw`, por lo que
 /// `775..=790` y `804` deben aplicarse incluso si el GRF no activó un bit de
 /// recoloración en el sprite.
-pub(crate) fn decoded_bridge_sprite_image(
+/// Convierte una referencia de puente y conserva el mapa Action5 `0x0A`
+/// elegido por el GRF para una paleta 2CC cuando está disponible.
+pub(crate) fn decoded_bridge_sprite_image_with_twocc_map(
     sprite: &DecodedSprite,
     sprite_modifiers: u8,
     direct_palette: u16,
+    twocc_map: Option<&DecodedSprite>,
 ) -> Image {
     let policy = if let Some(palette) =
         BridgeStructurePalette::from_openttd_palette_id(u32::from(direct_palette))
@@ -85,7 +88,7 @@ pub(crate) fn decoded_bridge_sprite_image(
     } else {
         DecodedSpriteImagePolicy::Raw
     };
-    decoded_sprite_image(sprite, policy)
+    decoded_sprite_image_with_twocc_map(sprite, policy, twocc_map)
 }
 
 /// Selecciona la paleta por defecto de `DrawCommonTileSeq` sólo cuando el
@@ -322,9 +325,45 @@ mod tests {
     #[test]
     fn bridge_direct_company_palette_is_applied_without_recolour_modifier() {
         let sprite = sprite_with_rgba(vec![8, 24, 88, 255]); // author ramp, shade 0
-        let img = decoded_bridge_sprite_image(&sprite, 0, 775 + 6);
+        let img = decoded_bridge_sprite_image_with_twocc_map(&sprite, 0, 775 + 6, None);
         assert_ne!(img.data.as_deref(), Some(&[8, 24, 88, 255][..]));
         assert_eq!(img.data.as_deref().map(|rgba| rgba[3]), Some(255));
+    }
+
+    #[test]
+    fn bridge_direct_2cc_palette_uses_the_action5_map() {
+        let sprite = DecodedSprite {
+            width: 2,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: openttdrs_core::newgrf_sprites::indices_to_rgba(&[0xC6, 0x50], 2, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let mut map_indices: Vec<u8> = (0..=u8::MAX).collect();
+        map_indices[0xC6] = 174;
+        map_indices[0x50] = 175;
+        let map = DecodedSprite {
+            width: 256,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: openttdrs_core::newgrf_sprites::indices_to_rgba(&map_indices, 256, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let palette = openttdrs_core::TWOCC_PALETTE_BASE + 2 + 3 * 16;
+        let img = decoded_bridge_sprite_image_with_twocc_map(&sprite, 0, palette, Some(&map));
+        assert_eq!(
+            img.data.as_deref(),
+            Some(
+                &openttdrs_core::bake_sprite_two_company_palette_with_map(
+                    &sprite,
+                    2,
+                    3,
+                    Some(&map),
+                )[..]
+            )
+        );
     }
 
     #[test]

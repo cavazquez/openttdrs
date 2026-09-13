@@ -17,7 +17,7 @@ use crate::iso::{
 use crate::render::catenary_newgrf::{
     CatenarySpriteAnchor, catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
 };
-use crate::render::newgrf_cache::decoded_bridge_sprite_image;
+use crate::render::newgrf_cache::decoded_bridge_sprite_image_with_twocc_map;
 use crate::render::road_newgrf::specific_sprite_for_tile;
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
@@ -1764,6 +1764,7 @@ fn spawn_custom_layer(
     map_width: u32,
     draw_ordinal: u8,
     pillar_half: Option<(usize, PillarHalf)>,
+    twocc_map: Option<&openttdrs_core::DecodedSprite>,
     images: Option<&mut Assets<Image>>,
 ) -> Option<Entity> {
     if reference.sprite_id == 0 {
@@ -1785,10 +1786,11 @@ fn spawn_custom_layer(
             );
             return None;
         };
-        let image = images.add(decoded_bridge_sprite_image(
+        let image = images.add(decoded_bridge_sprite_image_with_twocc_map(
             view,
             reference.modifiers,
             reference.palette,
+            twocc_map,
         ));
         (
             Sprite { image, ..default() },
@@ -3048,6 +3050,9 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
     };
 
     let rear_parent = if let Some((reference, view)) = custom_rear {
+        let twocc_map = action5_sprites
+            .as_mut()
+            .and_then(|cache| cache.twocc_map_for_palette(reference.palette));
         spawn_custom_layer(
             commands,
             assets,
@@ -3083,6 +3088,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             dims.0,
             BRIDGE_REAR_ORDINAL,
             None,
+            twocc_map,
             images.as_deref_mut(),
         )
     } else {
@@ -3518,6 +3524,9 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
         }
     }
     let front_parent = if let Some((reference, view)) = custom_front {
+        let twocc_map = action5_sprites
+            .as_mut()
+            .and_then(|cache| cache.twocc_map_for_palette(reference.palette));
         spawn_custom_layer(
             commands,
             assets,
@@ -3538,6 +3547,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             dims.0,
             BRIDGE_FRONT_ORDINAL,
             None,
+            twocc_map,
             images.as_deref_mut(),
         )
     } else {
@@ -3652,6 +3662,9 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
         foundation_surface_at(map, ctx.coord, dims).unwrap_or((ctx.info.tileh, ctx.info.base_z));
     let ground = pillar_ground_heights(pillar_tileh, pillar_base_z, span.axis);
     if let Some((reference, view)) = custom_pillar {
+        let twocc_map = action5_sprites
+            .as_mut()
+            .and_then(|cache| cache.twocc_map_for_palette(reference.palette));
         for segment in pillar_segments(
             z_draw_px.round() as i32,
             ground.front_north,
@@ -3677,6 +3690,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 dims.0,
                 BRIDGE_PILLAR_ORDINAL_BASE,
                 segment.half.map(|half| (span.axis, half)),
+                twocc_map,
                 images.as_deref_mut(),
             );
         }
@@ -3703,6 +3717,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                     dims.0,
                     BRIDGE_PILLAR_ORDINAL_BASE + 1,
                     segment.half.map(|half| (span.axis, half)),
+                    twocc_map,
                     images.as_deref_mut(),
                 );
             }

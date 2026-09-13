@@ -303,6 +303,7 @@ fn push_feature_vehicles(
             || has_cargo_groups
             || has_extended_id
             || !gfx.wagon_overrides.is_empty()
+            || meta.callback_mask & (1 << 6) != 0
         {
             Some(Box::new(gfx.clone()))
         } else {
@@ -471,6 +472,7 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 || gfx.needs_runtime_resolve()
                 || has_extended_id
                 || !gfx.wagon_overrides.is_empty()
+                || meta.callback_mask & (1 << 6) != 0
             {
                 Some(Box::new(gfx.clone()))
             } else {

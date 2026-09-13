@@ -884,14 +884,59 @@ pub fn resolve_vehicle_colour_mapping_callback(
     engine: &EngineDef,
     vehicle: &Vehicle,
 ) -> Option<VehicleColourMapping> {
+    if !vehicle_colour_mapping_callback_enabled(engine) {
+        return None;
+    }
+    let runtime = engine.newgrf_runtime.as_ref()?;
+    let mut snapshot = vehicle.clone();
+    let mut ctx = action2_eval_ctx_from_vehicle(&snapshot);
+    let result = runtime.resolve_callback_ctx_u16(
+        engine.newgrf_local_id,
+        CBID_VEHICLE_COLOUR_MAPPING,
+        0,
+        0,
+        &mut ctx,
+    );
+    writeback_vehicle_persistent_registers(&mut snapshot, &ctx);
+    decode_vehicle_colour_mapping_result(result)
+}
+
+/// Ejecuta `CBID_VEHICLE_COLOUR_MAPPING` con un contexto Action2 ya preparado.
+///
+/// La variante se usa para motores sin unidad construida, como las previews
+/// de compra de `OpenTTD`. El contexto es propiedad del caller: cualquier
+/// registro temporal o persistente escrito por el callback permanece sólo en
+/// esa evaluación visual y no toca una unidad de la simulación.
+#[must_use]
+pub fn resolve_vehicle_colour_mapping_callback_with_ctx(
+    engine: &EngineDef,
+    ctx: &mut Action2EvalCtx,
+) -> Option<VehicleColourMapping> {
+    if !vehicle_colour_mapping_callback_enabled(engine) {
+        return None;
+    }
+    let runtime = engine.newgrf_runtime.as_ref()?;
+    let result = runtime.resolve_callback_ctx_u16(
+        engine.newgrf_local_id,
+        CBID_VEHICLE_COLOUR_MAPPING,
+        0,
+        0,
+        ctx,
+    );
+    decode_vehicle_colour_mapping_result(result)
+}
+
+fn vehicle_colour_mapping_callback_enabled(engine: &EngineDef) -> bool {
     if engine.newgrf_grfid == 0
         || engine.vehicle_callback_mask & (1 << 6) == 0
         || engine.newgrf_runtime.is_none()
     {
-        return None;
+        return false;
     }
-    let mut snapshot = vehicle.clone();
-    let result = resolve_vehicle_callback(engine, &mut snapshot, CBID_VEHICLE_COLOUR_MAPPING, 0, 0);
+    true
+}
+
+fn decode_vehicle_colour_mapping_result(result: u16) -> Option<VehicleColourMapping> {
     if result == CALLBACK_FAILED {
         return None;
     }
@@ -6007,6 +6052,12 @@ mod tests {
         engine.vehicle_callback_mask = 1 << 6;
         engine.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(0x3FFF)));
         let mapping = resolve_vehicle_colour_mapping_callback(&engine, &vehicle).unwrap();
+        assert_eq!(mapping.palette_id, 0x3FFF);
+        assert!(!mapping.apply_company_colour);
+
+        let mut ctx = Action2EvalCtx::default();
+        let mapping = resolve_vehicle_colour_mapping_callback_with_ctx(&engine, &mut ctx)
+            .expect("callback with prepared context");
         assert_eq!(mapping.palette_id, 0x3FFF);
         assert!(!mapping.apply_company_colour);
     }

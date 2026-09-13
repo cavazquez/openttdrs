@@ -642,6 +642,59 @@ pub(super) fn custom_aircraft_rotor_layers_for_preview(
     )
 }
 
+/// Construye el scope de compra que OpenTTD usa cuando el vehículo todavía
+/// no existe. La unidad sintética sólo vive durante esta evaluación: permite
+/// reutilizar las variables de vehículo y luego se sobreescribe `0x43` con
+/// los dos canales efectivos de la compañía activa.
+fn vehicle_preview_action2_context(
+    sim: &crate::state::SimWorld,
+    engine: &EngineDef,
+    primary: CompanyColour,
+    secondary: CompanyColour,
+) -> openttdrs_core::Action2EvalCtx {
+    let mut preview = Vehicle::new(
+        0,
+        engine.kind,
+        openttdrs_core::TileCoord::new(0, 0),
+        openttdrs_core::TileCoord::new(0, 0),
+    );
+    preview.owner = sim.state.active_company;
+    preview.engine_id = Some(engine.id);
+    preview.cargo_type = engine.cargo;
+    preview.capacity = engine.capacity;
+    let mut ctx = openttdrs_core::action2_eval_ctx_for_unit(
+        std::slice::from_ref(&preview),
+        preview.id,
+        sim.state.tick,
+        &sim.state.engine_catalog,
+        primary.as_u8(),
+    );
+    let company_info = sim
+        .state
+        .companies
+        .iter()
+        .find(|company| company.id == sim.state.active_company)
+        .map_or_else(
+            || {
+                u32::from(sim.state.active_company.0)
+                    | (u32::from(primary.as_u8()) << 24)
+                    | (u32::from(secondary.as_u8()) << 28)
+            },
+            |company| {
+                u32::from(company.id.0)
+                    | (u32::from(company.is_ai) << 16)
+                    | (u32::from(primary.as_u8()) << 24)
+                    | (u32::from(secondary.as_u8()) << 28)
+            },
+        );
+    ctx.vars.insert(0x43, company_info);
+    let year = openttdrs_core::calendar_year_at_tick(sim.state.tick);
+    ctx.vars.insert(0x49, year);
+    ctx.vars
+        .insert(0xC4, year.saturating_sub(1920).min(u32::from(u8::MAX)));
+    ctx
+}
+
 /// Resuelve las capas del cuerpo para una entidad que todavía no existe.
 ///
 /// La compra usa una orientación estable (`DIR_E`) y el scope GUI. Los
@@ -659,17 +712,28 @@ pub(super) fn custom_vehicle_layers_for_preview(
 ) -> Vec<NewGrfVehicleLayer> {
     let dir = usize::from(openttdrs_core::DIR_E);
     if engine.newgrf_runtime.is_some() {
-        let mut ctx = openttdrs_core::Action2EvalCtx::default();
+        let mut ctx = vehicle_preview_action2_context(sim, engine, primary, secondary);
         ctx.set_grf_params(openttdrs_core::stack_params_for_grfid(
             &sim.state.newgrf_stack,
             engine.newgrf_grfid,
         ));
         ctx.vars.insert(0x1F, u32::from(openttdrs_core::DIR_E));
-        let palette_override = engine.uses_2cc.then(|| {
-            openttdrs_core::TWOCC_PALETTE_BASE
-                + u16::from(primary.as_u8())
-                + u16::from(secondary.as_u8()) * 16
-        });
+        let palette_override =
+            openttdrs_core::resolve_vehicle_colour_mapping_callback_with_ctx(engine, &mut ctx)
+                .map(|mapping| {
+                    mapping.palette_for_companies(
+                        primary.as_u8(),
+                        secondary.as_u8(),
+                        engine.uses_2cc,
+                    )
+                })
+                .or_else(|| {
+                    engine.uses_2cc.then(|| {
+                        openttdrs_core::TWOCC_PALETTE_BASE
+                            + u16::from(primary.as_u8())
+                            + u16::from(secondary.as_u8()) * 16
+                    })
+                });
         let layers = cache.handles_for_runtime_with_override_and_image_type(
             engine,
             dir,
@@ -716,25 +780,28 @@ fn custom_aircraft_rotor_layers_for_engine(
     images: &mut Assets<Image>,
 ) -> Vec<NewGrfVehicleLayer> {
     if engine.newgrf_runtime.is_some() {
-        let mut ctx = vehicle.map_or_else(openttdrs_core::Action2EvalCtx::default, |vehicle| {
-            let mut ctx = openttdrs_core::action2_eval_ctx_for_unit(
-                &sim.state.vehicles,
-                vehicle.id,
-                sim.state.tick,
-                &sim.state.engine_catalog,
-                primary.as_u8(),
-            );
-            openttdrs_core::enrich_vehicle_track_badge_vars(
-                &mut ctx,
-                &sim.state.vehicles,
-                vehicle.id,
-                &sim.state.map,
-                &sim.state.engine_catalog,
-                &sim.state.runtime.rail_type_badges,
-                &sim.state.road_type_catalog,
-            );
-            ctx
-        });
+        let mut ctx = vehicle.map_or_else(
+            || vehicle_preview_action2_context(sim, engine, primary, secondary),
+            |vehicle| {
+                let mut ctx = openttdrs_core::action2_eval_ctx_for_unit(
+                    &sim.state.vehicles,
+                    vehicle.id,
+                    sim.state.tick,
+                    &sim.state.engine_catalog,
+                    primary.as_u8(),
+                );
+                openttdrs_core::enrich_vehicle_track_badge_vars(
+                    &mut ctx,
+                    &sim.state.vehicles,
+                    vehicle.id,
+                    &sim.state.map,
+                    &sim.state.engine_catalog,
+                    &sim.state.runtime.rail_type_badges,
+                    &sim.state.road_type_catalog,
+                );
+                ctx
+            },
+        );
         ctx.set_grf_params(openttdrs_core::stack_params_for_grfid(
             &sim.state.newgrf_stack,
             engine.newgrf_grfid,
@@ -743,9 +810,14 @@ fn custom_aircraft_rotor_layers_for_engine(
         // var 1F while the selected view index is the rotor animation state.
         ctx.vars.insert(0x1F, u32::from(physical_direction));
         let palette_override = vehicle
-            .and_then(|vehicle| {
-                openttdrs_core::resolve_vehicle_colour_mapping_callback(engine, vehicle)
-            })
+            .map_or_else(
+                || {
+                    openttdrs_core::resolve_vehicle_colour_mapping_callback_with_ctx(
+                        engine, &mut ctx,
+                    )
+                },
+                |vehicle| openttdrs_core::resolve_vehicle_colour_mapping_callback(engine, vehicle),
+            )
             .map(|mapping| {
                 mapping.palette_for_companies(primary.as_u8(), secondary.as_u8(), engine.uses_2cc)
             })
@@ -1543,6 +1615,120 @@ mod tests {
             .expect("purchase image");
         assert_eq!(map_image.data.as_deref(), Some(&[10, 0, 0, 255][..]));
         assert_eq!(purchase_image.data.as_deref(), Some(&[20, 0, 0, 255][..]));
+    }
+
+    #[test]
+    fn vehicle_preview_applies_colour_mapping_callback() {
+        use openttdrs_core::newgrf_sprites::{
+            Action2VarAdjust, Action2VarEntry, Action2VarTerm, DecodedSprite, TrainSpriteAssign,
+            TrainSpriteGraphics,
+        };
+
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_TRAIN_KIRBY)
+            .expect("vanilla train")
+            .clone();
+        engine.id = 0x7F07;
+        engine.from_newgrf = true;
+        engine.newgrf_grfid = 0x434F_4C52;
+        engine.newgrf_local_id = 0;
+        engine.vehicle_callback_mask = 1 << 6;
+        engine.newgrf_runtime = Some(Box::new(TrainSpriteGraphics {
+            sets: vec![vec![DecodedSprite {
+                width: 1,
+                height: 1,
+                x_offs: 0,
+                y_offs: 0,
+                rgba: vec![255, 255, 255, 255],
+                mask: vec![198],
+            }]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 0,
+                set_id: 0,
+            }],
+            action2_var: [(
+                0,
+                Action2VarEntry {
+                    first: Action2VarTerm {
+                        variable: 0x1A,
+                        param: None,
+                        adjust: Action2VarAdjust {
+                            and_mask: 781,
+                            ..Default::default()
+                        },
+                    },
+                    ops: Vec::new(),
+                    ranges: Vec::new(),
+                    default: 0,
+                },
+            )]
+            .into_iter()
+            .collect(),
+            ..Default::default()
+        }));
+
+        let mut state = GameState::new(8, 8);
+        state.engine_catalog.push(engine.clone());
+        let sim = crate::state::SimWorld {
+            state,
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let mut cache = NewGrfTrainSpriteCache::default();
+        let mut images = Assets::<Image>::default();
+
+        let mut callback_ctx = vehicle_preview_action2_context(
+            &sim,
+            &engine,
+            CompanyColour::Red,
+            CompanyColour::DarkBlue,
+        );
+        let mapping = openttdrs_core::resolve_vehicle_colour_mapping_callback_with_ctx(
+            &engine,
+            &mut callback_ctx,
+        )
+        .expect("preview colour callback");
+        assert_eq!(mapping.palette_id, 781);
+        assert!(!mapping.apply_company_colour);
+
+        let views = engine
+            .newgrf_runtime
+            .as_ref()
+            .expect("runtime")
+            .views_for_local_id_cargo_u16_ctx(0, None, &mut callback_ctx)
+            .expect("preview views");
+        assert_eq!(views[0].mask, vec![198]);
+
+        let layers = custom_vehicle_layers_for_preview(
+            &engine,
+            &sim,
+            CompanyColour::Red,
+            CompanyColour::DarkBlue,
+            &mut cache,
+            &mut images,
+        );
+        let image = images
+            .get(&layers.first().expect("preview layer").handle)
+            .expect("preview image");
+        assert_eq!(
+            image.data.as_deref(),
+            Some(
+                openttdrs_core::bake_sprite_company_palette(
+                    &engine.newgrf_runtime.as_ref().unwrap().sets[0][0],
+                    CompanyColour::Green.as_u8(),
+                )
+                .as_slice()
+            )
+        );
+        assert_ne!(
+            image.data.as_deref(),
+            Some(
+                openttdrs_core::bake_sprite_company_palette(
+                    &engine.newgrf_runtime.as_ref().unwrap().sets[0][0],
+                    CompanyColour::Red.as_u8(),
+                )
+                .as_slice()
+            )
+        );
     }
 
     #[test]

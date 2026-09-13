@@ -38,7 +38,7 @@ Estados:
 | `0C` | Sound effects | runtime | no aplica | catálogo `sound_effect` + cola play; samples Action11 |
 | `0D` | Airports | runtime parcial | runtime | catálogo `airport_spec_catalog` (≥10); Action3 purchase/default; build+save; FTA custom bloqueada, callbacks `AirportTile` parciales (#260) |
 | `0E` | Signals | ignorada por spec (null en OTTD 15.3; #255) | N/A | gráficos: RailTypes `RTSG_SIGNALS` + Action5 `0x04`; estilo en `m2` save/load |
-| `0F` | Objects | runtime | runtime | catálogo `object_spec`; build+render multitile |
+| `0F` | Objects | runtime | runtime parcial | catálogo `object_spec`; build+render multitile; `flags` bit 8 (`Uses2CC`) conserva la librea 2CC en vistas y `TileSeq` |
 | `10` | Rail types | runtime | runtime (signals/underlay/overlay) | construcción/coste/compat + techo velocidad |
 | `11` | Airport tiles | runtime parcial | runtime | catálogo `airport_tile_spec_catalog` (≥74); Action3 views/subst; layouts `0xFE`; callbacks/anim consumidos (#260) |
 | `12` | Road types | runtime | runtime | construcción/coste + techo velocidad |

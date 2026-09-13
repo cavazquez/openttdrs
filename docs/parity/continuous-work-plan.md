@@ -6509,3 +6509,13 @@ comprueba Red y el rechazo de 2CC; pasaron 5 pruebas de TileLayout y 4 de
 AirportTile, Clippy estricto de cliente/core, formato y `git diff --check`.
 El soporte de mapas 2CC, paletas custom Action1, transparencia y var10 de
 paleta continúa pendiente.
+
+Corrección #329/#425-OBJECT-2CC-PALETTE (2026-09-12, `b96d1448`): los objetos
+NewGRF que declaran `ObjectFlag::Uses2CC` ya no suben sus vistas o piezas
+`TileSeq` como RGBA crudo. El byte `OBJS.colour` conserva la combinación
+`colour1 + colour2 * 16` de la librea por defecto al construir, el caché
+incluye ese byte y hornea ambas rampas para vistas planas, suelo, parents y
+children. La regresión de cliente contrasta dos libreas sobre los mismos
+píxeles; la de core verifica el offset inicial y el fallback de una sola rampa.
+Esto no cierra #329/#425: mapas 2CC Action5, paletas custom Action1,
+transparencia, layouts 16-bit y otros consumidores visuales siguen pendientes.

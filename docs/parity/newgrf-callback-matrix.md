@@ -1920,3 +1920,16 @@ sin máscara pendiente. Las paletas directas no representadas, incluyendo
 fallback. `tile_layout_honours_explicit_company_palette_on_action1_sprite`
 cubre ambos caminos; mapas 2CC, paletas custom Action1, transparencia y
 `PALETTE_VAR10` siguen abiertos.
+
+### #329/#425-OBJECT-2CC-PALETTE — librea de objetos NewGRF
+
+Actualizado: 2026-09-12 (`b96d1448`). El flag `ObjectFlag::Uses2CC` ya se
+conserva como `OBJECT_FLAG_USES_2CC`; al construir un objeto, `OBJS.colour`
+guarda `colour1 + colour2 * 16` de la librea por defecto de la compañía. El
+renderer usa ese byte para hornear las dos rampas en la vista plana y en cada
+pieza `TileSeq` de suelo, parent o child, y separa cada combinación en la
+caché. `object_sprite_cache_bakes_instance_2cc_and_separates_liveries` y
+`object_initial_colour_keeps_default_2cc_livery` cubren píxeles, aislamiento
+de texturas y persistencia del color inicial. El callback CB15B conserva su
+byte resultante; siguen pendientes paletas custom Action1, mapas 2CC Action5
+por objeto, transparencia y layouts 16-bit.

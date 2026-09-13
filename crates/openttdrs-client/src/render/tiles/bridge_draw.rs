@@ -260,7 +260,7 @@ fn vanilla_road_stop_disallowed_pillars(layout: u8) -> u8 {
 /// es sólo visual: el chequeo de altura/validez permanece en `core`.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
-fn road_stop_blocks_bridge_pillars(
+pub(crate) fn road_stop_blocks_bridge_pillars(
     map: &Map,
     stations: &[Station],
     road_stop_catalog: &[RoadStopSpecDef],

@@ -16,7 +16,7 @@ use crate::render::{
     NewGrfRoadSpriteCache, PillarHalf, bridge_foundation_decision_at, bridge_ramp_catenary_slope,
     bridge_ramp_catenary_world_z_delta, bridge_ramp_ground_kind, catenary_local_z_delta,
     catenary_sprite_anchor, catenary_sprite_center, pillar_ground_heights, pillar_half_crop,
-    pillar_segments,
+    pillar_segments, road_stop_blocks_bridge_pillars,
 };
 use crate::sprites::{
     BridgeDeckSpriteIds, OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, TILEH_TO_SHORE_SPRITE,
@@ -66,6 +66,9 @@ pub(crate) struct BridgeSpanPreviewSpawn<'a> {
     pub foundation_newgrf: &'a [Option<openttdrs_core::DecodedSprite>],
     pub action5_sprites: &'a mut NewGrfAction5SpriteCache,
     pub images: &'a mut Assets<Image>,
+    pub stations: &'a [openttdrs_core::Station],
+    pub road_stop_catalog: &'a [openttdrs_core::RoadStopSpecDef],
+    pub bridge_spec_catalog: &'a [openttdrs_core::BridgeSpecDef],
 }
 
 /// Eje Y del puente (vía vertical en mapa) a partir del tramo de teselas.
@@ -735,18 +738,35 @@ fn spawn_bridge_pillars_preview(
     commands: &mut Commands,
     asset_server: &AssetServer,
     map: &Map,
+    stations: &[openttdrs_core::Station],
+    road_stop_catalog: &[openttdrs_core::RoadStopSpecDef],
+    bridge_spec_catalog: &[openttdrs_core::BridgeSpecDef],
     px: i32,
     py: i32,
     axis_y: bool,
     surface_z: u8,
     pillar_id: u32,
+    piece: openttdrs_core::BridgePiece,
     tint: Color,
 ) {
     let coord = TileCoord::new(px, py);
     let Some(tile) = map.get(coord) else {
         return;
     };
-    if tile.kind == TileKind::Void || pillar_id == 0 {
+    let axis = usize::from(axis_y);
+    if tile.kind == TileKind::Void
+        || pillar_id == 0
+        || road_stop_blocks_bridge_pillars(
+            map,
+            stations,
+            road_stop_catalog,
+            bridge_spec_catalog,
+            coord,
+            BridgeType::Wooden,
+            piece,
+            axis,
+        )
+    {
         return;
     }
     let (raw_tileh, raw_base_z) = tile_slope_and_min_z(map, px as u32, py as u32);
@@ -754,7 +774,6 @@ fn spawn_bridge_pillars_preview(
     let pillar_base_z = raw_base_z.saturating_add(z_delta);
     let ground = pillar_ground_heights(pillar_tileh, pillar_base_z, usize::from(axis_y));
     let top_px = i32::from(surface_z) * HEIGHT_PX as i32 - 3;
-    let axis = usize::from(axis_y);
     for segment in pillar_segments(top_px, ground.front_north, ground.front_south) {
         spawn_bridge_pillar_preview(
             commands,
@@ -832,6 +851,9 @@ pub(crate) fn spawn_bridge_span_preview(
         foundation_newgrf,
         action5_sprites,
         images,
+        stations,
+        road_stop_catalog,
+        bridge_spec_catalog,
     } = spawn;
     let is_rail = action == BuildMenuAction::RailBridge;
     let ordered_tiles = bridge_preview_render_order(tiles);
@@ -941,11 +963,15 @@ pub(crate) fn spawn_bridge_span_preview(
                 commands,
                 asset_server,
                 map,
+                stations,
+                road_stop_catalog,
+                bridge_spec_catalog,
                 px,
                 py,
                 axis_y,
                 surface_z,
                 ids.pillar[axis],
+                piece,
                 tint,
             );
         }

@@ -7115,3 +7115,11 @@ La capa trasera conserva su desplazamiento y orden de sorting, y el eje X/Y usa
 los PNG vanilla específicos. Quedan fuera de esta unidad la supresión por
 road-stop, los pilares custom por tipo de puente y la aceptación raster; #326
 continúa abierta.
+
+Corrección #326-BRIDGE-PREVIEW-PILLAR-BLOCKS (2026-09-13): la preview consulta
+ahora `Station`, `RoadStopSpecDef` y `BridgeSpecDef` del estado real antes de
+dibujar pilares bajo un vano. Reutiliza la máscara vanilla o custom de
+`bridgeable_info.disallowed_pillars`, junto con la pieza y el eje efectivos;
+una parada de bus/camión ya no muestra apoyos que desaparecerán al confirmar la
+obra. El alcance no altera la validación de construcción ni cubre aún tipos de
+puente custom del selector; #326 continúa abierta.

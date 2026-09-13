@@ -1912,3 +1912,11 @@ Action1/3 de `AirportTile` conserva el mismo `PALETTE_RECOLOUR_START +
 owner_colour` que usa la textura horneada. Así el diagnóstico de paleta no
 vuelve a reportar `PAL_NONE` después de aplicar la máscara; las limitaciones
 de layouts, paletas restantes, foundations, sonidos y callbacks continúan.
+
+Corrección posterior (`c5b3e166`): un `TileLayout` Action1 con paleta directa
+`PALETTE_RECOLOUR_START..=+15` se hornea en el resolver core y llega al cliente
+sin máscara pendiente. Las paletas directas no representadas, incluyendo
+2CC, ya no pasan como textura cruda: el layout se marca incompleto para usar
+fallback. `tile_layout_honours_explicit_company_palette_on_action1_sprite`
+cubre ambos caminos; mapas 2CC, paletas custom Action1, transparencia y
+`PALETTE_VAR10` siguen abiertos.

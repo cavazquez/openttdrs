@@ -6497,3 +6497,15 @@ vista plana Action1/3 de `AirportTile`, alineando la evidencia exportada con
 la textura que el renderer ya hornea. Clippy estricto de cliente, formato y
 `git diff --check` pasan; no se amplía el alcance de la subetapa visual ni se
 cierran #326/#329.
+
+Corrección #326/#329-DIRECT-COMPANY-PALETTE (2026-09-12, `c5b3e166`): el
+resolver común de `TileLayout` reconoce ahora las paletas directas
+`PALETTE_RECOLOUR_START..=+15` en sprites Action1, las hornea una sola vez y
+limpia la máscara para que el cliente no las recoloree de nuevo con el dueño.
+Una paleta directa fuera del rango soportado (por ejemplo 2CC) deja el layout
+incompleto y activa su fallback atómico, en lugar de mostrar RGBA crudo. La
+regresión `tile_layout_honours_explicit_company_palette_on_action1_sprite`
+comprueba Red y el rechazo de 2CC; pasaron 5 pruebas de TileLayout y 4 de
+AirportTile, Clippy estricto de cliente/core, formato y `git diff --check`.
+El soporte de mapas 2CC, paletas custom Action1, transparencia y var10 de
+paleta continúa pendiente.

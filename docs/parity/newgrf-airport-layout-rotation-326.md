@@ -87,3 +87,9 @@ los sprites Action1/TileSeq custom y conserva el color por dueño en el caché,
 pero no amplía ese resultado a las paletas restantes. Por eso #326, #328 y
 #329 siguen abiertos; esta nota no afirma paridad raster ni interoperabilidad
 SAV global.
+
+El resolver común también hornea las paletas directas de compañía
+(`PALETTE_RECOLOUR_START..=+15`) de un sprite Action1 y rechaza como incompletas
+las paletas directas todavía no representadas, evitando una textura cruda en
+la rama de aeropuerto. 2CC, paletas custom Action1, transparencia y selección
+por `PALETTE_VAR10` continúan fuera de alcance.

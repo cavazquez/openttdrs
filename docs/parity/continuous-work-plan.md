@@ -6423,3 +6423,12 @@ catálogo/runtime; sólo usan el sprite estático como fallback cuando no hay un
 capa resoluble. La suite de `ui::buy_window` conserva 12 tests aprobados y
 Clippy estricto de cliente; #329 continúa abierta por layouts GUI adicionales
 y consumidores legacy.
+
+Corrección #329-VEHICLE-PREVIEW-STATIC-PALETTE (2026-09-12, `b7ae1e1b`): si
+el runtime no consigue devolver una vista y debe usar `newgrf_views`, la
+preview conserva igualmente el resultado de `CBID_VEHICLE_COLOUR_MAPPING` y
+hornea su paleta explícita, 2CC o crash. Los mapas 2CC Action5 activos también
+se pasan a ese fallback para no perder reemplazos instalados. El mismo helper
+se comparte con el fallback de rotores; 39 tests de `render::vehicles` y
+Clippy estricto de cliente pasan. #329 continúa abierta por layouts y call
+sites GUI no cubiertos.

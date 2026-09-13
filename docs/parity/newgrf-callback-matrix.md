@@ -1836,3 +1836,14 @@ sprite estático con otra vista por `EngineImageType`, SpriteStack, cargo,
 callback o paleta del catálogo activo. La suite `ui::buy_window` mantiene 12
 tests aprobados; quedan pendientes layouts GUI adicionales y consumidores
 legacy fuera del resolver de vehículos.
+
+### #329-VEHICLE-PREVIEW-STATIC-PALETTE — fallback estático con callback
+
+Actualizado: 2026-09-12 (`b7ae1e1b`). Cuando una cadena runtime no devuelve
+vistas, el fallback de `newgrf_views` conserva el `PaletteID` calculado por
+`CBID_VEHICLE_COLOUR_MAPPING`, incluyendo paletas de compañía, 2CC, crash y
+mapas Action5 instalados. El criterio se comparte entre el cuerpo y el rotor,
+evitando que la ausencia de una vista runtime vuelva silenciosamente a la
+librea primaria. La regresión de preview cubre tanto la ruta runtime como la
+estática; quedan pendientes layouts/call sites GUI adicionales y consumidores
+legacy fuera del resolver de vehículos.

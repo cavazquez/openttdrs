@@ -6,7 +6,8 @@ use bevy::prelude::*;
 use openttdrs_core::DecodedSprite;
 
 use crate::render::newgrf_cache::{
-    DecodedSpriteImagePolicy, decoded_sprite_image, decoded_tile_layout_image_with_palette,
+    DecodedSpriteImagePolicy, decoded_sprite_image,
+    decoded_tile_layout_image_with_palette_and_twocc_map, twocc_map_for_palette,
 };
 use crate::sprites::CompanyColour;
 
@@ -21,11 +22,21 @@ type Action5CacheKey = (u8, u16, u32, Option<CompanyColour>, u8, u16);
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfAction5SpriteCache {
     handles: HashMap<Action5CacheKey, Handle<Image>>,
+    twocc_maps: Vec<Option<DecodedSprite>>,
 }
 
 impl NewGrfAction5SpriteCache {
     pub(crate) fn clear(&mut self) {
         self.handles.clear();
+    }
+
+    /// Instala la tabla Action5 `0x0A` vigente para los layouts sintéticos
+    /// (roadstop y airport). Las texturas ya horneadas dependen de ella.
+    pub(crate) fn set_twocc_maps(&mut self, maps: &[Option<DecodedSprite>]) {
+        if self.twocc_maps != maps {
+            self.handles.clear();
+            self.twocc_maps = maps.to_vec();
+        }
     }
 
     pub(crate) fn handle_for(
@@ -128,14 +139,16 @@ impl NewGrfAction5SpriteCache {
         policy: DecodedSpriteImagePolicy,
         images: &mut Assets<Image>,
     ) -> Handle<Image> {
+        let twocc_map = twocc_map_for_palette(&self.twocc_maps, direct_palette);
         self.handles
             .entry(key)
             .or_insert_with(|| {
-                images.add(decoded_tile_layout_image_with_palette(
+                images.add(decoded_tile_layout_image_with_palette_and_twocc_map(
                     sprite,
                     sprite_modifiers,
                     direct_palette,
                     policy,
+                    twocc_map.as_ref(),
                 ))
             })
             .clone()
@@ -279,5 +292,96 @@ mod tests {
             .expect("green depot");
         assert_ne!(red.image, green.image);
         assert_eq!(images.len(), 2);
+    }
+
+    #[test]
+    fn layout_2cc_uses_action5_map_and_invalidates_changed_map() {
+        let sprite = DecodedSprite {
+            width: 2,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![40, 40, 40, 255, 120, 120, 120, 255],
+            mask: vec![0xC6, 0x50],
+        };
+        let mut map_indices: Vec<u8> = (0..=u8::MAX).collect();
+        map_indices[0xC6] = 174;
+        map_indices[0x50] = 175;
+        let map = DecodedSprite {
+            width: 256,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: openttdrs_core::newgrf_sprites::indices_to_rgba(&map_indices, 256, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let direct_palette = openttdrs_core::TWOCC_PALETTE_BASE + 2 + 3 * 16;
+        let mut maps = vec![None; openttdrs_core::TWOCC_ACTION5_SLOT_COUNT];
+        maps[usize::from(direct_palette - openttdrs_core::TWOCC_PALETTE_BASE)] = Some(map.clone());
+
+        let mut images = Assets::<Image>::default();
+        let mut cache = NewGrfAction5SpriteCache::default();
+        cache.set_twocc_maps(&maps);
+        let first = cache.handle_for_variant_with_company_colour_and_modifiers(
+            0x14,
+            6,
+            0,
+            Some(CompanyColour::Red),
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+            direct_palette,
+            &sprite,
+            &mut images,
+        );
+        assert_eq!(
+            images
+                .get(&first)
+                .expect("mapped roadstop layout")
+                .data
+                .as_deref(),
+            Some(
+                &openttdrs_core::bake_sprite_two_company_palette_with_map(
+                    &sprite,
+                    2,
+                    3,
+                    Some(&map),
+                )[..]
+            )
+        );
+
+        let mut changed_map = map.clone();
+        let mut changed_indices: Vec<u8> = (0..=u8::MAX).collect();
+        changed_indices[0xC6] = 180;
+        changed_indices[0x50] = 181;
+        changed_map.rgba =
+            openttdrs_core::newgrf_sprites::indices_to_rgba(&changed_indices, 256, 1).unwrap();
+        maps[usize::from(direct_palette - openttdrs_core::TWOCC_PALETTE_BASE)] =
+            Some(changed_map.clone());
+        cache.set_twocc_maps(&maps);
+        let second = cache.handle_for_variant_with_company_colour_and_modifiers(
+            0x14,
+            6,
+            0,
+            Some(CompanyColour::Red),
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+            direct_palette,
+            &sprite,
+            &mut images,
+        );
+        assert_ne!(first, second);
+        assert_eq!(
+            images
+                .get(&second)
+                .expect("changed roadstop layout")
+                .data
+                .as_deref(),
+            Some(
+                &openttdrs_core::bake_sprite_two_company_palette_with_map(
+                    &sprite,
+                    2,
+                    3,
+                    Some(&changed_map),
+                )[..]
+            )
+        );
     }
 }

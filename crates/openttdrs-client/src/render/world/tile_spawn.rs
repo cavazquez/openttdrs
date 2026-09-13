@@ -914,14 +914,18 @@ pub(crate) fn setup(
     let label_index = MapLabelSpatialIndex::from_state(&sim.state);
     let mut road_sprites = crate::render::NewGrfRoadSpriteCache::default();
     let mut station_sprites = crate::render::NewGrfStationSpriteCache::default();
+    station_sprites.set_twocc_maps(&sim.state.runtime.twocc_action5_newgrf_sprites);
     let mut shore_sprites = crate::render::NewGrfShoreSpriteCache::default();
     let mut catenary_sprites = crate::render::NewGrfCatenarySpriteCache::default();
     let mut signal_sprites = crate::render::NewGrfSignalSpriteCache::default();
     let mut industry_sprites = crate::render::NewGrfIndustrySpriteCache::default();
+    industry_sprites.set_twocc_maps(&sim.state.runtime.twocc_action5_newgrf_sprites);
     let mut house_sprites = crate::render::NewGrfHouseSpriteCache::default();
+    house_sprites.set_twocc_maps(&sim.state.runtime.twocc_action5_newgrf_sprites);
     let mut object_sprites = crate::render::NewGrfObjectSpriteCache::default();
     object_sprites.set_twocc_maps(&sim.state.runtime.twocc_action5_newgrf_sprites);
     let mut action5_sprites = crate::render::NewGrfAction5SpriteCache::default();
+    action5_sprites.set_twocc_maps(&sim.state.runtime.twocc_action5_newgrf_sprites);
     spawn_world_layer(
         &mut commands,
         &asset_server,
@@ -1019,14 +1023,18 @@ pub(crate) fn spawn_intro_map_render(
     commands.insert_resource(truck_handles);
     let mut road_sprites = crate::render::NewGrfRoadSpriteCache::default();
     let mut station_sprites = crate::render::NewGrfStationSpriteCache::default();
+    station_sprites.set_twocc_maps(&sim.state.runtime.twocc_action5_newgrf_sprites);
     let mut shore_sprites = crate::render::NewGrfShoreSpriteCache::default();
     let mut catenary_sprites = crate::render::NewGrfCatenarySpriteCache::default();
     let mut signal_sprites = crate::render::NewGrfSignalSpriteCache::default();
     let mut industry_sprites = crate::render::NewGrfIndustrySpriteCache::default();
+    industry_sprites.set_twocc_maps(&sim.state.runtime.twocc_action5_newgrf_sprites);
     let mut house_sprites = crate::render::NewGrfHouseSpriteCache::default();
+    house_sprites.set_twocc_maps(&sim.state.runtime.twocc_action5_newgrf_sprites);
     let mut object_sprites = crate::render::NewGrfObjectSpriteCache::default();
     object_sprites.set_twocc_maps(&sim.state.runtime.twocc_action5_newgrf_sprites);
     let mut action5_sprites = crate::render::NewGrfAction5SpriteCache::default();
+    action5_sprites.set_twocc_maps(&sim.state.runtime.twocc_action5_newgrf_sprites);
     let label_index = MapLabelSpatialIndex::from_state(&sim.state);
     spawn_world_layer(
         commands,

@@ -6,8 +6,9 @@ use bevy::prelude::*;
 use openttdrs_core::IndustryTileSpecDef;
 
 use crate::render::newgrf_cache::{
-    DecodedSpriteImagePolicy, decoded_sprite_image, decoded_tile_layout_image_with_palette,
-    runtime_fingerprint, vars,
+    DecodedSpriteImagePolicy, decoded_sprite_image,
+    decoded_tile_layout_image_with_palette_and_twocc_map, runtime_fingerprint,
+    twocc_map_for_palette, vars,
 };
 use crate::sprites::CompanyColour;
 
@@ -17,9 +18,19 @@ use crate::sprites::CompanyColour;
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfIndustrySpriteCache {
     handles: HashMap<(u16, u16, u8, u32, u8, u16), Handle<Image>>,
+    twocc_maps: Vec<Option<openttdrs_core::DecodedSprite>>,
 }
 
 impl NewGrfIndustrySpriteCache {
+    /// Instala la tabla Action5 `0x0A` vigente para los TileLayout de
+    /// industrias. Las texturas ya horneadas dependen de ella.
+    pub(crate) fn set_twocc_maps(&mut self, maps: &[Option<openttdrs_core::DecodedSprite>]) {
+        if self.twocc_maps != maps {
+            self.handles.clear();
+            self.twocc_maps = maps.to_vec();
+        }
+    }
+
     pub(crate) fn handle_for_runtime(
         &mut self,
         def: &IndustryTileSpecDef,
@@ -76,14 +87,16 @@ impl NewGrfIndustrySpriteCache {
             sprite_modifiers,
             direct_palette,
         );
+        let twocc_map = twocc_map_for_palette(&self.twocc_maps, direct_palette);
         self.handles
             .entry(key)
             .or_insert_with(|| {
-                images.add(decoded_tile_layout_image_with_palette(
+                images.add(decoded_tile_layout_image_with_palette_and_twocc_map(
                     sprite,
                     sprite_modifiers,
                     direct_palette,
                     DecodedSpriteImagePolicy::MaskedAndRecolored { colour },
+                    twocc_map.as_ref(),
                 ))
             })
             .clone()
@@ -220,6 +233,55 @@ mod tests {
             .handle_for_runtime(def, 0, None, &mut ctx, &mut images)
             .expect("handle");
         assert!(images.get(&handle).is_some());
+
+        let sprite = DecodedSprite {
+            width: 2,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![40, 40, 40, 255, 120, 120, 120, 255],
+            mask: vec![0xC6, 0x50],
+        };
+        let mut indices: Vec<u8> = (0..=u8::MAX).collect();
+        indices[0xC6] = 174;
+        indices[0x50] = 175;
+        let map = DecodedSprite {
+            width: 256,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: openttdrs_core::newgrf_sprites::indices_to_rgba(&indices, 256, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let direct_palette = openttdrs_core::TWOCC_PALETTE_BASE + 2 + 3 * 16;
+        let mut maps = vec![None; openttdrs_core::TWOCC_ACTION5_SLOT_COUNT];
+        maps[usize::from(direct_palette - openttdrs_core::TWOCC_PALETTE_BASE)] = Some(map.clone());
+        cache.set_twocc_maps(&maps);
+        let layout_handle = cache.handle_for_layout(
+            def,
+            0,
+            Some(CompanyColour::Red),
+            0,
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+            direct_palette,
+            &sprite,
+            &mut images,
+        );
+        assert_eq!(
+            images
+                .get(&layout_handle)
+                .expect("industry 2CC TileLayout")
+                .data
+                .as_deref(),
+            Some(
+                &openttdrs_core::bake_sprite_two_company_palette_with_map(
+                    &sprite,
+                    2,
+                    3,
+                    Some(&map),
+                )[..]
+            )
+        );
     }
 
     #[test]

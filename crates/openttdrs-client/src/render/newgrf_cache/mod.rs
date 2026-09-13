@@ -5,15 +5,36 @@ mod image_factory;
 
 use openttdrs_core::map::SPR_FLAT_WATER_TILE;
 use openttdrs_core::newgrf_sprites::{ResolvedTileLayout, ResolvedTileLayoutSprite};
+use openttdrs_core::{DecodedSprite, TWOCC_ACTION5_SLOT_COUNT, TWOCC_PALETTE_BASE};
 
 use crate::render::{AtlasSprite, WorldAssets};
 
 pub(crate) use fingerprint::runtime_fingerprint;
 pub(crate) use image_factory::{
     DecodedSpriteImagePolicy, decoded_sprite_image, decoded_sprite_image_with_twocc_map,
-    decoded_tile_layout_image_with_palette, decoded_tile_layout_image_with_palette_and_twocc_map,
-    tile_layout_entry_is_hidden, tile_layout_sprite_color_with_palette,
+    decoded_tile_layout_image_with_palette_and_twocc_map, tile_layout_entry_is_hidden,
+    tile_layout_sprite_color_with_palette,
 };
+
+/// Obtiene la tabla Action5 `0x0A` asociada a un `PaletteID` 2CC.
+///
+/// El rango es deliberadamente cerrado al tamaño nativo de la tabla: una
+/// paleta fuera de `SPR_2CCMAP_BASE..SPR_2CCMAP_BASE+256` debe seguir usando
+/// el remapeo vanilla o la política de la textura, nunca indexar una entrada
+/// arbitraria del runtime.
+#[must_use]
+pub(crate) fn twocc_map_for_palette(
+    maps: &[Option<DecodedSprite>],
+    palette_id: u16,
+) -> Option<DecodedSprite> {
+    let slot = palette_id.checked_sub(TWOCC_PALETTE_BASE)?;
+    if slot >= TWOCC_ACTION5_SLOT_COUNT as u16 {
+        return None;
+    }
+    maps.get(usize::from(slot))
+        .and_then(Option::as_ref)
+        .cloned()
+}
 
 /// Baseset sprites that are safe to use as a `TileLayout` ground without
 /// guessing a palette, an animation, or NFO geometry. They all share the

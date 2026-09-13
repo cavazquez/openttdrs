@@ -10,7 +10,8 @@ use openttdrs_core::{
 
 use crate::render::newgrf_cache::{
     DecodedSpriteImagePolicy, decoded_sprite_image, decoded_sprite_image_with_twocc_map,
-    decoded_tile_layout_image_with_palette_and_twocc_map, runtime_fingerprint, vars,
+    decoded_tile_layout_image_with_palette_and_twocc_map, runtime_fingerprint,
+    twocc_map_for_palette, vars,
 };
 use crate::sprites::CompanyColour;
 
@@ -59,14 +60,7 @@ impl NewGrfObjectSpriteCache {
     }
 
     fn twocc_map_for_palette(&self, palette_id: u16) -> Option<DecodedSprite> {
-        let slot = palette_id.checked_sub(TWOCC_PALETTE_BASE)?;
-        if slot >= TWOCC_ACTION5_SLOT_COUNT as u16 {
-            return None;
-        }
-        self.twocc_maps
-            .get(usize::from(slot))
-            .and_then(Option::as_ref)
-            .cloned()
+        twocc_map_for_palette(&self.twocc_maps, palette_id)
     }
 
     fn twocc_map_for(&self, def: &ObjectSpecDef, object_colour: u8) -> Option<DecodedSprite> {

@@ -6806,3 +6806,12 @@ ejemplo, `SPR_FLAT_GRASS_TILE` desde el id inmediatamente anterior, igual que
 `u16`, `var10`, paletas custom o resultados no auditados conservan fallback
 atómico; la regresión cubre selección válida y desborde sin truncarlo. #326/#329
 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-2CC-MAP-PROPAGATION (2026-09-13): las
+texturas de `TileLayout` para estaciones, industrias, casas y los layouts
+sintéticos de roadstop/aeropuerto reutilizan ahora la tabla Action5 `0x0A`
+correspondiente al `PaletteID` 2CC directo, igual que los objetos. La caché
+conserva una copia acotada a los 256 slots nativos y descarta sus handles
+cuando cambia el runtime, evitando tanto un índice fuera de rango como una
+textura horneada con el GRF anterior. Las regresiones cubren los cuatro
+consumidores y el reemplazo de una tabla; #326/#329 continúan abiertas.

@@ -50,27 +50,10 @@ pub(crate) fn decoded_sprite_image(
 /// wire activa `transparent` o `recolour`. `opaque` controla la visibilidad y
 /// no debe convertir por sí solo una textura en una rampa de compañía. También
 /// conserva una paleta directa que el core no puede hornear, como
-/// `PALETTE_TO_STRUCT_*`.
+/// `PALETTE_TO_STRUCT_*`, y el mapa Action5 `2CC` correspondiente.
 ///
 /// `direct_palette=0` conserva la ruta histórica para layouts sin paleta
 /// explícita.
-pub(crate) fn decoded_tile_layout_image_with_palette(
-    sprite: &DecodedSprite,
-    sprite_modifiers: u8,
-    direct_palette: u16,
-    default_policy: DecodedSpriteImagePolicy,
-) -> Image {
-    decoded_tile_layout_image_with_palette_and_twocc_map(
-        sprite,
-        sprite_modifiers,
-        direct_palette,
-        default_policy,
-        None,
-    )
-}
-
-/// Variante de [`decoded_tile_layout_image_with_palette`] que conserva una
-/// paleta directa y un mapa Action5 `2CC`.
 pub(crate) fn decoded_tile_layout_image_with_palette_and_twocc_map(
     sprite: &DecodedSprite,
     sprite_modifiers: u8,
@@ -297,8 +280,13 @@ mod tests {
     #[test]
     fn tile_layout_applies_direct_structure_palette_after_decode() {
         let sprite = sprite_with_rgba(vec![64, 20, 8, 255]);
-        let img =
-            decoded_tile_layout_image_with_palette(&sprite, 0, 801, DecodedSpriteImagePolicy::Raw);
+        let img = decoded_tile_layout_image_with_palette_and_twocc_map(
+            &sprite,
+            0,
+            801,
+            DecodedSpriteImagePolicy::Raw,
+            None,
+        );
         assert_eq!(img.data.as_deref(), Some(&[96, 44, 4, 255][..]));
     }
 
@@ -308,22 +296,24 @@ mod tests {
         let policy = DecodedSpriteImagePolicy::CompanyPalette {
             colour: CompanyColour::Green,
         };
-        let raw = decoded_tile_layout_image_with_palette(&sprite, 0, 0, policy);
+        let raw = decoded_tile_layout_image_with_palette_and_twocc_map(&sprite, 0, 0, policy, None);
         assert_eq!(raw.data.as_deref(), Some(&[8, 24, 88, 255][..]));
 
-        let opaque = decoded_tile_layout_image_with_palette(
+        let opaque = decoded_tile_layout_image_with_palette_and_twocc_map(
             &sprite,
             openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE,
             0,
             policy,
+            None,
         );
         assert_eq!(opaque.data.as_deref(), Some(&[8, 24, 88, 255][..]));
 
-        let recoloured = decoded_tile_layout_image_with_palette(
+        let recoloured = decoded_tile_layout_image_with_palette_and_twocc_map(
             &sprite,
             openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
             0,
             policy,
+            None,
         );
         assert_ne!(recoloured.data.as_deref(), Some(&[8, 24, 88, 255][..]));
     }
@@ -338,21 +328,23 @@ mod tests {
             rgba: vec![40, 80, 120, 255, 200, 160, 80, 128],
             mask: Vec::new(),
         };
-        let img = decoded_tile_layout_image_with_palette(
+        let img = decoded_tile_layout_image_with_palette_and_twocc_map(
             &sprite,
             openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT,
             PALETTE_TO_TRANSPARENT,
             DecodedSpriteImagePolicy::Raw,
+            None,
         );
         assert_eq!(img.data.as_deref(), Some(&[0, 0, 0, 64, 0, 0, 0, 32][..]));
 
         // GroundSpritePaletteTransform keys off the recolour bit rather than
         // the BUILD-only transparent bit.
-        let ground_img = decoded_tile_layout_image_with_palette(
+        let ground_img = decoded_tile_layout_image_with_palette_and_twocc_map(
             &sprite,
             openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
             PALETTE_TO_TRANSPARENT,
             DecodedSpriteImagePolicy::Raw,
+            None,
         );
         assert_eq!(
             ground_img.data.as_deref(),

@@ -7,8 +7,9 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{StationSpecDef, StationSpecId};
 
 use crate::render::newgrf_cache::{
-    DecodedSpriteImagePolicy, decoded_sprite_image, decoded_tile_layout_image_with_palette,
-    runtime_fingerprint, vars,
+    DecodedSpriteImagePolicy, decoded_sprite_image,
+    decoded_tile_layout_image_with_palette_and_twocc_map, runtime_fingerprint,
+    twocc_map_for_palette, vars,
 };
 use crate::sprites::CompanyColour;
 
@@ -21,11 +22,21 @@ use crate::sprites::CompanyColour;
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfStationSpriteCache {
     handles: HashMap<(u16, u16, u8, u32, u8, u16), Handle<Image>>,
+    twocc_maps: Vec<Option<openttdrs_core::DecodedSprite>>,
 }
 
 impl NewGrfStationSpriteCache {
     pub(crate) fn clear(&mut self) {
         self.handles.clear();
+    }
+
+    /// Instala la tabla Action5 `0x0A` vigente para los TileLayout de
+    /// estaciones. Las texturas ya horneadas dependen de ella.
+    pub(crate) fn set_twocc_maps(&mut self, maps: &[Option<openttdrs_core::DecodedSprite>]) {
+        if self.twocc_maps != maps {
+            self.handles.clear();
+            self.twocc_maps = maps.to_vec();
+        }
     }
 
     /// Textura re-resolviendo Action2 con vars de tesela.
@@ -85,14 +96,16 @@ impl NewGrfStationSpriteCache {
             sprite_modifiers,
             direct_palette,
         );
+        let twocc_map = twocc_map_for_palette(&self.twocc_maps, direct_palette);
         self.handles
             .entry(key)
             .or_insert_with(|| {
-                images.add(decoded_tile_layout_image_with_palette(
+                images.add(decoded_tile_layout_image_with_palette_and_twocc_map(
                     sprite,
                     sprite_modifiers,
                     direct_palette,
                     DecodedSpriteImagePolicy::MaskedAndRecolored { colour },
+                    twocc_map.as_ref(),
                 ))
             })
             .clone()
@@ -144,6 +157,34 @@ mod tests {
     use openttdrs_core::newgrf_sprites::build_grf_v2_station_with_preview_sprite;
     use openttdrs_core::prelude::GameState;
 
+    fn two_cc_layout_fixture() -> (
+        openttdrs_core::DecodedSprite,
+        openttdrs_core::DecodedSprite,
+        u16,
+    ) {
+        let sprite = openttdrs_core::DecodedSprite {
+            width: 2,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![40, 40, 40, 255, 120, 120, 120, 255],
+            mask: vec![0xC6, 0x50],
+        };
+        let mut indices: Vec<u8> = (0..=u8::MAX).collect();
+        indices[0xC6] = 174;
+        indices[0x50] = 175;
+        let map = openttdrs_core::DecodedSprite {
+            width: 256,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: openttdrs_core::newgrf_sprites::indices_to_rgba(&indices, 256, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let palette = openttdrs_core::TWOCC_PALETTE_BASE + 2 + 3 * 16;
+        (sprite, map, palette)
+    }
+
     #[test]
     fn station_sprite_cache_builds_handle_from_catalog_views() {
         let a0 = build_action0_station_payload(b"MODN", b"Plat", 0, 0, "Andén moderno");
@@ -189,6 +230,36 @@ mod tests {
             .handle_for_runtime(def, 0, Some(CompanyColour::Red), &mut ctx, &mut images)
             .expect("recolor");
         assert_ne!(handle, recolored);
+
+        let (sprite, map, direct_palette) = two_cc_layout_fixture();
+        let mut maps = vec![None; openttdrs_core::TWOCC_ACTION5_SLOT_COUNT];
+        maps[usize::from(direct_palette - openttdrs_core::TWOCC_PALETTE_BASE)] = Some(map.clone());
+        cache.set_twocc_maps(&maps);
+        let layout_handle = cache.handle_for_layout(
+            def,
+            0,
+            None,
+            0,
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+            direct_palette,
+            &sprite,
+            &mut images,
+        );
+        assert_eq!(
+            images
+                .get(&layout_handle)
+                .expect("station 2CC TileLayout")
+                .data
+                .as_deref(),
+            Some(
+                &openttdrs_core::bake_sprite_two_company_palette_with_map(
+                    &sprite,
+                    2,
+                    3,
+                    Some(&map),
+                )[..]
+            )
+        );
     }
 
     #[test]

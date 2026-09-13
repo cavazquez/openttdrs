@@ -48,6 +48,20 @@ pub struct DecodedSprite {
     pub mask: Vec<u8>,
 }
 
+/// Sprites reales cargados en el namespace global de `NewGRF`.
+///
+/// `Action0` puede guardar un `SpriteID` absoluto (por ejemplo, en las tablas
+/// estructurales de puentes), mientras que los parsers de `Action1` trabajan
+/// naturalmente con sets locales. Este índice conserva la correspondencia
+/// después de asignar los IDs en el orden de carga nativo.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GlobalSpriteGraphics {
+    /// `SpriteID` global → píxeles decodificados.
+    pub sprites: HashMap<u32, DecodedSprite>,
+    /// Primer ID libre después de las entradas que el GRF cargó.
+    pub next_sprite_id: u32,
+}
+
 /// Registros que modifican una entrada de un layout `TileSeq`.
 ///
 /// Los bytes almacenados por NFO son índices de registros temporales. El

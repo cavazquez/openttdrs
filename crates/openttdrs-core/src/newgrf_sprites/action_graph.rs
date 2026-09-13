@@ -13,9 +13,9 @@ use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
 
 use super::model::{
     ACTION2_PARENT_SCOPE_MARKER, Action2RandomEntry, Action2VarAdjust, Action2VarEntry,
-    Action2VarOp, Action2VarTerm, DecodedSprite, IndustryProductionGroup, TileLayout,
-    TileLayoutRegisterRefs, TileLayoutSpriteRef, TrainSpriteAssign, TrainSpriteGraphics,
-    WagonOverrideAssign,
+    Action2VarOp, Action2VarTerm, DecodedSprite, GlobalSpriteGraphics, IndustryProductionGroup,
+    TileLayout, TileLayoutRegisterRefs, TileLayoutSpriteRef, TrainSpriteAssign,
+    TrainSpriteGraphics, WagonOverrideAssign,
 };
 use super::model::{map_tile_layout_sprite_modifiers, tile_layout_flags_valid};
 use super::pixel_codec::{decode_real_sprite_entry, index_sprite_section, resolve_fd_sprite};
@@ -597,6 +597,50 @@ fn read_extended_byte(payload: &[u8], i: &mut usize) -> Option<u16> {
     }
 }
 
+/// Cantidad de sprites reales que una Action1 consume del flujo de datos.
+///
+/// El primer formato usa `BYTE num_sets`/`BYTE num_ent`; el formato extendido
+/// reemplaza esos campos por `ExtendedByte`. `first_set` no cambia el número
+/// de imágenes físicas, pero se consume para mantener el cursor correcto.
+fn action1_sprite_count(payload: &[u8]) -> Option<usize> {
+    if payload.len() < 4 || payload[0] != 0x01 {
+        return None;
+    }
+    let mut i = 2usize;
+    let raw_num_sets = *payload.get(i)?;
+    i += 1;
+    let (num_sets, num_ent) = if raw_num_sets == 0 && payload.len().saturating_sub(i) >= 3 {
+        let _first_set = read_extended_byte(payload, &mut i)?;
+        (
+            usize::from(read_extended_byte(payload, &mut i)?),
+            usize::from(read_extended_byte(payload, &mut i)?),
+        )
+    } else {
+        (
+            usize::from(raw_num_sets),
+            usize::from(read_extended_byte(payload, &mut i)?),
+        )
+    };
+    num_sets.checked_mul(num_ent)
+}
+
+/// Cantidad de glifos reales que una Action12 consume del flujo de datos.
+fn action12_sprite_count(payload: &[u8]) -> Option<usize> {
+    if payload.len() < 2 || payload[0] != 0x12 {
+        return None;
+    }
+    let num_def = usize::from(payload[1]);
+    let mut i = 2usize;
+    let mut count = 0usize;
+    for _ in 0..num_def {
+        let _font_size = *payload.get(i)?;
+        let num_char = usize::from(*payload.get(i + 1)?);
+        i = i.checked_add(4)?; // size + num_char + base_char
+        count = count.checked_add(num_char)?;
+    }
+    Some(count)
+}
+
 fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<ParsedAction3> {
     // 03 <feature> <n-id> <ids…> <num-cid> [cargo…] <default:u16>
     if payload.len() < 6 || payload[0] != 0x03 {
@@ -871,6 +915,62 @@ pub fn collect_feature_sprite_graphics(
     if !current_set.is_empty() {
         out.sets.push(current_set);
     }
+    Ok(out)
+}
+
+/// Asigna IDs globales a los sprites reales cargados por Action1/Action12.
+///
+/// `OpenTTD` incrementa un cursor global al activar cada entrada real de esos
+/// dos actions; Action0 puede referenciar luego ese cursor desde otra tabla.
+/// Los sprites `0xFD` se resuelven contra la sección v2 antes de entrar al
+/// índice. `Action5` y `ActionA` usan destinos fijos y no consumen este cursor.
+///
+/// El caller debe encadenar `next_sprite_id` entre los GRF activos, respetando
+/// el orden del stack. El resultado es deliberadamente independiente de un
+/// feature para que una referencia de puente pueda apuntar a cualquier set.
+pub fn collect_global_sprite_graphics(
+    data: &[u8],
+    first_sprite_id: u32,
+) -> Result<GlobalSpriteGraphics, GrfScanError> {
+    let parsed = parse_grf_full(data)?;
+    let container = parsed.container;
+    let sprite_index = index_sprite_section(parsed.sprite_section);
+    let mut out = GlobalSpriteGraphics {
+        sprites: std::collections::HashMap::new(),
+        next_sprite_id: first_sprite_id,
+    };
+    let mut pending_real = 0usize;
+
+    walk_grf_entries(parsed.data_section, container, |entry| match entry {
+        GrfEntry::Pseudo(payload) => {
+            if let Some(count) =
+                action1_sprite_count(payload).or_else(|| action12_sprite_count(payload))
+            {
+                pending_real = pending_real.saturating_add(count);
+            }
+        }
+        GrfEntry::Real { info, payload } => {
+            if pending_real == 0 {
+                return;
+            }
+            let decoded = if container == GrfContainerVersion::V2 && info == 0xFD {
+                if payload.len() >= 4 {
+                    let id = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
+                    resolve_fd_sprite(&sprite_index, id)
+                } else {
+                    None
+                }
+            } else {
+                decode_real_sprite_entry(container, info, payload)
+            };
+            if let Some(decoded) = decoded {
+                out.sprites.insert(out.next_sprite_id, decoded);
+            }
+            out.next_sprite_id = out.next_sprite_id.saturating_add(1);
+            pending_real -= 1;
+        }
+    });
+
     Ok(out)
 }
 

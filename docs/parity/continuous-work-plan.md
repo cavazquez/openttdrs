@@ -7314,3 +7314,11 @@ los overrides se aplican a todos los IDs consecutivos declarados por
 `num_ids`. La etapa todavía no dibuja esos sprites en Bevy: la resolución de
 IDs globales del sprite section/Action1 y su geometría quedan separadas para no
 confundir referencias con píxeles. #326 permanece abierta.
+
+Corrección #326-GLOBAL-SPRITE-INDEX (2026-09-13): se añadió un índice efímero
+que asigna los `SpriteID` globales de `OpenTTD` a las imágenes reales cargadas
+por Action1 y Action12, incluyendo imports v2 `0xFD` y el cursor
+`NEWGRF_SPRITE_BASE`. Esto habilita resolver las referencias absolutas de
+Action0 sin confundir un índice de set local con un sprite decodificado; la
+aplicación del índice al catálogo/renderer de puentes queda como la siguiente
+etapa. #326 permanece abierta.

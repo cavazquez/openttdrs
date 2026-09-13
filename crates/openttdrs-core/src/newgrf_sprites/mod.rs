@@ -36,7 +36,7 @@ pub use model::{
     CBID_VEHICLE_COLOUR_MAPPING, CBID_VEHICLE_CUSTOM_REFIT, CBID_VEHICLE_LENGTH,
     CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_MODIFY_PROPERTY, CBID_VEHICLE_REFIT_CAPACITY,
     CBID_VEHICLE_REFIT_COST, CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_SPAWN_VISUAL_EFFECT,
-    CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT, DecodedSprite,
+    CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT, DecodedSprite, GlobalSpriteGraphics,
     IndustryProductionGroup, ResolvedTileLayout, ResolvedTileLayoutSprite,
     TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE, TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
     TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT, TileLayout, TileLayoutRegisterRefs,
@@ -61,12 +61,12 @@ pub use pixel_codec::{
 pub use action_graph::{
     collect_aircraft_sprite_graphics, collect_airport_sprite_graphics,
     collect_airport_tile_sprite_graphics, collect_canal_sprite_graphics,
-    collect_cargo_sprite_graphics, collect_feature_sprite_graphics, collect_house_sprite_graphics,
-    collect_industry_sprite_graphics, collect_industry_tile_sprite_graphics,
-    collect_object_sprite_graphics, collect_railtype_sprite_graphics,
-    collect_road_vehicle_sprite_graphics, collect_roadstop_sprite_graphics,
-    collect_roadtype_sprite_graphics, collect_ship_sprite_graphics,
-    collect_station_sprite_graphics, collect_train_sprite_graphics,
+    collect_cargo_sprite_graphics, collect_feature_sprite_graphics, collect_global_sprite_graphics,
+    collect_house_sprite_graphics, collect_industry_sprite_graphics,
+    collect_industry_tile_sprite_graphics, collect_object_sprite_graphics,
+    collect_railtype_sprite_graphics, collect_road_vehicle_sprite_graphics,
+    collect_roadstop_sprite_graphics, collect_roadtype_sprite_graphics,
+    collect_ship_sprite_graphics, collect_station_sprite_graphics, collect_train_sprite_graphics,
 };
 
 // Re-exportar funciones de runtime de action5
@@ -77,10 +77,10 @@ pub use action5::{
     ACTION5_TYPE_TWOCC, AIRPORT_PREVIEW_ACTION5_SLOT_COUNT, Action5LoadContext,
     BRIDGE_DECKS_ACTION5_SLOT_COUNT, CANALS_ACTION5_LOCK_SLOT, CANALS_ACTION5_SLOT_COUNT,
     CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE, CATENARY_PYLON_SPRITE_BASE,
-    CATENARY_WIRE_SPRITE_BASE, FOUNDATION_ACTION5_SLOT_COUNT, ONEWAY_ACTION5_SLOT_COUNT,
-    OPENTTD_GUI_ACTION5_SLOT_COUNT, ROADSTOP_ACTION5_SLOT_COUNT, SHORE_ACTION5_SLOT_COUNT,
-    SHORE_MISSING_BLOCK_SLOTS, SIGNAL_ACTION5_SLOT_COUNT, SPR_SIGNALS_ACTION5_BASE,
-    TRAMWAY_ACTION5_SLOT_COUNT, TRAMWAY_DEPOT_NO_TRACK_ACTION5_SLOT,
+    CATENARY_WIRE_SPRITE_BASE, FOUNDATION_ACTION5_SLOT_COUNT, NEWGRF_SPRITE_BASE,
+    ONEWAY_ACTION5_SLOT_COUNT, OPENTTD_GUI_ACTION5_SLOT_COUNT, ROADSTOP_ACTION5_SLOT_COUNT,
+    SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS, SIGNAL_ACTION5_SLOT_COUNT,
+    SPR_SIGNALS_ACTION5_BASE, TRAMWAY_ACTION5_SLOT_COUNT, TRAMWAY_DEPOT_NO_TRACK_ACTION5_SLOT,
     TRAMWAY_DEPOT_WITH_TRACK_ACTION5_SLOT, TWOCC_ACTION5_SLOT_COUNT, TWOCC_PALETTE_BASE,
     TramwayDepotReplacement, action5_type_name, airport_preview_action5_slot,
     bridge_decks_action5_base, bridge_decks_action5_slot, catenary_action5_local_slot,
@@ -233,6 +233,29 @@ mod tests {
         let preview = gfx.preview_for_local_id(0).unwrap();
         assert_eq!(preview.width, 8);
         assert!(preview.rgba.iter().any(|&b| b != 0));
+    }
+
+    #[test]
+    fn collect_global_sprite_graphics_assigns_action1_fd_sprite() {
+        let a0 = build_action0_train_payload(1984, 100, 750, "Global FD");
+        let indices = [0u8, 174, 174, 0];
+        let bytes = build_grf_v2_train_with_fd_sprite(
+            &a0,
+            0,
+            0x1234,
+            2,
+            2,
+            &indices,
+            [b'G', b'L', 0, 1],
+            "global-fd",
+        );
+        let first = NEWGRF_SPRITE_BASE;
+        let graphics = collect_global_sprite_graphics(&bytes, first).unwrap();
+        let sprite = graphics.sprites.get(&first).expect("global Action1 sprite");
+        assert_eq!(sprite.width, 2);
+        assert!(sprite.rgba.iter().any(|&value| value != 0));
+        assert_eq!(graphics.next_sprite_id, first + 1);
+        assert!(!graphics.sprites.contains_key(&(first + 1)));
     }
 
     #[test]

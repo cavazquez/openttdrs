@@ -55,6 +55,9 @@ pub const OPENTTD_GUI_ACTION5_SLOT_COUNT: usize = 192;
 pub const AIRPORT_PREVIEW_ACTION5_SLOT_COUNT: usize = 9;
 /// `BRIDGE_DECKS_SPRITE_COUNT` (6 direcciones × 4 tipos).
 pub const BRIDGE_DECKS_ACTION5_SLOT_COUNT: usize = 24;
+/// Primer `SpriteID` que `OpenTTD` reserva para sprites cargados por `NewGRF`.
+/// Es `SPR_BRIDGE_DECKS_BASE + BRIDGE_DECKS_SPRITE_COUNT` (`6240 + 24`).
+pub const NEWGRF_SPRITE_BASE: u32 = 6264;
 /// `CANALS_SPRITE_COUNT` (Action5 tipo `0x08`).
 pub const CANALS_ACTION5_SLOT_COUNT: usize = 65;
 /// Primer slot de esclusa en Action5 canals (`SPR_LOCK_BASE - SPR_CANALS_BASE`).

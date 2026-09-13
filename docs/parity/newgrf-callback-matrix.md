@@ -1776,3 +1776,15 @@ por lo que el CSV opt-in coincide con el sprite que se dibuja cuando un motor
 NewGRF aporta offsets o dimensiones custom. La regresión verifica un bus cuyo
 offset activo desplaza la posición más de 30 px respecto del fallback vanilla;
 la traza conserva sus columnas y semántica de interpolación.
+
+### #329-VEHICLE-PREVIEW-2CC-LIVERY — paleta 2CC de previews
+
+Actualizado: 2026-09-12 (`9bbfeb6f`). Las previews de compra, vista de
+vehículo y rotor calculan el esquema de librea de la compañía activa con el
+contrato GUI, conservan los canales primario/secundario y hornean
+`SPR_2CCMAP_BASE + primary + secondary * 16`; las filas de compra comparten
+la clave de caché `(engine, primary, secondary)`. Antes el segundo canal
+repetía el primario, por lo que una librea personalizada perdía su color
+secundario. La regresión `vehicle_preview_uses_secondary_company_livery_for_2cc`
+contrasta `2/9` con `2/2`; callbacks de remapeo que requieren una unidad real
+y otros layouts GUI siguen pendientes.

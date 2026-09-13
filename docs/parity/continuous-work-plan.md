@@ -6365,3 +6365,15 @@ posición registrada con un motor custom desplazado 96 px. Pasaron los 2 tests
 dirigidos de `render_trace`, Clippy estricto de cliente y core, formato y
 `git diff --check`. #329 continúa abierta por callbacks, vistas runtime
 completas y consumidores legacy restantes; #326/#567 permanecen abiertas.
+
+Corrección #329-VEHICLE-PREVIEW-2CC-LIVERY (2026-09-12, `9bbfeb6f`): las
+previews de compra, vista de vehículo y rotor calculan la librea de la
+compañía activa con el contrato GUI y conservan sus canales primario y
+secundario al hornear sprites 2CC. Las filas de compra comparten además la
+clave de caché `(engine, primary, secondary)`, por lo que cambiar la librea no
+reutiliza una textura vieja. La regresión
+`vehicle_preview_uses_secondary_company_livery_for_2cc` contrasta `2/9` con
+el resultado incorrecto `2/2`; callbacks de remapeo de color que requieren
+una unidad real y otros layouts GUI siguen pendientes. Pasaron 36 tests de
+`render::vehicles`, Clippy estricto de cliente y core, formato y
+`git diff --check`. #329 continúa abierta; #326/#567 permanecen abiertas.

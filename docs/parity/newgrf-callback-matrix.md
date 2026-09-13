@@ -1867,3 +1867,14 @@ antes del sprite vanilla y aplica el mismo contrato de paleta 2CC/Action5 y sus
 metadatos geométricos. `runtime_empty_layers_fall_back_to_static_catalog_view`
 verifica píxeles, handle no vanilla, offsets y dimensiones; siguen pendientes
 las capas avanzadas y los consumidores fuera de este call site.
+
+### #329-VEHICLE-PICK-RUNTIME-OFFSETS — hit-test con capa runtime
+
+Actualizado: 2026-09-12 (`33a87136`). El click del mapa puede ejecutarse antes
+de que `update_vehicles` escriba los transforms del frame, por lo que calcula
+la posición con `vehicle_world_position_with_newgrf` cuando están disponibles
+los recursos visuales. Así el radio de selección sigue al primer sprite
+runtime, incluidos offsets de Action2/SpriteStack; sin esos recursos conserva
+el cálculo catalog-aware anterior. `pick_vehicle_uses_runtime_sprite_offsets`
+verifica que el centro vanilla no seleccione y el runtime sí; quedan pendientes
+el hit-test por bounds completos y consumidores legacy fuera del mapa.

@@ -6452,3 +6452,14 @@ reproduce el caso con runtime vacío y vista custom. Pasaron 41 tests de
 `render::vehicles`, Clippy estricto de cliente y `git diff --check`; #329
 continúa abierta por layouts/call sites GUI, efectos avanzados y consumidores
 legacy restantes.
+
+Corrección #329-VEHICLE-PICK-RUNTIME-OFFSETS (2026-09-12, `33a87136`): el
+hit-test del clic reutiliza ahora la primera capa NewGRF que el mapa resolverá
+para la misma unidad, pose, carga y librea. Un SpriteStack o Action2 con
+offsets runtime ya no sólo se dibuja desplazado: también se selecciona en su
+centro visible. El input conserva la ruta catalog-aware cuando el arnés no
+instala `TruckHandles`, caché o `Assets<Image>`. La regresión
+`pick_vehicle_uses_runtime_sprite_offsets` separa el centro runtime del
+vanilla y comprueba ambos contratos. Pasaron 42 tests de `render::vehicles`,
+Clippy estricto de cliente y `git diff --check`; #329 continúa abierta por
+callbacks y consumidores visuales legacy restantes.

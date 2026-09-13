@@ -21,7 +21,7 @@ use crate::i18n::{Locale, localized_text};
 use crate::render::newgrf_cache::{DecodedSpriteImagePolicy, decoded_sprite_image};
 use crate::render::{
     NewGrfTrainSpriteCache, NewGrfVehicleLayer, RemapMapVisualsPending, TruckHandles,
-    aircraft_rotor_preview_layers, vehicle_preview_layers,
+    aircraft_rotor_preview_layers, vehicle_preview_layers, vehicle_preview_livery_colours,
 };
 use crate::settings::ClientPreferences;
 use crate::sprites::CompanyColour;
@@ -41,19 +41,29 @@ const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
 const BTN_ACTIVE: Color = Color::srgb(0.58, 0.50, 0.31);
 
-/// Caché de previews NewGRF (`engine_id`, `company_colour`) → textura RGBA.
+/// Caché de previews NewGRF (`engine_id`, `primary`, `secondary`) → textura RGBA.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfTrainPreviewCache {
-    handles: HashMap<(u16, u8), Handle<Image>>,
+    handles: HashMap<(u16, u8, u8), Handle<Image>>,
 }
 
-fn decoded_sprite_to_image(sprite: &DecodedSprite, company_colour: u8) -> Image {
-    decoded_sprite_image(
-        sprite,
+fn decoded_sprite_to_image(
+    sprite: &DecodedSprite,
+    primary_colour: u8,
+    secondary_colour: u8,
+    uses_2cc: bool,
+) -> Image {
+    let policy = if uses_2cc {
+        DecodedSpriteImagePolicy::TwoCompany {
+            primary: CompanyColour::from_u8(primary_colour),
+            secondary: CompanyColour::from_u8(secondary_colour),
+        }
+    } else {
         DecodedSpriteImagePolicy::Masked {
-            colour: CompanyColour::from_u8(company_colour),
-        },
-    )
+            colour: CompanyColour::from_u8(primary_colour),
+        }
+    };
+    decoded_sprite_image(sprite, policy)
 }
 
 /// Filtro locomotora/vagón en depósito de vía.
@@ -671,13 +681,21 @@ fn preview_sprite_for_engine(
     engine: &EngineDef,
     cache: &mut NewGrfTrainPreviewCache,
     images: &mut Assets<Image>,
-    company_colour: u8,
+    primary_colour: u8,
+    secondary_colour: u8,
 ) -> Handle<Image> {
     if let Some(decoded) = engine.newgrf_preview() {
         return cache
             .handles
-            .entry((engine.id, company_colour))
-            .or_insert_with(|| images.add(decoded_sprite_to_image(decoded, company_colour)))
+            .entry((engine.id, primary_colour, secondary_colour))
+            .or_insert_with(|| {
+                images.add(decoded_sprite_to_image(
+                    decoded,
+                    primary_colour,
+                    secondary_colour,
+                    engine.uses_2cc,
+                ))
+            })
             .clone();
     }
     if engine.kind == VehicleKind::Train {
@@ -864,12 +882,14 @@ pub(crate) fn sync_buy_window(
     if let Some(trucks) = trucks.as_ref() {
         for (sprite, mut image) in &mut row_sprite_q {
             if let Some(engine) = engines.get(sprite.slot) {
+                let (primary, secondary) = vehicle_preview_livery_colours(&sim, engine);
                 image.image = preview_sprite_for_engine(
                     trucks,
                     engine,
                     &mut preview_cache,
                     &mut images,
-                    sim.state.company_colour,
+                    primary.as_u8(),
+                    secondary.as_u8(),
                 );
             }
         }
@@ -938,13 +958,9 @@ pub(crate) fn sync_buy_window_preview(
     };
     match (buy_state.depot_pos, preview_engine, trucks.as_ref()) {
         (Some(_), Some(engine), Some(trucks)) => {
-            let body_layers = vehicle_preview_layers(
-                &sim,
-                engine,
-                sim.state.company_colour,
-                &mut newgrf_train_sprites,
-                &mut images,
-            );
+            let (primary, secondary) = vehicle_preview_livery_colours(&sim, engine);
+            let body_layers =
+                vehicle_preview_layers(&sim, engine, &mut newgrf_train_sprites, &mut images);
             if let Ok((mut image, mut node)) = preview_q.single_mut() {
                 if let Some(layer) = body_layers.first() {
                     image.image = layer.handle.clone();
@@ -959,7 +975,8 @@ pub(crate) fn sync_buy_window_preview(
                         engine,
                         &mut preview_cache,
                         &mut images,
-                        sim.state.company_colour,
+                        primary.as_u8(),
+                        secondary.as_u8(),
                     );
                     node.left = Val::Px(0.0);
                     node.top = Val::Px(0.0);
@@ -984,7 +1001,6 @@ pub(crate) fn sync_buy_window_preview(
             let rotor_layers = aircraft_rotor_preview_layers(
                 &sim,
                 engine,
-                sim.state.company_colour,
                 &mut newgrf_train_sprites,
                 &mut images,
                 trucks,

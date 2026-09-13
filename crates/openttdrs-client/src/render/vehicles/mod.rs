@@ -37,7 +37,6 @@ fn engine_in_sim(sim: &SimWorld, engine_id: u16) -> Option<&EngineDef> {
 pub(crate) fn aircraft_rotor_preview_layers(
     sim: &SimWorld,
     engine: &EngineDef,
-    company_colour: u8,
     cache: &mut NewGrfTrainSpriteCache,
     images: &mut Assets<Image>,
     trucks: &TruckHandles,
@@ -45,12 +44,9 @@ pub(crate) fn aircraft_rotor_preview_layers(
     if engine.kind != VehicleKind::Aircraft || !openttdrs_core::aircraft_is_helicopter_def(engine) {
         return Vec::new();
     }
+    let (primary, secondary) = vehicle_preview_livery_colours(sim, engine);
     let custom = assets::custom_aircraft_rotor_layers_for_preview(
-        engine,
-        sim,
-        crate::sprites::CompanyColour::from_u8(company_colour),
-        cache,
-        images,
+        engine, sim, primary, secondary, cache, images,
     );
     if !custom.is_empty() {
         return custom;
@@ -73,16 +69,48 @@ pub(crate) fn aircraft_rotor_preview_layers(
 pub(crate) fn vehicle_preview_layers(
     sim: &SimWorld,
     engine: &EngineDef,
-    company_colour: u8,
     cache: &mut NewGrfTrainSpriteCache,
     images: &mut Assets<Image>,
 ) -> Vec<NewGrfVehicleLayer> {
-    assets::custom_vehicle_layers_for_preview(
-        engine,
-        sim,
-        crate::sprites::CompanyColour::from_u8(company_colour),
-        cache,
-        images,
+    let (primary, secondary) = vehicle_preview_livery_colours(sim, engine);
+    assets::custom_vehicle_layers_for_preview(engine, sim, primary, secondary, cache, images)
+}
+
+/// Devuelve la librea que OpenTTD usa para un motor todavía no construido.
+///
+/// `GetEnginePalette` resuelve el esquema de la compañía activa con una
+/// unidad nula: no hay grupo ni cabeza de consist, pero sí cuentan la clase,
+/// el cargo por defecto y los dos canales de la librea. El cliente recibía
+/// antes sólo `company_colour` y repetía ese valor para 2CC, ocultando un
+/// secundario personalizado en las previews de compra y de vehículo.
+#[must_use]
+pub(crate) fn vehicle_preview_livery_colours(
+    sim: &SimWorld,
+    engine: &EngineDef,
+) -> (crate::sprites::CompanyColour, crate::sprites::CompanyColour) {
+    let fallback = crate::sprites::CompanyColour::from_u8(sim.state.company_colour);
+    let Some(company) = sim
+        .state
+        .companies
+        .iter()
+        .find(|company| company.id == sim.state.active_company)
+    else {
+        return (fallback, fallback);
+    };
+
+    let mut preview = openttdrs_core::Vehicle::new(
+        0,
+        engine.kind,
+        openttdrs_core::TileCoord::new(0, 0),
+        openttdrs_core::TileCoord::new(0, 0),
+    );
+    preview.engine_id = Some(engine.id);
+    preview.cargo_type = engine.cargo;
+    let scheme = openttdrs_core::vehicle_livery_scheme(&preview, engine, None);
+    let (primary, secondary) = openttdrs_core::company_livery_colours(company, scheme);
+    (
+        crate::sprites::CompanyColour::from_u8(primary),
+        crate::sprites::CompanyColour::from_u8(secondary),
     )
 }
 
@@ -247,8 +275,8 @@ mod tests {
     use bevy::prelude::*;
     use openttdrs_core::prelude::*;
     use openttdrs_core::{
-        COMPANY_LIVERY_FLAG_PRIMARY, CargoType, CompanyLivery, LIVERY_SCHEME_BUS,
-        LIVERY_SCHEME_DEFAULT, VehicleGroup,
+        COMPANY_LIVERY_FLAG_PRIMARY, COMPANY_LIVERY_FLAG_SECONDARY, CargoType, CompanyLivery,
+        LIVERY_SCHEME_BUS, LIVERY_SCHEME_DEFAULT, VehicleGroup,
     };
 
     use assets::vehicle_gfx::{
@@ -1151,8 +1179,6 @@ mod tests {
 
     #[test]
     fn vehicle_preview_layers_resolve_runtime_body_sprite_stack() {
-        use crate::sprites::CompanyColour;
-
         let engine = eight_layer_sprite_stack_engine(0x7F04, 42);
         let mut state = GameState::new(8, 8);
         state.engine_catalog.push(engine.clone());
@@ -1172,13 +1198,7 @@ mod tests {
         let mut cache = NewGrfTrainSpriteCache::default();
         let mut images = Assets::<Image>::default();
 
-        let layers = vehicle_preview_layers(
-            &sim,
-            &engine,
-            CompanyColour::Red.as_u8(),
-            &mut cache,
-            &mut images,
-        );
+        let layers = vehicle_preview_layers(&sim, &engine, &mut cache, &mut images);
 
         assert_eq!(layers.len(), 8);
         assert_eq!(layers[0].x_offs, 42);
@@ -1208,6 +1228,53 @@ mod tests {
         let expected_pos =
             pose::vehicle_sprite_pos_at_offsets(vehicle, &sim.state.map, pose, 42.0, 0.0, 1.0, 1.0);
         assert_eq!(runtime_pos, expected_pos);
+    }
+
+    #[test]
+    fn vehicle_preview_uses_secondary_company_livery_for_2cc() {
+        let view = openttdrs_core::DecodedSprite {
+            width: 2,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![120, 120, 120, 255, 120, 120, 120, 255],
+            mask: vec![0xC6, 0x50],
+        };
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_BUS_MPS)
+            .expect("vanilla bus")
+            .clone();
+        engine.id = 0x7F05;
+        engine.from_newgrf = true;
+        engine.uses_2cc = true;
+        engine.newgrf_views = vec![view.clone()];
+
+        let mut state = GameState::new(8, 8);
+        state.companies[0].liveries[openttdrs_core::LIVERY_SCHEME_DEFAULT] = CompanyLivery {
+            in_use: COMPANY_LIVERY_FLAG_PRIMARY | COMPANY_LIVERY_FLAG_SECONDARY,
+            colour1: 2,
+            colour2: 9,
+        };
+        state.engine_catalog.push(engine.clone());
+        let sim = SimWorld {
+            state,
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let mut cache = NewGrfTrainSpriteCache::default();
+        let mut images = Assets::<Image>::default();
+
+        let layers = vehicle_preview_layers(&sim, &engine, &mut cache, &mut images);
+        let image = images
+            .get(&layers.first().expect("2CC preview layer").handle)
+            .expect("preview image");
+        assert_eq!(
+            image.data.as_deref(),
+            Some(openttdrs_core::bake_sprite_two_company_palette(&view, 2, 9).as_slice())
+        );
+        assert_ne!(
+            image.data.as_deref(),
+            Some(openttdrs_core::bake_sprite_two_company_palette(&view, 2, 2).as_slice())
+        );
     }
 
     #[test]

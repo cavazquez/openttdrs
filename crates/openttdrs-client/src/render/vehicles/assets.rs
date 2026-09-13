@@ -585,6 +585,7 @@ pub(super) fn custom_aircraft_rotor_layers_for_preview(
     engine: &EngineDef,
     sim: &crate::state::SimWorld,
     primary: CompanyColour,
+    secondary: CompanyColour,
     cache: &mut NewGrfTrainSpriteCache,
     images: &mut Assets<Image>,
 ) -> Vec<NewGrfVehicleLayer> {
@@ -597,7 +598,7 @@ pub(super) fn custom_aircraft_rotor_layers_for_preview(
         sim,
         openttdrs_core::DIR_W,
         primary,
-        primary,
+        secondary,
         None,
         cache,
         images,
@@ -615,6 +616,7 @@ pub(super) fn custom_vehicle_layers_for_preview(
     engine: &EngineDef,
     sim: &crate::state::SimWorld,
     primary: CompanyColour,
+    secondary: CompanyColour,
     cache: &mut NewGrfTrainSpriteCache,
     images: &mut Assets<Image>,
 ) -> Vec<NewGrfVehicleLayer> {
@@ -629,14 +631,14 @@ pub(super) fn custom_vehicle_layers_for_preview(
         let palette_override = engine.uses_2cc.then(|| {
             openttdrs_core::TWOCC_PALETTE_BASE
                 + u16::from(primary.as_u8())
-                + u16::from(primary.as_u8()) * 16
+                + u16::from(secondary.as_u8()) * 16
         });
         let layers = cache.handles_for_runtime_with_override(
             engine,
             dir,
             None,
             primary,
-            primary,
+            secondary,
             None,
             palette_override,
             &sim.state.runtime.twocc_action5_newgrf_sprites,
@@ -651,7 +653,7 @@ pub(super) fn custom_vehicle_layers_for_preview(
     let Some(view) = engine.newgrf_view(dir) else {
         return Vec::new();
     };
-    let Some(handle) = cache.handle_for_with_livery(engine, dir, primary, primary, images) else {
+    let Some(handle) = cache.handle_for_with_livery(engine, dir, primary, secondary, images) else {
         return Vec::new();
     };
     vec![NewGrfVehicleLayer {

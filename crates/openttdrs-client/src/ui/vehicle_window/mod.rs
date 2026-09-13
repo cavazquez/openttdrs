@@ -201,9 +201,7 @@ pub(crate) fn vehicle_side_sprite_for_sim(
         .engine_id
         .and_then(|id| openttdrs_core::engine_in_catalog(&sim.state.engine_catalog, id))
     {
-        if let Some(layer) =
-            vehicle_preview_layers(sim, engine, sim.state.company_colour, cache, images).first()
-        {
+        if let Some(layer) = vehicle_preview_layers(sim, engine, cache, images).first() {
             return layer.handle.clone();
         }
         return vehicle_side_sprite_for_engine(trucks, vehicle, engine);

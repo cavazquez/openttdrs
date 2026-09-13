@@ -6595,3 +6595,13 @@ los layouts avanzados y el vínculo con Action3. La regresión usa el rango
 ranges representables con IDs byte; la codificación `ExtendedByte` para
 estaciones por encima de 255 queda separada, por lo que #326/#329 continúan
 abiertas.
+
+Corrección #326/#329-STATION-EXTENDED-ID (2026-09-13, `bbbb7440`): el primer
+ID local de Action0 para `Stations` se lee y conserva como `u16` cuando llega
+con la codificación `ExtendedByte`; el rango completo se valida antes de
+consumir propiedades y se expande sin truncamiento en catálogo, layouts
+avanzados, vistas, `copy_layout`, Action3 y callbacks de disponibilidad,
+pendiente y animación. La regresión importa los IDs `300..301` y verifica que
+la identidad de wire llegue al catálogo. Esto elimina la colisión byte/WORD,
+pero no cubre todavía todos los layouts dinámicos, paletas especiales,
+transparencia, relocación ni scopes restantes; #326/#329 continúan abiertas.

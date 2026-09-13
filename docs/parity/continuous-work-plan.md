@@ -6578,3 +6578,11 @@ materialización de la secuencia; core (2707 tests), cliente, Clippy, formato y
 `git diff --check` quedaron verdes. Paletas no-Action1 dinámicas, transparencia,
 layouts 16-bit y la cobertura completa de Action3/relocación siguen pendientes;
 #326/#329 no se cierran.
+
+Corrección #326/#329-STATION-LOCAL-ID (2026-09-13, `9876c5cf`): los metadatos
+de `Stations` conservan el primer id local declarado por Action0. La aplicación
+usa ese id para asociar layouts avanzados, vistas y `copy_layout`, y deja de
+suponer que la posición del bloque en el GRF es el id. La regresión integrada
+usa una estación con id local `7` y verifica tanto el runtime como
+`StationSpecDef`. Los bloques Action0 que declaran varios ids todavía requieren
+expandir el rango completo; #326/#329 continúan abiertas.

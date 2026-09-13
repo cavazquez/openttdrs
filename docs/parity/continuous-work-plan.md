@@ -6586,3 +6586,12 @@ suponer que la posición del bloque en el GRF es el id. La regresión integrada
 usa una estación con id local `7` y verifica tanto el runtime como
 `StationSpecDef`. Los bloques Action0 que declaran varios ids todavía requieren
 expandir el rango completo; #326/#329 continúan abiertas.
+
+Corrección #326/#329-STATION-ACTION0-RANGE (2026-09-13, `c2045622`): la
+aplicación de Stations materializa ahora todos los IDs consecutivos de
+`num_ids`, replicando por cada uno las propiedades comunes, el `copy_layout`,
+los layouts avanzados y el vínculo con Action3. La regresión usa el rango
+`7..8` y comprueba que ambos IDs reciban el runtime visual. El corte cubre
+ranges representables con IDs byte; la codificación `ExtendedByte` para
+estaciones por encima de 255 queda separada, por lo que #326/#329 continúan
+abiertas.

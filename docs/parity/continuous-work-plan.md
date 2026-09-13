@@ -867,6 +867,14 @@ bits de vía que usa `DrawBridgeRoadBits`; si la vista o el grupo faltan, sólo
 esa capa cae al fallback ya existente. #326/#565 siguen abiertas por
 catenaria custom, clipping, pivotes y aceptación raster.
 
+Corrección #326-BRIDGE-PREVIEW-ROTSG-CATENARY (2026-09-13): la preview de
+puentes resuelve ahora las dos mitades custom de catenaria (`ROTSG_CATENARY_BACK`
+y `ROTSG_CATENARY_FRONT`) con sus índices `23 + 95..106`, conservando el
+orden posterior→delantero y las capas relativas al tablero. Respeta la
+preferencia global de ocultar catenaria, el flag de catenaria del roadtype y
+el fallback independiente de cada grupo; #326/#565 continúan abiertas por
+catenaria vanilla de preview, clipping, pivotes y aceptación raster.
+
 Actualización #326-ROAD-CATENARY-GLOBAL (2026-09-09): las calles normales
 publican ya los cuatro `AddSortableSpriteToDraw` de cada
 `DrawRoadTypeCatenary` como parents globales: tres recortes traseros con sus

@@ -18,9 +18,15 @@ const DECK_LAYER: f32 = 0.04;
 const FRONT_LAYER: f32 = 0.045;
 const CUSTOM_BRIDGE_LAYER: f32 = DECK_LAYER + 0.001;
 const CUSTOM_OVERLAY_LAYER: f32 = DECK_LAYER + 0.002;
+const CUSTOM_CATENARY_BACK_LAYER: f32 = DECK_LAYER + 0.003;
+const CUSTOM_CATENARY_FRONT_LAYER: f32 = FRONT_LAYER + 0.002;
 const ROTSG_BRIDGE: u8 = 6;
 const ROTSG_OVERLAY: u8 = 1;
+const ROTSG_CATENARY_FRONT: u8 = 4;
+const ROTSG_CATENARY_BACK: u8 = 5;
 const BRIDGE_ROAD_OVERLAY_OFFSETS: [usize; 6] = [0, 1, 11, 12, 13, 14];
+const BRIDGE_ROAD_CATENARY_BACK_OFFSETS: [usize; 6] = [95, 96, 99, 102, 100, 101];
+const BRIDGE_ROAD_CATENARY_FRONT_OFFSETS: [usize; 6] = [97, 98, 103, 106, 104, 105];
 
 pub(crate) struct BridgeSpanPreviewSpawn<'a> {
     pub asset_server: &'a AssetServer,
@@ -339,6 +345,89 @@ pub(crate) fn spawn_bridge_span_preview(
                 .with_scale(Vec3::splat(1.002)),
             ));
         }
+
+        if let Some((def, source_coord, source_tile)) = custom_source
+            && def.has_catenary()
+            && !crate::sprites::catenary_hidden()
+        {
+            let offset = bridge_offset.min(BRIDGE_ROAD_CATENARY_BACK_OFFSETS.len() - 1);
+            if def.has_newgrf_specific_group(ROTSG_CATENARY_BACK)
+                && let Some((sprite, view)) = custom_bridge_preview_layer(
+                    def,
+                    map,
+                    source_coord,
+                    source_tile,
+                    ROTSG_CATENARY_BACK,
+                    23 + BRIDGE_ROAD_CATENARY_BACK_OFFSETS[offset],
+                    climate,
+                    road_catalog,
+                    newgrf_stack,
+                    road_sprites,
+                    images,
+                    tint,
+                )
+            {
+                let custom_z = if is_middle {
+                    deck_z.unwrap_or(base_z)
+                } else {
+                    base_z
+                };
+                commands.spawn((
+                    BuildGhostPreview,
+                    sprite,
+                    Transform::from_translation(overlay_pos(
+                        iso(px, py),
+                        f32::from(view.x_offs),
+                        f32::from(view.y_offs),
+                        f32::from(view.width),
+                        f32::from(view.height),
+                        custom_z,
+                        CUSTOM_CATENARY_BACK_LAYER,
+                        px,
+                        py,
+                    ))
+                    .with_scale(Vec3::splat(1.002)),
+                ));
+            }
+            if def.has_newgrf_specific_group(ROTSG_CATENARY_FRONT)
+                && let Some((sprite, view)) = custom_bridge_preview_layer(
+                    def,
+                    map,
+                    source_coord,
+                    source_tile,
+                    ROTSG_CATENARY_FRONT,
+                    23 + BRIDGE_ROAD_CATENARY_FRONT_OFFSETS[offset],
+                    climate,
+                    road_catalog,
+                    newgrf_stack,
+                    road_sprites,
+                    images,
+                    tint,
+                )
+            {
+                let custom_z = if is_middle {
+                    deck_z.unwrap_or(base_z)
+                } else {
+                    base_z
+                };
+                commands.spawn((
+                    BuildGhostPreview,
+                    sprite,
+                    Transform::from_translation(overlay_pos(
+                        iso(px, py),
+                        f32::from(view.x_offs),
+                        f32::from(view.y_offs),
+                        f32::from(view.width),
+                        f32::from(view.height),
+                        custom_z,
+                        CUSTOM_CATENARY_FRONT_LAYER,
+                        px,
+                        py,
+                    ))
+                    .with_scale(Vec3::splat(1.002)),
+                ));
+            }
+        }
     }
 }
 
@@ -510,5 +599,13 @@ mod tests {
         assert_eq!((resolved.width, resolved.height), (5, 6));
         assert_eq!((resolved.x_offs, resolved.y_offs), (1, -2));
         assert_eq!(images.len(), 1);
+    }
+
+    #[test]
+    fn bridge_preview_catenary_uses_distinct_front_and_back_offsets() {
+        assert_eq!(23 + BRIDGE_ROAD_CATENARY_BACK_OFFSETS[0], 118);
+        assert_eq!(23 + BRIDGE_ROAD_CATENARY_FRONT_OFFSETS[0], 120);
+        assert_eq!(23 + BRIDGE_ROAD_CATENARY_BACK_OFFSETS[5], 124);
+        assert_eq!(23 + BRIDGE_ROAD_CATENARY_FRONT_OFFSETS[5], 128);
     }
 }

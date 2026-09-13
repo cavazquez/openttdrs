@@ -6243,6 +6243,16 @@ core (1 ignorado), 1430 del cliente (2 ignorados), Clippy estricto en core y
 cliente, formato y `git diff --check`. #329 continúa abierta por callbacks y
 consumidores legacy restantes; #326/#567 permanecen abiertas.
 
+Corrección #329-VEHICLE-IMAGE-TYPES (2026-09-12, `8bd9c649`): la resolución
+runtime conserva ahora el `EngineImageType` en el byte bajo de `var 10` y el
+índice de `SpriteStack` en el byte alto, como `GetCustomEngineSprite` de
+OpenTTD. Mapa usa `0x00`, depósito `0x10`, detalles `0x11`, lista `0x12` y
+compra `0x20`; la regresión `runtime_vehicle_layers_receive_purchase_image_type`
+selecciona grupos distintos para mapa y compra. Pasaron 38 tests de
+`render::vehicles`, Clippy estricto de cliente y core, formato y
+`git diff --check`. #329 continúa abierta por callbacks, layouts y
+consumidores legacy restantes; #326/#567 permanecen abiertas.
+
 Corrección #329-AUTOREPLACE-COMMAND-CATALOG (2026-09-12, `c4d604f4`): el
 comando `SetAutoReplaceRule` valida ahora los motores origen y destino contra
 `GameState.engine_catalog` antes de caer a la tabla vanilla. La ventana ya

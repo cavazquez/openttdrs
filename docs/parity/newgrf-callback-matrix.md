@@ -1798,3 +1798,13 @@ consist, callbacks y librea de grupo. La regresión
 `vehicle_side_layers_use_actual_group_livery` verifica una máscara 2CC con
 colores de grupo `4/9`; image types específicos de cada ventana, callbacks de
 remapeo sin unidad y otros consumidores GUI siguen pendientes.
+
+### #329-VEHICLE-IMAGE-TYPES — contexto visual en `var 10`
+
+Actualizado: 2026-09-12 (`8bd9c649`). La resolución runtime conserva el
+`EngineImageType` en el byte bajo de `var 10` y el índice de `SpriteStack` en
+el byte alto: mapa `0x00`, depósito `0x10`, detalles `0x11`, lista `0x12` y
+compra `0x20`. La regresión
+`runtime_vehicle_layers_receive_purchase_image_type` verifica que un grupo
+seleccione una vista distinta para compra frente al mapa; quedan callbacks,
+layouts específicos y consumidores legacy pendientes.

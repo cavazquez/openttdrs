@@ -850,6 +850,15 @@ construcción. Las regresiones cubren arrastre invertido y rampas planas,
 alineadas y de esquina; #326 continúa abierta por capas NewGRF específicas de
 preview, clipping, pivotes y aceptación raster.
 
+Corrección #326-BRIDGE-PREVIEW-ROTSG-BRIDGE (2026-09-13): la preview de
+puentes de carretera usa el `RoadType` seleccionado para resolver el grupo
+específico `ROTSG_BRIDGE`, incluso antes de que las rampas se materialicen en
+el mapa. La copia temporal conserva clima, parámetros del GRF y variables
+Action2; cada vista usa sus offsets y dimensiones NFO sobre la misma cota del
+tablero, con fallback vanilla por pieza si el grupo no resuelve. La caché de
+texturas es la compartida con el renderer in-world; #326/#565 siguen abiertas
+por overlays/catenaria custom, clipping, pivotes y aceptación raster.
+
 Actualización #326-ROAD-CATENARY-GLOBAL (2026-09-09): las calles normales
 publican ya los cuatro `AddSortableSpriteToDraw` de cada
 `DrawRoadTypeCatenary` como parents globales: tres recortes traseros con sus

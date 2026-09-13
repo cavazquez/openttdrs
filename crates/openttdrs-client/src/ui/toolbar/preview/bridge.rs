@@ -1,9 +1,14 @@
 //! Fantasma de puente: eje según el tramo y sprite distinto en rampas vs vano.
 
 use bevy::prelude::*;
-use openttdrs_core::{BridgeType, calc_bridge_piece};
+use openttdrs_core::{
+    BridgeType, Climate, Map, NewGrfEntry, RoadTramType, RoadType, RoadTypeDef, Tile, TileCoord,
+    TileKind, action2_eval_ctx_for_road_tile, calc_bridge_piece, set_road_type_on_tile,
+    set_tram_road_type_on_tile, stack_params_for_grfid,
+};
 
-use crate::iso::{HEIGHT_PX, iso, remap_tile_offset, tile_slope_and_min_z};
+use crate::iso::{HEIGHT_PX, iso, overlay_pos, remap_tile_offset, tile_slope_and_min_z};
+use crate::render::NewGrfRoadSpriteCache;
 use crate::sprites::{BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_sprite_meta};
 use crate::ui::toolbar::BuildMenuAction;
 
@@ -11,6 +16,22 @@ use super::BuildGhostPreview;
 
 const DECK_LAYER: f32 = 0.04;
 const FRONT_LAYER: f32 = 0.045;
+const CUSTOM_BRIDGE_LAYER: f32 = DECK_LAYER + 0.001;
+const ROTSG_BRIDGE: u8 = 6;
+
+pub(crate) struct BridgeSpanPreviewSpawn<'a> {
+    pub asset_server: &'a AssetServer,
+    pub action: BuildMenuAction,
+    pub tiles: &'a [(i32, i32)],
+    pub map: &'a Map,
+    pub valid: bool,
+    pub custom_road_def: Option<&'a RoadTypeDef>,
+    pub road_catalog: &'a [RoadTypeDef],
+    pub climate: Climate,
+    pub newgrf_stack: &'a [NewGrfEntry],
+    pub road_sprites: &'a mut NewGrfRoadSpriteCache,
+    pub images: &'a mut Assets<Image>,
+}
 
 /// Eje Y del puente (vía vertical en mapa) a partir del tramo de teselas.
 #[must_use]
@@ -62,6 +83,93 @@ fn bridge_preview_deck_z(ramp_tileh: u8, ramp_min_z: u8, axis: usize) -> u8 {
     ramp_min_z.saturating_add(if one_corner { 1 } else { 2 })
 }
 
+/// Índice que `DrawBridgeRoadBits` entrega al grupo `ROTSG_BRIDGE`.
+fn bridge_preview_road_sprite_offset(axis_y: bool, index: usize, total: usize, tileh: u8) -> usize {
+    let axis = usize::from(axis_y);
+    if index != 0 && index + 1 < total {
+        return axis ^ 1;
+    }
+    let south_dir = u8::from(!axis_y) + 1;
+    let dir = if index == 0 { south_dir } else { 2 ^ south_dir };
+    if tileh == 0 {
+        usize::from(dir) + 2
+    } else {
+        usize::from(dir.wrapping_add(1) & 1)
+    }
+}
+
+/// Crea la vista de la rampa sur que todavía no existe durante la preview.
+/// El renderer del mapa lee el tipo desde la rampa materializada; aquí se
+/// escribe el tipo seleccionado sobre una copia para que las variables
+/// `RoadTypeSpriteGroup` vean el mismo contrato sin modificar el mapa.
+fn bridge_preview_source_tile(
+    map: &Map,
+    ordered_tiles: &[(i32, i32)],
+    def: &RoadTypeDef,
+) -> Option<(TileCoord, Tile)> {
+    let (px, py) = *ordered_tiles
+        .iter()
+        .rev()
+        .find(|&&(px, py)| map.get(TileCoord::new(px, py)).is_some())?;
+    let source_coord = TileCoord::new(px, py);
+    let mut source_tile = map.get(source_coord)?;
+    source_tile.kind = TileKind::RoadBridge;
+    if def.class == RoadTramType::Tram {
+        source_tile = set_road_type_on_tile(source_tile, RoadType::from_u8(0x3F));
+        source_tile = set_tram_road_type_on_tile(source_tile, Some(def.id));
+    } else {
+        source_tile = set_road_type_on_tile(source_tile, def.id);
+        source_tile = set_tram_road_type_on_tile(source_tile, None);
+    }
+    Some((source_coord, source_tile))
+}
+
+/// Resuelve una vista específica con el mismo contexto de Action2 que usa el
+/// mapa, pero conserva la textura en la caché del preview para no recrearla en
+/// cada frame del cursor.
+#[allow(clippy::too_many_arguments)]
+fn custom_bridge_preview_layer(
+    def: &RoadTypeDef,
+    map: &Map,
+    source_coord: TileCoord,
+    source_tile: Tile,
+    view_idx: usize,
+    climate: Climate,
+    road_catalog: &[RoadTypeDef],
+    newgrf_stack: &[NewGrfEntry],
+    road_sprites: &mut NewGrfRoadSpriteCache,
+    images: &mut Assets<Image>,
+    tint: Color,
+) -> Option<(Sprite, openttdrs_core::DecodedSprite)> {
+    let mut action2 = action2_eval_ctx_for_road_tile(
+        map,
+        source_tile,
+        source_coord,
+        climate,
+        def.newgrf_type_tables.as_ref(),
+        road_catalog,
+    );
+    action2.set_grf_params(stack_params_for_grfid(newgrf_stack, def.newgrf_grfid));
+    let view = def.newgrf_specific_view_runtime(ROTSG_BRIDGE, view_idx, &mut action2)?;
+    let image = road_sprites.handle_for_resolved_specific_view(
+        def,
+        ROTSG_BRIDGE,
+        view_idx,
+        None,
+        &action2,
+        &view,
+        images,
+    );
+    Some((
+        Sprite {
+            image,
+            color: tint,
+            ..default()
+        },
+        view,
+    ))
+}
+
 /// Posición en pantalla con offsets NFO, como `spawn_layer` en `bridge_draw.rs`.
 fn bridge_ghost_translation(
     px: i32,
@@ -81,15 +189,23 @@ fn bridge_ghost_translation(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_bridge_span_preview(
     commands: &mut Commands,
-    asset_server: &AssetServer,
-    action: BuildMenuAction,
-    tiles: &[(i32, i32)],
-    map: &openttdrs_core::Map,
-    valid: bool,
+    spawn: BridgeSpanPreviewSpawn<'_>,
 ) {
+    let BridgeSpanPreviewSpawn {
+        asset_server,
+        action,
+        tiles,
+        map,
+        valid,
+        custom_road_def,
+        road_catalog,
+        climate,
+        newgrf_stack,
+        road_sprites,
+        images,
+    } = spawn;
     let is_rail = action == BuildMenuAction::RailBridge;
     let ordered_tiles = bridge_preview_render_order(tiles);
     let axis_y = bridge_span_axis_y(&ordered_tiles);
@@ -105,12 +221,15 @@ pub(crate) fn spawn_bridge_span_preview(
         let (tileh, min_z) = tile_slope_and_min_z(map, px as u32, py as u32);
         bridge_preview_deck_z(tileh, min_z, axis)
     });
+    let custom_source = custom_road_def.and_then(|def| {
+        bridge_preview_source_tile(map, &ordered_tiles, def).map(|(coord, tile)| (def, coord, tile))
+    });
     for (index, &(px, py)) in ordered_tiles.iter().enumerate() {
         let coord = openttdrs_core::TileCoord::new(px, py);
         if map.get(coord).is_none() {
             continue;
         }
-        let (_, base_z) = tile_slope_and_min_z(map, px as u32, py as u32);
+        let (tileh, base_z) = tile_slope_and_min_z(map, px as u32, py as u32);
         let north_len = u32::try_from(index + 1).unwrap_or(u32::MAX);
         let south_len = u32::try_from(total.saturating_sub(index)).unwrap_or(u32::MAX);
         let piece = calc_bridge_piece(north_len, south_len);
@@ -142,12 +261,50 @@ pub(crate) fn spawn_bridge_span_preview(
             ))
             .with_scale(Vec3::new(1.002, 1.002, 1.0)),
         ));
+
+        if let Some((def, source_coord, source_tile)) = custom_source
+            && let Some((sprite, view)) = custom_bridge_preview_layer(
+                def,
+                map,
+                source_coord,
+                source_tile,
+                bridge_preview_road_sprite_offset(axis_y, index, total, tileh),
+                climate,
+                road_catalog,
+                newgrf_stack,
+                road_sprites,
+                images,
+                tint,
+            )
+        {
+            let custom_z = if is_middle {
+                deck_z.unwrap_or(base_z)
+            } else {
+                base_z
+            };
+            commands.spawn((
+                BuildGhostPreview,
+                sprite,
+                Transform::from_translation(overlay_pos(
+                    iso(px, py),
+                    f32::from(view.x_offs),
+                    f32::from(view.y_offs),
+                    f32::from(view.width),
+                    f32::from(view.height),
+                    custom_z,
+                    CUSTOM_BRIDGE_LAYER,
+                    px,
+                    py,
+                ))
+                .with_scale(Vec3::splat(1.002)),
+            ));
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{bridge_preview_deck_z, bridge_preview_render_order, bridge_span_axis_y};
+    use super::*;
 
     #[test]
     fn bridge_axis_y_when_span_runs_north_south() {
@@ -175,5 +332,73 @@ mod tests {
         assert_eq!(bridge_preview_deck_z(0, 4, 0), 5);
         assert_eq!(bridge_preview_deck_z(1, 4, 0), 5);
         assert_eq!(bridge_preview_deck_z(5, 4, 0), 6);
+    }
+
+    #[test]
+    fn custom_bridge_layer_uses_specific_view_geometry() {
+        use std::collections::HashMap;
+
+        let view = openttdrs_core::DecodedSprite {
+            width: 11,
+            height: 13,
+            x_offs: -4,
+            y_offs: -7,
+            rgba: vec![255, 0, 0, 255].repeat(11 * 13),
+            mask: Vec::new(),
+        };
+        let graphics = openttdrs_core::TrainSpriteGraphics {
+            sets: vec![vec![view.clone()]],
+            assigns: vec![openttdrs_core::TrainSpriteAssign {
+                local_id: 0,
+                set_id: 0,
+            }],
+            specific_assigns: HashMap::from([((0, ROTSG_BRIDGE), 0)]),
+            ..default()
+        };
+        let def = RoadTypeDef {
+            id: RoadType::from_u8(2),
+            class: RoadTramType::Road,
+            label: "Preview bridge".into(),
+            short_label: "PBRG".into(),
+            intro_year: 0,
+            max_speed: 0,
+            cost_multiplier: 0,
+            maintenance_multiplier: 0,
+            flags: 0,
+            powered_mask: 0,
+            badges: Vec::new(),
+            from_tramtypes_feature: false,
+            from_newgrf: true,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(graphics)),
+            newgrf_grfid: 0,
+            newgrf_type_tables: None,
+        };
+        let map = Map::new_flat(4, 4, 0);
+        let coord = TileCoord::new(2, 2);
+        let tile = map.get(coord).expect("preview source tile");
+        let mut images = Assets::<Image>::default();
+        let mut road_sprites = NewGrfRoadSpriteCache::default();
+
+        let (_, resolved) = custom_bridge_preview_layer(
+            &def,
+            &map,
+            coord,
+            tile,
+            0,
+            Climate::Temperate,
+            &[def.clone()],
+            &[],
+            &mut road_sprites,
+            &mut images,
+            Color::WHITE,
+        )
+        .expect("ROTSG_BRIDGE preview view");
+
+        assert_eq!((resolved.width, resolved.height), (11, 13));
+        assert_eq!((resolved.x_offs, resolved.y_offs), (-4, -7));
+        assert_eq!(images.len(), 1);
     }
 }

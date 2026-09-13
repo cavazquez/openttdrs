@@ -12,7 +12,7 @@ use crate::ui::toolbar::StationBuildState;
 
 use super::BuildGhostPreview;
 use super::PreviewNewGrfResources;
-use super::bridge::spawn_bridge_span_preview;
+use super::bridge::{BridgeSpanPreviewSpawn, spawn_bridge_span_preview};
 use super::dock::spawn_dock_preview;
 use super::industry::spawn_industry_template_preview;
 use super::plan::{PreviewPlan, TilePreviewKind, TilePreviewPlan, preview_tint, rail_signal_tint};
@@ -111,13 +111,30 @@ pub(crate) fn spawn_preview_plan(
             );
         }
         PreviewPlan::BridgeSpan { tiles, valid } => {
+            let custom_road_def = (action == crate::ui::toolbar::BuildMenuAction::RoadBridge)
+                .then(|| {
+                    openttdrs_core::road_type_def(
+                        &sim.state.road_type_catalog,
+                        sim.state.current_road_type,
+                    )
+                })
+                .flatten()
+                .filter(|def| def.has_newgrf_specific_group(6));
             spawn_bridge_span_preview(
                 commands,
-                asset_server,
-                action,
-                tiles,
-                &sim.state.map,
-                *valid,
+                BridgeSpanPreviewSpawn {
+                    asset_server,
+                    action,
+                    tiles,
+                    map: &sim.state.map,
+                    valid: *valid,
+                    custom_road_def,
+                    road_catalog: &sim.state.road_type_catalog,
+                    climate: sim.state.climate,
+                    newgrf_stack: &sim.state.newgrf_stack,
+                    road_sprites: &mut preview_newgrf.road_sprites,
+                    images: &mut preview_newgrf.images,
+                },
             );
         }
         PreviewPlan::RailSignalDrag {

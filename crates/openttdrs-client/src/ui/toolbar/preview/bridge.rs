@@ -11,6 +11,7 @@ use crate::iso::{
     HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half, iso, overlay_pos, remap_tile_offset,
     slope_half_h, slope_sprite_offset, tile_pos_half, tile_slope_and_min_z,
 };
+use crate::render::newgrf_cache::decoded_bridge_sprite_image_with_twocc_map;
 use crate::render::{
     BridgeRampGround, CatenarySpriteAnchor, NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache,
     NewGrfRoadSpriteCache, PillarHalf, WorldAssets, bridge_foundation_decision_at,
@@ -18,6 +19,7 @@ use crate::render::{
     catenary_local_z_delta, catenary_sprite_anchor, catenary_sprite_center, pillar_ground_heights,
     pillar_half_crop, pillar_segments, road_stop_blocks_bridge_pillars,
 };
+use crate::sprites::bridge_structure_palette::BridgeStructurePalette;
 use crate::sprites::{
     BridgeDeckSpriteIds, OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, TILEH_TO_SHORE_SPRITE,
     bridge_deck_sprite_ids, bridge_ramp_sprite_id, bridge_sprite_meta,
@@ -129,6 +131,85 @@ fn bridge_preview_image(
         "assets/opengfx/tiles/{}",
         BridgeDeckSpriteIds::atlas_name(sprite_id)
     ))
+}
+
+fn bridge_preview_piece_table_index(piece: openttdrs_core::BridgePiece) -> usize {
+    match piece {
+        openttdrs_core::BridgePiece::North => 0,
+        openttdrs_core::BridgePiece::South => 1,
+        openttdrs_core::BridgePiece::InnerNorth => 2,
+        openttdrs_core::BridgePiece::InnerSouth => 3,
+        openttdrs_core::BridgePiece::MiddleOdd => 4,
+        openttdrs_core::BridgePiece::MiddleEven => 5,
+    }
+}
+
+/// Offset de transporte de `GetBridgeSpriteTableBaseOffset`, compartido por
+/// las siete tablas estructurales de Action0 `Bridges`.
+fn bridge_preview_sprite_table_transport_offset(
+    is_rail: bool,
+    rail_type: openttdrs_core::RailType,
+) -> usize {
+    if !is_rail {
+        return 8;
+    }
+    match rail_type {
+        openttdrs_core::RailType::Rail | openttdrs_core::RailType::Electric => 0,
+        openttdrs_core::RailType::Monorail => 16,
+        openttdrs_core::RailType::Maglev => 24,
+    }
+}
+
+/// Recupera una entrada Action0 para el fantasma de construcción con la
+/// misma tabla de dirección/eje/transporte que el renderer del mapa.
+///
+/// `Some((ref, None))` es deliberado: una tabla presente cuyo gráfico todavía
+/// no se resolvió, o cuya referencia es cero, suprime el fallback vanilla.
+#[allow(clippy::too_many_arguments)]
+fn custom_bridge_preview_sprite(
+    bridge_spec_catalog: &[openttdrs_core::BridgeSpecDef],
+    bridge_type: BridgeType,
+    piece: openttdrs_core::BridgePiece,
+    is_rail: bool,
+    rail_type: openttdrs_core::RailType,
+    axis: usize,
+    on_ramp: bool,
+    ramp_direction: Option<u8>,
+    effective_tileh: u8,
+    layer_offset: usize,
+) -> Option<(
+    openttdrs_core::BridgeSpriteRef,
+    Option<&openttdrs_core::DecodedSprite>,
+)> {
+    let (piece_index, base_offset) = if on_ramp {
+        let direction = ramp_direction?;
+        let direction_offset = [2usize, 1, 0, 3][usize::from(direction & 3)];
+        let slope_offset = usize::from(effective_tileh == 0) * 4;
+        (
+            openttdrs_core::BRIDGE_PIECE_COUNT - 1,
+            direction_offset + slope_offset,
+        )
+    } else {
+        (bridge_preview_piece_table_index(piece), axis.min(1) * 4)
+    };
+    let index = base_offset
+        .checked_add(bridge_preview_sprite_table_transport_offset(
+            is_rail, rail_type,
+        ))?
+        .checked_add(layer_offset)?;
+    if index >= openttdrs_core::BRIDGE_SPRITE_COUNT {
+        return None;
+    }
+    let spec = openttdrs_core::bridge_spec_def(bridge_spec_catalog, bridge_type)?;
+    let table = spec.custom_sprite_tables.get(piece_index)?.as_ref()?;
+    let reference = table[index];
+    let graphics = spec
+        .custom_sprite_graphics
+        .get(piece_index)
+        .and_then(Option::as_ref)
+        .and_then(|table| table.get(index))
+        .and_then(Option::as_ref);
+    Some((reference, graphics))
 }
 
 /// Orden canónico de las piezas del puente: norte → sur según el eje del
@@ -704,6 +785,126 @@ fn spawn_bridge_ramp_ground(
     ));
 }
 
+/// Dibuja una capa estructural custom de Action0 durante la construcción.
+///
+/// Las referencias de Action1 conservan sus offsets y dimensiones reales; las
+/// referencias directas al baseset reutilizan el atlas/cache vanilla. La
+/// colocación mantiene el ancla de `spawn_bridge_pillar_preview` para que una
+/// preview no cambie de geometría al confirmar la obra.
+#[allow(clippy::too_many_arguments)]
+fn spawn_bridge_custom_layer(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    bridge_assets: Option<&WorldAssets>,
+    action5_sprites: &mut NewGrfAction5SpriteCache,
+    images: &mut Assets<Image>,
+    bridge_type: BridgeType,
+    px: i32,
+    py: i32,
+    surface_z: u8,
+    reference: openttdrs_core::BridgeSpriteRef,
+    view: Option<&openttdrs_core::DecodedSprite>,
+    shift: Vec2,
+    z_px: f32,
+    layer: f32,
+    axis: usize,
+    half: Option<PillarHalf>,
+    tint: Color,
+) {
+    if reference.sprite_id == 0 {
+        return;
+    }
+    let sprite_id = u32::from(reference.sprite_id);
+    let (mut sprite, width, height, xrel, yrel) = if let Some(view) = view {
+        let twocc_map = action5_sprites.twocc_map_for_palette(reference.palette);
+        let image = images.add(decoded_bridge_sprite_image_with_twocc_map(
+            view,
+            reference.modifiers,
+            reference.palette,
+            twocc_map,
+        ));
+        (
+            Sprite {
+                image,
+                color: tint,
+                ..default()
+            },
+            f32::from(view.width),
+            f32::from(view.height),
+            f32::from(view.x_offs),
+            f32::from(view.y_offs),
+        )
+    } else {
+        let explicit_palette =
+            BridgeStructurePalette::from_openttd_palette_id(u32::from(reference.palette));
+        if let Some(palette) = explicit_palette
+            && let Some(handle) =
+                bridge_assets.and_then(|assets| assets.bridge_palettes.handle(sprite_id, palette))
+        {
+            let (width, height, xrel, yrel) =
+                bridge_sprite_meta(sprite_id).unwrap_or((64.0, 32.0, -32.0, -16.0));
+            (
+                Sprite {
+                    image: handle.clone(),
+                    color: tint,
+                    ..default()
+                },
+                width,
+                height,
+                xrel,
+                yrel,
+            )
+        } else if let Some(sprite_data) =
+            bridge_assets.and_then(|assets| assets.bridge_sprite(sprite_id))
+        {
+            let (width, height, xrel, yrel) =
+                bridge_sprite_meta(sprite_id).unwrap_or((64.0, 32.0, -32.0, -16.0));
+            let mut sprite = sprite_data.sprite();
+            sprite.color = tint;
+            (sprite, width, height, xrel, yrel)
+        } else if let Some((width, height, xrel, yrel)) = bridge_sprite_meta(sprite_id) {
+            (
+                Sprite {
+                    image: bridge_preview_image(
+                        asset_server,
+                        bridge_assets,
+                        bridge_type,
+                        sprite_id,
+                    ),
+                    color: tint,
+                    ..default()
+                },
+                width,
+                height,
+                xrel,
+                yrel,
+            )
+        } else {
+            return;
+        }
+    };
+    let crop_x_shift = if let Some(half) = half {
+        let Some((rect, x_shift)) = pillar_half_crop(axis, half, width, height, xrel) else {
+            return;
+        };
+        sprite.rect = Some(rect);
+        x_shift
+    } else {
+        0.0
+    };
+    let iso_pos = iso(px, py);
+    let position = Vec3::new(
+        iso_pos.x + shift.x + xrel + width / 2.0 + crop_x_shift,
+        iso_pos.y + shift.y - yrel - height / 2.0 + z_px,
+        crate::iso::sortable_draw_z(px, py, surface_z, layer),
+    );
+    commands.spawn((
+        BuildGhostPreview,
+        sprite,
+        Transform::from_translation(position).with_scale(Vec3::splat(1.002)),
+    ));
+}
+
 /// Dibuja una pieza de pilar usando el mismo PNG, ancla NFO y recorte de media
 /// columna que el renderer del mapa. `z_px` es la cota de pantalla del extremo
 /// superior de ese segmento, no la altura base de la tesela.
@@ -763,6 +964,8 @@ fn spawn_bridge_pillars_preview(
     commands: &mut Commands,
     asset_server: &AssetServer,
     bridge_assets: Option<&WorldAssets>,
+    action5_sprites: &mut NewGrfAction5SpriteCache,
+    images: &mut Assets<Image>,
     map: &Map,
     stations: &[openttdrs_core::Station],
     road_stop_catalog: &[openttdrs_core::RoadStopSpecDef],
@@ -774,6 +977,8 @@ fn spawn_bridge_pillars_preview(
     pillar_id: u32,
     bridge_type: BridgeType,
     piece: openttdrs_core::BridgePiece,
+    is_rail: bool,
+    rail_type: openttdrs_core::RailType,
     tint: Color,
 ) {
     let coord = TileCoord::new(px, py);
@@ -781,8 +986,20 @@ fn spawn_bridge_pillars_preview(
         return;
     };
     let axis = usize::from(axis_y);
+    let custom_pillar = custom_bridge_preview_sprite(
+        bridge_spec_catalog,
+        bridge_type,
+        piece,
+        is_rail,
+        rail_type,
+        axis,
+        false,
+        None,
+        0,
+        2,
+    );
     if tile.kind == TileKind::Void
-        || pillar_id == 0
+        || (custom_pillar.is_none() && pillar_id == 0)
         || road_stop_blocks_bridge_pillars(
             map,
             stations,
@@ -802,26 +1019,27 @@ fn spawn_bridge_pillars_preview(
     let ground = pillar_ground_heights(pillar_tileh, pillar_base_z, usize::from(axis_y));
     let top_px = i32::from(surface_z) * HEIGHT_PX as i32 - 3;
     for segment in pillar_segments(top_px, ground.front_north, ground.front_south) {
-        spawn_bridge_pillar_preview(
-            commands,
-            asset_server,
-            bridge_assets,
-            bridge_type,
-            px,
-            py,
-            surface_z,
-            pillar_id,
-            axis,
-            bridge_front_shift(axis),
-            segment.z_px,
-            PILLAR_LAYER,
-            segment.half,
-            tint,
-        );
-    }
-    let back_top_px = top_px - 2 * HEIGHT_PX as i32;
-    if ground.back_north <= back_top_px || ground.back_south <= back_top_px {
-        for segment in pillar_segments(back_top_px, ground.back_north, ground.back_south) {
+        if let Some((reference, view)) = custom_pillar {
+            spawn_bridge_custom_layer(
+                commands,
+                asset_server,
+                bridge_assets,
+                action5_sprites,
+                images,
+                bridge_type,
+                px,
+                py,
+                surface_z,
+                reference,
+                view,
+                bridge_front_shift(axis),
+                segment.z_px as f32,
+                PILLAR_LAYER,
+                axis,
+                segment.half,
+                tint,
+            );
+        } else {
             spawn_bridge_pillar_preview(
                 commands,
                 asset_server,
@@ -832,12 +1050,55 @@ fn spawn_bridge_pillars_preview(
                 surface_z,
                 pillar_id,
                 axis,
-                bridge_back_shift(axis),
+                bridge_front_shift(axis),
                 segment.z_px,
-                PILLAR_BACK_LAYER,
+                PILLAR_LAYER,
                 segment.half,
                 tint,
             );
+        }
+    }
+    let back_top_px = top_px - 2 * HEIGHT_PX as i32;
+    if ground.back_north <= back_top_px || ground.back_south <= back_top_px {
+        for segment in pillar_segments(back_top_px, ground.back_north, ground.back_south) {
+            if let Some((reference, view)) = custom_pillar {
+                spawn_bridge_custom_layer(
+                    commands,
+                    asset_server,
+                    bridge_assets,
+                    action5_sprites,
+                    images,
+                    bridge_type,
+                    px,
+                    py,
+                    surface_z,
+                    reference,
+                    view,
+                    bridge_back_shift(axis),
+                    segment.z_px as f32,
+                    PILLAR_BACK_LAYER,
+                    axis,
+                    segment.half,
+                    tint,
+                );
+            } else {
+                spawn_bridge_pillar_preview(
+                    commands,
+                    asset_server,
+                    bridge_assets,
+                    bridge_type,
+                    px,
+                    py,
+                    surface_z,
+                    pillar_id,
+                    axis,
+                    bridge_back_shift(axis),
+                    segment.z_px,
+                    PILLAR_BACK_LAYER,
+                    segment.half,
+                    tint,
+                );
+            }
         }
     }
 }
@@ -964,6 +1225,7 @@ pub(crate) fn spawn_bridge_span_preview(
                 tint,
             );
         }
+        let effective_tileh = ramp_foundation.map_or(tileh, |foundation| foundation.surface_tileh);
         let (sprite_id, shift, layer) = if is_middle {
             (ids.front[axis], bridge_front_shift(axis), FRONT_LAYER)
         } else {
@@ -991,11 +1253,39 @@ pub(crate) fn spawn_bridge_span_preview(
                 .map(|foundation| foundation.surface_base_z)
                 .unwrap_or(base_z)
         };
+        let custom_rear = custom_bridge_preview_sprite(
+            bridge_spec_catalog,
+            bridge_type,
+            piece,
+            is_rail,
+            rail_type,
+            axis,
+            !is_middle,
+            ramp_direction,
+            effective_tileh,
+            0,
+        );
+        let custom_front = is_middle.then(|| {
+            custom_bridge_preview_sprite(
+                bridge_spec_catalog,
+                bridge_type,
+                piece,
+                is_rail,
+                rail_type,
+                axis,
+                false,
+                None,
+                effective_tileh,
+                1,
+            )
+        });
         if is_middle {
             spawn_bridge_pillars_preview(
                 commands,
                 asset_server,
                 bridge_assets,
+                action5_sprites,
+                images,
                 map,
                 stations,
                 road_stop_catalog,
@@ -1007,21 +1297,73 @@ pub(crate) fn spawn_bridge_span_preview(
                 ids.pillar[axis],
                 bridge_type,
                 piece,
+                is_rail,
+                rail_type,
                 tint,
             );
         }
-        commands.spawn((
-            BuildGhostPreview,
-            Sprite {
-                image: bridge_preview_image(asset_server, bridge_assets, bridge_type, sprite_id),
-                color: tint,
-                ..default()
-            },
-            Transform::from_translation(bridge_ghost_translation(
-                px, py, surface_z, sprite_id, shift, layer,
-            ))
-            .with_scale(Vec3::new(1.002, 1.002, 1.0)),
-        ));
+        if custom_rear.is_some() || custom_front.is_some() {
+            if let Some((reference, view)) = custom_rear {
+                spawn_bridge_custom_layer(
+                    commands,
+                    asset_server,
+                    bridge_assets,
+                    action5_sprites,
+                    images,
+                    bridge_type,
+                    px,
+                    py,
+                    surface_z,
+                    reference,
+                    view,
+                    Vec2::ZERO,
+                    f32::from(surface_z) * HEIGHT_PX,
+                    DECK_LAYER,
+                    axis,
+                    None,
+                    tint,
+                );
+            }
+            if let Some(Some((reference, view))) = custom_front {
+                spawn_bridge_custom_layer(
+                    commands,
+                    asset_server,
+                    bridge_assets,
+                    action5_sprites,
+                    images,
+                    bridge_type,
+                    px,
+                    py,
+                    surface_z,
+                    reference,
+                    view,
+                    bridge_front_shift(axis),
+                    f32::from(surface_z) * HEIGHT_PX,
+                    FRONT_LAYER,
+                    axis,
+                    None,
+                    tint,
+                );
+            }
+        } else {
+            commands.spawn((
+                BuildGhostPreview,
+                Sprite {
+                    image: bridge_preview_image(
+                        asset_server,
+                        bridge_assets,
+                        bridge_type,
+                        sprite_id,
+                    ),
+                    color: tint,
+                    ..default()
+                },
+                Transform::from_translation(bridge_ghost_translation(
+                    px, py, surface_z, sprite_id, shift, layer,
+                ))
+                .with_scale(Vec3::new(1.002, 1.002, 1.0)),
+            ));
+        }
 
         let custom_bridge_surface = if let Some((def, source_coord, source_tile)) = road_source
             && let Some((sprite, view)) = custom_bridge_preview_layer(
@@ -1305,6 +1647,102 @@ mod tests {
         assert_eq!(bridge_preview_deck_z(0, 4, 0), 5);
         assert_eq!(bridge_preview_deck_z(1, 4, 0), 5);
         assert_eq!(bridge_preview_deck_z(5, 4, 0), 6);
+    }
+
+    #[test]
+    fn custom_bridge_preview_uses_native_ramp_and_middle_offsets() {
+        let mut catalog = openttdrs_core::vanilla_bridge_spec_catalog();
+        let mut table =
+            [openttdrs_core::BridgeSpriteRef::default(); openttdrs_core::BRIDGE_SPRITE_COUNT];
+        for (index, reference) in table.iter_mut().enumerate() {
+            reference.sprite_id = u16::try_from(index + 1).expect("test sprite id");
+        }
+        let wooden = &mut catalog[usize::from(BridgeType::Wooden.as_u8())];
+        wooden.custom_sprite_tables[openttdrs_core::BRIDGE_PIECE_COUNT - 1] = Some(table);
+        wooden.custom_sprite_tables[5] = Some(table);
+
+        let (ramp, _) = custom_bridge_preview_sprite(
+            &catalog,
+            BridgeType::Wooden,
+            openttdrs_core::BridgePiece::MiddleEven,
+            true,
+            openttdrs_core::RailType::Maglev,
+            1,
+            true,
+            Some(0),
+            0,
+            0,
+        )
+        .expect("custom maglev ramp");
+        assert_eq!(ramp.sprite_id, 31);
+
+        let (rear, _) = custom_bridge_preview_sprite(
+            &catalog,
+            BridgeType::Wooden,
+            openttdrs_core::BridgePiece::MiddleEven,
+            true,
+            openttdrs_core::RailType::Maglev,
+            1,
+            false,
+            None,
+            0,
+            0,
+        )
+        .expect("custom middle rear");
+        let (front, _) = custom_bridge_preview_sprite(
+            &catalog,
+            BridgeType::Wooden,
+            openttdrs_core::BridgePiece::MiddleEven,
+            true,
+            openttdrs_core::RailType::Maglev,
+            1,
+            false,
+            None,
+            0,
+            1,
+        )
+        .expect("custom middle front");
+        let (pillar, _) = custom_bridge_preview_sprite(
+            &catalog,
+            BridgeType::Wooden,
+            openttdrs_core::BridgePiece::MiddleEven,
+            true,
+            openttdrs_core::RailType::Maglev,
+            1,
+            false,
+            None,
+            0,
+            2,
+        )
+        .expect("custom middle pillar");
+        assert_eq!(
+            (rear.sprite_id, front.sprite_id, pillar.sprite_id),
+            (29, 30, 31)
+        );
+    }
+
+    #[test]
+    fn custom_bridge_preview_keeps_zero_entries_as_explicit_overrides() {
+        let mut catalog = openttdrs_core::vanilla_bridge_spec_catalog();
+        let wooden = &mut catalog[usize::from(BridgeType::Wooden.as_u8())];
+        wooden.custom_sprite_tables[5] =
+            Some([openttdrs_core::BridgeSpriteRef::default(); openttdrs_core::BRIDGE_SPRITE_COUNT]);
+
+        let (reference, view) = custom_bridge_preview_sprite(
+            &catalog,
+            BridgeType::Wooden,
+            openttdrs_core::BridgePiece::MiddleEven,
+            false,
+            openttdrs_core::RailType::Rail,
+            0,
+            false,
+            None,
+            0,
+            0,
+        )
+        .expect("explicit zero override");
+        assert_eq!(reference.sprite_id, 0);
+        assert!(view.is_none());
     }
 
     #[test]

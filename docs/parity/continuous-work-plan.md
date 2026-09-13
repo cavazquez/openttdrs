@@ -7353,3 +7353,13 @@ mantiene el remapeo estándar y la entrada continúa siendo renderizable. La
 regresión compara el resultado de puente con `bake_sprite_two_company_palette`
 usando un mapa que altera ambos colores; #326 permanece abierta por los
 callbacks/layouts restantes y aceptación raster sobre saves reales.
+
+Corrección #326-BRIDGE-PREVIEW-CUSTOM-SPRITES (2026-09-13): la preview de
+construcción consulta ahora las mismas siete tablas Action0 `Bridges` que el
+renderer del mapa para rampas, vanos y pilares. Respeta dirección, pendiente,
+eje, transporte y los offsets reales de `DecodedSprite`; los pilares custom
+reutilizan los recortes de media columna y las entradas cero mantienen la
+supresión explícita del fallback vanilla. Las imágenes dinámicas aplican el
+mapa Action5 `0x0A` de 2CC y las referencias directas reutilizan el atlas/cache
+de estructura. #326 permanece abierta por callbacks/layouts restantes y
+aceptación raster sobre saves reales.

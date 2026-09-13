@@ -7104,6 +7104,13 @@ mapa. La selección de los seis slots relocatables (`SE_1`, `SE_2`, `SW_1`,
 NFO. Si el grupo no resuelve, el fallback vanilla sigue activo; #326 continúa
 abierta por clipping y aceptación raster.
 
+Corrección #326-RAIL-STATION-PREVIEW-SORT (2026-09-13): las capas BUILD del
+ghost de estación ferroviaria con bounds conocidos se publican ahora como
+`ViewportSortableParent`, con la misma caja `TILE_SEQ`, profundidad de columna
+y ordinal del renderer materializado. El suelo de vía continúa siendo ground
+y las capas sin metadatos conservan el fallback previo; la fundación virtual,
+catenaria del preview y la aceptación raster quedan como trabajo separado.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

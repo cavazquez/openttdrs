@@ -5,9 +5,13 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{RailType, rail_station_footprint, rail_station_layout};
 
 use crate::iso::{TILE_HALF_H, iso, overlay_pos, tile_pos_half, tile_slope_and_min_z};
-use crate::render::{CompanyColoredSprites, TileAtlas};
+use crate::render::viewport_sort::tile_seq_parent_bounds;
+use crate::render::{
+    CompanyColoredSprites, TileAtlas, ViewportSortableParent, viewport_insertion_key,
+    viewport_source_depth,
+};
 use crate::sprites::{
-    rail_station_draw_layers, rail_station_ground_track_sprite_for_type,
+    rail_station_draw_layers, rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
     rail_station_layer_for_type, rail_station_overlay_rel, rail_station_sprite_meta,
 };
 
@@ -96,7 +100,7 @@ fn spawn_one_tile(
             continue;
         };
         let (xrel, yrel) = rail_station_overlay_rel(&layer, nfo_xrel, nfo_yrel);
-        let pos3 = overlay_pos(
+        let mut pos3 = overlay_pos(
             origin,
             xrel,
             yrel,
@@ -119,17 +123,52 @@ fn spawn_one_tile(
                 })
                 .unwrap_or_else(|| img.sprite_colored(tint))
         };
-        commands.spawn((
+        let source_depth = viewport_source_depth(pos3.z, coord.x as u32, map.dimensions().0);
+        pos3.z = source_depth;
+        let mut preview = commands.spawn((
             BuildGhostPreview,
             sprite,
             Transform::from_translation(pos3).with_scale(Vec3::splat(PREVIEW_SCALE)),
         ));
+        if let Some(parent) = rail_station_parent(layer, coord, base_z, source_depth) {
+            preview.insert(parent);
+        }
     }
+}
+
+/// Parent global equivalente a `station_rail_layer_parent_bounds` del mapa.
+/// El preview aún no materializa la fundación virtual; por eso `base_z` es
+/// simultáneamente la altura cruda y la superficie de la tesela.
+fn rail_station_parent(
+    layer: crate::sprites::RailStationLayer,
+    coord: TileCoord,
+    base_z: u8,
+    source_depth: f32,
+) -> Option<ViewportSortableParent> {
+    let (ex, ey, ez) = rail_station_layer_bounds(layer.sprite_id)?;
+    Some(ViewportSortableParent {
+        sprite_id: layer.sprite_id,
+        bounds: tile_seq_parent_bounds(
+            coord.x,
+            coord.y,
+            base_z,
+            layer.dx as i32,
+            layer.dy as i32,
+            layer.dz as i32,
+            ex,
+            ey,
+            ez,
+        ),
+        insertion_key: viewport_insertion_key(coord.x as u32, coord.y as u32, 16),
+        source_depth,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::render::viewport_insertion_key;
+    use crate::render::viewport_sort::ParentSpriteBounds;
     use openttdrs_core::rail_station_layout;
 
     #[test]
@@ -141,5 +180,17 @@ mod tests {
         for &gfx in &m5 {
             assert!(!rail_station_draw_layers(gfx).is_empty());
         }
+    }
+
+    #[test]
+    fn preview_station_parent_uses_runtime_tile_seq_bounds() {
+        let layer = rail_station_layer_for_type(rail_station_draw_layers(1)[1], RailType::Rail);
+        let parent = rail_station_parent(layer, TileCoord::new(2, 3), 4, 0.05)
+            .expect("rail station layer bounds");
+        assert_eq!(
+            parent.bounds,
+            ParentSpriteBounds::new(43, 48, 32, 47, 63, 33)
+        );
+        assert_eq!(parent.insertion_key, viewport_insertion_key(2, 3, 16));
     }
 }

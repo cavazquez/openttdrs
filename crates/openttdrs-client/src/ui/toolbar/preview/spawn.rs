@@ -45,7 +45,7 @@ pub(crate) fn spawn_preview_plan(
     action: crate::ui::toolbar::BuildMenuAction,
     anim_cursor_frame: u8,
     preview_newgrf: &mut PreviewNewGrfResources<'_>,
-    bridge_assets: Option<&WorldAssets>,
+    world_assets: Option<&WorldAssets>,
     bridge_type: openttdrs_core::BridgeType,
 ) {
     match plan {
@@ -89,6 +89,7 @@ pub(crate) fn spawn_preview_plan(
                 commands,
                 asset_server,
                 company,
+                world_assets,
                 &sim.state.map,
                 *origin,
                 *dir,
@@ -140,7 +141,7 @@ pub(crate) fn spawn_preview_plan(
                     foundation_newgrf: &sim.state.runtime.foundation_newgrf_sprites,
                     action5_sprites: &mut preview_newgrf.action5_sprites,
                     images: &mut preview_newgrf.images,
-                    bridge_assets,
+                    bridge_assets: world_assets,
                     bridge_decks_newgrf: &sim.state.runtime.bridge_decks_newgrf_sprites,
                     bridge_type,
                     stations: &sim.state.stations,

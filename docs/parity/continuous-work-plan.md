@@ -4059,6 +4059,15 @@ queda en 1382 pasadas y 2 ignoradas, con Clippy estricto y formato verdes.
 #567 sigue abierta por callbacks/vecinos, clipping de viewport y framebuffer;
 #326 permanece abierta.
 
+Actualización #326/#567-SHIP-DEPOT-PREVIEW-ASSET-PARITY (2026-09-13): el ghost
+naval consume ahora las mismas entradas `WorldAssets.ship_depot` del atlas y la
+misma ruta de paleta de compañía que `DrawWaterDepot`; sólo conserva PNG suelto
+como fallback cuando el recurso de mundo no está disponible en pruebas o
+arranque. Así la geometría ya compartida no vuelve a divergir por recorte,
+tamaño de entrada o recolor. #567 sigue abierta por callbacks/vecinos,
+validación visual bajo Weston, clipping integrado y framebuffer; #326
+permanece abierta.
+
 Actualización #326/#567-SHIP-DEPOT-EDGE-CLIPPING (2026-09-11, `b104f9e1`):
 runtime y preview naval ahora convierten `TILE_SEQ_LINE` mediante el mismo
 helper de bounds inclusivos. Se agregó una regresión sobre las cuatro

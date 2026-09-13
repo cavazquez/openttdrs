@@ -6,8 +6,9 @@ use openttdrs_core::{Map, TileCoord, ship_depot_footprint};
 use crate::iso::{iso, overlay_pos, remap_tile_offset, tile_slope_and_min_z};
 use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
 use crate::render::{
-    CompanyColoredSprites, ViewportSortableParent, sprite_from_company_or_asset,
-    viewport_insertion_key, viewport_source_depth,
+    CompanyColoredSprites, ViewportSortableParent, WorldAssets,
+    sprite_from_atlas_or_company_colour, sprite_from_company_or_asset, viewport_insertion_key,
+    viewport_source_depth,
 };
 use crate::sprites::{SHIP_DEPOT_PATHS, ship_depot_layers};
 
@@ -19,10 +20,12 @@ const PREVIEW_SCALE: f32 = 1.002;
 /// Spawn del depósito completo. `origin` conserva la tesela que recibe el
 /// comando; la segunda sección se calcula con la misma función que usa el
 /// núcleo al validar y materializar la huella.
+#[allow(clippy::too_many_arguments)] // parámetros ECS/assets de spawn
 pub(crate) fn spawn_ship_depot_preview(
     commands: &mut Commands,
     asset_server: &AssetServer,
     company: Option<&CompanyColoredSprites>,
+    world_assets: Option<&WorldAssets>,
     map: &Map,
     origin: TileCoord,
     dir: u8,
@@ -55,11 +58,28 @@ pub(crate) fn spawn_ship_depot_preview(
             );
             let source_depth = viewport_source_depth(pos.z, coord.x as u32, map.dimensions().0);
             pos.z = source_depth;
-            let sprite = sprite_from_company_or_asset(
-                company,
-                asset_server,
-                SHIP_DEPOT_PATHS[layer.sprite_index],
-                tint,
+            let sprite = world_assets.map_or_else(
+                || {
+                    sprite_from_company_or_asset(
+                        company,
+                        asset_server,
+                        SHIP_DEPOT_PATHS[layer.sprite_index],
+                        tint,
+                    )
+                },
+                |assets| {
+                    // El ghost y `DrawWaterDepot` deben consumir la misma
+                    // entrada del atlas. El helper conserva además el
+                    // recolor de la compañía activa antes del alpha del
+                    // preview.
+                    sprite_from_atlas_or_company_colour(
+                        company,
+                        None,
+                        &assets.ship_depot[layer.sprite_index],
+                        SHIP_DEPOT_PATHS[layer.sprite_index],
+                        tint,
+                    )
+                },
             );
             commands.spawn((
                 BuildGhostPreview,

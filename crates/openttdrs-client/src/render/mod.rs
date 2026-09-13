@@ -95,7 +95,8 @@ pub(crate) use train_smoke::TrainSmokePlugin;
 
 pub(crate) use action5_newgrf::NewGrfAction5SpriteCache;
 pub(crate) use catenary_newgrf::{
-    CatenarySpriteAnchor, NewGrfCatenarySpriteCache, catenary_sprite_anchor, catenary_sprite_center,
+    CatenarySpriteAnchor, NewGrfCatenarySpriteCache, catenary_sprite_anchor,
+    catenary_sprite_center, catenary_sprite_horizontal_crop,
 };
 pub(crate) use house_newgrf::NewGrfHouseSpriteCache;
 pub(crate) use industry_newgrf::NewGrfIndustrySpriteCache;

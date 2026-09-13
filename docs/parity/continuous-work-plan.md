@@ -7363,3 +7363,12 @@ supresión explícita del fallback vanilla. Las imágenes dinámicas aplican el
 mapa Action5 `0x0A` de 2CC y las referencias directas reutilizan el atlas/cache
 de estructura. #326 permanece abierta por callbacks/layouts restantes y
 aceptación raster sobre saves reales.
+
+Corrección #326-ROAD-WAYPOINT-PREVIEW-CATENARY (2026-09-13): el ghost de
+waypoint vial electrificado publica ahora los tres recortes traseros y el
+frente de `DrawRoadTypeCatenary`, con las filas X/Y y anclas NFO de
+`SPR_TRAMWAY_BASE`, sobre la superficie nivelada de la preview. La limpieza
+usa el mismo marcador `BuildGhostPreview` que el resto de la herramienta y
+también contempla cuando la tesela conserva road y tranvía electrificados.
+Los grupos específicos de catenaria de RoadType y la aceptación raster del
+preview quedan como subetapas separadas; #326 continúa abierta.

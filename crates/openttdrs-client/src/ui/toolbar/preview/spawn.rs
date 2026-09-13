@@ -102,6 +102,8 @@ pub(crate) fn spawn_preview_plan(
                 &sim.state.runtime.foundation_newgrf_sprites,
                 &mut preview_newgrf.action5_sprites,
                 &mut preview_newgrf.images,
+                &sim.state.road_type_catalog,
+                &sim.state.runtime.catenary_newgrf_sprites,
             );
         }
         PreviewPlan::ShipDepot { origin, dir, valid } => {

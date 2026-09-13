@@ -11,13 +11,15 @@ use crate::render::viewport_sort::{
     ParentSprite, ParentSpriteBounds, depths_in_viewport_sort_order, tile_seq_parent_bounds,
 };
 use crate::render::{
-    NewGrfAction5SpriteCache, TileAtlas, ViewportSortableChild, ViewportSortableParent,
-    WorldAssets, forced_leveled_foundation_decision_at, viewport_insertion_key,
+    CatenarySpriteAnchor, NewGrfAction5SpriteCache, TileAtlas, ViewportSortableChild,
+    ViewportSortableParent, WorldAssets, catenary_sprite_anchor, catenary_sprite_center,
+    catenary_sprite_horizontal_crop, forced_leveled_foundation_decision_at, viewport_insertion_key,
     viewport_source_depth,
 };
 use crate::sprites::{
-    ROAD_WAYPOINT_SPRITE_PATHS, foundation_asset_path, foundation_gfx_for_tileh, road_stop_seq_gfx,
-    road_waypoint_build_layers, road_waypoint_sprite_index,
+    ROAD_WAYPOINT_SPRITE_PATHS, catenary_hidden, catenary_sprite_color, foundation_asset_path,
+    foundation_gfx_for_tileh, road_catenary_sprite_ids, road_stop_seq_gfx,
+    road_waypoint_build_layers, road_waypoint_sprite_index, tramway_sprite_atlas_key,
 };
 
 use super::BuildGhostPreview;
@@ -53,6 +55,8 @@ pub(crate) fn spawn_road_waypoint_preview(
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     action5_sprites: &mut NewGrfAction5SpriteCache,
     images: &mut Assets<Image>,
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
 ) {
     let Some(idx) = road_waypoint_flat_index(map, coord) else {
         return;
@@ -135,6 +139,32 @@ pub(crate) fn spawn_road_waypoint_preview(
         );
     }
 
+    let Some(tile) = map.get(coord) else {
+        return;
+    };
+    let waypoint_bits = road_waypoint_catenary_bits(tile);
+    let road_has_catenary =
+        openttdrs_core::road_type_def(road_catalog, openttdrs_core::road_type_from_tile(&tile))
+            .is_some_and(openttdrs_core::RoadTypeDef::has_catenary);
+    let tram_has_catenary = tram_road_type_from_tile(&tile)
+        .or_else(|| {
+            (openttdrs_core::tram_track_bits(&tile) != 0).then_some(openttdrs_core::RoadType::TRAM)
+        })
+        .and_then(|road_type| openttdrs_core::road_type_def(road_catalog, road_type))
+        .is_some_and(openttdrs_core::RoadTypeDef::has_catenary);
+    spawn_road_waypoint_catenary(
+        commands,
+        asset_server,
+        world_assets,
+        coord,
+        surface_base_z,
+        tint,
+        waypoint_bits,
+        road_has_catenary,
+        tram_has_catenary,
+        catenary_newgrf,
+    );
+
     let layers = road_waypoint_build_layers(u8::from(idx == 5));
     let child_centers = foundation
         .child_parent
@@ -194,6 +224,140 @@ pub(crate) fn spawn_road_waypoint_preview(
             ));
         }
     }
+}
+
+/// `DrawTile_Station` publica la catenaria de un waypoint con los roadbits del
+/// eje, no con el índice de las capas BUILD. Una estación importada conserva
+/// el eje en `m5`; los fixtures antiguos pueden necesitar el nibble de `m3`.
+#[must_use]
+fn road_waypoint_catenary_bits(tile: Tile) -> u8 {
+    match tile.kind {
+        TileKind::Road => tile.m5 & 0x0F,
+        TileKind::Station => match tile.m5 {
+            openttdrs_core::RSV_DRIVE_THROUGH_X => 0x0A,
+            openttdrs_core::RSV_DRIVE_THROUGH_Y => 0x05,
+            _ => match tile.m3 & 0x0F {
+                0x05 | 0x0A => tile.m3 & 0x0F,
+                _ => 0,
+            },
+        },
+        _ => 0,
+    }
+}
+
+/// Preview de las tres columnas recortadas y el frente que emite
+/// `DrawRoadTypeCatenary`. El waypoint queda nivelado antes de entrar aquí,
+/// por eso se consulta la fila plana aunque el terreno original sea pendiente.
+#[allow(clippy::too_many_arguments)]
+fn spawn_road_waypoint_catenary(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    world_assets: Option<&WorldAssets>,
+    coord: TileCoord,
+    surface_base_z: u8,
+    tint: Color,
+    road_bits: u8,
+    road_has_catenary: bool,
+    tram_has_catenary: bool,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+) {
+    if catenary_hidden() || road_bits == 0 {
+        return;
+    }
+    let Some((back_id, front_id)) = road_catenary_sprite_ids(0, road_bits) else {
+        return;
+    };
+    let tint = tint.with_alpha(tint.alpha() * catenary_sprite_color().alpha());
+    for has_catenary in [road_has_catenary, tram_has_catenary] {
+        if !has_catenary {
+            continue;
+        }
+        let Some((back, back_anchor)) = preview_road_catenary_sprite(
+            asset_server,
+            world_assets,
+            back_id,
+            tint,
+            catenary_newgrf,
+        ) else {
+            continue;
+        };
+        for (index, (left, right)) in [
+            (None, Some(-12.0)),
+            (Some(-12.0), Some(12.0)),
+            (Some(12.0), None),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let Some((sprite, x_shift)) =
+                catenary_sprite_horizontal_crop(back.clone(), back_anchor, left, right)
+            else {
+                continue;
+            };
+            let mut position = catenary_sprite_center(
+                coord.x,
+                coord.y,
+                surface_base_z,
+                PREVIEW_Z_BASE + 0.034 + index as f32 * 0.0001,
+                0.0,
+                0.0,
+                0.0,
+                back_anchor,
+            );
+            position.x += x_shift;
+            commands.spawn((
+                BuildGhostPreview,
+                sprite,
+                Transform::from_translation(position).with_scale(Vec3::splat(PREVIEW_SCALE)),
+            ));
+        }
+
+        let Some((sprite, anchor)) = preview_road_catenary_sprite(
+            asset_server,
+            world_assets,
+            front_id,
+            tint,
+            catenary_newgrf,
+        ) else {
+            continue;
+        };
+        let position = catenary_sprite_center(
+            coord.x,
+            coord.y,
+            surface_base_z,
+            PREVIEW_Z_BASE + 0.04,
+            0.0,
+            0.0,
+            0.0,
+            anchor,
+        );
+        commands.spawn((
+            BuildGhostPreview,
+            sprite,
+            Transform::from_translation(position).with_scale(Vec3::splat(PREVIEW_SCALE)),
+        ));
+    }
+}
+
+fn preview_road_catenary_sprite(
+    asset_server: &AssetServer,
+    world_assets: Option<&WorldAssets>,
+    sprite_id: u32,
+    tint: Color,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+) -> Option<(Sprite, CatenarySpriteAnchor)> {
+    let anchor = catenary_sprite_anchor(sprite_id, catenary_newgrf)?;
+    let image = world_assets
+        .and_then(|assets| assets.rail.get(&sprite_id))
+        .map(|asset| asset.sprite_colored(tint))
+        .or_else(|| {
+            tramway_sprite_atlas_key(sprite_id).map(|path| Sprite {
+                image: asset_server.load::<Image>(format!("assets/opengfx/tiles/{path}")),
+                color: tint,
+                ..default()
+            })
+        })?;
+    Some((image, anchor))
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -542,5 +706,47 @@ mod tests {
         );
         assert_eq!(decision.surface_tileh, 0);
         assert_eq!(decision.surface_base_z, 5);
+    }
+
+    #[test]
+    fn road_waypoint_catenary_uses_station_axis_bits() {
+        let x = Tile {
+            height: 0,
+            kind: TileKind::Station,
+            mapt: 0,
+            m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
+            m1: 0,
+            m6: 0,
+            m8: 0,
+            m3: 0,
+            m2: 0,
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 0,
+        };
+        let y = Tile {
+            height: 0,
+            kind: TileKind::Station,
+            mapt: 0,
+            m5: openttdrs_core::RSV_DRIVE_THROUGH_Y,
+            m1: 0,
+            m6: 0,
+            m8: 0,
+            m3: 0,
+            m2: 0,
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 0,
+        };
+        assert_eq!(road_waypoint_catenary_bits(x), 0x0A);
+        assert_eq!(road_waypoint_catenary_bits(y), 0x05);
+        assert_eq!(
+            road_catenary_sprite_ids(0, road_waypoint_catenary_bits(x)),
+            Some((6071, 6043))
+        );
+        assert_eq!(
+            road_catenary_sprite_ids(0, road_waypoint_catenary_bits(y)),
+            Some((6070, 6042))
+        );
     }
 }

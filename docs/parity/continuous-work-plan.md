@@ -6720,3 +6720,16 @@ permite recuperar un índice DOS completo se conserva el fallback atómico. La
 regresión `tile_layout_honours_bare_land_palette_on_action1_sprite` fija el
 contrato; `PALETTE_TO_TRANSPARENT`, 2CC y referencias directas del baseset
 continúan pendientes y #326/#329 siguen abiertas.
+
+Corrección #326/#329-TILELAYOUT-TRANSPARENT-PALETTE (2026-09-13): las
+entradas `BUILD` de `TileLayout` que declaran `PALETTE_TO_TRANSPARENT` (`802`)
+junto al modifier nativo `transparent` conservan la paleta directa y el
+renderer Bevy las materializa como una máscara negra con cobertura por píxel.
+Esto reproduce el oscurecimiento del destino a `3/4` del blitter 32bpp,
+respeta alpha parcial y evita aplicar otra vez el alpha de transparencia de la
+categoría. Sin el modifier nativo la paleta se ignora como en
+`SpriteLayoutPaletteTransform`; el ground y combinaciones no representables
+mantienen fallback atómico. Las regresiones cubren la resolución core, la
+máscara RGBA y la ausencia de doble alpha; 2CC, referencias directas del
+baseset y el resto de compositor siguen pendientes, por lo que #326/#329
+continúan abiertas.

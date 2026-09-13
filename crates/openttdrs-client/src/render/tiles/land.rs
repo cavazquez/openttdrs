@@ -22,7 +22,7 @@ use crate::iso::{
 use crate::render::atlas::AtlasSprite;
 use crate::render::newgrf_cache::{
     direct_tile_layout_ground, runtime_fingerprint, tile_layout_entry_is_hidden,
-    tile_layout_is_renderable, tile_layout_sprite_color, vars,
+    tile_layout_is_renderable, tile_layout_sprite_color_with_palette, vars,
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
@@ -1288,7 +1288,11 @@ fn spawn_newgrf_house_layout_sequence(
         let layer_z = 0.5 + index as f32 * 0.0003;
         let sprite = Sprite {
             image: handle,
-            color: tile_layout_sprite_color(tint, layer.sprite_modifiers),
+            color: tile_layout_sprite_color_with_palette(
+                tint,
+                layer.sprite_modifiers,
+                layer.direct_palette,
+            ),
             ..default()
         };
         if layer.is_parent() {
@@ -2143,7 +2147,11 @@ fn spawn_newgrf_industry_layout_sequence(
         let layer_z = 0.5 + index as f32 * 0.0003;
         let sprite = Sprite {
             image: handle,
-            color: tile_layout_sprite_color(tint, layer.sprite_modifiers),
+            color: tile_layout_sprite_color_with_palette(
+                tint,
+                layer.sprite_modifiers,
+                layer.direct_palette,
+            ),
             ..default()
         };
         if layer.is_parent() {
@@ -2527,7 +2535,11 @@ fn spawn_newgrf_object_layout_sequence(
         let layer_z = 0.6 + index as f32 * 0.0003;
         let sprite = Sprite {
             image: handle,
-            color: tile_layout_sprite_color(tint, layer.sprite_modifiers),
+            color: tile_layout_sprite_color_with_palette(
+                tint,
+                layer.sprite_modifiers,
+                layer.direct_palette,
+            ),
             ..default()
         };
         if layer.is_parent() {

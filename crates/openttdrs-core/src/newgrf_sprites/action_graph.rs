@@ -1676,6 +1676,63 @@ mod tests {
     }
 
     #[test]
+    fn tile_layout_preserves_destination_transparency_palette_on_action1_sprite() {
+        let sprite = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![40, 80, 120, 255],
+            mask: Vec::new(),
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![sprite.clone()]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 7,
+                set_id: 9,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: TileLayoutSpriteRef::default(),
+                sequence: vec![TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    direct_palette: 802, // PALETTE_TO_TRANSPARENT
+                    sprite_modifiers:
+                        crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT,
+                    ..TileLayoutSpriteRef::default()
+                }],
+            },
+        );
+
+        let mut ctx = Action2EvalCtx::default();
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("destination-transparent TileLayout");
+        let layer = &layout.sequence[0];
+        assert!(layout.complete);
+        assert_eq!(layer.direct_palette, 802);
+        assert_eq!(
+            layer.action1_sprite().map(|decoded| decoded.rgba.clone()),
+            Some(sprite.rgba)
+        );
+
+        // Without the native transparent modifier OpenTTD ignores the direct
+        // palette in SpriteLayoutPaletteTransform; it must not make the
+        // otherwise valid custom layout fall back.
+        let mut no_modifier = graphics.tile_layouts.get(&9).cloned().unwrap();
+        no_modifier.sequence[0].sprite_modifiers = 0;
+        graphics.tile_layouts.insert(9, no_modifier);
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("TileLayout without transparent modifier");
+        assert!(layout.complete);
+        assert_eq!(layout.sequence[0].direct_palette, 0);
+    }
+
+    #[test]
     fn tile_layout_preserves_structure_palette_on_action1_sprite() {
         let sprite = DecodedSprite {
             width: 1,

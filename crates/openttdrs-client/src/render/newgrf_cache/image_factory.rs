@@ -13,6 +13,7 @@ use crate::sprites::bridge_structure_palette::{BridgeStructurePalette, recolor_s
 const TILE_LAYOUT_PALETTE_MODIFIERS: u8 =
     openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
         | openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR;
+const PALETTE_TO_TRANSPARENT: u16 = 802;
 
 /// Política de bake/recolor al subir un sprite NewGRF a textura.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +33,8 @@ pub(crate) enum DecodedSpriteImagePolicy {
     },
     /// Remapeo gris oscuro de un vehículo en estado de choque (`804`).
     Crash,
+    /// Máscara que oscurece el destino para `PALETTE_TO_TRANSPARENT` (`802`).
+    Transparent,
     /// Paleta `PALETTE_TO_STRUCT_*` aplicada sobre un sprite compartido.
     Structure { palette: BridgeStructurePalette },
 }
@@ -75,7 +78,13 @@ pub(crate) fn decoded_tile_layout_image_with_palette_and_twocc_map(
     default_policy: DecodedSpriteImagePolicy,
     twocc_map: Option<&DecodedSprite>,
 ) -> Image {
-    let policy = if let Some(palette) =
+    let policy = if direct_palette == PALETTE_TO_TRANSPARENT
+        && sprite_modifiers
+            & openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
+            != 0
+    {
+        DecodedSpriteImagePolicy::Transparent
+    } else if let Some(palette) =
         BridgeStructurePalette::from_openttd_palette_id(u32::from(direct_palette))
     {
         DecodedSpriteImagePolicy::Structure { palette }
@@ -85,6 +94,27 @@ pub(crate) fn decoded_tile_layout_image_with_palette_and_twocc_map(
         DecodedSpriteImagePolicy::Raw
     };
     decoded_sprite_image_with_twocc_map(sprite, policy, twocc_map)
+}
+
+/// Convierte el modo nativo `Transparent` en una textura que Bevy puede
+/// componer sobre el framebuffer actual.
+///
+/// OpenTTD no pinta el RGB del sprite en este modo: para cada píxel con alpha
+/// oscurece el destino a `3/4` (o en proporción a un alpha parcial). Una
+/// textura negra con alpha equivalente conserva esa semántica sin inventar un
+/// color de origen. El valor máximo `64/255` es la representación de 1/4 en
+/// el canal alpha de ocho bits.
+fn destination_transparent_rgba8(sprite: &DecodedSprite) -> Vec<u8> {
+    let mut rgba = sprite.rgba.clone();
+    let (pixels, _) = rgba.as_chunks_mut::<4>();
+    for pixel in pixels {
+        let source_alpha = u16::from(pixel[3]);
+        pixel[0] = 0;
+        pixel[1] = 0;
+        pixel[2] = 0;
+        pixel[3] = ((source_alpha * 64 + 127) / 255) as u8;
+    }
+    rgba
 }
 
 /// Color de una entrada `TileLayout` después de aplicar la preferencia de
@@ -100,6 +130,24 @@ pub(crate) fn tile_layout_sprite_color(color: Color, sprite_modifiers: u8) -> Co
     }
     let rgba = color.to_srgba();
     Color::srgba(rgba.red, rgba.green, rgba.blue, 1.0)
+}
+
+/// Ajusta el color de una entrada `TileLayout` teniendo en cuenta una paleta
+/// que ya representa transparencia de destino.
+///
+/// La textura de `PALETTE_TO_TRANSPARENT` ya contiene la cobertura de la
+/// máscara negra; aplicar además el alpha de la categoría volvería a
+/// oscurecerla por segunda vez, algo que no hace el blitter nativo.
+pub(crate) fn tile_layout_sprite_color_with_palette(
+    color: Color,
+    sprite_modifiers: u8,
+    direct_palette: u16,
+) -> Color {
+    if direct_palette == PALETTE_TO_TRANSPARENT {
+        let rgba = color.to_srgba();
+        return Color::srgba(rgba.red, rgba.green, rgba.blue, 1.0);
+    }
+    tile_layout_sprite_color(color, sprite_modifiers)
 }
 
 /// Decide si `IsInvisibilitySet` suprime una entrada de la secuencia.
@@ -155,6 +203,7 @@ pub(crate) fn decoded_sprite_image_with_twocc_map(
             }
         }
         DecodedSpriteImagePolicy::Crash => bake_sprite_crash(sprite),
+        DecodedSpriteImagePolicy::Transparent => destination_transparent_rgba8(sprite),
         DecodedSpriteImagePolicy::Structure { palette } => {
             let mut rgba = sprite.rgba.clone();
             recolor_structure_rgba8(&mut rgba, palette);
@@ -265,6 +314,36 @@ mod tests {
             policy,
         );
         assert_ne!(recoloured.data.as_deref(), Some(&[8, 24, 88, 255][..]));
+    }
+
+    #[test]
+    fn tile_layout_transparent_palette_builds_destination_mask() {
+        let sprite = DecodedSprite {
+            width: 2,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![40, 80, 120, 255, 200, 160, 80, 128],
+            mask: Vec::new(),
+        };
+        let img = decoded_tile_layout_image_with_palette(
+            &sprite,
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT,
+            PALETTE_TO_TRANSPARENT,
+            DecodedSpriteImagePolicy::Raw,
+        );
+        assert_eq!(img.data.as_deref(), Some(&[0, 0, 0, 64, 0, 0, 0, 32][..]));
+    }
+
+    #[test]
+    fn tile_layout_transparent_palette_does_not_double_category_alpha() {
+        let category_tint = Color::srgba(1.0, 1.0, 1.0, 0.45);
+        let color = tile_layout_sprite_color_with_palette(category_tint, 0, PALETTE_TO_TRANSPARENT);
+        let rgba = color.to_srgba();
+        assert!((rgba.red - 1.0).abs() < f32::EPSILON);
+        assert!((rgba.green - 1.0).abs() < f32::EPSILON);
+        assert!((rgba.blue - 1.0).abs() < f32::EPSILON);
+        assert_eq!(rgba.alpha, 1.0);
     }
 
     #[test]

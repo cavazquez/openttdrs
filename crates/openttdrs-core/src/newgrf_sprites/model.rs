@@ -20,6 +20,8 @@ const PALETTE_RECOLOUR_END: u16 = PALETTE_RECOLOUR_START + 15;
 const PALETTE_CRASH: u16 = 804;
 /// Paleta nativa para tonos de terreno desnudo (`PALETTE_TO_BARE_LAND`).
 const PALETTE_TO_BARE_LAND: u16 = 791;
+/// Paleta nativa que oscurece el destino (`PALETTE_TO_TRANSPARENT`).
+const PALETTE_TO_TRANSPARENT: u16 = 802;
 /// Paleta nativa de sprites de periódico (`PALETTE_NEWSPAPER`).
 const PALETTE_NEWSPAPER: u16 = 803;
 /// Paletas nativas que recolorean sprites compartidos de estructuras.
@@ -353,7 +355,7 @@ fn resolve_layout_sprite(
         return None;
     }
     let (sprite, base_sprite, direct_palette) =
-        resolve_layout_sprite_asset(reference, graphics, ctx, complete)?;
+        resolve_layout_sprite_asset(reference, is_ground, graphics, ctx, complete)?;
 
     let mut origin = reference.origin;
     if !is_ground {
@@ -478,6 +480,7 @@ fn resolve_custom_layout_palette(
 
 fn resolve_layout_sprite_asset(
     reference: &TileLayoutSpriteRef,
+    is_ground: bool,
     graphics: &TrainSpriteGraphics,
     ctx: &Action2EvalCtx,
     complete: &mut bool,
@@ -542,6 +545,30 @@ fn resolve_layout_sprite_asset(
             // máscara de paleta al subir la textura al cliente.
             sprite.mask.clear();
             return Some((Some(sprite), None, 0));
+        }
+        if direct_palette == PALETTE_TO_TRANSPARENT {
+            // SpriteLayoutPaletteTransform only consumes this palette when a
+            // BUILD entry carries the native transparent modifier. The
+            // destination is then darkened by the blitter; the source RGB is
+            // not recoloured. GroundSpritePaletteTransform has a different
+            // contract, so leave its non-PAL_NONE form on the atomic fallback.
+            let palette_modifier = if is_ground {
+                reference.sprite_modifiers & TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR
+            } else {
+                reference.sprite_modifiers
+                    & (TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
+                        | TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR)
+            };
+            if !is_ground
+                && reference.sprite_modifiers & TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT != 0
+            {
+                return Some((Some(sprite), None, direct_palette));
+            }
+            if palette_modifier == 0 {
+                return Some((Some(sprite), None, 0));
+            }
+            *complete = false;
+            return None;
         }
         if direct_palette == PALETTE_CRASH {
             sprite.rgba = bake_sprite_crash(&sprite);

@@ -37,7 +37,7 @@ use crate::render::catenary_newgrf::{
 };
 use crate::render::newgrf_cache::{
     direct_tile_layout_ground, runtime_fingerprint, tile_layout_entry_is_hidden,
-    tile_layout_is_renderable, tile_layout_sprite_color, vars,
+    tile_layout_is_renderable, tile_layout_sprite_color_with_palette, vars,
 };
 use crate::render::road_newgrf::{
     newgrf_road_def_for_tile, newgrf_tram_def_for_tile, road_newgrf_view_index,
@@ -3429,7 +3429,11 @@ fn spawn_newgrf_station_layout_sequence(
             color: Color::WHITE,
             ..default()
         });
-        sprite.color = tile_layout_sprite_color(sprite.color, layer.sprite_modifiers);
+        sprite.color = tile_layout_sprite_color_with_palette(
+            sprite.color,
+            layer.sprite_modifiers,
+            layer.direct_palette,
+        );
 
         if layer.is_parent() {
             let position = road_stop_build_sprite_center(
@@ -3848,7 +3852,11 @@ fn spawn_newgrf_road_stop_layout_sequence(
             color: Color::WHITE,
             ..default()
         });
-        sprite.color = tile_layout_sprite_color(sprite.color, layer.sprite_modifiers);
+        sprite.color = tile_layout_sprite_color_with_palette(
+            sprite.color,
+            layer.sprite_modifiers,
+            layer.direct_palette,
+        );
 
         if layer.is_parent() {
             let position = road_stop_build_sprite_center(
@@ -4600,7 +4608,11 @@ fn spawn_newgrf_airport_layout_sequence(
             color: Color::WHITE,
             ..default()
         });
-        sprite.color = tile_layout_sprite_color(sprite.color, layer.sprite_modifiers);
+        sprite.color = tile_layout_sprite_color_with_palette(
+            sprite.color,
+            layer.sprite_modifiers,
+            layer.direct_palette,
+        );
 
         if layer.is_parent() {
             let position = road_stop_build_sprite_center(

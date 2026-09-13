@@ -705,6 +705,30 @@ fn preview_sprite_for_engine(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn buy_row_sprite_for_engine(
+    trucks: &TruckHandles,
+    engine: &EngineDef,
+    sim: &SimWorld,
+    runtime_cache: &mut NewGrfTrainSpriteCache,
+    preview_cache: &mut NewGrfTrainPreviewCache,
+    images: &mut Assets<Image>,
+    primary_colour: u8,
+    secondary_colour: u8,
+) -> Handle<Image> {
+    if let Some(layer) = vehicle_preview_layers(sim, engine, runtime_cache, images).first() {
+        return layer.handle.clone();
+    }
+    preview_sprite_for_engine(
+        trucks,
+        engine,
+        preview_cache,
+        images,
+        primary_colour,
+        secondary_colour,
+    )
+}
+
 fn preview_rotor_rect(layer: &NewGrfVehicleLayer) -> (f32, f32, f32, f32) {
     let width = f32::from(layer.width) * PREVIEW_LAYER_SCALE;
     let height = f32::from(layer.height) * PREVIEW_LAYER_SCALE;
@@ -744,6 +768,7 @@ pub(crate) fn sync_buy_window(
     prefs: Res<ClientPreferences>,
     trucks: Option<Res<TruckHandles>>,
     mut preview_cache: ResMut<NewGrfTrainPreviewCache>,
+    mut newgrf_train_sprites: ResMut<NewGrfTrainSpriteCache>,
     mut images: ResMut<Assets<Image>>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
@@ -883,9 +908,11 @@ pub(crate) fn sync_buy_window(
         for (sprite, mut image) in &mut row_sprite_q {
             if let Some(engine) = engines.get(sprite.slot) {
                 let (primary, secondary) = vehicle_preview_livery_colours(&sim, engine);
-                image.image = preview_sprite_for_engine(
+                image.image = buy_row_sprite_for_engine(
                     trucks,
                     engine,
+                    &sim,
+                    &mut newgrf_train_sprites,
                     &mut preview_cache,
                     &mut images,
                     primary.as_u8(),

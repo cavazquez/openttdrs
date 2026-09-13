@@ -32,7 +32,9 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::TileCoord;
 
 use crate::iso::{world_pos_to_rail_signal_pick, world_pos_to_tile_coord, world_pos_to_tile_fract};
-use crate::render::{CompanyColoredSprites, MapPreviewCamera, PrimaryGameCamera, TileAtlas};
+use crate::render::{
+    CompanyColoredSprites, MapPreviewCamera, PrimaryGameCamera, TileAtlas, WorldAssets,
+};
 use crate::state::{OrderPickState, SimWorld, order_pick_active};
 use crate::ui::hud::HoveredTileCoord;
 
@@ -93,6 +95,7 @@ pub(crate) struct PreviewAssetResources<'w> {
     pub asset_server: Res<'w, AssetServer>,
     pub atlas: Option<Res<'w, TileAtlas>>,
     pub company: Option<Res<'w, CompanyColoredSprites>>,
+    pub world_assets: Option<Res<'w, WorldAssets>>,
 }
 
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
@@ -288,6 +291,7 @@ pub(crate) fn update_build_ghost_preview(
         action,
         anim_cursor_frame,
         &mut preview_newgrf,
+        asset_resources.world_assets.as_deref(),
         bridge_type,
     );
 }

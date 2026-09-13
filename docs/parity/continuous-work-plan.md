@@ -7132,3 +7132,11 @@ especie de puente; el valor por defecto continúa siendo madera antes de la
 primera elección. La validación previa sigue usando madera como sonda porque la
 ventana aún permite escoger el tipo después de terminar el arrastre; #326
 continúa abierta por paletas de recolor, callbacks custom y aceptación raster.
+
+Corrección #326-BRIDGE-PREVIEW-PALETTE (2026-09-13): las piezas de tablero,
+cabeza y pilar de la preview consultan ahora `WorldAssets.bridge_palettes`,
+aplicando la misma tabla `PALETTE_TO_STRUCT_*` que el renderer materializado
+para puentes rojos, amarillos, marrones, blancos y concretos. El recurso es
+opcional para conservar el fallback PNG en escenas de arranque o tests aislados;
+cuando está disponible no se duplica el recolor ni se altera la textura original.
+#326 continúa abierta por sprites/callbacks NewGRF custom y aceptación raster.

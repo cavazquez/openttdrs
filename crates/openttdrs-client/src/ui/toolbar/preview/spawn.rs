@@ -6,7 +6,7 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::rail_station_footprint;
 
 use crate::iso::{TILE_HALF_H, slope_half_h, tile_pos_half, tile_slope_and_min_z};
-use crate::render::{CompanyColoredSprites, TileAtlas};
+use crate::render::{CompanyColoredSprites, TileAtlas, WorldAssets};
 use crate::state::SimWorld;
 use crate::ui::toolbar::StationBuildState;
 
@@ -45,6 +45,7 @@ pub(crate) fn spawn_preview_plan(
     action: crate::ui::toolbar::BuildMenuAction,
     anim_cursor_frame: u8,
     preview_newgrf: &mut PreviewNewGrfResources<'_>,
+    bridge_assets: Option<&WorldAssets>,
     bridge_type: openttdrs_core::BridgeType,
 ) {
     match plan {
@@ -139,6 +140,7 @@ pub(crate) fn spawn_preview_plan(
                     foundation_newgrf: &sim.state.runtime.foundation_newgrf_sprites,
                     action5_sprites: &mut preview_newgrf.action5_sprites,
                     images: &mut preview_newgrf.images,
+                    bridge_assets,
                     bridge_type,
                     stations: &sim.state.stations,
                     road_stop_catalog: &sim.state.road_stop_spec_catalog,

@@ -13,15 +13,16 @@ use crate::iso::{
 };
 use crate::render::{
     BridgeRampGround, CatenarySpriteAnchor, NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache,
-    NewGrfRoadSpriteCache, PillarHalf, bridge_foundation_decision_at, bridge_ramp_catenary_slope,
-    bridge_ramp_catenary_world_z_delta, bridge_ramp_ground_kind, catenary_local_z_delta,
-    catenary_sprite_anchor, catenary_sprite_center, pillar_ground_heights, pillar_half_crop,
-    pillar_segments, road_stop_blocks_bridge_pillars,
+    NewGrfRoadSpriteCache, PillarHalf, WorldAssets, bridge_foundation_decision_at,
+    bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta, bridge_ramp_ground_kind,
+    catenary_local_z_delta, catenary_sprite_anchor, catenary_sprite_center, pillar_ground_heights,
+    pillar_half_crop, pillar_segments, road_stop_blocks_bridge_pillars,
 };
 use crate::sprites::{
     BridgeDeckSpriteIds, OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, TILEH_TO_SHORE_SPRITE,
-    bridge_deck_sprite_ids, bridge_ramp_sprite_id, bridge_sprite_meta, catenary_sprite_atlas_key,
-    catenary_sprite_color, catenary_tile_location_group, collect_catenary_bridge_draws,
+    bridge_deck_sprite_ids, bridge_ramp_sprite_id, bridge_sprite_meta,
+    bridge_structure_palette_for_sprite, catenary_sprite_atlas_key, catenary_sprite_color,
+    catenary_tile_location_group, collect_catenary_bridge_draws,
     collect_catenary_ramp_draws_from_map, foundation_asset_path, foundation_gfx_for_tileh,
 };
 use crate::ui::toolbar::BuildMenuAction;
@@ -66,6 +67,7 @@ pub(crate) struct BridgeSpanPreviewSpawn<'a> {
     pub foundation_newgrf: &'a [Option<openttdrs_core::DecodedSprite>],
     pub action5_sprites: &'a mut NewGrfAction5SpriteCache,
     pub images: &'a mut Assets<Image>,
+    pub bridge_assets: Option<&'a WorldAssets>,
     pub bridge_type: BridgeType,
     pub stations: &'a [openttdrs_core::Station],
     pub road_stop_catalog: &'a [openttdrs_core::RoadStopSpecDef],
@@ -103,6 +105,28 @@ fn bridge_back_shift(axis: usize) -> Vec2 {
     } else {
         remap_tile_offset(3.0, 0.0, 0.0) * 0.5
     }
+}
+
+/// Resuelve la imagen de una pieza de puente con el mismo recolor estructural
+/// que el renderer materializado. Si todavía no existe `WorldAssets` (por
+/// ejemplo, durante un test de spawn aislado), conserva el PNG vanilla como
+/// fallback.
+fn bridge_preview_image(
+    asset_server: &AssetServer,
+    bridge_assets: Option<&WorldAssets>,
+    bridge_type: BridgeType,
+    sprite_id: u32,
+) -> Handle<Image> {
+    let palette = bridge_structure_palette_for_sprite(bridge_type, sprite_id);
+    if let Some(handle) =
+        bridge_assets.and_then(|assets| assets.bridge_palettes.handle(sprite_id, palette))
+    {
+        return handle.clone();
+    }
+    asset_server.load(format!(
+        "assets/opengfx/tiles/{}",
+        BridgeDeckSpriteIds::atlas_name(sprite_id)
+    ))
 }
 
 /// Orden canónico de las piezas del puente: norte → sur según el eje del
@@ -685,6 +709,8 @@ fn spawn_bridge_ramp_ground(
 fn spawn_bridge_pillar_preview(
     commands: &mut Commands,
     asset_server: &AssetServer,
+    bridge_assets: Option<&WorldAssets>,
+    bridge_type: BridgeType,
     px: i32,
     py: i32,
     surface_z: u8,
@@ -699,12 +725,8 @@ fn spawn_bridge_pillar_preview(
     let Some((width, height, xrel, yrel)) = bridge_sprite_meta(pillar_id) else {
         return;
     };
-    let path = format!(
-        "assets/opengfx/tiles/{}",
-        BridgeDeckSpriteIds::atlas_name(pillar_id)
-    );
     let mut sprite = Sprite {
-        image: asset_server.load::<Image>(path),
+        image: bridge_preview_image(asset_server, bridge_assets, bridge_type, pillar_id),
         color: tint,
         ..default()
     };
@@ -738,6 +760,7 @@ fn spawn_bridge_pillar_preview(
 fn spawn_bridge_pillars_preview(
     commands: &mut Commands,
     asset_server: &AssetServer,
+    bridge_assets: Option<&WorldAssets>,
     map: &Map,
     stations: &[openttdrs_core::Station],
     road_stop_catalog: &[openttdrs_core::RoadStopSpecDef],
@@ -780,6 +803,8 @@ fn spawn_bridge_pillars_preview(
         spawn_bridge_pillar_preview(
             commands,
             asset_server,
+            bridge_assets,
+            bridge_type,
             px,
             py,
             surface_z,
@@ -798,6 +823,8 @@ fn spawn_bridge_pillars_preview(
             spawn_bridge_pillar_preview(
                 commands,
                 asset_server,
+                bridge_assets,
+                bridge_type,
                 px,
                 py,
                 surface_z,
@@ -853,6 +880,7 @@ pub(crate) fn spawn_bridge_span_preview(
         foundation_newgrf,
         action5_sprites,
         images,
+        bridge_assets,
         bridge_type,
         stations,
         road_stop_catalog,
@@ -964,6 +992,7 @@ pub(crate) fn spawn_bridge_span_preview(
             spawn_bridge_pillars_preview(
                 commands,
                 asset_server,
+                bridge_assets,
                 map,
                 stations,
                 road_stop_catalog,
@@ -978,14 +1007,10 @@ pub(crate) fn spawn_bridge_span_preview(
                 tint,
             );
         }
-        let path = format!(
-            "assets/opengfx/tiles/{}",
-            BridgeDeckSpriteIds::atlas_name(sprite_id)
-        );
         commands.spawn((
             BuildGhostPreview,
             Sprite {
-                image: asset_server.load(path),
+                image: bridge_preview_image(asset_server, bridge_assets, bridge_type, sprite_id),
                 color: tint,
                 ..default()
             },

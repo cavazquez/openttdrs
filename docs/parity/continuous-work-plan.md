@@ -6653,3 +6653,14 @@ representable mantiene el fallback atómico. Esto cubre la selección de paleta
 y evita recolors espurios; la composición destino de `transparent`, la
 visibilidad de `opaque` frente a las preferencias de ocultar y las paletas
 especiales continúan pendientes, por lo que #326/#329 siguen abiertas.
+
+Corrección #326/#329-TILELAYOUT-OPAQUE-ALPHA (2026-09-13, `57567539`): las
+secuencias BUILD de Stations, road-stops, airport-tiles, casas, industrias y
+objetos ya no aplican el alpha de la preferencia de transparencia a una entrada
+que trae `SPRITE_MODIFIER_OPAQUE`. El helper común conserva RGB y restaura alpha
+1 sólo para esa entrada; las entradas sin `opaque` mantienen el alpha de su
+categoría y la política de paleta de la etapa anterior. La regresión cubre la
+transformación de color sin tocar estado global. La supresión de entradas
+non-opaque bajo `IsInvisibilitySet`, la composición destino de `transparent` y
+las paletas especiales quedan como subetapas distintas; #326/#329 continúan
+abiertas.

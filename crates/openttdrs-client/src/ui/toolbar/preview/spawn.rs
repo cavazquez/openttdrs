@@ -119,7 +119,7 @@ pub(crate) fn spawn_preview_plan(
                     )
                 })
                 .flatten()
-                .filter(|def| def.has_newgrf_specific_group(6));
+                .filter(|def| def.has_newgrf_specific_group(1) || def.has_newgrf_specific_group(6));
             spawn_bridge_span_preview(
                 commands,
                 BridgeSpanPreviewSpawn {

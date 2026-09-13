@@ -859,6 +859,14 @@ tablero, con fallback vanilla por pieza si el grupo no resuelve. La caché de
 texturas es la compartida con el renderer in-world; #326/#565 siguen abiertas
 por overlays/catenaria custom, clipping, pivotes y aceptación raster.
 
+Corrección #326-BRIDGE-PREVIEW-ROTSG-OVERLAY (2026-09-13): el mismo preview
+materializa el `ROTSG_OVERLAY` custom de carretera con la tabla de offsets
+propia de puentes (`0,1,11..14`), separado del selector `ROTSG_BRIDGE` y con
+una clave de caché distinta. La condición de tranvía conserva la presencia de
+bits de vía que usa `DrawBridgeRoadBits`; si la vista o el grupo faltan, sólo
+esa capa cae al fallback ya existente. #326/#565 siguen abiertas por
+catenaria custom, clipping, pivotes y aceptación raster.
+
 Actualización #326-ROAD-CATENARY-GLOBAL (2026-09-09): las calles normales
 publican ya los cuatro `AddSortableSpriteToDraw` de cada
 `DrawRoadTypeCatenary` como parents globales: tres recortes traseros con sus

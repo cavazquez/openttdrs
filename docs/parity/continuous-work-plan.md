@@ -7372,3 +7372,11 @@ usa el mismo marcador `BuildGhostPreview` que el resto de la herramienta y
 también contempla cuando la tesela conserva road y tranvía electrificados.
 Los grupos específicos de catenaria de RoadType y la aceptación raster del
 preview quedan como subetapas separadas; #326 continúa abierta.
+
+Corrección #326-ROAD-WAYPOINT-PREVIEW-CUSTOM-CATENARY (2026-09-13): el
+preview de waypoint reutiliza ahora la caché y el evaluador Action2 de
+RoadTypes para `ROTSG_CATENARY_BACK` y `ROTSG_CATENARY_FRONT`, incluyendo la
+vista plana del eje y la política nativa de suprimir sólo el fallback que
+corresponde cuando un grupo custom sí resuelve. Sus anclas y offsets se
+aplican a los mismos tres recortes y frente; la aceptación raster amplia
+queda pendiente y #326 continúa abierta.

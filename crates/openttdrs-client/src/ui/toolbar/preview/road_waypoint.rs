@@ -11,9 +11,10 @@ use crate::render::viewport_sort::{
     ParentSprite, ParentSpriteBounds, depths_in_viewport_sort_order, tile_seq_parent_bounds,
 };
 use crate::render::{
-    CatenarySpriteAnchor, NewGrfAction5SpriteCache, TileAtlas, ViewportSortableChild,
-    ViewportSortableParent, WorldAssets, catenary_sprite_anchor, catenary_sprite_center,
-    catenary_sprite_horizontal_crop, forced_leveled_foundation_decision_at, viewport_insertion_key,
+    CatenarySpriteAnchor, NewGrfAction5SpriteCache, NewGrfRoadSpriteCache, TileAtlas,
+    ViewportSortableChild, ViewportSortableParent, WorldAssets, catenary_sprite_anchor,
+    catenary_sprite_center, catenary_sprite_horizontal_crop, forced_leveled_foundation_decision_at,
+    road_newgrf_view_index, specific_sprite_for_tile, viewport_insertion_key,
     viewport_source_depth,
 };
 use crate::sprites::{
@@ -56,6 +57,9 @@ pub(crate) fn spawn_road_waypoint_preview(
     action5_sprites: &mut NewGrfAction5SpriteCache,
     images: &mut Assets<Image>,
     road_catalog: &[openttdrs_core::RoadTypeDef],
+    climate: openttdrs_core::Climate,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    road_sprites: &mut NewGrfRoadSpriteCache,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
 ) {
     let Some(idx) = road_waypoint_flat_index(map, coord) else {
@@ -143,15 +147,15 @@ pub(crate) fn spawn_road_waypoint_preview(
         return;
     };
     let waypoint_bits = road_waypoint_catenary_bits(tile);
-    let road_has_catenary =
+    let road_def =
         openttdrs_core::road_type_def(road_catalog, openttdrs_core::road_type_from_tile(&tile))
-            .is_some_and(openttdrs_core::RoadTypeDef::has_catenary);
-    let tram_has_catenary = tram_road_type_from_tile(&tile)
+            .filter(|def| def.has_catenary());
+    let tram_def = tram_road_type_from_tile(&tile)
         .or_else(|| {
             (openttdrs_core::tram_track_bits(&tile) != 0).then_some(openttdrs_core::RoadType::TRAM)
         })
         .and_then(|road_type| openttdrs_core::road_type_def(road_catalog, road_type))
-        .is_some_and(openttdrs_core::RoadTypeDef::has_catenary);
+        .filter(|def| def.has_catenary());
     spawn_road_waypoint_catenary(
         commands,
         asset_server,
@@ -160,8 +164,15 @@ pub(crate) fn spawn_road_waypoint_preview(
         surface_base_z,
         tint,
         waypoint_bits,
-        road_has_catenary,
-        tram_has_catenary,
+        road_def,
+        tram_def,
+        map,
+        tile,
+        road_catalog,
+        climate,
+        newgrf_stack,
+        road_sprites,
+        images,
         catenary_newgrf,
     );
 
@@ -257,8 +268,15 @@ fn spawn_road_waypoint_catenary(
     surface_base_z: u8,
     tint: Color,
     road_bits: u8,
-    road_has_catenary: bool,
-    tram_has_catenary: bool,
+    road_def: Option<&openttdrs_core::RoadTypeDef>,
+    tram_def: Option<&openttdrs_core::RoadTypeDef>,
+    map: &Map,
+    tile: Tile,
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    climate: openttdrs_core::Climate,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    road_sprites: &mut NewGrfRoadSpriteCache,
+    images: &mut Assets<Image>,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
 ) {
     if catenary_hidden() || road_bits == 0 {
@@ -268,17 +286,56 @@ fn spawn_road_waypoint_catenary(
         return;
     };
     let tint = tint.with_alpha(tint.alpha() * catenary_sprite_color().alpha());
-    for has_catenary in [road_has_catenary, tram_has_catenary] {
-        if !has_catenary {
+    let view_idx = road_newgrf_view_index(0, road_bits);
+    for def in [road_def, tram_def] {
+        let Some(def) = def else {
             continue;
-        }
-        let Some((back, back_anchor)) = preview_road_catenary_sprite(
-            asset_server,
-            world_assets,
-            back_id,
-            tint,
-            catenary_newgrf,
-        ) else {
+        };
+        let custom_back = def
+            .has_newgrf_specific_group(5)
+            .then(|| {
+                preview_custom_road_catenary_sprite(
+                    def,
+                    5,
+                    view_idx,
+                    map,
+                    coord,
+                    tile,
+                    road_catalog,
+                    climate,
+                    newgrf_stack,
+                    road_sprites,
+                    images,
+                    tint,
+                )
+            })
+            .flatten();
+        let custom_front = def
+            .has_newgrf_specific_group(4)
+            .then(|| {
+                preview_custom_road_catenary_sprite(
+                    def,
+                    4,
+                    view_idx,
+                    map,
+                    coord,
+                    tile,
+                    road_catalog,
+                    climate,
+                    newgrf_stack,
+                    road_sprites,
+                    images,
+                    tint,
+                )
+            })
+            .flatten();
+        let custom_any = custom_back.is_some() || custom_front.is_some();
+        let back = if custom_any {
+            custom_back
+        } else {
+            preview_road_catenary_sprite(asset_server, world_assets, back_id, tint, catenary_newgrf)
+        };
+        let Some((back, back_anchor)) = back else {
             continue;
         };
         for (index, (left, right)) in [
@@ -312,13 +369,18 @@ fn spawn_road_waypoint_catenary(
             ));
         }
 
-        let Some((sprite, anchor)) = preview_road_catenary_sprite(
-            asset_server,
-            world_assets,
-            front_id,
-            tint,
-            catenary_newgrf,
-        ) else {
+        let front = if custom_any {
+            custom_front
+        } else {
+            preview_road_catenary_sprite(
+                asset_server,
+                world_assets,
+                front_id,
+                tint,
+                catenary_newgrf,
+            )
+        };
+        let Some((sprite, anchor)) = front else {
             continue;
         };
         let position = catenary_sprite_center(
@@ -337,6 +399,41 @@ fn spawn_road_waypoint_catenary(
             Transform::from_translation(position).with_scale(Vec3::splat(PREVIEW_SCALE)),
         ));
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn preview_custom_road_catenary_sprite(
+    def: &openttdrs_core::RoadTypeDef,
+    selector: u8,
+    view_idx: usize,
+    map: &Map,
+    coord: TileCoord,
+    tile: Tile,
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    climate: openttdrs_core::Climate,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    road_sprites: &mut NewGrfRoadSpriteCache,
+    images: &mut Assets<Image>,
+    tint: Color,
+) -> Option<(Sprite, CatenarySpriteAnchor)> {
+    let mut road_sprites = Some(road_sprites);
+    let mut images = Some(images);
+    let (mut sprite, view) = specific_sprite_for_tile(
+        def,
+        map,
+        selector,
+        view_idx,
+        coord,
+        tile,
+        climate,
+        road_catalog,
+        newgrf_stack,
+        None,
+        &mut road_sprites,
+        &mut images,
+    )?;
+    sprite.color = tint;
+    Some((sprite, CatenarySpriteAnchor::from_decoded(&view)))
 }
 
 fn preview_road_catenary_sprite(

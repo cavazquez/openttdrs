@@ -103,6 +103,9 @@ pub(crate) fn spawn_preview_plan(
                 &mut preview_newgrf.action5_sprites,
                 &mut preview_newgrf.images,
                 &sim.state.road_type_catalog,
+                sim.state.climate,
+                &sim.state.newgrf_stack,
+                &mut preview_newgrf.road_sprites,
                 &sim.state.runtime.catenary_newgrf_sprites,
             );
         }

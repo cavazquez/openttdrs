@@ -102,6 +102,7 @@ pub(crate) use house_newgrf::NewGrfHouseSpriteCache;
 pub(crate) use industry_newgrf::NewGrfIndustrySpriteCache;
 pub(crate) use object_newgrf::NewGrfObjectSpriteCache;
 pub(crate) use road_newgrf::NewGrfRoadSpriteCache;
+pub(crate) use road_newgrf::{road_newgrf_view_index, specific_sprite_for_tile};
 pub(crate) use shore_newgrf::NewGrfShoreSpriteCache;
 pub(crate) use signal_newgrf::NewGrfSignalSpriteCache;
 pub(crate) use station_newgrf::NewGrfStationSpriteCache;

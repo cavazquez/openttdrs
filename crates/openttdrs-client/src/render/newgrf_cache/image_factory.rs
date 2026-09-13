@@ -79,9 +79,7 @@ pub(crate) fn decoded_tile_layout_image_with_palette_and_twocc_map(
     twocc_map: Option<&DecodedSprite>,
 ) -> Image {
     let policy = if direct_palette == PALETTE_TO_TRANSPARENT
-        && sprite_modifiers
-            & openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
-            != 0
+        && sprite_modifiers & TILE_LAYOUT_PALETTE_MODIFIERS != 0
     {
         DecodedSpriteImagePolicy::Transparent
     } else if (openttdrs_core::TWOCC_PALETTE_BASE
@@ -347,6 +345,19 @@ mod tests {
             DecodedSpriteImagePolicy::Raw,
         );
         assert_eq!(img.data.as_deref(), Some(&[0, 0, 0, 64, 0, 0, 0, 32][..]));
+
+        // GroundSpritePaletteTransform keys off the recolour bit rather than
+        // the BUILD-only transparent bit.
+        let ground_img = decoded_tile_layout_image_with_palette(
+            &sprite,
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+            PALETTE_TO_TRANSPARENT,
+            DecodedSpriteImagePolicy::Raw,
+        );
+        assert_eq!(
+            ground_img.data.as_deref(),
+            Some(&[0, 0, 0, 64, 0, 0, 0, 32][..])
+        );
     }
 
     #[test]

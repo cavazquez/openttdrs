@@ -6768,3 +6768,13 @@ parcial o un consumidor futuro ignore una paleta explícita y pinte el suelo
 crudo. La regresión cubre `PALETTE_TO_BARE_LAND` y conserva el fallback
 atómico; las paletas de ground custom siguen su contrato separado. #326/#329
 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-GROUND-TRANSPARENT-PALETTE (2026-09-13): el
+resolver aplica ahora `PALETTE_TO_TRANSPARENT` también al ground custom cuando
+está presente el modifier nativo `recolour`, que es la condición que usa
+`GroundSpritePaletteTransform`; puede coexistir con `transparent`. El cliente
+convierte esa entrada en la misma máscara negra de destino con cobertura 1/4
+por píxel que usa para BUILD, sin aplicar el alpha de categoría dos veces. Un
+ground sin `recolour` sigue ignorando la paleta 802, y BUILD sin su modifier
+`transparent` conserva fallback según el contrato nativo. Las regresiones
+cubren resolución core y textura Bevy; #326/#329 continúan abiertas.

@@ -551,11 +551,11 @@ fn resolve_layout_sprite_asset(
             return Some((Some(sprite), None, 0));
         }
         if direct_palette == PALETTE_TO_TRANSPARENT {
-            // SpriteLayoutPaletteTransform only consumes this palette when a
-            // BUILD entry carries the native transparent modifier. The
-            // destination is then darkened by the blitter; the source RGB is
-            // not recoloured. GroundSpritePaletteTransform has a different
-            // contract, so leave its non-PAL_NONE form on the atomic fallback.
+            // SpriteLayoutPaletteTransform consumes this palette when a BUILD
+            // entry carries the native transparent modifier. For a ground
+            // entry, GroundSpritePaletteTransform consumes it when the native
+            // recolour bit is present. In both cases the destination is
+            // darkened by the blitter; the source RGB is not recoloured.
             let palette_modifier = if is_ground {
                 reference.sprite_modifiers & TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR
             } else {
@@ -570,6 +570,9 @@ fn resolve_layout_sprite_asset(
             }
             if palette_modifier == 0 {
                 return Some((Some(sprite), None, 0));
+            }
+            if is_ground {
+                return Some((Some(sprite), None, direct_palette));
             }
             *complete = false;
             return None;

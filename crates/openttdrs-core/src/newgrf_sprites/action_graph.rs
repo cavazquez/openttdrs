@@ -1730,6 +1730,25 @@ mod tests {
             .expect("TileLayout without transparent modifier");
         assert!(layout.complete);
         assert_eq!(layout.sequence[0].direct_palette, 0);
+
+        // GroundSpritePaletteTransform uses PALETTE_TO_TRANSPARENT when the
+        // ground carries the native recolour bit (with or without the
+        // transparent bit). It must reach the client as a destination mask,
+        // rather than being discarded as an unsupported ground palette.
+        let mut ground_layout = graphics.tile_layouts.get(&9).cloned().unwrap();
+        ground_layout.ground = TileLayoutSpriteRef {
+            action1_set: Some(0),
+            direct_palette: 802,
+            sprite_modifiers: crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+            ..TileLayoutSpriteRef::default()
+        };
+        ground_layout.sequence.clear();
+        graphics.tile_layouts.insert(9, ground_layout);
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("ground destination-transparent TileLayout");
+        assert!(layout.complete);
+        assert_eq!(layout.ground.expect("ground").direct_palette, 802);
     }
 
     #[test]

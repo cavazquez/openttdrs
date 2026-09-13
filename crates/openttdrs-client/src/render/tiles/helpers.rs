@@ -549,6 +549,27 @@ pub(crate) fn bridge_foundation_decision_at(
     foundation_decision_at(map, coord, map_dims, base_z, foundation, surface, z_delta)
 }
 
+/// Variante de `DrawFoundation(Leveled)` para previews que todavía no tienen
+/// una `TileRenderContext` materializada.
+pub(crate) fn forced_leveled_foundation_decision_at(
+    map: &Map,
+    coord: TileCoord,
+    map_dims: (u32, u32),
+    tileh: u8,
+    base_z: u8,
+) -> FoundationDecision {
+    let z_delta = 1 + u8::from(tileh & openttdrs_core::SLOPE_STEEP != 0);
+    foundation_decision_at(
+        map,
+        coord,
+        map_dims,
+        base_z,
+        openttdrs_core::FOUNDATION_LEVELED,
+        0,
+        z_delta,
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_foundation_sprite(
     commands: &mut Commands,

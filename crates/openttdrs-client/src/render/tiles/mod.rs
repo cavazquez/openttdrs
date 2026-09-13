@@ -26,9 +26,9 @@ pub(crate) use bridge_draw::{
 };
 pub(crate) use helpers::{
     FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, TRAM_OVERLAY_LAYER_FRAC,
-    bridge_foundation_decision_at, leveled_foundation_overlay_pos, push_water_sprite,
-    sloped_or_flat_image, spawn_coast_debug_label, spawn_ground_sprite, spawn_rail_foundation,
-    spawn_road_foundation,
+    bridge_foundation_decision_at, forced_leveled_foundation_decision_at,
+    leveled_foundation_overlay_pos, push_water_sprite, sloped_or_flat_image,
+    spawn_coast_debug_label, spawn_ground_sprite, spawn_rail_foundation, spawn_road_foundation,
 };
 #[cfg(test)]
 pub(crate) use land::spawn_generic_land_tile;

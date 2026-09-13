@@ -7143,6 +7143,14 @@ capa del renderer. La selección consulta primero `WorldAssets.tram_flat`, luego
 el atlas y finalmente el PNG directo; los grupos/overlays NewGRF y la
 aceptación raster quedan fuera de esta unidad. #326 continúa abierta.
 
+Corrección #326-ROAD-WAYPOINT-PREVIEW-FOUNDATION (2026-09-13): el ghost de
+waypoint vial aplica ahora la misma `FOUNDATION_LEVELED` que el renderer cuando
+la tesela está inclinada. Materializa los sprites clásicos y los slots Action5
+disponibles, conserva sus bounds `SpriteBounds` como parents del compositor y
+adjunta suelo, tranvía y postes como children; una pendiente empinada conserva
+la elevación de dos niveles. La catenaria, layouts NewGRF, clipping y
+aceptación raster siguen siendo unidades separadas; #326 continúa abierta.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

@@ -7065,6 +7065,14 @@ ghost y la vía de salida conserva su sprite tipado remapeado. #326 continúa
 abierta por orden global del preview, catenaria, Action5/NewGRF, clipping y
 aceptación raster.
 
+Corrección #326-RAIL-DEPOT-PREVIEW-SORT (2026-09-13): las fachadas del ghost
+ferroviario entran ahora en `ViewportSortableParent` con el mismo prisma
+`TILE_SEQ_LINE`, profundidad fuente y clave local que `DrawRailTileSeq`. La
+vía de salida sigue siendo suelo/child y no se convierte artificialmente en
+parent; la regresión compara la caja inclusiva de la capa NE con el helper
+runtime. #326 continúa abierta por catenaria del preview, `RTSG_DEPOT`/Action5,
+clipping y aceptación raster.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

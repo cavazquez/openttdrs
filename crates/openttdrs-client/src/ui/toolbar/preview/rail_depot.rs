@@ -4,9 +4,11 @@ use bevy::prelude::*;
 use openttdrs_core::RailType;
 
 use crate::iso::{iso, road_depot_build_sprite_center, tile_pos_half};
+use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
 use crate::render::{
-    CompanyColoredSprites, WorldAssets, sprite_from_atlas_or_company_colour,
-    sprite_from_company_or_asset,
+    CompanyColoredSprites, ViewportSortableParent, WorldAssets,
+    sprite_from_atlas_or_company_colour, sprite_from_company_or_asset, viewport_insertion_key,
+    viewport_source_depth,
 };
 use crate::sprites::{
     RAIL_DEPOT_GROUND_TRACK, rail_depot_build_layers, rail_depot_seq_gfx,
@@ -28,6 +30,7 @@ pub(crate) struct RailDepotPreviewSpawn<'a> {
     pub asset_server: &'a AssetServer,
     pub company: Option<&'a CompanyColoredSprites>,
     pub world_assets: Option<&'a WorldAssets>,
+    pub map_width: u32,
 }
 
 pub(crate) fn spawn_rail_depot_preview(commands: &mut Commands, spawn: RailDepotPreviewSpawn<'_>) {
@@ -42,6 +45,7 @@ pub(crate) fn spawn_rail_depot_preview(commands: &mut Commands, spawn: RailDepot
         asset_server,
         company,
         world_assets,
+        map_width,
     } = spawn;
     let dir = dir.min(3);
 
@@ -100,10 +104,62 @@ pub(crate) fn spawn_rail_depot_preview(commands: &mut Commands, spawn: RailDepot
                     sprite_from_atlas_or_company_colour(company, None, asset, spec.path, tint)
                 },
             );
+        let source_depth = viewport_source_depth(center.z, px as u32, map_width);
+        let mut position = center;
+        position.z = source_depth;
         commands.spawn((
             BuildGhostPreview,
             sprite,
-            Transform::from_translation(center).with_scale(Vec3::splat(PREVIEW_SCALE)),
+            Transform::from_translation(position).with_scale(Vec3::splat(PREVIEW_SCALE)),
+            ViewportSortableParent {
+                sprite_id: spec.sprite_id,
+                bounds: rail_depot_parent_bounds(px, py, base_z, spec),
+                insertion_key: viewport_insertion_key(
+                    px as u32,
+                    py as u32,
+                    u8::try_from(layer_index + 1).unwrap_or(u8::MAX),
+                ),
+                source_depth,
+            },
         ));
+    }
+}
+
+/// Caja `TILE_SEQ_LINE` que `DrawRailTileSeq` entrega al sorter runtime.
+///
+/// El tamaño de la imagen puede cambiar por `RTSG_DEPOT`, pero el preview
+/// vanilla conserva el prisma de la capa declarada por `track_land.h`.
+fn rail_depot_parent_bounds(
+    px: i32,
+    py: i32,
+    base_z: u8,
+    layer: &crate::sprites::RailDepotLayerGfx,
+) -> ParentSpriteBounds {
+    tile_seq_parent_bounds(
+        px,
+        py,
+        base_z,
+        layer.dx as i32,
+        layer.dy as i32,
+        layer.dz as i32,
+        layer.sx,
+        layer.sy,
+        23,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{rail_depot_build_layers, rail_depot_parent_bounds};
+    use crate::render::viewport_sort::ParentSpriteBounds;
+    use openttdrs_core::RailType;
+
+    #[test]
+    fn preview_parent_bounds_match_runtime_tile_seq_line() {
+        let layer = rail_depot_build_layers(RailType::Rail, 0)[0];
+        assert_eq!(
+            rail_depot_parent_bounds(1, 1, 2, &layer),
+            ParentSpriteBounds::new(18, 29, 16, 30, 29, 38)
+        );
     }
 }

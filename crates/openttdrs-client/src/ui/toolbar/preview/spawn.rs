@@ -522,6 +522,7 @@ fn spawn_tile_preview(
                     asset_server,
                     company,
                     world_assets,
+                    map_width: map.dimensions().0,
                 },
             );
         }

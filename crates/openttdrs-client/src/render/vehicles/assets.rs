@@ -511,35 +511,8 @@ impl NewGrfTrainSpriteCache {
             if stack > 0 && register_100.is_none() && previous.as_ref() == Some(&view) {
                 break;
             }
-            let image_policy = if palette_id == 0 {
-                if palette_override.is_some() {
-                    DecodedSpriteImagePolicy::Raw
-                } else {
-                    DecodedSpriteImagePolicy::Masked { colour: primary }
-                }
-            } else if (775..=790).contains(&palette_id) {
-                let palette_colour =
-                    CompanyColour::from_u8(u8::try_from(palette_id - 775).unwrap_or(0));
-                DecodedSpriteImagePolicy::CompanyPalette {
-                    colour: palette_colour,
-                }
-            } else if (openttdrs_core::TWOCC_PALETTE_BASE
-                ..openttdrs_core::TWOCC_PALETTE_BASE
-                    + openttdrs_core::TWOCC_ACTION5_SLOT_COUNT as u16)
-                .contains(&palette_id)
-            {
-                DecodedSpriteImagePolicy::TwoCompany { primary, secondary }
-            } else {
-                match palette_id {
-                    804 => DecodedSpriteImagePolicy::Crash,
-                    _ => {
-                        // Other PaletteIDs (pulsating overlays and custom
-                        // tables) remain raw until their palette source is
-                        // available. Never apply a false company colour.
-                        DecodedSpriteImagePolicy::Raw
-                    }
-                }
-            };
+            let image_policy =
+                vehicle_image_policy(palette_override, primary, secondary, engine.uses_2cc);
             let twocc_map = (openttdrs_core::TWOCC_PALETTE_BASE
                 ..openttdrs_core::TWOCC_PALETTE_BASE
                     + openttdrs_core::TWOCC_ACTION5_SLOT_COUNT as u16)
@@ -695,6 +668,62 @@ fn vehicle_preview_action2_context(
     ctx
 }
 
+fn vehicle_image_policy(
+    palette_override: Option<u16>,
+    primary: CompanyColour,
+    secondary: CompanyColour,
+    uses_2cc: bool,
+) -> DecodedSpriteImagePolicy {
+    let palette_id = palette_override.unwrap_or_else(|| {
+        if uses_2cc {
+            openttdrs_core::TWOCC_PALETTE_BASE
+                + u16::from(primary.as_u8())
+                + u16::from(secondary.as_u8()) * 16
+        } else {
+            0
+        }
+    });
+    if palette_id == 0 {
+        return if palette_override.is_some() {
+            DecodedSpriteImagePolicy::Raw
+        } else {
+            DecodedSpriteImagePolicy::Masked { colour: primary }
+        };
+    }
+    if (775..=790).contains(&palette_id) {
+        return DecodedSpriteImagePolicy::CompanyPalette {
+            colour: CompanyColour::from_u8(u8::try_from(palette_id - 775).unwrap_or(0)),
+        };
+    }
+    if (openttdrs_core::TWOCC_PALETTE_BASE
+        ..openttdrs_core::TWOCC_PALETTE_BASE + openttdrs_core::TWOCC_ACTION5_SLOT_COUNT as u16)
+        .contains(&palette_id)
+    {
+        return DecodedSpriteImagePolicy::TwoCompany { primary, secondary };
+    }
+    match palette_id {
+        804 => DecodedSpriteImagePolicy::Crash,
+        _ => DecodedSpriteImagePolicy::Raw,
+    }
+}
+
+fn twocc_action5_map_for_palette(
+    sim: &crate::state::SimWorld,
+    palette_id: Option<u16>,
+) -> Option<&openttdrs_core::DecodedSprite> {
+    let palette_id = palette_id?;
+    let range = openttdrs_core::TWOCC_PALETTE_BASE
+        ..openttdrs_core::TWOCC_PALETTE_BASE + openttdrs_core::TWOCC_ACTION5_SLOT_COUNT as u16;
+    if !range.contains(&palette_id) {
+        return None;
+    }
+    sim.state
+        .runtime
+        .twocc_action5_newgrf_sprites
+        .get(usize::from(palette_id - openttdrs_core::TWOCC_PALETTE_BASE))
+        .and_then(Option::as_ref)
+}
+
 /// Resuelve las capas del cuerpo para una entidad que todavía no existe.
 ///
 /// La compra usa una orientación estable (`DIR_E`) y el scope GUI. Los
@@ -711,7 +740,7 @@ pub(super) fn custom_vehicle_layers_for_preview(
     images: &mut Assets<Image>,
 ) -> Vec<NewGrfVehicleLayer> {
     let dir = usize::from(openttdrs_core::DIR_E);
-    if engine.newgrf_runtime.is_some() {
+    let fallback_palette_override = if engine.newgrf_runtime.is_some() {
         let mut ctx = vehicle_preview_action2_context(sim, engine, primary, secondary);
         ctx.set_grf_params(openttdrs_core::stack_params_for_grfid(
             &sim.state.newgrf_stack,
@@ -750,14 +779,25 @@ pub(super) fn custom_vehicle_layers_for_preview(
         if !layers.is_empty() {
             return layers;
         }
-    }
+        palette_override
+    } else {
+        None
+    };
 
     let Some(view) = engine.newgrf_view(dir) else {
         return Vec::new();
     };
-    let Some(handle) = cache.handle_for_with_livery(engine, dir, primary, secondary, images) else {
-        return Vec::new();
-    };
+    let policy = vehicle_image_policy(
+        fallback_palette_override,
+        primary,
+        secondary,
+        engine.uses_2cc,
+    );
+    let twocc_map = twocc_action5_map_for_palette(sim, fallback_palette_override);
+    let handle = cache.handle_for_image(
+        decoded_sprite_image_with_twocc_map(view, policy, twocc_map),
+        images,
+    );
     vec![NewGrfVehicleLayer {
         handle,
         x_offs: view.x_offs,
@@ -779,7 +819,7 @@ fn custom_aircraft_rotor_layers_for_engine(
     cache: &mut NewGrfTrainSpriteCache,
     images: &mut Assets<Image>,
 ) -> Vec<NewGrfVehicleLayer> {
-    if engine.newgrf_runtime.is_some() {
+    let fallback_palette_override = if engine.newgrf_runtime.is_some() {
         let mut ctx = vehicle.map_or_else(
             || vehicle_preview_action2_context(sim, engine, primary, secondary),
             |vehicle| {
@@ -828,7 +868,7 @@ fn custom_aircraft_rotor_layers_for_engine(
                         + u16::from(secondary.as_u8()) * 16
                 })
             });
-        return cache.handles_for_runtime_with_override_and_image_type(
+        let layers = cache.handles_for_runtime_with_override_and_image_type(
             engine,
             frame,
             if vehicle.is_some() {
@@ -845,15 +885,28 @@ fn custom_aircraft_rotor_layers_for_engine(
             &mut ctx,
             images,
         );
-    }
+        if !layers.is_empty() {
+            return layers;
+        }
+        palette_override
+    } else {
+        None
+    };
 
     let Some(view) = engine.newgrf_view(frame) else {
         return Vec::new();
     };
-    let Some(handle) = cache.handle_for_with_livery(engine, frame, primary, secondary, images)
-    else {
-        return Vec::new();
-    };
+    let policy = vehicle_image_policy(
+        fallback_palette_override,
+        primary,
+        secondary,
+        engine.uses_2cc,
+    );
+    let twocc_map = twocc_action5_map_for_palette(sim, fallback_palette_override);
+    let handle = cache.handle_for_image(
+        decoded_sprite_image_with_twocc_map(view, policy, twocc_map),
+        images,
+    );
     vec![NewGrfVehicleLayer {
         handle,
         x_offs: view.x_offs,
@@ -1725,6 +1778,39 @@ mod tests {
                 openttdrs_core::bake_sprite_company_palette(
                     &engine.newgrf_runtime.as_ref().unwrap().sets[0][0],
                     CompanyColour::Red.as_u8(),
+                )
+                .as_slice()
+            )
+        );
+
+        let static_view = engine.newgrf_runtime.as_ref().expect("runtime").sets[0][0].clone();
+        let mut static_engine = engine.clone();
+        static_engine.newgrf_views = vec![static_view.clone()];
+        static_engine
+            .newgrf_runtime
+            .as_mut()
+            .expect("runtime")
+            .sets
+            .clear();
+        let mut static_cache = NewGrfTrainSpriteCache::default();
+        let mut static_images = Assets::<Image>::default();
+        let static_layers = custom_vehicle_layers_for_preview(
+            &static_engine,
+            &sim,
+            CompanyColour::Red,
+            CompanyColour::DarkBlue,
+            &mut static_cache,
+            &mut static_images,
+        );
+        let static_image = static_images
+            .get(&static_layers.first().expect("static preview layer").handle)
+            .expect("static preview image");
+        assert_eq!(
+            static_image.data.as_deref(),
+            Some(
+                openttdrs_core::bake_sprite_company_palette(
+                    &static_view,
+                    CompanyColour::Green.as_u8(),
                 )
                 .as_slice()
             )

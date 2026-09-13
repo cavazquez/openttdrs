@@ -1878,3 +1878,14 @@ runtime, incluidos offsets de Action2/SpriteStack; sin esos recursos conserva
 el cálculo catalog-aware anterior. `pick_vehicle_uses_runtime_sprite_offsets`
 verifica que el centro vanilla no seleccione y el runtime sí; quedan pendientes
 el hit-test por bounds completos y consumidores legacy fuera del mapa.
+
+### #329-VEHICLE-PICK-SPRITE-BOUNDS — hit-test por huella visible
+
+Actualizado: 2026-09-12 (`efb35321`). El selector comparte ahora la geometría
+de render de cada sprite: rectángulo centrado en sus offsets y dimensiones, o
+unión de las capas runtime cuando el vehículo usa `SpriteStack`. Se mantienen
+los filtros de visibilidad y la prioridad del centro más cercano, pero ya no se
+descartan píxeles válidos por el radio aproximado de 34 px. La regresión
+`pick_vehicle_uses_catalog_sprite_offsets` comprueba un clic a 35 px dentro de
+un sprite custom de 80 px y otro a 41 px fuera; quedan pendientes callbacks y
+consumidores legacy fuera de esta ruta.

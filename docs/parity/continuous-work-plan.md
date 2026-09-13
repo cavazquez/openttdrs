@@ -6664,3 +6664,15 @@ transformación de color sin tocar estado global. La supresión de entradas
 non-opaque bajo `IsInvisibilitySet`, la composición destino de `transparent` y
 las paletas especiales quedan como subetapas distintas; #326/#329 continúan
 abiertas.
+
+Corrección #326/#329-TILELAYOUT-INVISIBILITY (2026-09-13, `8a8b4e5b`): el
+renderer aplica ahora `IsInvisibilitySet` por entrada en las secuencias BUILD
+de Stations, road-stops, airport-tiles, casas, industrias y objetos. Un parent
+no opaco oculto limpia el parent activo y salta sus children hasta el siguiente
+parent; un parent `opaque` y sus children declarados siguen materializándose.
+El suelo permanece fuera del filtro porque OpenTTD lo entrega mediante
+`DrawGroundSprite` antes de `DrawCommonTileSeq`; también se conservan
+fundaciones y catenaria. El fallback vanilla no reaparece cuando un layout
+completo queda enteramente oculto. La composición destino de `transparent` y
+las paletas especiales siguen pendientes, por lo que #326/#329 continúan
+abiertas.

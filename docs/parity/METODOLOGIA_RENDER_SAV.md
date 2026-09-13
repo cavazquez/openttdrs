@@ -547,3 +547,12 @@ vanilla sigue siendo explícito cuando no existe una vista usable. La prueba
 ECS compara la imagen materializada y verifica simultáneamente que no cambian
 la caja de extensión cero ni el depth del parent sortable; la aceptación
 raster de una sustitución real queda como paso posterior del oráculo.
+
+Corrección #326-CLEAR-GROUND-DENSITY (2026-09-13): la selección de suelo claro
+usa ahora `m5 & 0x03` sin la compatibilidad que trataba cero como densidad tres.
+La generación de mundo ya escribe su densidad inicial y los contextos
+sintéticos sin tesela conservan el default visual de preview, pero una tesela
+real respeta el byte nativo de un SAV. La
+repetición completa de `mvp_openttd_ship.sav` produjo `3924` en `(2,2)` y
+eliminó el `3981` que no existía en la traza de OpenTTD. Este caso es un gate
+de selección/semántica; no sustituye el gate raster ni cierra #326.

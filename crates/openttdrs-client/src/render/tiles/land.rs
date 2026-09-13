@@ -242,17 +242,6 @@ fn rocky_image(assets: &WorldAssets, tileh: u8) -> AtlasSprite {
     assets.rocky[0][usize::from(slope_sprite_offset(tileh))].clone()
 }
 
-fn clear_grass_density(tile_m5: u8) -> usize {
-    // Los mapas procedurales históricos usan `m5 == 0` como su valor de
-    // inicio; conservar su césped pleno. Los MP_TREES usan
-    // `tree_density_from_tile` y nunca pasan por esta compatibilidad.
-    if tile_m5 == 0 {
-        3
-    } else {
-        usize::from(tile_m5 & 0x03)
-    }
-}
-
 fn record_tree_ground(sprite_id: u32, fallback: bool) {
     WorldDrawTrace::record_sprite(
         if fallback {
@@ -3050,7 +3039,11 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
 ) {
     let tileh = ctx.info.tileh;
     let ottd_type = ctx.tile.map_or(0u8, |t| (t.mapt >> 4) & 0xF);
-    let tile_m5 = ctx.tile.map_or(0u8, |t| t.m5);
+    // `Map::new_flat` y el mundo generado escriben la densidad inicial
+    // explícitamente. El valor 3 para un contexto sintético conserva el
+    // default de previews que no tienen una tesela materializada; una tesela
+    // importada, en cambio, debe respetar literalmente `GetClearDensity`.
+    let tile_m5 = ctx.tile.map_or(3u8, |t| t.m5);
     let object_type = ctx.object_type.unwrap_or(u16::from(tile_m5));
     let newgrf_object_def = if ottd_type == 10 && is_newgrf_object_type_id(object_type) {
         crate::render::object_newgrf::newgrf_object_def_for_type(object_catalog, object_type)
@@ -3107,7 +3100,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
     // MP_CLEAR (0): distinguir subtipo de suelo vía m5 bits 2-4.
     // MP_OBJECT (10): el suelo depende del ObjectType resuelto desde OBJS;
     // m5 sólo es el byte alto crudo de ObjectID en una partida importada.
-    let grass_img = || grass_density_image(assets, clear_grass_density(tile_m5), tileh);
+    let grass_img = || grass_density_image(assets, usize::from(tile_m5 & 0x03), tileh);
     let full_grass_img = || sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
     let rough_img = || rough_tree_image(assets, tileh, ctx.tx, ctx.ty);
     let rocky_img = || rocky_image(assets, tileh);
@@ -3130,7 +3123,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
                     "ground",
                     clear_ground_sprite_id(
                         clear_ground,
-                        clear_grass_density(tile_m5),
+                        usize::from(tile_m5 & 0x03),
                         tileh,
                         ctx.tx,
                         ctx.ty,
@@ -3823,6 +3816,7 @@ mod tests {
     #[test]
     fn clear_ground_selector_matches_openttd_drawtile_clear() {
         // DrawClearLandTile: base + density * 19 + SlopeToSpriteOffset.
+        assert_eq!(clear_ground_sprite_id(CLEAR_GROUND_GRASS, 0, 0, 0, 0), 3924);
         assert_eq!(clear_ground_sprite_id(CLEAR_GROUND_GRASS, 3, 0, 0, 0), 3981);
         assert_eq!(
             clear_ground_sprite_id(CLEAR_GROUND_GRASS, 3, 29, 0, 0),

@@ -4847,3 +4847,13 @@ ground pass de la tesela mediante `DrawGroundSprite`. Así no puede adelantarse
 artificialmente a una fila diagonal por usar profundidad sortable. La regresión
 ECS cubre un child huérfano y verifica su profundidad junto al ground; los
 children posteriores a un parent mantienen el contrato sortable existente.
+
+Corrección #326-CLEAR-GROUND-DENSITY (2026-09-13): el renderer deja de convertir
+`m5 == 0` en césped denso. OpenTTD usa los dos bits bajos de `m5` literalmente
+(`GetClearDensity`): una tesela clara cargada desde SAV con densidad cero emite
+`SPR_FLAT_BARE_LAND` (`3924`), mientras que la generación de mundo inicializa
+explícitamente densidad tres. La traza completa de
+`mvp_openttd_ship.sav` (64×64) vuelve a coincidir en `(2,2)` y en las 4082
+selecciones de `3924`; antes la candidata emitía `3981`. La preview sin tesela
+mantiene el default visual de césped pleno. #326 sigue abierta por composición
+global y aceptación raster de las familias restantes.

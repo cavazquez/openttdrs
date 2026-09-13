@@ -7416,3 +7416,13 @@ una profundidad sortable ajena a la tesela. La regresión ECS verifica la
 profundidad contra `ground_draw_z`; los children que siguen a un parent
 conservan `ViewportSortableChild` y el orden global. #326 continúa abierta por
 callbacks/layouts/children dinámicos completos y aceptación raster real.
+
+Corrección #326-CLEAR-GROUND-DENSITY (2026-09-13): se eliminó la reinterpretación
+de `m5 == 0` como césped pleno en la ruta de `MP_CLEAR`. La generación de mundo
+escribe su densidad inicial y los contextos sintéticos sin tile usan un default
+visual explícito. Los SAV importados pasan por el valor nativo y una traza
+completa de `mvp_openttd_ship.sav` volvió a
+seleccionar `3924` en `(2,2)`, igual que OpenTTD, en lugar de `3981`. La
+regresión cubre el selector de densidad cero y conserva el default visual de
+preview; #326
+continúa abierta por las capas restantes y la aceptación raster completa.

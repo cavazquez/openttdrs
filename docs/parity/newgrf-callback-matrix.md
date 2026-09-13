@@ -1837,6 +1837,16 @@ callback o paleta del catálogo activo. La suite `ui::buy_window` mantiene 12
 tests aprobados; quedan pendientes layouts GUI adicionales y consumidores
 legacy fuera del resolver de vehículos.
 
+### #329-VEHICLE-AIRCRAFT-SHADOW-LAYER — sombra con capa custom
+
+Actualizado: 2026-09-12 (`28afcb51`). La sombra de una aeronave reutiliza la
+primera capa NewGRF del cuerpo que ya resolvió la misma pose, en lugar de
+volver a pedir siempre el sprite vanilla. También adopta sus offsets y
+dimensiones para el anclaje auxiliar; si la capa no existe conserva el
+fallback catalog-aware. `aircraft_shadow_reuses_custom_body_layer` comprueba
+textura e igualdad de la alineación X/Y; quedan pendientes efectos/sombras
+NewGRF con contratos avanzados y consumidores fuera de esta ruta.
+
 ### #329-VEHICLE-PREVIEW-STATIC-PALETTE — fallback estático con callback
 
 Actualizado: 2026-09-12 (`b7ae1e1b`). Cuando una cadena runtime no devuelve

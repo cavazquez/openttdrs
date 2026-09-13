@@ -6432,3 +6432,12 @@ se pasan a ese fallback para no perder reemplazos instalados. El mismo helper
 se comparte con el fallback de rotores; 39 tests de `render::vehicles` y
 Clippy estricto de cliente pasan. #329 continúa abierta por layouts y call
 sites GUI no cubiertos.
+
+Corrección #329-VEHICLE-AIRCRAFT-SHADOW-LAYER (2026-09-12, `28afcb51`): la
+sombra de aeronaves reutiliza la primera capa NewGRF ya resuelta para la misma
+pose, tanto al crear la entidad como en `update_vehicles`. Esto conserva su
+textura custom y sus offsets/dimensiones para el anclaje; cuando no hay capa
+runtime se mantiene el fallback de catálogo vanilla. La regresión
+`aircraft_shadow_reuses_custom_body_layer` verifica textura y alineación X/Y.
+Pasaron 40 tests de `render::vehicles` y Clippy estricto de cliente; #329
+continúa abierta por sombras/efectos NewGRF avanzados y otros call sites.

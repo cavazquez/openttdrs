@@ -7167,6 +7167,14 @@ interno cuando las dos mitades ya están materializadas; callbacks/features
 NewGRF de canales, ríos, pendientes y aceptación raster siguen fuera de esta
 unidad; #326 continúa abierta.
 
+Corrección #326-SHIP-DEPOT-PREVIEW-RIVER-SLOPE (2026-09-13): el ghost de
+depósito naval sobre río selecciona ahora los cuatro sprites vanilla
+`water_river_slope_*` para las pendientes diagonales admitidas por
+`DrawRiverWater`, conservando sus anclas y tamaños NFO; los casos no
+diagonales mantienen el agua plana. River edges, offsets por features/Action5,
+callbacks y aceptación raster quedan fuera de esta unidad; #326 continúa
+abierta.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

@@ -3,14 +3,19 @@
 use bevy::prelude::*;
 use openttdrs_core::{Map, TileCoord, WaterClass, ship_depot_footprint, water_class};
 
-use crate::iso::{full_tile_sprite_pos, iso, overlay_pos, remap_tile_offset, tile_slope_and_min_z};
+use crate::iso::{
+    full_tile_sprite_pos, ground_draw_z, iso, overlay_pos, remap_tile_offset, tile_slope_and_min_z,
+};
 use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
 use crate::render::{
     CompanyColoredSprites, ViewportSortableParent, WorldAssets, canal_dike_slots,
-    sprite_from_atlas_or_company_colour, sprite_from_company_or_asset, viewport_insertion_key,
-    viewport_source_depth,
+    river_slope_sprite_index, sprite_from_atlas_or_company_colour, sprite_from_company_or_asset,
+    viewport_insertion_key, viewport_source_depth,
 };
-use crate::sprites::{SHIP_DEPOT_PATHS, WATER_CANAL_DIKE_SPRITE_META, ship_depot_layers};
+use crate::sprites::{
+    SHIP_DEPOT_PATHS, WATER_CANAL_DIKE_SPRITE_META, WATER_RIVER_SLOPE_SPRITE_META,
+    ship_depot_layers,
+};
 
 use super::BuildGhostPreview;
 
@@ -18,6 +23,12 @@ const PREVIEW_Z_BASE: f32 = 3.0;
 const PREVIEW_WATER_LAYER: f32 = PREVIEW_Z_BASE - 0.030;
 const PREVIEW_DIKE_LAYER: f32 = PREVIEW_WATER_LAYER + 0.010;
 const PREVIEW_SCALE: f32 = 1.002;
+const RIVER_SLOPE_PATHS: [&str; 4] = [
+    "assets/opengfx/tiles/water_river_slope_y_up.png",
+    "assets/opengfx/tiles/water_river_slope_x_down.png",
+    "assets/opengfx/tiles/water_river_slope_x_up.png",
+    "assets/opengfx/tiles/water_river_slope_y_down.png",
+];
 
 /// Spawn del depósito completo. `origin` conserva la tesela que recibe el
 /// comando; la segunda sección se calcula con la misma función que usa el
@@ -43,25 +54,54 @@ pub(crate) fn spawn_ship_depot_preview(
         let Some(_) = map.get(coord) else {
             continue;
         };
-        let (_, base_z) = tile_slope_and_min_z(map, coord.x as u32, coord.y as u32);
-        let water = world_assets.map_or_else(
-            || Sprite {
-                image: asset_server.load::<Image>("assets/opengfx/tiles/water.png"),
-                color: tint,
-                ..default()
-            },
-            |assets| assets.water.sprite_colored(tint),
-        );
+        let (tileh, base_z) = tile_slope_and_min_z(map, coord.x as u32, coord.y as u32);
+        let river_slope = (map.get(coord).and_then(water_class) == Some(WaterClass::River))
+            .then(|| river_slope_sprite_index(tileh))
+            .flatten();
+        let (water, water_position) = if let Some(index) = river_slope {
+            let Some(&(width, height, xrel, yrel)) = WATER_RIVER_SLOPE_SPRITE_META.get(index)
+            else {
+                continue;
+            };
+            let water = world_assets.map_or_else(
+                || Sprite {
+                    image: asset_server.load::<Image>(RIVER_SLOPE_PATHS[index]),
+                    color: tint,
+                    ..default()
+                },
+                |assets| assets.river_slopes[index].sprite_colored(tint),
+            );
+            let mut position = overlay_pos(
+                iso(coord.x, coord.y),
+                f32::from(xrel),
+                f32::from(yrel),
+                f32::from(width),
+                f32::from(height),
+                base_z,
+                PREVIEW_WATER_LAYER,
+                coord.x,
+                coord.y,
+            );
+            position.z = ground_draw_z(coord.x, coord.y, PREVIEW_WATER_LAYER);
+            (water, position)
+        } else {
+            let water = world_assets.map_or_else(
+                || Sprite {
+                    image: asset_server.load::<Image>("assets/opengfx/tiles/water.png"),
+                    color: tint,
+                    ..default()
+                },
+                |assets| assets.water.sprite_colored(tint),
+            );
+            (
+                water,
+                full_tile_sprite_pos(coord.x, coord.y, base_z, PREVIEW_WATER_LAYER),
+            )
+        };
         commands.spawn((
             BuildGhostPreview,
             water,
-            Transform::from_translation(full_tile_sprite_pos(
-                coord.x,
-                coord.y,
-                base_z,
-                PREVIEW_WATER_LAYER,
-            ))
-            .with_scale(Vec3::splat(PREVIEW_SCALE)),
+            Transform::from_translation(water_position).with_scale(Vec3::splat(PREVIEW_SCALE)),
         ));
         spawn_ship_depot_canal_dikes(
             commands,

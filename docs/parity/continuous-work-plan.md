@@ -6517,8 +6517,16 @@ NewGRF que declaran `ObjectFlag::Uses2CC` ya no suben sus vistas o piezas
 incluye ese byte y hornea ambas rampas para vistas planas, suelo, parents y
 children. La regresión de cliente contrasta dos libreas sobre los mismos
 píxeles; la de core verifica el offset inicial y el fallback de una sola rampa.
-Esto no cierra #329/#425: mapas 2CC Action5, paletas custom Action1 con var10,
-transparencia, layouts 16-bit y otros consumidores visuales siguen pendientes.
+Esto no cierra #329/#425: paletas custom Action1 con var10, transparencia,
+layouts 16-bit y otros consumidores visuales siguen pendientes.
+
+Corrección #329/#425-OBJECT-2CC-ACTION5-MAP (2026-09-12, `80709ae9`): los
+caches de objetos reciben la tabla Action5 `0x0A`, calculan el slot a partir de
+`Object::colour` y aplican el mapa tanto a las vistas planas como a `TileSeq`.
+Los cambios de tabla invalidan los handles para no reutilizar texturas
+horneadas con un GRF anterior. La regresión de objetos verifica ambos caminos;
+las issues madre siguen abiertas por `PALETTE_VAR10`, transparencia, layouts
+16-bit y demás consumidores visuales.
 
 Corrección #326/#329-TILELAYOUT-CUSTOM-ACTION1-PALETTE (2026-09-12,
 `7518216e`): el resolver común de `TileLayout` hornea mapas de paleta Action1

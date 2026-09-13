@@ -1932,7 +1932,15 @@ caché. `object_sprite_cache_bakes_instance_2cc_and_separates_liveries` y
 `object_initial_colour_keeps_default_2cc_livery` cubren píxeles, aislamiento
 de texturas y persistencia del color inicial. El callback CB15B conserva su
 byte resultante; siguen pendientes paletas custom Action1 con `PALETTE_VAR10`,
-mapas 2CC Action5 por objeto, transparencia y layouts 16-bit.
+transparencia y layouts 16-bit.
+
+Corrección posterior (`80709ae9`): el caché de objetos recibe ahora la tabla
+Action5 `0x0A` del runtime y consulta el slot `TWOCC_PALETTE_BASE +
+Object::colour` tanto para la vista plana como para cada pieza `TileSeq`. La
+tabla forma parte del estado del caché y sus cambios invalidan los handles
+horneados; la regresión `object_sprite_cache_bakes_instance_2cc_and_separates_liveries`
+comprueba el mapa y la separación de libreas. #329/#425 permanecen abiertas
+por los modificadores visuales restantes.
 
 ### #326/#329-TILELAYOUT-CUSTOM-ACTION1-PALETTE — mapas estáticos de paleta
 

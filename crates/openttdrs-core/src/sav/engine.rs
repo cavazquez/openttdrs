@@ -132,6 +132,8 @@ pub(crate) fn catalog_engine_id_for_native(native_id: u16) -> Option<u16> {
         24 => crate::engine::ENGINE_TRAIN_SH_40,
         25 => crate::engine::ENGINE_TRAIN_TIM,
         26 => crate::engine::ENGINE_TRAIN_ASIASTAR,
+        54 => crate::engine::ENGINE_TRAIN_X2001,
+        84 => crate::engine::ENGINE_TRAIN_LEV1,
         116 => crate::engine::ENGINE_BUS_MPS,
         117 => crate::engine::ENGINE_BUS_HEREFORD,
         118 => crate::engine::ENGINE_BUS_FOSTER,
@@ -323,5 +325,17 @@ mod tests {
         let states = states_from_opaque(&[chunk]);
         assert_eq!(states[0].preview_company, None);
         assert_eq!(states[0].preview_wait, 0);
+    }
+
+    #[test]
+    fn maps_vanilla_monorail_and_maglev_slots_without_aliasing_models() {
+        assert_eq!(
+            catalog_engine_id_for_native(54),
+            Some(crate::engine::ENGINE_TRAIN_X2001)
+        );
+        assert_eq!(
+            catalog_engine_id_for_native(84),
+            Some(crate::engine::ENGINE_TRAIN_LEV1)
+        );
     }
 }

@@ -7461,3 +7461,16 @@ Corrección #326-CLEAN-FULL-ANIMATION (2026-09-13): el perfil temporal de
 arranca con la preferencia en `true`, comprueba que se congele durante la
 captura y que el guard restaure el valor original; no se modifica la
 preferencia persistida. #326 continúa abierta.
+
+Evidencia #326-VIEWPORT-BANDS (2026-09-13): el trace de captura limpia de
+`Kale_TitleGame.sav` (`(189,126)`, `1280×720`, `Normal`) muestra 15 llamadas
+de `ViewportDoDraw` en OpenTTD: 14 bandas de 204 píxeles virtuales y una de
+24, con 2374 parents post-sort acumulados. `openttdrs` todavía ordena una
+única lista global de 1572 parents. El `world-draw` estructural permanece
+contenido (`157142/157142`), mientras la referencia promueve en bandas
+distintas el primer sprite visible de 7 secuencias combinadas y mantiene 4
+cajas que no aparecen en la pasada global. El siguiente trabajo queda
+acotado a clipping/composición segmentada; el depósito naval real y los
+assets de sentido único no presentan una divergencia reproducible adicional.
+La métrica raster actual es `94775/921600` (`10,283745660 %`) y #326 no se
+cierra.

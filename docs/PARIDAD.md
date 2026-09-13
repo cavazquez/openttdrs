@@ -4900,3 +4900,15 @@ durante la captura; la regresión parte de `true` y verifica que el perfil lo
 desactive, mientras el guard restaura el valor original al finalizar. Es una
 corrección del contrato determinista de captura; no cierra #326 ni cambia el
 perfil persistido del usuario.
+
+Evidencia #326-VIEWPORT-BANDS (2026-09-13): la traza del mismo raster limpio
+de `Kale_TitleGame.sav`, centro `(189,126)`, `1280×720` y zoom `Normal`,
+confirma que `LargeWorldCallback` de OpenTTD compone la vista en 15 bandas
+verticales (`14×204 + 24` píxeles virtuales), con `2374` filas de parents
+post-sort. El candidato conserva una única pasada global con `1572` parents;
+la selección `world-draw` sigue contenida (`157142/157142`) y los sprites del
+depósito naval real permanecen alineados. Las 7 promociones de primer sprite
+de secuencias combinadas y las 4 cajas visibles sólo en una banda delimitan la
+siguiente subetapa: clipping y composición por banda, no assets navales ni
+una nueva issue de depósito. El raster candidato queda en `94775/921600`
+píxeles distintos (`10,283745660 %`); #326 continúa abierta.

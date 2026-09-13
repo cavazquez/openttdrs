@@ -2913,6 +2913,43 @@ mod tests {
     }
 
     #[test]
+    fn parse_station_advanced_layout_consumes_var10_registers() {
+        let mut payload = vec![0x00, ACTION0_FEATURE_STATIONS, 0x07, 0x01, 0x00];
+        payload.extend_from_slice(&[0x08, b'A', b'D', b'V', b'S']);
+        payload.extend_from_slice(&[0x1A, 0x01, 0x41]); // one flagged layout, one parent
+
+        // Ground: palette register + PALETTE_VAR10 register. The latter is
+        // valid in the native loader because TLF_PALETTE is also present.
+        payload.extend_from_slice(&0_u16.to_le_bytes());
+        payload.extend_from_slice(&0x8000_u16.to_le_bytes());
+        payload.extend_from_slice(&0x0084_u16.to_le_bytes());
+        payload.extend_from_slice(&[3, 2]);
+
+        // Parent: DODRAW + BB_XY_OFFSET + SPRITE_VAR10, followed by its
+        // origin, extent and registers in the native order.
+        payload.extend_from_slice(&1_u16.to_le_bytes());
+        payload.extend_from_slice(&0x8001_u16.to_le_bytes());
+        payload.extend_from_slice(&0x0051_u16.to_le_bytes());
+        payload.extend_from_slice(&[1, 2, 3, 4, 5, 6]);
+        payload.extend_from_slice(&[0, 7, 8, 4]);
+
+        // Properties after 0x1A prove that the complete advanced layout was
+        // consumed, rather than merely skipping its fixed sprite words.
+        payload.extend_from_slice(&[0x13, 0x04, 0x16, 0x09, 0x01, 0x17, 0x03]);
+        payload.extend_from_slice(&[0x18, 0x05, 0x00, 0xFE]);
+        payload.extend_from_slice(b"Advanced station\0");
+
+        let meta = parse_action0_station_meta(&payload).unwrap();
+        assert_eq!(meta.class_short_label, "ADVS");
+        assert_eq!(meta.label, "Advanced station");
+        assert_eq!(meta.flags, 0x04);
+        assert_eq!(meta.animation_frames, 9);
+        assert_eq!(meta.animation_status, 1);
+        assert_eq!(meta.animation_speed, 3);
+        assert_eq!(meta.animation_triggers, 5);
+    }
+
+    #[test]
     fn apply_station_badges_uses_globalvar_translation_table() {
         let badge = build_action0_badge_payload(b"GATE", 0, None);
         let badge_translation = vec![

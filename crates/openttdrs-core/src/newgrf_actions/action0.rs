@@ -143,6 +143,8 @@ const PROP_STATION_DISALLOWED_LENGTHS: u8 = 0x0D;
 const PROP_STATION_CUSTOM_LAYOUT: u8 = 0x0E;
 /// Stations: copy custom layout from another station id.
 const PROP_STATION_COPY_LAYOUT: u8 = 0x0F;
+/// Stations: advanced sprite layout with `TileLayoutFlags`.
+const PROP_STATION_ADVANCED_LAYOUT: u8 = 0x1A;
 /// Feature Action0: `TramTypes` (`OpenTTD` `GSF_TRAMTYPES`; mismo handler que `RoadTypes`).
 pub const ACTION0_FEATURE_TRAMTYPES: u8 = 0x13;
 /// Prop año introducción (uint16 LE).
@@ -1376,7 +1378,8 @@ fn read_station_extended_byte(payload: &[u8], i: &mut usize) -> Option<usize> {
     if byte != 0xFF {
         return Some(usize::from(byte));
     }
-    let bytes = payload.get(*i..*i + 2)?;
+    let end = (*i).checked_add(2)?;
+    let bytes = payload.get(*i..end)?;
     *i += 2;
     Some(usize::from(u16::from_le_bytes([bytes[0], bytes[1]])))
 }
@@ -1416,6 +1419,155 @@ fn skip_station_legacy_sprite_layouts(payload: &[u8], i: &mut usize) -> bool {
                 return false;
             }
             *i = next;
+        }
+    }
+    true
+}
+
+/// Consume los registros opcionales de un sprite del layout avanzado.
+///
+/// `ReadSpriteLayoutRegisters` de `OpenTTD` usa el mismo orden para Action0
+/// `Stations` y para los grupos `TileLayout`: primero los offsets de sprite y
+/// paleta, luego la caja/child y finalmente los selectores `var10`. Aquí sólo
+/// necesitamos avanzar el cursor, pero respetar ese orden es esencial para
+/// no interpretar la siguiente propiedad como parte del layout.
+fn skip_station_advanced_registers(
+    payload: &[u8],
+    i: &mut usize,
+    flags: u16,
+    is_parent: bool,
+) -> bool {
+    // TLF_DRAWING_FLAGS = TLF_KNOWN_FLAGS sin TLF_CUSTOM_PALETTE. Los bits
+    // altos de un WORD son desconocidos y no agregan bytes al wire format.
+    if flags & 0x00F7 == 0 {
+        return true;
+    }
+    let mut width = 0usize;
+    if flags & 0x01 != 0 {
+        width += 1;
+    }
+    if flags & 0x02 != 0 {
+        width += 1;
+    }
+    if flags & 0x04 != 0 {
+        width += 1;
+    }
+    if is_parent {
+        if flags & 0x10 != 0 {
+            width += 2;
+        }
+        if flags & 0x20 != 0 {
+            width += 1;
+        }
+    } else {
+        if flags & 0x10 != 0 {
+            width += 1;
+        }
+        if flags & 0x20 != 0 {
+            width += 1;
+        }
+    }
+    if flags & 0x40 != 0 {
+        width += 1;
+    }
+    if flags & 0x80 != 0 {
+        width += 1;
+    }
+    skip_station_fixed_property(payload, i, width)
+}
+
+/// Salta `Stations` Action0 `prop 0x1A` (advanced sprite layout).
+///
+/// A diferencia del layout clásico `0x09`, cada entrada declara un contador
+/// de building sprites y puede llevar un WORD de flags más registros. Se
+/// conserva el consumo completo, incluidos `TLF_PALETTE_VAR10`, aunque el
+/// renderer todavía no materializa esta representación legacy.
+fn skip_station_advanced_sprite_layouts(payload: &[u8], i: &mut usize) -> bool {
+    let Some(layouts) = read_station_extended_byte(payload, i) else {
+        return false;
+    };
+    for _ in 0..layouts {
+        let Some(&raw_building_count) = payload.get(*i) else {
+            return false;
+        };
+        *i += 1;
+        // Bit 6 indica que cada sprite trae un WORD de flags; los seis bits
+        // bajos son el número de building sprites. Bit 7 no pertenece a
+        // este contrato y se rechaza para no perder sincronización.
+        if raw_building_count & 0x80 != 0 {
+            return false;
+        }
+        let has_flags = raw_building_count & 0x40 != 0;
+        let building_count = raw_building_count & 0x3F;
+
+        let Some(ground_end) = (*i).checked_add(4) else {
+            return false;
+        };
+        if payload.get(*i..ground_end).is_none() {
+            return false;
+        }
+        *i = ground_end;
+        let ground_flags = if has_flags {
+            let Some(end) = (*i).checked_add(2) else {
+                return false;
+            };
+            let Some(bytes) = payload.get(*i..end) else {
+                return false;
+            };
+            *i = end;
+            u16::from_le_bytes([bytes[0], bytes[1]])
+        } else {
+            0
+        };
+        // OpenTTD passes `false` for the ground entry when consuming its
+        // optional registers, even though invalid non-ground flags are later
+        // rejected by the native loader.
+        if !skip_station_advanced_registers(payload, i, ground_flags, false) {
+            return false;
+        }
+
+        for _ in 0..building_count {
+            let Some(sprite_end) = (*i).checked_add(4) else {
+                return false;
+            };
+            if payload.get(*i..sprite_end).is_none() {
+                return false;
+            }
+            *i = sprite_end;
+            let flags = if has_flags {
+                let Some(end) = (*i).checked_add(2) else {
+                    return false;
+                };
+                let Some(bytes) = payload.get(*i..end) else {
+                    return false;
+                };
+                *i = end;
+                u16::from_le_bytes([bytes[0], bytes[1]])
+            } else {
+                0
+            };
+
+            // Stations call ReadSpriteLayout with no_z_position=false.
+            let Some(origin_end) = (*i).checked_add(3) else {
+                return false;
+            };
+            let Some(origin) = payload.get(*i..origin_end) else {
+                return false;
+            };
+            *i = origin_end;
+            let is_parent = origin[2] != 0x80;
+            if is_parent {
+                let Some(extent_end) = (*i).checked_add(3) else {
+                    return false;
+                };
+                if payload.get(*i..extent_end).is_none() {
+                    return false;
+                }
+                *i = extent_end;
+            }
+            if !skip_station_advanced_registers(payload, i, flags, is_parent) {
+                return false;
+            }
         }
     }
     true
@@ -1512,6 +1664,11 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
                     break;
                 };
                 copy_layout_from = Some(id);
+            }
+            PROP_STATION_ADVANCED_LAYOUT => {
+                if !skip_station_advanced_sprite_layouts(payload, &mut i) {
+                    break;
+                }
             }
             // Props intermedias de ancho fijo que no cambian aún el modelo
             // Rust, pero suelen preceder a la configuración de animación.

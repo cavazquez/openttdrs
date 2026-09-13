@@ -6081,6 +6081,57 @@ mod tests {
         );
     }
 
+    /// #326: una tabla de puente debe resolver el `SpriteID` global que
+    /// consume Action1, no el índice local del set del feature.
+    #[test]
+    fn bridge_sprite_tables_materialize_global_action1_graphics() {
+        use crate::bridge_spec::{BRIDGE_SPRITE_COUNT, BridgeType};
+        use crate::newgrf_sprites::{NEWGRF_SPRITE_BASE, build_grf_v2_with_preview_sprite};
+
+        let mut a0 = vec![
+            0x00,
+            ACTION0_FEATURE_BRIDGES,
+            0x01, // sólo sprite tables
+            0x01,
+            0x00,
+            0x0D,
+            0x06, // BRIDGE_PIECE_HEAD
+            0x01,
+        ];
+        for _ in 0..BRIDGE_SPRITE_COUNT {
+            a0.extend_from_slice(&NEWGRF_SPRITE_BASE.to_le_bytes());
+            a0.extend_from_slice(&0u16.to_le_bytes());
+        }
+        let bytes = build_grf_v2_with_preview_sprite(
+            &a0,
+            ACTION0_FEATURE_TRAINS,
+            0,
+            2,
+            2,
+            &[0, 174, 174, 0],
+            [b'B', b'G', 0, 1],
+            "bridge-global",
+        );
+        let dir = tempfile_dir_with("bridge-global.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("bridge-global.grf", 0x4247_0001));
+        apply_newgrf_bridges(&mut state, &[&dir]);
+
+        let def = crate::bridge_spec_def(&state.bridge_spec_catalog, BridgeType::Wooden)
+            .expect("bridge catalog slot");
+        let head = def.custom_sprite_graphics[6]
+            .as_ref()
+            .expect("materialized bridge head table");
+        let sprite = head[0].as_ref().expect("global Action1 bridge sprite");
+        assert_eq!(sprite.width, 2);
+        assert_eq!(sprite.height, 2);
+        assert_eq!(sprite.x_offs, -1);
+        assert_eq!(sprite.y_offs, -2);
+        assert!(sprite.rgba.iter().any(|&value| value != 0));
+    }
+
     /// #259: Bridges — dos GRFs mismo `local_id`; el último gana.
     #[test]
     fn infra_ac_bridge_two_grf_stack_last_wins() {

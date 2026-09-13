@@ -7322,3 +7322,13 @@ por Action1 y Action12, incluyendo imports v2 `0xFD` y el cursor
 Action0 sin confundir un índice de set local con un sprite decodificado; la
 aplicación del índice al catálogo/renderer de puentes queda como la siguiente
 etapa. #326 permanece abierta.
+
+Corrección #326-GLOBAL-SPRITE-MATERIALIZATION (2026-09-13): el apply de
+`Bridges` encadena ahora el cursor global entre todos los GRF activos y
+materializa cada tabla Action0 `0x0D` en una tabla runtime paralela de
+`DecodedSprite`. La referencia cruda permanece para sprites directos del
+baseset y los huecos sin resolución quedan explícitos; también se conserva el
+último override por pieza y por ID consecutivo. La regresión combina Action0
+`Bridges` con Action1 y comprueba los offsets/píxeles resueltos. Falta conectar
+esta tabla al draw de Bevy, incluyendo offsets nativos, paletas/modificadores,
+recortes de pilares y fallback trazable; #326 permanece abierta.

@@ -1,9 +1,11 @@
 //! Aplicación de Action0 `Bridges` (`0x06`) desde el stack `NewGRF`.
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use crate::GameState;
-use crate::bridge_spec::vanilla_bridge_spec_catalog;
+use crate::bridge_spec::{BridgeSpriteGraphicsTable, vanilla_bridge_spec_catalog};
+use crate::newgrf_sprites::{DecodedSprite, NEWGRF_SPRITE_BASE, collect_global_sprite_graphics};
 
 use super::super::action0::collect_bridge_metas_from_grf;
 
@@ -11,6 +13,9 @@ use super::super::action0::collect_bridge_metas_from_grf;
 pub fn apply_newgrf_bridges(state: &mut GameState, search_dirs: &[&Path]) {
     let mut catalog = vanilla_bridge_spec_catalog();
     let stack = state.newgrf_stack.clone();
+    let mut loaded_grfs = Vec::new();
+    let mut next_sprite_id = NEWGRF_SPRITE_BASE;
+    let mut global_sprites: HashMap<u32, DecodedSprite> = HashMap::new();
     for entry in &stack {
         if !entry.enabled {
             continue;
@@ -25,6 +30,13 @@ pub fn apply_newgrf_bridges(state: &mut GameState, search_dirs: &[&Path]) {
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
+        if let Ok(graphics) = collect_global_sprite_graphics(&data, next_sprite_id) {
+            next_sprite_id = graphics.next_sprite_id;
+            global_sprites.extend(graphics.sprites);
+        }
+        loaded_grfs.push((entry.grfid, data));
+    }
+    for (grfid, data) in loaded_grfs {
         for meta in collect_bridge_metas_from_grf(&data) {
             for offset in 0..usize::from(meta.num_ids) {
                 let Some(idx) = usize::from(meta.local_id).checked_add(offset) else {
@@ -62,17 +74,38 @@ pub fn apply_newgrf_bridges(state: &mut GameState, search_dirs: &[&Path]) {
                             *destination = source;
                         }
                     }
+                    for (destination, source) in slot
+                        .custom_sprite_graphics
+                        .iter_mut()
+                        .zip(meta.custom_sprite_tables.iter())
+                    {
+                        if let Some(source) = source {
+                            *destination =
+                                Some(materialize_bridge_sprite_table(source, &global_sprites));
+                        }
+                    }
                 }
                 if meta.pillar_flags_set {
                     slot.pillar_flags = meta.pillar_flags;
                     slot.has_custom_pillar_flags = true;
                 }
                 slot.from_newgrf = true;
-                slot.grfid = entry.grfid;
+                slot.grfid = grfid;
             }
         }
     }
     state.bridge_spec_catalog = catalog;
+}
+
+fn materialize_bridge_sprite_table(
+    table: &crate::bridge_spec::BridgeSpriteTable,
+    global_sprites: &HashMap<u32, DecodedSprite>,
+) -> BridgeSpriteGraphicsTable {
+    std::array::from_fn(|index| {
+        global_sprites
+            .get(&u32::from(table[index].sprite_id))
+            .cloned()
+    })
 }
 
 /// Aplica Bridges con directorios de búsqueda por defecto.

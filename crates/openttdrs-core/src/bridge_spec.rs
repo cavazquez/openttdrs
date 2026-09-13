@@ -3,6 +3,7 @@
 //! El catálogo mutable [`BridgeSpecDef`] admite overrides Action0 `Bridges` (`0x06`).
 
 use crate::map::{RAIL_TB_X, RAIL_TB_Y, Tile, TileCoord};
+use crate::newgrf_sprites::DecodedSprite;
 use crate::rail_signals::calendar_year_at_tick;
 use crate::tick::GameTick;
 
@@ -61,6 +62,15 @@ impl BridgeSpriteRef {
 /// Tablas parciales de un override: `None` conserva el fallback vanilla.
 pub type BridgeSpriteTable = [BridgeSpriteRef; BRIDGE_SPRITE_COUNT];
 pub type BridgeSpriteTables = [Option<BridgeSpriteTable>; BRIDGE_PIECE_COUNT];
+/// Imágenes decodificadas que corresponden a una tabla Action0 `0x0D`.
+///
+/// La tabla conserva el mismo orden nativo de 32 entradas. `None` significa
+/// que el `SpriteID` absoluto todavía no pudo resolverse en el índice global
+/// de sprites (por ejemplo, porque el GRF está incompleto); el renderer debe
+/// consultar entonces la referencia cruda para los sprites del baseset y
+/// mantener el fallback trazable para los demás.
+pub type BridgeSpriteGraphicsTable = [Option<DecodedSprite>; BRIDGE_SPRITE_COUNT];
+pub type BridgeSpriteGraphicsTables = [Option<BridgeSpriteGraphicsTable>; BRIDGE_PIECE_COUNT];
 
 /// Línea recta entre dos teselas (misma regla que el arrastre de puente).
 #[must_use]
@@ -178,6 +188,11 @@ pub struct BridgeSpecDef {
     /// sus imágenes se vuelven a resolver al reconstruir el stack `NewGRF`.
     #[serde(default, skip)]
     pub custom_sprite_tables: BridgeSpriteTables,
+    /// Imágenes reales de las referencias custom, indexadas con las mismas
+    /// siete piezas y 32 offsets que `custom_sprite_tables`. No se serializa:
+    /// depende de los GRF activos y se reconstruye junto con el catálogo.
+    #[serde(default, skip)]
+    pub custom_sprite_graphics: BridgeSpriteGraphicsTables,
     /// Action0 prop `0x15`: máscara de pilares por pieza central/eje.
     /// Cada bit sigue `BridgePillarFlag` de `OpenTTD` (esquinas 0..3, aristas 4..7).
     #[serde(default)]
@@ -203,6 +218,7 @@ impl BridgeSpecDef {
             grfid: 0,
             has_custom_sprites: false,
             custom_sprite_tables: [None; BRIDGE_PIECE_COUNT],
+            custom_sprite_graphics: [const { None }; BRIDGE_PIECE_COUNT],
             pillar_flags: [[0; BRIDGE_AXIS_COUNT]; BRIDGE_MIDDLE_PIECE_COUNT],
             has_custom_pillar_flags: false,
         }

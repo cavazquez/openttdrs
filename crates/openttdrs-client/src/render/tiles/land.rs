@@ -1162,7 +1162,8 @@ fn spawn_newgrf_house_layout_ground(
         return true;
     };
     let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
-        let handle = cache.handle_for_layout(def, 0, runtime_fp, decoded, images);
+        let handle =
+            cache.handle_for_layout(def, 0, runtime_fp, ground.sprite_modifiers, decoded, images);
         (
             Sprite {
                 image: handle,
@@ -1238,7 +1239,14 @@ fn spawn_newgrf_house_layout_sequence(
             return false;
         };
         let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
-        let handle = cache.handle_for_layout(def, slot, runtime_fp, decoded, images);
+        let handle = cache.handle_for_layout(
+            def,
+            slot,
+            runtime_fp,
+            layer.sprite_modifiers,
+            decoded,
+            images,
+        );
         let width = f32::from(decoded.width);
         let height = f32::from(decoded.height);
         let seq = RoadStopSeqGfx {
@@ -1982,8 +1990,15 @@ fn spawn_newgrf_industry_layout_ground(
     let tint =
         crate::sprites::with_to_alpha(Color::WHITE, crate::sprites::TransparencyOption::Industries);
     let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
-        let handle =
-            cache.handle_for_layout(def, 0, Some(palette_colour), runtime_fp, decoded, images);
+        let handle = cache.handle_for_layout(
+            def,
+            0,
+            Some(palette_colour),
+            runtime_fp,
+            ground.sprite_modifiers,
+            decoded,
+            images,
+        );
         (
             Sprite {
                 image: handle,
@@ -2059,8 +2074,15 @@ fn spawn_newgrf_industry_layout_sequence(
             return false;
         };
         let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
-        let handle =
-            cache.handle_for_layout(def, slot, Some(palette_colour), runtime_fp, decoded, images);
+        let handle = cache.handle_for_layout(
+            def,
+            slot,
+            Some(palette_colour),
+            runtime_fp,
+            layer.sprite_modifiers,
+            decoded,
+            images,
+        );
         let width = f32::from(decoded.width);
         let height = f32::from(decoded.height);
         let seq = RoadStopSeqGfx {
@@ -2342,7 +2364,15 @@ fn spawn_newgrf_object_layout_ground(
         return true;
     };
     let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
-        let handle = cache.handle_for_layout(def, 0, object_colour, runtime_fp, decoded, images);
+        let handle = cache.handle_for_layout(
+            def,
+            0,
+            object_colour,
+            runtime_fp,
+            ground.sprite_modifiers,
+            decoded,
+            images,
+        );
         (
             Sprite {
                 image: handle,
@@ -2411,7 +2441,15 @@ fn spawn_newgrf_object_layout_sequence(
             return false;
         };
         let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
-        let handle = cache.handle_for_layout(def, slot, object_colour, runtime_fp, decoded, images);
+        let handle = cache.handle_for_layout(
+            def,
+            slot,
+            object_colour,
+            runtime_fp,
+            layer.sprite_modifiers,
+            decoded,
+            images,
+        );
         let width = f32::from(decoded.width);
         let height = f32::from(decoded.height);
         let seq = RoadStopSeqGfx {

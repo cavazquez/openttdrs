@@ -9,11 +9,11 @@ use crate::render::newgrf_cache::{
     DecodedSpriteImagePolicy, decoded_sprite_image, runtime_fingerprint, vars,
 };
 
-/// `(house_id, slot, runtime_fp)` → textura RGBA. El bit alto de `slot`
-/// separa piezas `TileSeq` de vistas planas.
+/// `(house_id, slot, runtime_fp, sprite_modifiers)` → textura RGBA. El bit
+/// alto de `slot` separa piezas `TileSeq` de vistas planas.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfHouseSpriteCache {
-    handles: HashMap<(u16, u16, u32), Handle<Image>>,
+    handles: HashMap<(u16, u16, u32, u8), Handle<Image>>,
 }
 
 impl NewGrfHouseSpriteCache {
@@ -40,7 +40,7 @@ impl NewGrfHouseSpriteCache {
             def.newgrf_view(view_idx)?.clone()
         };
         let idx = u16::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0);
-        let key = (def.id, idx, fp);
+        let key = (def.id, idx, fp, 0);
         Some(
             self.handles
                 .entry(key)
@@ -61,10 +61,16 @@ impl NewGrfHouseSpriteCache {
         def: &HouseSpecDef,
         slot: u16,
         runtime_fp: u32,
+        sprite_modifiers: u8,
         sprite: &openttdrs_core::DecodedSprite,
         images: &mut Assets<Image>,
     ) -> Handle<Image> {
-        let key = (def.id, 0x8000 | (slot & 0x7FFF), runtime_fp);
+        let key = (
+            def.id,
+            0x8000 | (slot & 0x7FFF),
+            runtime_fp,
+            sprite_modifiers,
+        );
         self.handles
             .entry(key)
             .or_insert_with(|| {

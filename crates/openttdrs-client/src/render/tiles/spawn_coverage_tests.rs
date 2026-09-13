@@ -9698,7 +9698,9 @@ fn newgrf_airport_tile_layout_emits_ground_sortable_parent_and_child() {
 
 #[test]
 fn rotated_newgrf_airport_layout_selects_relative_runtime_and_action5_foundation() {
-    use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
+    use openttdrs_core::newgrf_sprites::{
+        TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR, TileLayout, TileLayoutSpriteRef,
+    };
 
     let assets = boot_assets_app();
     let mut map = Map::new_flat(6, 6, 0);
@@ -9812,6 +9814,7 @@ fn rotated_newgrf_airport_layout_selects_relative_runtime_and_action5_foundation
         TileLayout {
             ground: TileLayoutSpriteRef {
                 action1_set: Some(0),
+                sprite_modifiers: TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
                 ..Default::default()
             },
             sequence: vec![TileLayoutSpriteRef {

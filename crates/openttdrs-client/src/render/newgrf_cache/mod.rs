@@ -11,6 +11,7 @@ use crate::render::{AtlasSprite, WorldAssets};
 pub(crate) use fingerprint::runtime_fingerprint;
 pub(crate) use image_factory::{
     DecodedSpriteImagePolicy, decoded_sprite_image, decoded_sprite_image_with_twocc_map,
+    decoded_tile_layout_image, decoded_tile_layout_image_with_twocc_map,
 };
 
 /// Baseset sprites that are safe to use as a `TileLayout` ground without
@@ -48,9 +49,9 @@ pub(crate) fn tile_layout_is_renderable(layout: &ResolvedTileLayout) -> bool {
         None => true,
         Some(ground) => {
             ground.action1_sprite().is_some()
-                || ground
-                    .base_sprite_id()
-                    .is_some_and(|id| DIRECT_FLAT_GROUND_SPRITES.contains(&id))
+                || ground.base_sprite_id().is_some_and(|id| {
+                    ground.sprite_modifiers == 0 && DIRECT_FLAT_GROUND_SPRITES.contains(&id)
+                })
         }
     }
 }
@@ -168,5 +169,22 @@ mod tests {
             !tile_layout_is_renderable(&direct_build),
             "base BUILD sprites need their own NFO anchors and bounds"
         );
+    }
+
+    #[test]
+    fn direct_base_ground_with_palette_modifier_keeps_atomic_fallback() {
+        let layout = ResolvedTileLayout {
+            ground: Some(ResolvedTileLayoutSprite {
+                sprite: None,
+                base_sprite: Some(3981),
+                sprite_modifiers:
+                    openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+                origin: [0, 0, 0],
+                extent: [0, 0, 0],
+            }),
+            sequence: vec![action1_sprite()],
+            complete: true,
+        };
+        assert!(!tile_layout_is_renderable(&layout));
     }
 }

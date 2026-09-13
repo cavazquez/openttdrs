@@ -2282,6 +2282,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     dims.0,
                     foundation_child_parent,
                     *spec_id,
+                    owner_colour,
                     *runtime_fp,
                     layout,
                     cache,
@@ -2625,6 +2626,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     dims.0,
                     foundation_child_parent,
                     *spec_id,
+                    owner_colour,
                     *runtime_fp,
                     layout,
                     cache,
@@ -2681,6 +2683,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     dims.0,
                     waypoint_building_parent_ordinal,
                     *spec_id,
+                    owner_colour,
                     *runtime_fp,
                     layout,
                     cache,
@@ -3297,7 +3300,15 @@ fn spawn_newgrf_station_layout_ground(
         return true;
     };
     let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
-        let handle = cache.handle_for_layout(def, 0, owner_colour, runtime_fp, decoded, images);
+        let handle = cache.handle_for_layout(
+            def,
+            0,
+            owner_colour,
+            runtime_fp,
+            ground.sprite_modifiers,
+            decoded,
+            images,
+        );
         (
             tint_building_sprite(Sprite {
                 image: handle,
@@ -3375,7 +3386,15 @@ fn spawn_newgrf_station_layout_sequence(
             return false;
         };
         let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
-        let handle = cache.handle_for_layout(def, slot, owner_colour, runtime_fp, decoded, images);
+        let handle = cache.handle_for_layout(
+            def,
+            slot,
+            owner_colour,
+            runtime_fp,
+            layer.sprite_modifiers,
+            decoded,
+            images,
+        );
         let width = f32::from(decoded.width);
         let height = f32::from(decoded.height);
         let origin = crate::iso::RoadStopSeqGfx {
@@ -3618,6 +3637,7 @@ fn spawn_newgrf_road_stop_layout_ground(
     map_width: u32,
     foundation_child_parent: Option<Entity>,
     spec_id: u16,
+    owner_colour: Option<CompanyColour>,
     runtime_fp: u32,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
     cache: &mut crate::render::NewGrfAction5SpriteCache,
@@ -3635,10 +3655,12 @@ fn spawn_newgrf_road_stop_layout_ground(
         let Some(slot) = road_stop_layout_ground_slot(spec_id) else {
             return false;
         };
-        let handle = cache.handle_for_variant(
+        let handle = cache.handle_for_variant_with_company_colour_and_modifiers(
             ROADSTOP_TILE_LAYOUT_CACHE_TYPE,
             slot,
             runtime_fp,
+            owner_colour,
+            ground.sprite_modifiers,
             decoded,
             images,
         );
@@ -3728,6 +3750,7 @@ fn spawn_newgrf_road_stop_layout_sequence(
     map_width: u32,
     parent_ordinal: u8,
     spec_id: u16,
+    owner_colour: Option<CompanyColour>,
     runtime_fp: u32,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
     cache: &mut crate::render::NewGrfAction5SpriteCache,
@@ -3764,10 +3787,12 @@ fn spawn_newgrf_road_stop_layout_sequence(
         let Some(slot) = slot_base.checked_add(index) else {
             return false;
         };
-        let handle = cache.handle_for_variant(
+        let handle = cache.handle_for_variant_with_company_colour_and_modifiers(
             ROADSTOP_TILE_LAYOUT_CACHE_TYPE,
             slot,
             runtime_fp,
+            owner_colour,
+            layer.sprite_modifiers,
             decoded,
             images,
         );
@@ -3965,6 +3990,7 @@ fn spawn_road_stop_buildings(
                 map.dimensions().0,
                 vanilla_parent_ordinal,
                 spec_id,
+                owner_colour,
                 runtime_fp,
                 &layout,
                 cache,
@@ -4406,11 +4432,12 @@ fn spawn_newgrf_airport_layout_ground(
         let Some(slot) = airport_tile_layout_cache_slot(gfx, 0) else {
             return false;
         };
-        let image = cache.handle_for_variant_with_company_colour(
+        let image = cache.handle_for_variant_with_company_colour_and_modifiers(
             AIRPORT_TILE_ACTION3_CACHE_TYPE,
             slot,
             runtime_fp,
             owner_colour,
+            ground.sprite_modifiers,
             decoded,
             images,
         );
@@ -4494,11 +4521,12 @@ fn spawn_newgrf_airport_layout_sequence(
         let Some(slot) = airport_tile_layout_cache_slot(gfx, index.saturating_add(1)) else {
             return false;
         };
-        let handle = cache.handle_for_variant_with_company_colour(
+        let handle = cache.handle_for_variant_with_company_colour_and_modifiers(
             AIRPORT_TILE_ACTION3_CACHE_TYPE,
             slot,
             runtime_fp,
             owner_colour,
+            layer.sprite_modifiers,
             decoded,
             images,
         );

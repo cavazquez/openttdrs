@@ -9,6 +9,10 @@ use openttdrs_core::{
 
 use crate::sprites::CompanyColour;
 
+const TILE_LAYOUT_PALETTE_MODIFIERS: u8 =
+    openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
+        | openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR;
+
 /// Política de bake/recolor al subir un sprite NewGRF a textura.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DecodedSpriteImagePolicy {
@@ -34,6 +38,33 @@ pub(crate) fn decoded_sprite_image(
     policy: DecodedSpriteImagePolicy,
 ) -> Image {
     decoded_sprite_image_with_twocc_map(sprite, policy, None)
+}
+
+/// Selecciona la paleta por defecto de `DrawCommonTileSeq` sólo cuando el
+/// wire activa `transparent` o `recolour`. `opaque` controla la visibilidad y
+/// no debe convertir por sí solo una textura en una rampa de compañía.
+pub(crate) fn decoded_tile_layout_image(
+    sprite: &DecodedSprite,
+    sprite_modifiers: u8,
+    default_policy: DecodedSpriteImagePolicy,
+) -> Image {
+    decoded_tile_layout_image_with_twocc_map(sprite, sprite_modifiers, default_policy, None)
+}
+
+/// Variante de [`decoded_tile_layout_image`] para layouts de objetos que
+/// pueden depender de un mapa Action5 `2CC`.
+pub(crate) fn decoded_tile_layout_image_with_twocc_map(
+    sprite: &DecodedSprite,
+    sprite_modifiers: u8,
+    default_policy: DecodedSpriteImagePolicy,
+    twocc_map: Option<&DecodedSprite>,
+) -> Image {
+    let policy = if sprite_modifiers & TILE_LAYOUT_PALETTE_MODIFIERS != 0 {
+        default_policy
+    } else {
+        DecodedSpriteImagePolicy::Raw
+    };
+    decoded_sprite_image_with_twocc_map(sprite, policy, twocc_map)
 }
 
 pub(crate) fn decoded_sprite_image_with_twocc_map(
@@ -145,5 +176,29 @@ mod tests {
         );
         assert_ne!(img.data.as_deref(), Some(&[8, 24, 88, 255][..]));
         assert_eq!(img.data.as_deref().map(|rgba| rgba[3]), Some(255));
+    }
+
+    #[test]
+    fn tile_layout_uses_default_palette_only_for_palette_modifiers() {
+        let sprite = sprite_with_rgba(vec![8, 24, 88, 255]);
+        let policy = DecodedSpriteImagePolicy::CompanyPalette {
+            colour: CompanyColour::Green,
+        };
+        let raw = decoded_tile_layout_image(&sprite, 0, policy);
+        assert_eq!(raw.data.as_deref(), Some(&[8, 24, 88, 255][..]));
+
+        let opaque = decoded_tile_layout_image(
+            &sprite,
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE,
+            policy,
+        );
+        assert_eq!(opaque.data.as_deref(), Some(&[8, 24, 88, 255][..]));
+
+        let recoloured = decoded_tile_layout_image(
+            &sprite,
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+            policy,
+        );
+        assert_ne!(recoloured.data.as_deref(), Some(&[8, 24, 88, 255][..]));
     }
 }

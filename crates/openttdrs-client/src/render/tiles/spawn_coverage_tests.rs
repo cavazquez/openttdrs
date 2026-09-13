@@ -13275,6 +13275,26 @@ fn direct_industry_build_uses_the_industry_atlas_and_overlay_anchor() {
 }
 
 #[test]
+fn direct_industry_ground_uses_the_industry_atlas_and_ground_anchor() {
+    let assets = boot_assets_app();
+    let layer = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+        sprite: None,
+        base_sprite: Some(2022),
+        sprite_modifiers: 0,
+        direct_palette: 0,
+        origin: [0, 0, 0],
+        extent: [1, 1, 1],
+    };
+
+    let resolved = direct_tile_layout_sequence(&layer, &assets).expect("industry ground sprite");
+    assert!(resolved.atlas.matches(&assets.industries[&2022].sprite()));
+    assert_eq!(resolved.width, 64.0);
+    assert_eq!(resolved.height, 31.0);
+    assert_eq!(resolved.x_offs, -31.0);
+    assert_eq!(resolved.y_offs, 0.0);
+}
+
+#[test]
 fn direct_house_build_uses_the_house_atlas_and_overlay_anchor() {
     let assets = boot_assets_app();
     let layer = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {

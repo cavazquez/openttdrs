@@ -6857,3 +6857,11 @@ fallback si el atlas falta o la referencia usa paleta/modifier. Los suelos
 industriales (`ground_sprite_id`) y draw-procs animados quedan explícitamente
 fuera de esta subetapa para no confundir su contrato con un overlay BUILD;
 #326/#329 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-INDUSTRY-GROUND (2026-09-13): el
+`ground` directo de un layout puede reutilizar ahora los `ground_sprite_id`
+industriales auditados, incluidos los pisos parciales de 32/44/46 píxeles,
+con el atlas `industries` y sus anclas `ground_w/ground_h/ground_xrel/ground_yrel`.
+La tabla se valida por todas sus etapas para no seleccionar una geometría
+arbitraria; modifiers, paletas y draw-procs animados siguen en fallback
+atómico. #326/#329 continúan abiertas.

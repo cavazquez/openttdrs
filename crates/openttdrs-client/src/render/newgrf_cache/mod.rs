@@ -318,6 +318,39 @@ fn direct_tile_layout_ground_geometry(sprite_id: u16) -> Option<DirectTileLayout
 /// the complete layout fallback in `tile_layout_is_renderable`.
 fn direct_tile_layout_ground_sprite_is_supported(sprite_id: u16) -> bool {
     direct_tile_layout_ground_geometry(sprite_id).is_some()
+        || direct_tile_layout_industry_ground_geometry(sprite_id).is_some()
+}
+
+/// Busca la geometría del suelo propio de una industria (`s1`) en todas sus
+/// etapas. Hay suelos planos y piezas parciales de industrias custom; sólo se
+/// admite un ID cuando todas sus apariciones tienen el mismo ancla NFO.
+fn direct_tile_layout_industry_ground_geometry(
+    sprite_id: u16,
+) -> Option<DirectTileLayoutGroundGeometry> {
+    if sprite_id == 0 {
+        return None;
+    }
+    let sprite_id = u32::from(sprite_id);
+    let mut geometry = None;
+    for entry in crate::sprites::INDUSTRY_GFX_DATA
+        .iter()
+        .filter(|entry| entry.ground_sprite_id == sprite_id)
+    {
+        let candidate = DirectTileLayoutGroundGeometry {
+            width: entry.ground_w,
+            height: entry.ground_h,
+            x_offs: entry.ground_xrel,
+            y_offs: entry.ground_yrel,
+        };
+        if let Some(previous) = geometry {
+            if previous != candidate {
+                return None;
+            }
+        } else {
+            geometry = Some(candidate);
+        }
+    }
+    geometry
 }
 
 /// Busca la geometría del overlay de industria en todas sus etapas. Un mismo
@@ -387,6 +420,7 @@ fn direct_tile_layout_house_geometry(sprite_id: u16) -> Option<DirectTileLayoutG
 /// como un rombo plano sólo porque vienen de un `TileLayout` directo.
 fn direct_tile_layout_sequence_geometry(sprite_id: u16) -> Option<DirectTileLayoutGroundGeometry> {
     direct_tile_layout_ground_geometry(sprite_id)
+        .or_else(|| direct_tile_layout_industry_ground_geometry(sprite_id))
         .or_else(|| direct_tile_layout_industry_geometry(sprite_id))
         .or_else(|| direct_tile_layout_house_geometry(sprite_id))
         .or_else(|| {
@@ -505,9 +539,10 @@ pub(crate) fn direct_tile_layout_ground(
         4532..=4549 => assets.snow_desert[2][usize::from(sprite_id - 4531)].clone(),
         4550 => assets.snow_desert[3][0].clone(), // SPR_FLAT_SNOW_DESERT_TILE
         4551..=4568 => assets.snow_desert[3][usize::from(sprite_id - 4550)].clone(),
-        _ => return None,
+        _ => assets.industries.get(&u32::from(sprite_id))?.clone(),
     };
-    let geometry = direct_tile_layout_ground_geometry(sprite_id)?;
+    let geometry = direct_tile_layout_ground_geometry(sprite_id)
+        .or_else(|| direct_tile_layout_industry_ground_geometry(sprite_id))?;
     Some(DirectTileLayoutGround {
         atlas,
         width: geometry.width,
@@ -639,6 +674,14 @@ mod tests {
             assert!(
                 tile_layout_is_renderable(&supported),
                 "sprite de terreno vanilla {sprite_id} debe conservarse como ground"
+            );
+        }
+        for sprite_id in [2022, 2269, 4721, 4769] {
+            let mut supported = layout.clone();
+            supported.ground.as_mut().expect("ground").base_sprite = Some(sprite_id);
+            assert!(
+                tile_layout_is_renderable(&supported),
+                "sprite de suelo industrial {sprite_id} debe conservarse como ground"
             );
         }
 
@@ -795,6 +838,38 @@ mod tests {
             })
         );
         assert_eq!(direct_tile_layout_industry_geometry(2000), None);
+    }
+
+    #[test]
+    fn direct_base_ground_uses_consistent_industry_ground_geometry() {
+        assert_eq!(
+            direct_tile_layout_industry_ground_geometry(2022),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 64.0,
+                height: 31.0,
+                x_offs: -31.0,
+                y_offs: 0.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_industry_ground_geometry(2269),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 64.0,
+                height: 46.0,
+                x_offs: -31.0,
+                y_offs: -15.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_industry_ground_geometry(4769),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 32.0,
+                height: 32.0,
+                x_offs: 0.0,
+                y_offs: -1.0,
+            })
+        );
+        assert_eq!(direct_tile_layout_industry_ground_geometry(2000), None);
     }
 
     #[test]

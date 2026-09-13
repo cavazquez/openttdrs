@@ -18,7 +18,10 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{default_engine_id, engine_for_vehicle};
 
-use crate::render::{NewGrfTrainSpriteCache, TruckHandles, vehicle_side_layers_for_sim};
+use crate::render::{
+    NewGrfTrainSpriteCache, TruckHandles, VEHICLE_IMAGE_TYPE_IN_DETAILS,
+    vehicle_side_layers_for_sim_with_image_type,
+};
 use crate::state::SimWorld;
 use crate::ui::floating_window::FloatingWindowClosed;
 use crate::ui::vehicle_chain::VehicleChainRegistry;
@@ -197,12 +200,33 @@ pub(crate) fn vehicle_side_sprite_for_sim(
     cache: &mut NewGrfTrainSpriteCache,
     images: &mut Assets<Image>,
 ) -> Handle<Image> {
+    vehicle_side_sprite_for_sim_with_image_type(
+        trucks,
+        sim,
+        vehicle,
+        VEHICLE_IMAGE_TYPE_IN_DETAILS,
+        cache,
+        images,
+    )
+}
+
+/// Sprite lateral con el `EngineImageType` del consumidor de la ventana.
+pub(crate) fn vehicle_side_sprite_for_sim_with_image_type(
+    trucks: &TruckHandles,
+    sim: &SimWorld,
+    vehicle: &openttdrs_core::Vehicle,
+    image_type: u8,
+    cache: &mut NewGrfTrainSpriteCache,
+    images: &mut Assets<Image>,
+) -> Handle<Image> {
     if let Some(engine) = vehicle
         .engine_id
         .and_then(|id| openttdrs_core::engine_in_catalog(&sim.state.engine_catalog, id))
     {
-        if let Some(layer) =
-            vehicle_side_layers_for_sim(trucks, sim, vehicle, cache, images).first()
+        if let Some(layer) = vehicle_side_layers_for_sim_with_image_type(
+            trucks, sim, vehicle, image_type, cache, images,
+        )
+        .first()
         {
             return layer.handle.clone();
         }

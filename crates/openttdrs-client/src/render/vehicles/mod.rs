@@ -28,6 +28,13 @@ fn engine_in_sim(sim: &SimWorld, engine_id: u16) -> Option<&EngineDef> {
         .or_else(|| openttdrs_core::engine_by_id(engine_id))
 }
 
+/// `EngineImageType` low-byte values passed through Action2 `var 10`.
+pub(crate) const VEHICLE_IMAGE_TYPE_ON_MAP: u8 = 0x00;
+pub(crate) const VEHICLE_IMAGE_TYPE_IN_DEPOT: u8 = 0x10;
+pub(crate) const VEHICLE_IMAGE_TYPE_IN_DETAILS: u8 = 0x11;
+pub(crate) const VEHICLE_IMAGE_TYPE_IN_LIST: u8 = 0x12;
+pub(crate) const VEHICLE_IMAGE_TYPE_PURCHASE: u8 = 0x20;
+
 /// Capas del rotor que se dibuja en la vista previa de compra.
 ///
 /// El preview no tiene una unidad real para aportar estado de consist, por lo
@@ -80,12 +87,13 @@ pub(crate) fn vehicle_preview_layers(
 ///
 /// La orientación visual de una tira sigue siendo fija (`DIR_E`), pero la
 /// resolución conserva el vehículo real: cargo, consist, callbacks y librea
-/// de grupo. Reutilizar [`vehicle_preview_layers`] aquí hace que una unidad
-/// comprada con una librea de grupo vuelva a aparecer con la librea de compra.
-pub(crate) fn vehicle_side_layers_for_sim(
+/// de grupo. El `image_type` mantiene además el contrato GUI de OpenTTD para
+/// distinguir lista, depósito, detalles y compra.
+pub(crate) fn vehicle_side_layers_for_sim_with_image_type(
     trucks: &TruckHandles,
     sim: &SimWorld,
     vehicle: &openttdrs_core::Vehicle,
+    image_type: u8,
     cache: &mut NewGrfTrainSpriteCache,
     images: &mut Assets<Image>,
 ) -> Vec<NewGrfVehicleLayer> {
@@ -103,7 +111,7 @@ pub(crate) fn vehicle_side_layers_for_sim(
     side_vehicle.direction = openttdrs_core::DIR_E;
     let pose = openttdrs_core::VehiclePose::from_vehicle(&side_vehicle)
         .with_drive_on_right(sim.state.construction.road_drive_on_right());
-    trucks.for_vehicle_with_newgrf_layers(
+    trucks.for_vehicle_with_newgrf_layers_and_image_type(
         &side_vehicle,
         pose,
         None,
@@ -111,6 +119,7 @@ pub(crate) fn vehicle_side_layers_for_sim(
         sim,
         cache,
         images,
+        image_type,
     )
 }
 
@@ -543,10 +552,11 @@ mod tests {
         let mut cache = NewGrfTrainSpriteCache::default();
         let mut images = Assets::<Image>::default();
         let handles = default_handles();
-        let layers = vehicle_side_layers_for_sim(
+        let layers = vehicle_side_layers_for_sim_with_image_type(
             &handles,
             &sim,
             &sim.state.vehicles[0],
+            VEHICLE_IMAGE_TYPE_IN_DETAILS,
             &mut cache,
             &mut images,
         );

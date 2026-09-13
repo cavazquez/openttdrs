@@ -13,6 +13,8 @@ use crate::render::newgrf_cache::{
 };
 use crate::sprites::CompanyColour;
 
+use super::{VEHICLE_IMAGE_TYPE_ON_MAP, VEHICLE_IMAGE_TYPE_PURCHASE};
+
 #[path = "../../sprites/vehicle_gfx_data_generated.rs"]
 #[cfg(not(test))]
 mod vehicle_gfx;
@@ -414,6 +416,38 @@ impl NewGrfTrainSpriteCache {
         ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Vec<NewGrfVehicleLayer> {
+        self.handles_for_runtime_with_override_and_image_type(
+            engine,
+            dir,
+            VEHICLE_IMAGE_TYPE_ON_MAP,
+            cargo,
+            primary,
+            secondary,
+            overriding_local_id,
+            palette_override,
+            twocc_maps,
+            ctx,
+            images,
+        )
+    }
+
+    /// Igual que [`Self::handles_for_runtime_with_override`], conservando el
+    /// `EngineImageType` que OpenTTD expone en `var 10`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn handles_for_runtime_with_override_and_image_type(
+        &mut self,
+        engine: &EngineDef,
+        dir: usize,
+        image_type: u8,
+        cargo: Option<openttdrs_core::CargoType>,
+        primary: CompanyColour,
+        secondary: CompanyColour,
+        overriding_local_id: Option<u16>,
+        palette_override: Option<u16>,
+        twocc_maps: &[Option<openttdrs_core::DecodedSprite>],
+        ctx: &mut openttdrs_core::Action2EvalCtx,
+        images: &mut Assets<Image>,
+    ) -> Vec<NewGrfVehicleLayer> {
         let Some(runtime) = engine.newgrf_runtime.as_ref() else {
             return Vec::new();
         };
@@ -427,10 +461,13 @@ impl NewGrfTrainSpriteCache {
         let mut previous: Option<openttdrs_core::DecodedSprite> = None;
         for stack in 0..max_stack {
             let mut stack_ctx = base_ctx.clone();
-            // EIT_ON_MAP = 0; the high byte is the sprite-stack index.
-            stack_ctx
-                .vars
-                .insert(0x10, u32::try_from(stack).unwrap_or(0) << 8);
+            // `var 10` carries the image type in the low byte and the
+            // SpriteStack index in the high byte, exactly as
+            // `GetCustomEngineSprite` sets `callback_param1` upstream.
+            stack_ctx.vars.insert(
+                0x10,
+                u32::from(image_type) | u32::try_from(stack).unwrap_or(0) << 8,
+            );
             let views = overriding_local_id
                 .and_then(|overriding_id| {
                     runtime.views_for_wagon_override_u16_ctx(
@@ -633,9 +670,10 @@ pub(super) fn custom_vehicle_layers_for_preview(
                 + u16::from(primary.as_u8())
                 + u16::from(secondary.as_u8()) * 16
         });
-        let layers = cache.handles_for_runtime_with_override(
+        let layers = cache.handles_for_runtime_with_override_and_image_type(
             engine,
             dir,
+            VEHICLE_IMAGE_TYPE_PURCHASE,
             None,
             primary,
             secondary,
@@ -718,9 +756,14 @@ fn custom_aircraft_rotor_layers_for_engine(
                         + u16::from(secondary.as_u8()) * 16
                 })
             });
-        return cache.handles_for_runtime_with_override(
+        return cache.handles_for_runtime_with_override_and_image_type(
             engine,
             frame,
+            if vehicle.is_some() {
+                VEHICLE_IMAGE_TYPE_ON_MAP
+            } else {
+                VEHICLE_IMAGE_TYPE_PURCHASE
+            },
             None,
             primary,
             secondary,
@@ -946,6 +989,32 @@ impl TruckHandles {
         cache: &mut NewGrfTrainSpriteCache,
         images: &mut Assets<Image>,
     ) -> Vec<NewGrfVehicleLayer> {
+        self.for_vehicle_with_newgrf_layers_and_image_type(
+            v,
+            pose,
+            _company,
+            owner_colour,
+            sim,
+            cache,
+            images,
+            VEHICLE_IMAGE_TYPE_ON_MAP,
+        )
+    }
+
+    /// Resuelve un vehículo real con el `EngineImageType` propio del
+    /// consumidor GUI o del mapa.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn for_vehicle_with_newgrf_layers_and_image_type(
+        &self,
+        v: &Vehicle,
+        pose: openttdrs_core::VehiclePose,
+        _company: Option<&CompanyColoredSprites>,
+        owner_colour: Option<crate::sprites::CompanyColour>,
+        sim: &crate::state::SimWorld,
+        cache: &mut NewGrfTrainSpriteCache,
+        images: &mut Assets<Image>,
+        image_type: u8,
+    ) -> Vec<NewGrfVehicleLayer> {
         let dir = openttdrs_core::vehicle_sprite_direction_at(v, pose).min(7) as usize;
         if let Some(eid) = v.engine_id
             && let Some(eng) = super::engine_in_sim(sim, eid)
@@ -991,9 +1060,10 @@ impl TruckHandles {
                                     + u16::from(livery_secondary.as_u8()) * 16
                             })
                         });
-                let layers = cache.handles_for_runtime_with_override(
+                let layers = cache.handles_for_runtime_with_override_and_image_type(
                     eng,
                     dir,
+                    image_type,
                     v.cargo_type,
                     colour,
                     livery_secondary,
@@ -1384,6 +1454,95 @@ mod tests {
             images.get(&layer.handle).unwrap().data.as_deref(),
             Some(&[23, 0, 0, 255][..])
         );
+    }
+
+    #[test]
+    fn runtime_vehicle_layers_receive_purchase_image_type() {
+        use openttdrs_core::newgrf_sprites::{
+            Action2VarAdjust, Action2VarEntry, Action2VarTerm, DecodedSprite, TrainSpriteAssign,
+            TrainSpriteGraphics,
+        };
+
+        let sprite = |red: u8| DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![red, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_TRAIN_KIRBY)
+            .expect("vanilla train")
+            .clone();
+        engine.id = 0x7F06;
+        engine.from_newgrf = true;
+        engine.newgrf_local_id = 0;
+        engine.newgrf_runtime = Some(Box::new(TrainSpriteGraphics {
+            sets: vec![vec![sprite(10)], vec![sprite(20)]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 0,
+                set_id: 0,
+            }],
+            action2_var: [(
+                0,
+                Action2VarEntry {
+                    first: Action2VarTerm {
+                        variable: 0x10,
+                        param: None,
+                        adjust: Action2VarAdjust {
+                            and_mask: 0xFF,
+                            ..Default::default()
+                        },
+                    },
+                    ops: Vec::new(),
+                    ranges: vec![(1, 0x20, 0x20)],
+                    default: 0,
+                },
+            )]
+            .into_iter()
+            .collect(),
+            ..Default::default()
+        }));
+
+        let mut cache = NewGrfTrainSpriteCache::default();
+        let mut images = Assets::<Image>::default();
+        let mut map_ctx = openttdrs_core::Action2EvalCtx::default();
+        let map_layers = cache.handles_for_runtime_with_override_and_image_type(
+            &engine,
+            0,
+            VEHICLE_IMAGE_TYPE_ON_MAP,
+            None,
+            CompanyColour::DarkBlue,
+            CompanyColour::DarkBlue,
+            None,
+            None,
+            &[],
+            &mut map_ctx,
+            &mut images,
+        );
+        let mut purchase_ctx = openttdrs_core::Action2EvalCtx::default();
+        let purchase_layers = cache.handles_for_runtime_with_override_and_image_type(
+            &engine,
+            0,
+            VEHICLE_IMAGE_TYPE_PURCHASE,
+            None,
+            CompanyColour::DarkBlue,
+            CompanyColour::DarkBlue,
+            None,
+            None,
+            &[],
+            &mut purchase_ctx,
+            &mut images,
+        );
+
+        let map_image = images
+            .get(&map_layers.first().expect("map layer").handle)
+            .expect("map image");
+        let purchase_image = images
+            .get(&purchase_layers.first().expect("purchase layer").handle)
+            .expect("purchase image");
+        assert_eq!(map_image.data.as_deref(), Some(&[10, 0, 0, 255][..]));
+        assert_eq!(purchase_image.data.as_deref(), Some(&[20, 0, 0, 255][..]));
     }
 
     #[test]

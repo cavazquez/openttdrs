@@ -11,7 +11,8 @@ use openttdrs_core::prelude::*;
 use crate::i18n::{Locale, localized_text};
 use crate::render::{
     MapPreviewCamera, NewGrfTrainSpriteCache, PrimaryGameCamera, RemapMapVisualsPending,
-    TruckHandles, vehicle_world_position_with_catalog, vehicle_world_position_with_newgrf,
+    TruckHandles, VEHICLE_IMAGE_TYPE_IN_LIST, vehicle_world_position_with_catalog,
+    vehicle_world_position_with_newgrf,
 };
 use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
@@ -29,8 +30,8 @@ use crate::ui::navigation::{OpenUiRoute, UiRoute};
 use crate::ui::toolbar::BuildMenuUi;
 use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_window::{
-    CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, VehicleWindowState, vehicle_side_sprite_for_sim,
-    vehicle_side_sprite_with_catalog,
+    CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, VehicleWindowState,
+    vehicle_side_sprite_for_sim_with_image_type, vehicle_side_sprite_with_catalog,
 };
 
 const LIST_HEIGHT: f32 = 300.0;
@@ -1265,7 +1266,14 @@ pub(crate) fn sync_vehicle_list_sprites(
         else {
             continue;
         };
-        image.image = vehicle_side_sprite_for_sim(trucks, &sim, vehicle, &mut cache, &mut images);
+        image.image = vehicle_side_sprite_for_sim_with_image_type(
+            trucks,
+            &sim,
+            vehicle,
+            VEHICLE_IMAGE_TYPE_IN_LIST,
+            &mut cache,
+            &mut images,
+        );
     }
 }
 

@@ -17,7 +17,7 @@ use crate::camera::tile_camera_world_pos;
 use crate::i18n::{Locale, localized_text};
 use crate::render::{
     MapPreviewCamera, NewGrfTrainSpriteCache, PrimaryGameCamera, RemapMapVisualsPending,
-    TruckHandles,
+    TruckHandles, VEHICLE_IMAGE_TYPE_IN_DEPOT,
 };
 use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
@@ -33,7 +33,7 @@ use crate::ui::scrollbar::spawn_classic_scroll_area_with;
 use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_window::{
     CONSIST_STRIP_MAX_UNITS, CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, VehicleWindowState,
-    vehicle_side_sprite_for_sim,
+    vehicle_side_sprite_for_sim_with_image_type,
 };
 
 use super::{BuildMenuUi, OrderEditState};
@@ -874,7 +874,14 @@ pub(crate) fn sync_depot_panel_consist(
             && let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == unit_id)
         {
             node.display = Display::Flex;
-            image.image = vehicle_side_sprite_for_sim(trucks, &sim, unit, &mut cache, &mut images);
+            image.image = vehicle_side_sprite_for_sim_with_image_type(
+                trucks,
+                &sim,
+                unit,
+                VEHICLE_IMAGE_TYPE_IN_DEPOT,
+                &mut cache,
+                &mut images,
+            );
             let dragging_this =
                 drag_from == Some(sprite.slot) && drag_unit == Some(sprite.unit_idx);
             *border = if dragging_this || *interaction == Interaction::Hovered {

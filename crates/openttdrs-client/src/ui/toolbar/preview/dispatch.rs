@@ -1,7 +1,10 @@
 //! Dispatch: decidir qué tipo de preview construir según la herramienta activa.
 
 use openttdrs_core::prelude::*;
-use openttdrs_core::{Command, is_tunnel_entrance_slope, tile_slope_and_z};
+use openttdrs_core::{
+    Command, RoadTramType, RoadType, TramwayDepotReplacement, is_tunnel_entrance_slope,
+    road_type_def, tile_slope_and_z,
+};
 
 use crate::iso::tile_slope_and_min_z;
 use crate::sprites::road_flat_sprite_index;
@@ -13,6 +16,11 @@ use super::plan::{
 };
 use super::road_stop::road_stop_preview_dir;
 use super::validation::{action_is_tunnel, preview_bridge_span_valid, preview_build_command_valid};
+
+/// Selectores `RoadTypeSpriteGroup` usados para decidir si el depósito
+/// conserva su composición vanilla o la entrega a un grupo NewGRF.
+const ROTSG_GROUND: u8 = 2;
+const ROTSG_DEPOT: u8 = 8;
 
 /// Construye el plan de preview según el contexto.
 pub(crate) fn build_preview_plan(ctx: &PreviewContext, game_state: &GameState) -> PreviewPlan {
@@ -230,8 +238,11 @@ fn dispatch_tile_kind(
 
     // Depósito de carretera
     if action == BuildMenuAction::RoadDepot {
+        let (action5_replacement, show_tram_overlay) = road_depot_preview_mode(game_state);
         return Some(TilePreviewKind::RoadDepot {
             dir: road_stop_preview_dir(ctx.station_state.orientation),
+            action5_replacement,
+            show_tram_overlay,
         });
     }
 
@@ -259,6 +270,40 @@ fn dispatch_tile_kind(
 
     // Sprite genérico para otras acciones
     Some(TilePreviewKind::GenericSprite)
+}
+
+/// Decide qué composición de `DrawTile_Road` debe anticipar el ghost del
+/// depósito. Un depósito vial común no dibuja `road_flat`; sólo el tranvía
+/// puro con `DEPOT_NO_TRACK` agrega el overlay de vía separado. Los roadtypes
+/// eléctricos válidos también pueden usar Action5, pero no heredan ese
+/// overlay: el mapa aplica la misma distinción en `objects.rs`.
+#[must_use]
+fn road_depot_preview_mode(game_state: &GameState) -> (Option<TramwayDepotReplacement>, bool) {
+    let selected = game_state.current_road_type;
+    let type_def = road_type_def(&game_state.road_type_catalog, selected);
+    let class = type_def.map_or_else(|| selected.road_tram_type(), |def| def.class);
+    let has_catenary = type_def.map_or(
+        selected == RoadType::TRAM,
+        openttdrs_core::RoadTypeDef::has_catenary,
+    );
+    let uses_overlay = type_def.is_some_and(|def| def.has_newgrf_specific_group(ROTSG_GROUND));
+    let has_custom_depot = type_def.is_some_and(|def| def.has_newgrf_specific_group(ROTSG_DEPOT));
+
+    let action5_replacement = (has_catenary && !has_custom_depot).then(|| {
+        if game_state.runtime.tramway_depot_replacement == TramwayDepotReplacement::WithTrack
+            && class == RoadTramType::Tram
+            && !uses_overlay
+        {
+            TramwayDepotReplacement::WithTrack
+        } else {
+            TramwayDepotReplacement::NoTrack
+        }
+    });
+    let show_tram_overlay = action5_replacement == Some(TramwayDepotReplacement::NoTrack)
+        && class == RoadTramType::Tram
+        && !uses_overlay;
+
+    (action5_replacement, show_tram_overlay)
 }
 
 /// Ghost de conversión: misma geometría de vía, tint/tipo = `current_rail_type`.
@@ -506,5 +551,36 @@ mod tests {
         assert_eq!(bits, RAIL_TB_X);
         assert_eq!(rail_type, RailType::Electric);
         assert!(rail_convert_preview_kind(&state, TileCoord::new(5, 5)).is_none());
+    }
+
+    #[test]
+    fn road_depot_preview_has_no_surface_layer_for_normal_road() {
+        let state = GameState::new(10, 10);
+
+        assert_eq!(road_depot_preview_mode(&state), (None, false));
+    }
+
+    #[test]
+    fn tram_depot_preview_with_track_uses_embedded_track() {
+        let mut state = GameState::new(10, 10);
+        state.current_road_type = RoadType::TRAM;
+        state.runtime.tramway_depot_replacement = TramwayDepotReplacement::WithTrack;
+
+        assert_eq!(
+            road_depot_preview_mode(&state),
+            (Some(TramwayDepotReplacement::WithTrack), false)
+        );
+    }
+
+    #[test]
+    fn tram_depot_preview_no_track_adds_separate_overlay() {
+        let mut state = GameState::new(10, 10);
+        state.current_road_type = RoadType::TRAM;
+        state.runtime.tramway_depot_replacement = TramwayDepotReplacement::NoTrack;
+
+        assert_eq!(
+            road_depot_preview_mode(&state),
+            (Some(TramwayDepotReplacement::NoTrack), true)
+        );
     }
 }

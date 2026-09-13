@@ -434,7 +434,11 @@ fn spawn_tile_preview(
                 );
             }
         }
-        TilePreviewKind::RoadDepot { dir } => {
+        TilePreviewKind::RoadDepot {
+            dir,
+            action5_replacement,
+            show_tram_overlay,
+        } => {
             spawn_road_depot_preview(
                 commands,
                 RoadDepotPreviewSpawn {
@@ -446,6 +450,8 @@ fn spawn_tile_preview(
                     tint,
                     asset_server,
                     company,
+                    action5_replacement: *action5_replacement,
+                    show_tram_overlay: *show_tram_overlay,
                 },
             );
         }

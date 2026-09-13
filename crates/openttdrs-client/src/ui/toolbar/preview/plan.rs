@@ -4,6 +4,7 @@
 //! separada de la lógica de creación de entidades Bevy.
 
 use bevy::prelude::*;
+use openttdrs_core::TramwayDepotReplacement;
 use openttdrs_core::prelude::*;
 
 use crate::ui::toolbar::{BuildMenuAction, DragBuildState, StationBuildState};
@@ -85,8 +86,13 @@ pub(crate) enum TilePreviewKind {
         tileh: u8,
         rail_type: openttdrs_core::RailType,
     },
-    /// Depósito de carretera
-    RoadDepot { dir: usize },
+    /// Depósito de carretera, incluyendo la composición Action5 que debe
+    /// mostrar el ghost cuando el tipo seleccionado es eléctrico.
+    RoadDepot {
+        dir: usize,
+        action5_replacement: Option<TramwayDepotReplacement>,
+        show_tram_overlay: bool,
+    },
     /// Depósito ferroviario, con el set visual del tipo de vía seleccionado.
     RailDepot {
         dir: usize,

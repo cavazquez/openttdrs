@@ -820,6 +820,17 @@ focal; no se reclama métrica raster ni se altera la matriz de seis zooms. #326 
 catenaria vial, layouts custom/NewGRF, clipping, pivotes, children globales y
 framebuffer.
 
+Corrección #326-ROAD-DEPOT-PREVIEW-ACTION5 (2026-09-13): el fantasma de
+construcción de depósito deja de dibujar siempre una capa `road_flat` debajo
+de la fachada. El plan consulta el roadtype seleccionado, sus flags de
+catenaria y los grupos `ROTSG_GROUND/ROTSG_DEPOT`; los tipos normales muestran
+sólo los BUILD del depósito, mientras que un tranvía puro replica las
+variantes Action5 `WithTrack`/`NoTrack`, sus anclas y tamaños NFO, y agrega
+`tram_flat` únicamente para `DEPOT_NO_TRACK`. El preview de grupos
+`ROTSG_DEPOT` custom todavía requiere resolver el grupo específico dentro de
+la UI, por lo que #326/#565 continúan abiertas junto con clipping, pivotes y
+aceptación raster.
+
 Actualización #326-ROAD-CATENARY-GLOBAL (2026-09-09): las calles normales
 publican ya los cuatro `AddSortableSpriteToDraw` de cada
 `DrawRoadTypeCatenary` como parents globales: tres recortes traseros con sus

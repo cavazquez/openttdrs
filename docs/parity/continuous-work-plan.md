@@ -7072,3 +7072,12 @@ oculta con una superficie casi opaca de `520 px`. El backdrop baja a alfa
 opacos para conservar contraste y accesibilidad. Esto mejora la composición
 visible del escaparate sin alterar el mapa, las rutas ni la simulación; #326
 continúa abierta.
+
+Corrección #326-BRIDGE-PREVIEW-RAIL-RAMP-CATENARY (2026-09-13): la preview
+ferroviaria eléctrica materializa ahora catenaria también en las dos rampas.
+Cada extremo deriva su dirección desde el orden canónico del puente, reutiliza
+la decisión de fundación y el delta Z del renderer, reserva el PCP interior
+para el vano y conserva aliases Action5/OpenGFX, pendientes y transparencia.
+La cota del tablero fantasma usa la misma superficie efectiva de la fundación
+en los extremos; las fundaciones visuales completas y las rampas de otros
+transportes siguen siendo trabajo separado. #326 continúa abierta.

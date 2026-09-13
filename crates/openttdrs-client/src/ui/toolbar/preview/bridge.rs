@@ -9,12 +9,15 @@ use openttdrs_core::{
 
 use crate::iso::{HEIGHT_PX, iso, overlay_pos, remap_tile_offset, tile_slope_and_min_z};
 use crate::render::{
-    CatenarySpriteAnchor, NewGrfCatenarySpriteCache, NewGrfRoadSpriteCache, catenary_sprite_anchor,
-    catenary_sprite_center,
+    CatenarySpriteAnchor, NewGrfCatenarySpriteCache, NewGrfRoadSpriteCache,
+    bridge_foundation_decision_at, bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta,
+    catenary_local_z_delta, catenary_sprite_anchor, catenary_sprite_center,
 };
 use crate::sprites::{
-    BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_sprite_meta, catenary_sprite_atlas_key,
-    catenary_sprite_color, catenary_tile_location_group, collect_catenary_bridge_draws,
+    BridgeDeckSpriteIds, OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, bridge_deck_sprite_ids,
+    bridge_sprite_meta, catenary_sprite_atlas_key, catenary_sprite_color,
+    catenary_tile_location_group, collect_catenary_bridge_draws,
+    collect_catenary_ramp_draws_from_map,
 };
 use crate::ui::toolbar::BuildMenuAction;
 
@@ -342,6 +345,150 @@ fn spawn_rail_bridge_catenary(
     }
 }
 
+/// Dirección persistida en `m5` para la rampa de la preview. El orden
+/// canónico de las teselas es norte → sur; el extremo sur apunta de vuelta al
+/// norte, como las dos cabezas que materializa `PlaceRailBridge`.
+fn bridge_preview_ramp_direction(axis_y: bool, south_ramp: bool) -> u8 {
+    let north_to_south = u8::from(!axis_y) + 1;
+    if south_ramp {
+        (north_to_south + 2) & 3
+    } else {
+        north_to_south
+    }
+}
+
+/// Catenaria de una rampa ferroviaria durante la construcción.
+///
+/// La rampa aún no existe en `Map`, por eso la decisión de fundación recibe
+/// la pendiente/base crudas por separado y el recolector recibe la pendiente
+/// efectiva. La colocación de wires, PCP y PPP es la misma que en el renderer
+/// materializado; sólo se omite el parent sortable propio del mapa.
+#[allow(clippy::too_many_arguments)]
+fn spawn_rail_bridge_ramp_catenary(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    map: &Map,
+    map_dims: (u32, u32),
+    px: i32,
+    py: i32,
+    axis_y: bool,
+    south_ramp: bool,
+    raw_tileh: u8,
+    raw_base_z: u8,
+    tint: Color,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: &mut NewGrfCatenarySpriteCache,
+    images: &mut Assets<Image>,
+) {
+    if crate::sprites::catenary_hidden() {
+        return;
+    }
+    let direction = bridge_preview_ramp_direction(axis_y, south_ramp);
+    let coord = TileCoord::new(px, py);
+    let foundation =
+        bridge_foundation_decision_at(map, coord, map_dims, raw_tileh, raw_base_z, direction);
+    let foundation_tileh = foundation.surface_tileh;
+    let foundation_base_z = foundation.surface_base_z;
+    let ramp_slope = bridge_ramp_catenary_slope(foundation_tileh, direction);
+    let trackbits = if axis_y { RAIL_TB_Y } else { RAIL_TB_X };
+    let mut wires = Vec::new();
+    let mut pylons = Vec::new();
+    collect_catenary_ramp_draws_from_map(
+        map,
+        coord,
+        map_dims.0,
+        map_dims.1,
+        OTTD_MP_RAIL,
+        trackbits,
+        ramp_slope,
+        1 << (direction & 3),
+        &mut wires,
+        &mut pylons,
+    );
+    let catenary_tint = catenary_sprite_color();
+    let tint = tint.with_alpha(tint.alpha() * catenary_tint.alpha());
+
+    for draw in pylons {
+        let Some((sprite, anchor)) = preview_catenary_sprite(
+            asset_server,
+            draw.sprite_id,
+            tint,
+            catenary_newgrf,
+            catenary_sprites,
+            images,
+        ) else {
+            continue;
+        };
+        let Some(pcp) = draw.pcp_direction else {
+            continue;
+        };
+        let index = usize::from(pcp & 3);
+        let world_z_delta = bridge_ramp_catenary_world_z_delta(
+            foundation_tileh,
+            foundation_base_z,
+            raw_base_z,
+            direction,
+            [0, 8, 16, 8][index].min(15),
+            [8, 16, 8, 0][index].min(15),
+            4,
+        );
+        let local_z = catenary_local_z_delta(world_z_delta, raw_base_z, foundation_base_z);
+        let position = catenary_sprite_center(
+            px,
+            py,
+            foundation_base_z,
+            draw.z_layer + 0.055,
+            draw.tile_dx - 1.0,
+            draw.tile_dy - 1.0,
+            local_z as f32,
+            anchor,
+        );
+        commands.spawn((
+            BuildGhostPreview,
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
+
+    for (index, draw) in wires.into_iter().enumerate() {
+        let Some((sprite, anchor)) = preview_catenary_sprite(
+            asset_server,
+            draw.sprite_id,
+            tint,
+            catenary_newgrf,
+            catenary_sprites,
+            images,
+        ) else {
+            continue;
+        };
+        let (ox, oy, oz) = draw.bounds_origin;
+        let world_z_delta = bridge_ramp_catenary_world_z_delta(
+            foundation_tileh,
+            foundation_base_z,
+            raw_base_z,
+            direction,
+            ox,
+            oy,
+            8,
+        );
+        let position = catenary_sprite_center(
+            px,
+            py,
+            foundation_base_z,
+            0.09 + index as f32 * 0.0004,
+            ox as f32,
+            oy as f32,
+            (world_z_delta + oz) as f32,
+            anchor,
+        );
+        commands.spawn((
+            BuildGhostPreview,
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
+}
+
 /// Posición en pantalla con offsets NFO, como `spawn_layer` en `bridge_draw.rs`.
 fn bridge_ghost_translation(
     px: i32,
@@ -392,6 +539,7 @@ pub(crate) fn spawn_bridge_span_preview(
     } else {
         Color::srgba(1.0, 0.28, 0.22, 0.58)
     };
+    let map_dims = map.dimensions();
     let deck_z = ordered_tiles.last().map(|&(px, py)| {
         let (tileh, min_z) = tile_slope_and_min_z(map, px as u32, py as u32);
         bridge_preview_deck_z(tileh, min_z, axis)
@@ -416,10 +564,15 @@ pub(crate) fn spawn_bridge_span_preview(
         } else {
             (ids.rear(is_rail, axis), Vec2::ZERO, DECK_LAYER)
         };
+        let ramp_foundation_base_z = (!is_middle && total >= 2).then(|| {
+            let direction = bridge_preview_ramp_direction(axis_y, index + 1 == total);
+            bridge_foundation_decision_at(map, coord, map_dims, tileh, base_z, direction)
+                .surface_base_z
+        });
         let surface_z = if is_middle {
             deck_z.unwrap_or(base_z)
         } else {
-            base_z
+            ramp_foundation_base_z.unwrap_or(base_z)
         };
         let path = format!(
             "assets/opengfx/tiles/{}",
@@ -472,25 +625,42 @@ pub(crate) fn spawn_bridge_span_preview(
             ));
         }
 
-        if is_rail
-            && rail_type.has_catenary()
-            && is_middle
-            && let Some(middle_length) = total.checked_sub(2)
-        {
-            spawn_rail_bridge_catenary(
-                commands,
-                asset_server,
-                px,
-                py,
-                surface_z,
-                axis_y,
-                index,
-                middle_length,
-                tint,
-                catenary_newgrf,
-                catenary_sprites,
-                images,
-            );
+        if is_rail && rail_type.has_catenary() {
+            if is_middle {
+                if let Some(middle_length) = total.checked_sub(2) {
+                    spawn_rail_bridge_catenary(
+                        commands,
+                        asset_server,
+                        px,
+                        py,
+                        surface_z,
+                        axis_y,
+                        index,
+                        middle_length,
+                        tint,
+                        catenary_newgrf,
+                        catenary_sprites,
+                        images,
+                    );
+                }
+            } else if total >= 2 {
+                spawn_rail_bridge_ramp_catenary(
+                    commands,
+                    asset_server,
+                    map,
+                    map_dims,
+                    px,
+                    py,
+                    axis_y,
+                    index + 1 == total,
+                    tileh,
+                    base_z,
+                    tint,
+                    catenary_newgrf,
+                    catenary_sprites,
+                    images,
+                );
+            }
         }
 
         if let Some((def, source_coord, source_tile)) = road_source
@@ -658,6 +828,14 @@ mod tests {
             bridge_preview_render_order(&tiles),
             vec![(3, 2), (3, 3), (3, 4), (3, 5)]
         );
+    }
+
+    #[test]
+    fn bridge_preview_ramp_directions_follow_axis_and_endpoint() {
+        assert_eq!(bridge_preview_ramp_direction(false, false), 2);
+        assert_eq!(bridge_preview_ramp_direction(false, true), 0);
+        assert_eq!(bridge_preview_ramp_direction(true, false), 1);
+        assert_eq!(bridge_preview_ramp_direction(true, true), 3);
     }
 
     #[test]

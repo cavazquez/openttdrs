@@ -446,23 +446,29 @@ fn foundation_decision(
     surface: u8,
     z_delta: u8,
 ) -> FoundationDecision {
-    let current_z = ctx.info.base_z.saturating_add(z_delta);
-    let nw_edge = has_foundation_edge(
+    foundation_decision_at(
         map,
         ctx.coord,
         map_dims,
+        ctx.info.base_z,
+        foundation,
         surface,
-        current_z,
-        FoundationEdge::Nw,
-    );
-    let ne_edge = has_foundation_edge(
-        map,
-        ctx.coord,
-        map_dims,
-        surface,
-        current_z,
-        FoundationEdge::Ne,
-    );
+        z_delta,
+    )
+}
+
+fn foundation_decision_at(
+    map: &Map,
+    coord: TileCoord,
+    map_dims: (u32, u32),
+    base_z: u8,
+    foundation: u8,
+    surface: u8,
+    z_delta: u8,
+) -> FoundationDecision {
+    let current_z = base_z.saturating_add(z_delta);
+    let nw_edge = has_foundation_edge(map, coord, map_dims, surface, current_z, FoundationEdge::Nw);
+    let ne_edge = has_foundation_edge(map, coord, map_dims, surface, current_z, FoundationEdge::Ne);
     FoundationDecision {
         foundation,
         surface_tileh: surface,
@@ -517,9 +523,30 @@ pub(crate) fn bridge_foundation_decision(
     map_dims: (u32, u32),
     direction: u8,
 ) -> FoundationDecision {
-    let foundation = bridge_foundation_kind(ctx.info.tileh, direction);
-    let (surface, z_delta) = bridge_foundation_surface(ctx.info.tileh, direction);
-    foundation_decision(map, ctx, map_dims, foundation, surface, z_delta)
+    bridge_foundation_decision_at(
+        map,
+        ctx.coord,
+        map_dims,
+        ctx.info.tileh,
+        ctx.info.base_z,
+        direction,
+    )
+}
+
+/// Variante de `bridge_foundation_decision` para previews que aún no tienen
+/// una `TileRenderContext` materializada. Conserva las comparaciones de borde
+/// y la altura efectiva que usará el renderer al construir la rampa.
+pub(crate) fn bridge_foundation_decision_at(
+    map: &Map,
+    coord: TileCoord,
+    map_dims: (u32, u32),
+    tileh: u8,
+    base_z: u8,
+    direction: u8,
+) -> FoundationDecision {
+    let foundation = bridge_foundation_kind(tileh, direction);
+    let (surface, z_delta) = bridge_foundation_surface(tileh, direction);
+    foundation_decision_at(map, coord, map_dims, base_z, foundation, surface, z_delta)
 }
 
 #[allow(clippy::too_many_arguments)]

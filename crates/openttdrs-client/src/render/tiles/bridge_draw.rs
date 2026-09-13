@@ -1004,7 +1004,7 @@ fn spawn_bridge_catenary(
 /// terreno plano: aunque `tileh` sea plano, el cable asciende dentro de la
 /// tesela hacia el tablero. En una rampa sobre pendiente, la fundación deja
 /// una superficie plana al nivel del tablero.
-fn bridge_ramp_catenary_slope(tileh: u8, dir: u8) -> u8 {
+pub(crate) fn bridge_ramp_catenary_slope(tileh: u8, dir: u8) -> u8 {
     if tileh != 0 {
         return 0;
     }
@@ -1027,7 +1027,7 @@ fn bridge_ramp_catenary_slope(tileh: u8, dir: u8) -> u8 {
 /// de terreno por encima de ella. Esta es la traducción de
 /// `GetSlopePixelZ_TunnelBridge` más el redondeo específico de cables (8 px)
 /// o PCPs (4 px).
-fn bridge_ramp_catenary_world_z_delta(
+pub(crate) fn bridge_ramp_catenary_world_z_delta(
     foundation_tileh: u8,
     foundation_base_z: u8,
     raw_base_z: u8,

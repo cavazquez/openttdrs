@@ -19,11 +19,15 @@ pub(crate) use bridge::spawn_bridge_middle;
 #[cfg(test)]
 pub(crate) use bridge::spawn_bridge_middle_with_road_types;
 pub(crate) use bridge::spawn_bridge_middle_with_road_types_and_stations;
-pub(crate) use bridge_draw::{catenary_under_low_bridge, roadside_detail_visible_under_bridge};
+pub(crate) use bridge_draw::{
+    bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta, catenary_under_low_bridge,
+    roadside_detail_visible_under_bridge,
+};
 pub(crate) use helpers::{
     FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, TRAM_OVERLAY_LAYER_FRAC,
-    leveled_foundation_overlay_pos, push_water_sprite, sloped_or_flat_image,
-    spawn_coast_debug_label, spawn_ground_sprite, spawn_rail_foundation, spawn_road_foundation,
+    bridge_foundation_decision_at, leveled_foundation_overlay_pos, push_water_sprite,
+    sloped_or_flat_image, spawn_coast_debug_label, spawn_ground_sprite, spawn_rail_foundation,
+    spawn_road_foundation,
 };
 #[cfg(test)]
 pub(crate) use land::spawn_generic_land_tile;
@@ -43,7 +47,7 @@ pub(crate) use objects::{
 pub(crate) use objects::{
     spawn_transport_object_tile, spawn_transport_object_tile_with_road_types,
 };
-pub(crate) use transport::{spawn_rail_tile, spawn_road_tile};
+pub(crate) use transport::{catenary_local_z_delta, spawn_rail_tile, spawn_road_tile};
 #[cfg(test)]
 pub(crate) use water::push_water_tile;
 pub(crate) use water::{push_object_water_ground_with_action5, push_water_tile_with_action5};

@@ -470,6 +470,61 @@ mod tests {
         engine
     }
 
+    fn two_layer_sprite_stack_engine(
+        id: u16,
+        first_offset: i16,
+        second_offset: i16,
+    ) -> openttdrs_core::EngineDef {
+        use openttdrs_core::newgrf_sprites::{
+            Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
+            TrainSpriteGraphics,
+        };
+
+        let solid = |x_offs| openttdrs_core::DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs,
+            y_offs: 0,
+            rgba: vec![255, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![solid(first_offset)], vec![solid(second_offset)]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 0,
+                set_id: 1,
+            }],
+            ..Default::default()
+        };
+        graphics.action2_var.insert(
+            1,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x10,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 8,
+                        and_mask: 0xFF,
+                        ..Default::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(0, 0, 0)],
+                default: 1,
+            },
+        );
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_TRAIN_KIRBY)
+            .expect("vanilla train")
+            .clone();
+        engine.id = id;
+        engine.newgrf_local_id = 0;
+        engine.variant_parent_id = None;
+        engine.newgrf_variant_parent_local_id = None;
+        engine.sprite_stack = true;
+        engine.newgrf_runtime = Some(Box::new(graphics));
+        engine
+    }
+
     #[test]
     fn vehicle_livery_colour_follows_company_scheme_and_group_parent() {
         let mut sim = SimWorld {
@@ -697,6 +752,63 @@ mod tests {
                 &mut images,
             ),
             None
+        );
+    }
+
+    #[test]
+    fn pick_vehicle_uses_union_of_runtime_sprite_stack_layers() {
+        let mut sim = SimWorld {
+            state: GameState::new(16, 16),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let tile = TileCoord::new(4, 4);
+        sim.state
+            .map
+            .set_kind(tile, TileKind::Rail)
+            .expect("rail tile");
+
+        let engine = two_layer_sprite_stack_engine(0x7F0A, 80, 140);
+        sim.state.engine_catalog.push(engine.clone());
+        let mut vehicle = Vehicle::new(45, VehicleKind::Train, tile, tile);
+        vehicle.engine_id = Some(engine.id);
+        sim.state.vehicles.push(vehicle);
+
+        let handles = default_handles();
+        let mut cache = NewGrfTrainSpriteCache::default();
+        let mut images = Assets::<Image>::default();
+        let vehicle = &sim.state.vehicles[0];
+        let pose = openttdrs_core::extrapolate_vehicle_pose(vehicle, 0.0);
+        let layers = handles.for_vehicle_with_newgrf_layers(
+            vehicle,
+            pose,
+            None,
+            None,
+            &sim,
+            &mut cache,
+            &mut images,
+        );
+        assert_eq!(layers.len(), 2);
+        let second_layer_pos = pose::vehicle_sprite_pos_at_offsets(
+            vehicle,
+            &sim.state.map,
+            pose,
+            f32::from(layers[1].x_offs),
+            f32::from(layers[1].y_offs),
+            f32::from(layers[1].width),
+            f32::from(layers[1].height),
+        )
+        .truncate();
+        assert_eq!(pick_vehicle_id_at_world(second_layer_pos, &sim), None);
+        assert_eq!(
+            pick_vehicle_id_at_world_with_newgrf(
+                second_layer_pos,
+                &sim,
+                &handles,
+                &mut cache,
+                &mut images,
+            ),
+            Some(45)
         );
     }
 

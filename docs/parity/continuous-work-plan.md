@@ -6630,3 +6630,14 @@ consumo correcto de registros y límite `var10`. Esto evita layouts desalineados
 o materializados con un contrato que OpenTTD deshabilitaría; paletas especiales,
 transparencia, relocación y scopes restantes siguen pendientes, por lo que
 #326/#329 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-SPRITE-MODIFIERS (2026-09-13, `00fb3251`): los
+lectores de `Stations` legacy `0x09`, `Stations` avanzado `0x1A` y grupos
+Action2 traducen los bits nativos de modifier antes de tratar los words como
+IDs. `palette` bit 14 se conserva como `opaque`, `sprite` bit 14 como
+`transparent` y `sprite` bit 15 como `recolour`; los bits se eliminan de los
+IDs directos y de las referencias Action1, y el metadato acompaña al layout
+resuelto. Las regresiones cubren las tres entradas y verifican la resolución
+posterior. La aplicación efectiva de transparencia, recolour y la paleta por
+defecto en el blitter Bevy es una subetapa separada; #326/#329 permanecen
+abiertas.

@@ -23,7 +23,8 @@ const TEST_WORLD_SEED: u64 = 0;
 use crate::iso::{ground_draw_z, overlay_pos};
 use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
 use crate::render::newgrf_cache::{
-    direct_tile_layout_object_sequence, direct_tile_layout_sequence,
+    direct_tile_layout_object_sequence, direct_tile_layout_road_stop_sequence,
+    direct_tile_layout_sequence,
 };
 use crate::render::tiles::{
     FLAT_WATER_LAYER_FRAC, HouseSpawnResources, TramwayDepotAction5, flush_map_batches,
@@ -13393,6 +13394,105 @@ fn direct_object_hq_build_uses_hq_atlas_and_nfo_geometry() {
         assert_eq!(resolved.height, meta.height, "sprite {sprite_id}");
         assert_eq!(resolved.x_offs, meta.x_offs, "sprite {sprite_id}");
         assert_eq!(resolved.y_offs, meta.y_offs, "sprite {sprite_id}");
+    }
+}
+
+#[test]
+fn direct_road_stop_build_uses_road_stop_atlas_and_namespace_geometry() {
+    let assets = boot_assets_app();
+    let mut cases = Vec::new();
+    for direction in 0..4 {
+        cases.push((
+            u16::try_from(2692 + direction).expect("bus ground SpriteID"),
+            assets.bus_stop_grounds[direction].clone(),
+            64.0,
+            31.0,
+            -31.0,
+            0.0,
+        ));
+        cases.push((
+            u16::try_from(2708 + direction).expect("truck ground SpriteID"),
+            assets.station_grounds[direction].clone(),
+            64.0,
+            31.0,
+            -31.0,
+            0.0,
+        ));
+        for layer in 0..3 {
+            let gfx = crate::sprites::road_stop_build_layers(
+                crate::sprites::StationTileClass::Bus,
+                direction,
+            )[layer];
+            cases.push((
+                u16::try_from(gfx.sprite_id).expect("bus stop SpriteID"),
+                assets.bus_stop_builds[direction][layer].clone(),
+                gfx.w,
+                gfx.h,
+                gfx.x_offs,
+                gfx.y_offs,
+            ));
+            let gfx = crate::sprites::road_stop_build_layers(
+                crate::sprites::StationTileClass::Truck,
+                direction,
+            )[layer];
+            cases.push((
+                u16::try_from(gfx.sprite_id).expect("truck stop SpriteID"),
+                assets.truck_stop_builds[direction][layer].clone(),
+                gfx.w,
+                gfx.h,
+                gfx.x_offs,
+                gfx.y_offs,
+            ));
+        }
+    }
+    for axis in 0..2 {
+        for layer in 0..2 {
+            let gfx = crate::sprites::road_stop_drive_through_layers(
+                crate::sprites::StationTileClass::Bus,
+                4 + axis as u8,
+            )[layer];
+            cases.push((
+                u16::try_from(gfx.sprite_id).expect("bus drive-through SpriteID"),
+                assets.bus_stop_drive_through[axis][layer].clone(),
+                gfx.w,
+                gfx.h,
+                gfx.x_offs,
+                gfx.y_offs,
+            ));
+            let gfx = crate::sprites::road_stop_drive_through_layers(
+                crate::sprites::StationTileClass::Truck,
+                4 + axis as u8,
+            )[layer];
+            cases.push((
+                u16::try_from(gfx.sprite_id).expect("truck drive-through SpriteID"),
+                assets.truck_stop_drive_through[axis][layer].clone(),
+                gfx.w,
+                gfx.h,
+                gfx.x_offs,
+                gfx.y_offs,
+            ));
+        }
+    }
+
+    for (sprite_id, expected, width, height, x_offs, y_offs) in cases {
+        let layer = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+            sprite: None,
+            base_sprite: Some(sprite_id),
+            sprite_modifiers: 0,
+            direct_palette: 0,
+            origin: [0, 0, 0],
+            extent: [16, 16, 10],
+        };
+        let resolved = direct_tile_layout_road_stop_sequence(&layer, &assets)
+            .unwrap_or_else(|| panic!("road stop BUILD sprite {sprite_id}"));
+        assert!(
+            resolved.atlas.matches(&expected.sprite()),
+            "sprite {sprite_id}"
+        );
+        assert_eq!(resolved.width, width, "sprite {sprite_id}");
+        assert_eq!(resolved.height, height, "sprite {sprite_id}");
+        assert_eq!(resolved.x_offs, x_offs, "sprite {sprite_id}");
+        assert_eq!(resolved.y_offs, y_offs, "sprite {sprite_id}");
     }
 }
 

@@ -527,6 +527,109 @@ fn direct_tile_layout_object_atlas(sprite_id: u16, assets: &WorldAssets) -> Opti
     }
 }
 
+/// Geometría NFO de los sprites vanilla que `DrawRoadStop` puede publicar en
+/// un `TileLayout`. El rango de bus/truck y las tiras drive-through viven en
+/// el namespace de estaciones viales; no se agregan al resolver global porque
+/// sus SpriteID también pueden aparecer en otros bancos del baseset.
+fn direct_tile_layout_road_stop_geometry(sprite_id: u16) -> Option<DirectTileLayoutGroundGeometry> {
+    let sprite_id = u32::from(sprite_id);
+    if (2692..=2695).contains(&sprite_id) || (2708..=2711).contains(&sprite_id) {
+        return Some(DirectTileLayoutGroundGeometry {
+            width: 64.0,
+            height: 31.0,
+            x_offs: -31.0,
+            y_offs: 0.0,
+        });
+    }
+
+    for class in [
+        crate::sprites::StationTileClass::Bus,
+        crate::sprites::StationTileClass::Truck,
+    ] {
+        for direction in 0..4 {
+            if let Some(layer) = crate::sprites::road_stop_build_layers(class, direction)
+                .iter()
+                .find(|layer| layer.sprite_id == sprite_id)
+            {
+                return Some(DirectTileLayoutGroundGeometry {
+                    width: layer.w,
+                    height: layer.h,
+                    x_offs: layer.x_offs,
+                    y_offs: layer.y_offs,
+                });
+            }
+        }
+        for orientation in [4u8, 5u8] {
+            if let Some(layer) = crate::sprites::road_stop_drive_through_layers(class, orientation)
+                .iter()
+                .find(|layer| layer.sprite_id == sprite_id)
+            {
+                return Some(DirectTileLayoutGroundGeometry {
+                    width: layer.w,
+                    height: layer.h,
+                    x_offs: layer.x_offs,
+                    y_offs: layer.y_offs,
+                });
+            }
+        }
+    }
+    None
+}
+
+fn direct_tile_layout_road_stop_atlas(sprite_id: u16, assets: &WorldAssets) -> Option<AtlasSprite> {
+    let sprite_id = u32::from(sprite_id);
+    if (2692..=2695).contains(&sprite_id) {
+        return assets
+            .bus_stop_grounds
+            .get(usize::try_from(sprite_id - 2692).ok()?)
+            .cloned();
+    }
+    if (2708..=2711).contains(&sprite_id) {
+        return assets
+            .station_grounds
+            .get(usize::try_from(sprite_id - 2708).ok()?)
+            .cloned();
+    }
+
+    for class in [
+        crate::sprites::StationTileClass::Bus,
+        crate::sprites::StationTileClass::Truck,
+    ] {
+        for direction in 0..4 {
+            let layers = crate::sprites::road_stop_build_layers(class, direction);
+            if let Some(layer_index) = layers.iter().position(|layer| layer.sprite_id == sprite_id)
+            {
+                return match class {
+                    crate::sprites::StationTileClass::Bus => {
+                        Some(assets.bus_stop_builds[direction][layer_index].clone())
+                    }
+                    crate::sprites::StationTileClass::Truck => {
+                        Some(assets.truck_stop_builds[direction][layer_index].clone())
+                    }
+                    _ => None,
+                };
+            }
+        }
+        for axis in 0..2 {
+            let orientation = 4 + axis as u8;
+            let layers = crate::sprites::road_stop_drive_through_layers(class, orientation);
+            if let Some(layer_index) = layers.iter().position(|layer| layer.sprite_id == sprite_id)
+            {
+                return match class {
+                    crate::sprites::StationTileClass::Bus => {
+                        Some(assets.bus_stop_drive_through[axis][layer_index].clone())
+                    }
+                    crate::sprites::StationTileClass::Truck => {
+                        Some(assets.truck_stop_drive_through[axis][layer_index].clone())
+                    }
+                    _ => None,
+                };
+            }
+        }
+    }
+    None
+}
+
 /// Geometría NFO de un sprite vanilla que puede aparecer en una secuencia
 /// `BUILD`. Además del terreno, las tablas de estación rail y airport ya
 /// conservan el tamaño y el ancla de cada sprite; no es correcto tratarlos
@@ -562,6 +665,16 @@ fn direct_tile_layout_sequence_geometry(sprite_id: u16) -> Option<DirectTileLayo
 
 fn direct_tile_layout_sequence_sprite_is_supported(sprite_id: u16) -> bool {
     direct_tile_layout_sequence_geometry(sprite_id).is_some()
+}
+
+fn direct_tile_layout_road_stop_sequence_sprite_is_supported(sprite_id: u16) -> bool {
+    direct_tile_layout_sequence_sprite_is_supported(sprite_id)
+        || direct_tile_layout_road_stop_geometry(sprite_id).is_some()
+}
+
+fn direct_tile_layout_road_stop_ground_sprite_is_supported(sprite_id: u16) -> bool {
+    direct_tile_layout_ground_sprite_is_supported(sprite_id)
+        || direct_tile_layout_road_stop_geometry(sprite_id).is_some()
 }
 
 fn direct_tile_layout_object_sequence_sprite_is_supported(sprite_id: u16) -> bool {
@@ -646,6 +759,39 @@ pub(crate) fn tile_layout_is_object_renderable(layout: &ResolvedTileLayout) -> b
                     ground.sprite_modifiers == 0
                         && ground.direct_palette == 0
                         && direct_tile_layout_object_ground_sprite_is_supported(id)
+                })
+        }
+    }
+}
+
+/// Variante contextual para `DrawRoadStop`.
+///
+/// Las piezas vanilla de bus/truck y las tiras drive-through se resuelven
+/// contra sus tablas de estación vial. Mantener este contrato separado evita
+/// que un ID numéricamente coincidente de industria, vía o herramienta cambie
+/// de atlas en los otros consumidores de `TileLayout`.
+#[must_use]
+pub(crate) fn tile_layout_is_road_stop_renderable(layout: &ResolvedTileLayout) -> bool {
+    if !layout.complete
+        || layout.sequence.iter().any(|entry| {
+            entry.action1_sprite().is_none()
+                && !entry.base_sprite_id().is_some_and(|id| {
+                    entry.sprite_modifiers == 0
+                        && entry.direct_palette == 0
+                        && direct_tile_layout_road_stop_sequence_sprite_is_supported(id)
+                })
+        })
+    {
+        return false;
+    }
+    match layout.ground.as_ref() {
+        None => true,
+        Some(ground) => {
+            ground.action1_sprite().is_some()
+                || ground.base_sprite_id().is_some_and(|id| {
+                    ground.sprite_modifiers == 0
+                        && ground.direct_palette == 0
+                        && direct_tile_layout_road_stop_ground_sprite_is_supported(id)
                 })
         }
     }
@@ -768,6 +914,33 @@ pub(crate) fn direct_tile_layout_object_sequence(
     if let Some(sprite_id) = layer.base_sprite_id()
         && let Some(geometry) = direct_tile_layout_object_geometry(sprite_id)
         && let Some(atlas) = direct_tile_layout_object_atlas(sprite_id, assets)
+    {
+        return Some(DirectTileLayoutGround {
+            atlas,
+            width: geometry.width,
+            height: geometry.height,
+            x_offs: geometry.x_offs,
+            y_offs: geometry.y_offs,
+        });
+    }
+    direct_tile_layout_sequence(layer, assets)
+}
+
+/// Resuelve una referencia directa desde el namespace de `RoadStops`.
+/// Primero se consultan las tablas vanilla de bus/truck y drive-through; el
+/// resto conserva el resolver global para terreno, estaciones e industrias.
+#[must_use]
+pub(crate) fn direct_tile_layout_road_stop_sequence(
+    layer: &ResolvedTileLayoutSprite,
+    assets: &WorldAssets,
+) -> Option<DirectTileLayoutGround> {
+    if layer.action1_sprite().is_some() || layer.sprite_modifiers != 0 || layer.direct_palette != 0
+    {
+        return None;
+    }
+    if let Some(sprite_id) = layer.base_sprite_id()
+        && let Some(geometry) = direct_tile_layout_road_stop_geometry(sprite_id)
+        && let Some(atlas) = direct_tile_layout_road_stop_atlas(sprite_id, assets)
     {
         return Some(DirectTileLayoutGround {
             atlas,
@@ -1234,6 +1407,38 @@ mod tests {
 
         layout.sequence[0].direct_palette = 1;
         assert!(!tile_layout_is_object_renderable(&layout));
+    }
+
+    #[test]
+    fn direct_road_stop_layout_is_contextual_and_rejects_unsupported_modifiers() {
+        let direct_ground = ResolvedTileLayoutSprite {
+            sprite: None,
+            base_sprite: Some(3981),
+            sprite_modifiers: 0,
+            direct_palette: 0,
+            origin: [0, 0, 0],
+            extent: [0, 0, 0],
+        };
+        let mut layout = ResolvedTileLayout {
+            ground: Some(direct_ground),
+            sequence: vec![action1_sprite()],
+            complete: true,
+        };
+
+        for sprite_id in [2692, 2696, 2708, 2712, 5978, 5985] {
+            layout.sequence[0].sprite = None;
+            layout.sequence[0].base_sprite = Some(sprite_id);
+            assert!(
+                tile_layout_is_road_stop_renderable(&layout),
+                "road-stop {sprite_id} debe entrar al resolver contextual"
+            );
+        }
+
+        layout.sequence[0].base_sprite = Some(2724);
+        assert!(!tile_layout_is_road_stop_renderable(&layout));
+        layout.sequence[0].base_sprite = Some(2696);
+        layout.sequence[0].direct_palette = 1;
+        assert!(!tile_layout_is_road_stop_renderable(&layout));
     }
 
     #[test]

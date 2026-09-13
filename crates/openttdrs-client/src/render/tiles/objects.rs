@@ -36,9 +36,9 @@ use crate::render::catenary_newgrf::{
     catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
 };
 use crate::render::newgrf_cache::{
-    direct_tile_layout_ground, direct_tile_layout_sequence, runtime_fingerprint,
-    tile_layout_entry_is_hidden, tile_layout_is_renderable, tile_layout_sprite_color_with_palette,
-    vars,
+    direct_tile_layout_ground, direct_tile_layout_road_stop_sequence, direct_tile_layout_sequence,
+    runtime_fingerprint, tile_layout_entry_is_hidden, tile_layout_is_renderable,
+    tile_layout_is_road_stop_renderable, tile_layout_sprite_color_with_palette, vars,
 };
 use crate::render::road_newgrf::{
     newgrf_road_def_for_tile, newgrf_tram_def_for_tile, road_newgrf_view_index,
@@ -3655,7 +3655,7 @@ fn road_stop_layout_is_static(
     spec_id: u16,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
 ) -> bool {
-    tile_layout_is_renderable(layout)
+    tile_layout_is_road_stop_renderable(layout)
         && layout.ground.as_ref().is_none_or(|ground| {
             ground.action1_sprite().is_none() || road_stop_layout_ground_slot(spec_id).is_some()
         })
@@ -3717,7 +3717,7 @@ fn spawn_newgrf_road_stop_layout_ground(
             f32::from(decoded.width),
             f32::from(decoded.height),
         )
-    } else if let Some(base) = direct_tile_layout_ground(ground, assets) {
+    } else if let Some(base) = direct_tile_layout_road_stop_sequence(ground, assets) {
         (
             base.atlas.sprite(),
             base.x_offs,
@@ -3877,7 +3877,7 @@ fn spawn_newgrf_road_stop_layout_sequence(
                     f32::from(decoded.x_offs),
                     f32::from(decoded.y_offs),
                 )
-            } else if let Some(base) = direct_tile_layout_sequence(layer, assets) {
+            } else if let Some(base) = direct_tile_layout_road_stop_sequence(layer, assets) {
                 (
                     tint_building_sprite(base.atlas.sprite()),
                     base.width,

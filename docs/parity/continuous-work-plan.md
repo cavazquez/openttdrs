@@ -6903,3 +6903,12 @@ BUILD altos de niveles 2..4. La ampliación se mantiene contextual al namespace
 colisiones con túneles, estaciones y herramientas. La regresión cubre los 29
 sprites, sus anclas y el fallback de renderizabilidad entre namespaces;
 #326/#329 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-ROADSTOP (2026-09-13): los layouts de
+`RoadStops` pueden materializar referencias directas a los grounds de bus y
+truck (`2692..2695`, `2708..2711`), sus piezas BUILD (`2696..2723`) y las
+tiras drive-through (`5978..5985`) usando los atlas y metadatos NFO de las
+tablas viales vanilla. La selección es contextual a `DrawRoadStop`, por lo que
+el resolver global conserva sus namespaces y fallback atómico ante modifiers,
+paletas o IDs no auditados. La regresión cubre ground, BUILD y ambos ejes de
+bus/truck; #326/#329 continúan abiertas.

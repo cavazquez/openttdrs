@@ -29,8 +29,8 @@ use crate::sprites::{
     OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, TRAMWAY_SPRITE_BASE, bridge_deck_sprite_ids,
     bridge_ramp_sprite_id, bridge_sprite_meta, bridge_structure_palette_for_sprite,
     catenary_hidden, catenary_reference_sprite_id, catenary_sprite_color,
-    catenary_tile_location_group, collect_catenary_bridge_draws, collect_catenary_pylons_from_map,
-    collect_catenary_wire_draws_from_map,
+    catenary_tile_location_group, collect_catenary_bridge_draws,
+    collect_catenary_ramp_draws_from_map,
 };
 
 use super::helpers::{
@@ -1078,18 +1078,8 @@ fn spawn_bridge_ramp_catenary(
     let tint = catenary_sprite_color();
 
     let mut wires = Vec::new();
-    collect_catenary_wire_draws_from_map(
-        map,
-        ctx.coord,
-        dims.0,
-        dims.1,
-        OTTD_MP_RAIL,
-        trackbits,
-        ramp_slope,
-        &mut wires,
-    );
     let mut pylons = Vec::new();
-    collect_catenary_pylons_from_map(
+    collect_catenary_ramp_draws_from_map(
         map,
         ctx.coord,
         dims.0,
@@ -1097,6 +1087,8 @@ fn spawn_bridge_ramp_catenary(
         OTTD_MP_RAIL,
         trackbits,
         ramp_slope,
+        0,
+        &mut wires,
         &mut pylons,
     );
     let pylon_count = pylons.len();

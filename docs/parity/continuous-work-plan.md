@@ -7056,6 +7056,14 @@ los aliases virtuales (`rail_pylon_*`, `rail_catenary_entrance_*`) se resuelven
 al atlas correcto. Las rampas ferroviarias —que consultan fundación, pendiente
 y vecinos— quedan separadas para la siguiente etapa; #326 continúa abierta.
 
+Corrección #326-BRIDGE-RAMP-CATENARY-CONTRACT (2026-09-13): el renderer de
+rampas ferroviarias ya no vuelve a inferir la pendiente desde la tesela
+`RailBridge` cruda después de aplicar `DrawFoundation`. El recolector común
+recibe la pendiente efectiva, conserva la máscara de cables y el estado PCP
+vecino, y permite reservar el PCP interior que emite el vano. La misma unidad
+queda disponible para la preview, que todavía debe conectar su fundación
+virtual y sus dos extremos; #326 continúa abierta.
+
 Corrección #326-MAIN-MENU-SHOWCASE-READABILITY (2026-09-13): la escena
 determinista de `Kale_TitleGame` ya materializa doce actores de transporte,
 incluidos tren, maglev, bus, barco, avión y camiones; el panel raíz ya no la

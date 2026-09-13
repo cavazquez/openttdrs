@@ -590,28 +590,17 @@ pub fn collect_catenary_wire_draws_from_map(
     // En una unión, `MaskWireBits` puede retirar sólo la rama que termina en
     // una vía no electrificada; usar una sola máscara dibujaba un cable y un
     // poste de más (Kale: 35,164).
-    let home_track_tb = electrified_trackbits_at(map, pos, mw, mh, mp_rail);
-    let home_track_tb = if home_track_tb != 0 {
-        home_track_tb
-    } else {
-        tb & 0x3F
-    };
-    let wire_tb = mask_catenary_wire_bits(map, pos, mw, mh, mp_rail, home_track_tb);
-    let effective_tileh = catenary_effective_tileh(map, pos, home_track_tb, tileh);
-    let pcp = compute_catenary_pcp_status(
-        map,
-        pos,
-        mw,
-        mh,
-        mp_rail,
-        home_track_tb,
-        wire_tb,
-        effective_tileh,
+    let state = catenary_map_draw_state(map, pos, mw, mh, mp_rail, tb, None, tileh);
+    collect_catenary_wire_draws_with_effective_tileh(
+        state.wire_tb,
+        state.effective_tileh,
+        state.edges.pcp,
+        out,
     );
-    collect_catenary_wire_draws_with_effective_tileh(wire_tb, effective_tileh, pcp, out);
 }
 
 /// Postes PPP sueltos (`DrawRailCatenaryRailway` pylon loop).
+#[cfg_attr(not(test), allow(dead_code))]
 #[allow(clippy::too_many_arguments)]
 pub fn collect_catenary_pylons_from_map(
     map: &Map,
@@ -655,72 +644,53 @@ pub fn collect_catenary_pylons_from_map_with_pcp_override(
     }) {
         return;
     }
-    let home_track_tb = electrified_trackbits_at(map, pos, mw, mh, mp_rail);
-    let home_track_tb = if home_track_tb != 0 {
-        home_track_tb
-    } else {
-        tb & 0x3F
-    };
-    let wire_tb = mask_catenary_wire_bits(map, pos, mw, mh, mp_rail, home_track_tb);
-    if wire_tb == 0 {
+    let state = catenary_map_draw_state(map, pos, mw, mh, mp_rail, tb, None, tileh);
+    collect_catenary_pylons_from_state(map, pos, mw, mh, mp_rail, &state, pcp_override, out);
+}
+
+/// Wires y postes de una rampa de puente con la pendiente ya modificada por
+/// `DrawFoundation`.
+///
+/// La preview llama a esta variante antes de que exista una tesela
+/// `RailBridge`; el renderer del mapa la usa porque el fallback de una
+/// `RailBridge` materializada no debe volver a inferir la pendiente cruda.
+/// `pcp_override` permite reservar el borde interior para el vano, igual que
+/// `DrawRailCatenaryOnBridge`.
+#[allow(clippy::too_many_arguments)]
+pub fn collect_catenary_ramp_draws_from_map(
+    map: &Map,
+    pos: TileCoord,
+    mw: u32,
+    mh: u32,
+    mp_rail: u8,
+    tb: u8,
+    effective_tileh: u8,
+    pcp_override: u8,
+    wires: &mut Vec<CatenaryWireDraw>,
+    pylons: &mut Vec<CatenarySpriteDraw>,
+) {
+    wires.clear();
+    pylons.clear();
+    if catenary_hidden() {
         return;
     }
-    let effective_tileh = catenary_effective_tileh(map, pos, home_track_tb, tileh);
-    let edges = compute_catenary_edge_state(
-        map,
-        pos,
-        mw,
-        mh,
-        mp_rail,
-        home_track_tb,
-        wire_tb,
-        effective_tileh,
-    );
-    let bridge_pylon_override = bridge_pylon_override(map, pos);
-    let tlg = catenary_tile_location_group(pos.x, pos.y);
-    for dir in 0..4u8 {
-        if pcp_override & (1 << dir) != 0 {
-            continue;
-        }
-        if bridge_pylon_override == Some(dir) {
-            continue;
-        }
-        if edges.pcp & (1 << dir) == 0 {
-            continue;
-        }
-        let mut allowed = edges.allowed[dir as usize];
-        let preferred = edges.preferred[dir as usize];
-        if allowed & preferred != 0 {
-            allowed &= preferred;
-        }
-        if allowed == 0 {
-            continue;
-        }
-        let order = &PPP_ORDER[dir as usize][tlg as usize];
-        for &ppp in order {
-            if allowed & (1 << ppp) == 0 {
-                continue;
-            }
-            if OWNED_PPP[dir as usize] & (1 << ppp) == 0 {
-                // PPP en el borde: lo dibuja el vecino si tiene vía.
-                let (dx, dy) = diag_dir_offset(dir);
-                let npos = TileCoord::new(pos.x + dx, pos.y + dy);
-                if electrified_trackbits_at(map, npos, mw, mh, mp_rail) != 0 {
-                    break;
-                }
-                continue;
-            }
-            let tile_dx = f32::from(X_PCP_OFF[dir as usize] + X_PPP_OFF[ppp as usize]);
-            let tile_dy = f32::from(Y_PCP_OFF[dir as usize] + Y_PPP_OFF[ppp as usize]);
-            out.push(CatenarySpriteDraw {
-                sprite_id: PYLON_SPRITE_BASE + u32::from(PYLON_SPRITES[ppp as usize]),
-                tile_dx,
-                tile_dy,
-                z_layer: 0.036,
-                pcp_direction: Some(dir),
-            });
-            break;
-        }
+    let can_draw_wires = !map.get(pos).is_some_and(|tile| {
+        tile.kind == TileKind::Station && !openttdrs_core::station_tile_can_have_wires(tile.m3)
+    });
+    let can_draw_pylons = !map.get(pos).is_some_and(|tile| {
+        tile.kind == TileKind::Station && !openttdrs_core::station_tile_can_have_pylons(tile.m3)
+    });
+    let state = catenary_map_draw_state(map, pos, mw, mh, mp_rail, tb, Some(effective_tileh), 0);
+    if can_draw_wires {
+        collect_catenary_wire_draws_with_effective_tileh(
+            state.wire_tb,
+            state.effective_tileh,
+            state.edges.pcp,
+            wires,
+        );
+    }
+    if can_draw_pylons {
+        collect_catenary_pylons_from_state(map, pos, mw, mh, mp_rail, &state, pcp_override, pylons);
     }
 }
 
@@ -869,6 +839,111 @@ struct CatenaryEdgeState {
     pcp: u8,
     preferred: [u8; 4],
     allowed: [u8; 4],
+}
+
+struct CatenaryMapDrawState {
+    wire_tb: u8,
+    effective_tileh: u8,
+    edges: CatenaryEdgeState,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn catenary_map_draw_state(
+    map: &Map,
+    pos: TileCoord,
+    mw: u32,
+    mh: u32,
+    mp_rail: u8,
+    tb: u8,
+    effective_tileh_override: Option<u8>,
+    fallback_tileh: u8,
+) -> CatenaryMapDrawState {
+    let home_track_tb = electrified_trackbits_at(map, pos, mw, mh, mp_rail);
+    let home_track_tb = if home_track_tb != 0 {
+        home_track_tb
+    } else {
+        tb & 0x3F
+    };
+    let wire_tb = mask_catenary_wire_bits(map, pos, mw, mh, mp_rail, home_track_tb);
+    let effective_tileh = effective_tileh_override
+        .unwrap_or_else(|| catenary_effective_tileh(map, pos, home_track_tb, fallback_tileh));
+    let edges = compute_catenary_edge_state(
+        map,
+        pos,
+        mw,
+        mh,
+        mp_rail,
+        home_track_tb,
+        wire_tb,
+        effective_tileh,
+    );
+    CatenaryMapDrawState {
+        wire_tb,
+        effective_tileh,
+        edges,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn collect_catenary_pylons_from_state(
+    map: &Map,
+    pos: TileCoord,
+    mw: u32,
+    mh: u32,
+    mp_rail: u8,
+    state: &CatenaryMapDrawState,
+    pcp_override: u8,
+    out: &mut Vec<CatenarySpriteDraw>,
+) {
+    if state.wire_tb == 0 {
+        return;
+    }
+    let bridge_pylon_override = bridge_pylon_override(map, pos);
+    let tlg = catenary_tile_location_group(pos.x, pos.y);
+    for dir in 0..4u8 {
+        if pcp_override & (1 << dir) != 0 {
+            continue;
+        }
+        if bridge_pylon_override == Some(dir) {
+            continue;
+        }
+        if state.edges.pcp & (1 << dir) == 0 {
+            continue;
+        }
+        let mut allowed = state.edges.allowed[dir as usize];
+        let preferred = state.edges.preferred[dir as usize];
+        if allowed & preferred != 0 {
+            allowed &= preferred;
+        }
+        if allowed == 0 {
+            continue;
+        }
+        let order = &PPP_ORDER[dir as usize][tlg as usize];
+        for &ppp in order {
+            if allowed & (1 << ppp) == 0 {
+                continue;
+            }
+            if OWNED_PPP[dir as usize] & (1 << ppp) == 0 {
+                // PPP en el borde: lo dibuja el vecino si tiene vía.
+                let (dx, dy) = diag_dir_offset(dir);
+                let npos = TileCoord::new(pos.x + dx, pos.y + dy);
+                if electrified_trackbits_at(map, npos, mw, mh, mp_rail) != 0 {
+                    break;
+                }
+                continue;
+            }
+            let tile_dx = f32::from(X_PCP_OFF[dir as usize] + X_PPP_OFF[ppp as usize]);
+            let tile_dy = f32::from(Y_PCP_OFF[dir as usize] + Y_PPP_OFF[ppp as usize]);
+            out.push(CatenarySpriteDraw {
+                sprite_id: PYLON_SPRITE_BASE + u32::from(PYLON_SPRITES[ppp as usize]),
+                tile_dx,
+                tile_dy,
+                z_layer: 0.036,
+                pcp_direction: Some(dir),
+            });
+            break;
+        }
+    }
 }
 
 /// Máscara de 4 bits: bit `d` = PCP activo en `DiagDirection` d.
@@ -1324,31 +1399,6 @@ fn neighbour_is_far_bridge_head(map: &Map, pos: TileCoord, direction_from_home: 
             && tile.m5 & 0x80 != 0
             && (tile.m5 & 0x03) == reverse_diag_dir(direction_from_home)
     })
-}
-
-/// Calcula máscara PCP de 4 bits (`pcp_status` en `DrawRailCatenaryRailway`).
-#[allow(clippy::too_many_arguments)]
-fn compute_catenary_pcp_status(
-    map: &Map,
-    pos: TileCoord,
-    mw: u32,
-    mh: u32,
-    mp_rail: u8,
-    home_track_tb: u8,
-    home_wire_tb: u8,
-    home_tileh: u8,
-) -> u8 {
-    compute_catenary_edge_state(
-        map,
-        pos,
-        mw,
-        mh,
-        mp_rail,
-        home_track_tb,
-        home_wire_tb,
-        home_tileh,
-    )
-    .pcp
 }
 
 /// PCP + preferred/allowed PPP por borde (`DrawRailCatenaryRailway`).
@@ -3184,6 +3234,40 @@ mod tests {
         assert!(
             out.iter()
                 .all(|d| { (PYLON_SPRITE_BASE..PYLON_SPRITE_BASE + 8).contains(&d.sprite_id) })
+        );
+    }
+
+    #[test]
+    fn ramp_catenary_collector_keeps_explicit_foundation_slope() {
+        use openttdrs_core::SLOPE_SW;
+
+        let mut map = Map::new_flat(3, 3, 1);
+        let c = TileCoord::new(1, 1);
+        map.set_tile(c, electric_rail_tile(RAIL_TB_X)).unwrap();
+        let mut wires = Vec::new();
+        let mut pylons = Vec::new();
+        collect_catenary_ramp_draws_from_map(
+            &map,
+            c,
+            3,
+            3,
+            1,
+            RAIL_TB_X,
+            SLOPE_SW,
+            1 << DIAGDIR_NE,
+            &mut wires,
+            &mut pylons,
+        );
+
+        assert_eq!(
+            wires.iter().map(|draw| draw.sprite_id).collect::<Vec<_>>(),
+            vec![WIRE_SPRITE_BASE + WSO_X_SHORT_UP]
+        );
+        assert!(!pylons.is_empty());
+        assert!(
+            pylons
+                .iter()
+                .all(|draw| draw.pcp_direction != Some(DIAGDIR_NE))
         );
     }
 

@@ -94,7 +94,9 @@ pub(crate) use town_labels::{TownLabel, town_id_at_label_pos};
 pub(crate) use train_smoke::TrainSmokePlugin;
 
 pub(crate) use action5_newgrf::NewGrfAction5SpriteCache;
-pub(crate) use catenary_newgrf::NewGrfCatenarySpriteCache;
+pub(crate) use catenary_newgrf::{
+    CatenarySpriteAnchor, NewGrfCatenarySpriteCache, catenary_sprite_anchor, catenary_sprite_center,
+};
 pub(crate) use house_newgrf::NewGrfHouseSpriteCache;
 pub(crate) use industry_newgrf::NewGrfIndustrySpriteCache;
 pub(crate) use object_newgrf::NewGrfObjectSpriteCache;

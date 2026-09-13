@@ -71,6 +71,7 @@ pub(crate) struct RailSignalGhostPreviewParams<'w, 's> {
 pub(crate) struct PreviewNewGrfResources<'w> {
     pub images: ResMut<'w, Assets<Image>>,
     pub road_sprites: ResMut<'w, crate::render::NewGrfRoadSpriteCache>,
+    pub catenary_sprites: ResMut<'w, crate::render::NewGrfCatenarySpriteCache>,
 }
 
 /// Assets opcionales que consume cada variante del preview.

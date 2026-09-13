@@ -8,8 +8,14 @@ use openttdrs_core::{
 };
 
 use crate::iso::{HEIGHT_PX, iso, overlay_pos, remap_tile_offset, tile_slope_and_min_z};
-use crate::render::NewGrfRoadSpriteCache;
-use crate::sprites::{BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_sprite_meta};
+use crate::render::{
+    CatenarySpriteAnchor, NewGrfCatenarySpriteCache, NewGrfRoadSpriteCache, catenary_sprite_anchor,
+    catenary_sprite_center,
+};
+use crate::sprites::{
+    BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_sprite_meta, catenary_sprite_atlas_key,
+    catenary_sprite_color, catenary_tile_location_group, collect_catenary_bridge_draws,
+};
 use crate::ui::toolbar::BuildMenuAction;
 
 use super::BuildGhostPreview;
@@ -34,11 +40,14 @@ pub(crate) struct BridgeSpanPreviewSpawn<'a> {
     pub tiles: &'a [(i32, i32)],
     pub map: &'a Map,
     pub valid: bool,
+    pub rail_type: openttdrs_core::RailType,
     pub road_def: Option<&'a RoadTypeDef>,
     pub road_catalog: &'a [RoadTypeDef],
     pub climate: Climate,
     pub newgrf_stack: &'a [NewGrfEntry],
     pub road_sprites: &'a mut NewGrfRoadSpriteCache,
+    pub catenary_newgrf: &'a [Option<openttdrs_core::DecodedSprite>],
+    pub catenary_sprites: &'a mut NewGrfCatenarySpriteCache,
     pub images: &'a mut Assets<Image>,
 }
 
@@ -225,6 +234,114 @@ fn spawn_vanilla_bridge_catenary(
     ));
 }
 
+/// Carga una pieza de catenaria con la misma prioridad que el renderer del
+/// mapa: Action5 activa primero y OpenGFX vanilla como fallback.
+fn preview_catenary_sprite(
+    asset_server: &AssetServer,
+    sprite_id: u32,
+    tint: Color,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: &mut NewGrfCatenarySpriteCache,
+    images: &mut Assets<Image>,
+) -> Option<(Sprite, CatenarySpriteAnchor)> {
+    let anchor = catenary_sprite_anchor(sprite_id, catenary_newgrf)?;
+    let image = if let Some(slot) = openttdrs_core::catenary_action5_local_slot(sprite_id)
+        && let Some(decoded) = catenary_newgrf.get(slot).and_then(Option::as_ref)
+    {
+        catenary_sprites.handle_for(u8::try_from(slot).unwrap_or(u8::MAX), decoded, images)
+    } else {
+        let path = catenary_sprite_atlas_key(sprite_id)?;
+        asset_server.load::<Image>(format!("assets/opengfx/tiles/{path}"))
+    };
+    Some((
+        Sprite {
+            image,
+            color: tint,
+            ..default()
+        },
+        anchor,
+    ))
+}
+
+/// Catenaria del vano ferroviario durante la construcción.
+///
+/// Usa `collect_catenary_bridge_draws`, el mismo port de
+/// `DrawRailCatenaryOnBridge` que consume el mapa. Esto conserva el cable
+/// corto/largo, la paridad del primer poste y el cambio de eje sin inventar
+/// una geometría específica para el cursor.
+#[allow(clippy::too_many_arguments)]
+fn spawn_rail_bridge_catenary(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    px: i32,
+    py: i32,
+    surface_z: u8,
+    axis_y: bool,
+    middle_num: usize,
+    middle_length: usize,
+    tint: Color,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: &mut NewGrfCatenarySpriteCache,
+    images: &mut Assets<Image>,
+) {
+    if crate::sprites::catenary_hidden() || middle_length == 0 || middle_num == 0 {
+        return;
+    }
+    let Ok(num) = u32::try_from(middle_num) else {
+        return;
+    };
+    let Ok(length) = u32::try_from(middle_length) else {
+        return;
+    };
+    let mut draws = Vec::new();
+    collect_catenary_bridge_draws(
+        !axis_y,
+        num,
+        length,
+        catenary_tile_location_group(px, py),
+        &mut draws,
+    );
+    let catenary_tint = catenary_sprite_color();
+    let tint = tint.with_alpha(tint.alpha() * catenary_tint.alpha());
+    let (wire_ox, wire_oy, wire_oz) = if axis_y {
+        (7.0, 0.0, 10.0)
+    } else {
+        (0.0, 7.0, 10.0)
+    };
+    for draw in draws {
+        let Some((sprite, anchor)) = preview_catenary_sprite(
+            asset_server,
+            draw.sprite_id,
+            tint,
+            catenary_newgrf,
+            catenary_sprites,
+            images,
+        ) else {
+            continue;
+        };
+        let (tile_dx, tile_dy, local_z) = if draw.pcp_direction.is_some() {
+            (draw.tile_dx - 1.0, draw.tile_dy - 1.0, 0.0)
+        } else {
+            (wire_ox, wire_oy, wire_oz)
+        };
+        let position = catenary_sprite_center(
+            px,
+            py,
+            surface_z,
+            draw.z_layer,
+            tile_dx,
+            tile_dy,
+            local_z,
+            anchor,
+        );
+        commands.spawn((
+            BuildGhostPreview,
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
+}
+
 /// Posición en pantalla con offsets NFO, como `spawn_layer` en `bridge_draw.rs`.
 fn bridge_ghost_translation(
     px: i32,
@@ -254,11 +371,14 @@ pub(crate) fn spawn_bridge_span_preview(
         tiles,
         map,
         valid,
+        rail_type,
         road_def,
         road_catalog,
         climate,
         newgrf_stack,
         road_sprites,
+        catenary_newgrf,
+        catenary_sprites,
         images,
     } = spawn;
     let is_rail = action == BuildMenuAction::RailBridge;
@@ -350,6 +470,27 @@ pub(crate) fn spawn_bridge_span_preview(
                 ))
                 .with_scale(Vec3::splat(1.002)),
             ));
+        }
+
+        if is_rail
+            && rail_type.has_catenary()
+            && is_middle
+            && let Some(middle_length) = total.checked_sub(2)
+        {
+            spawn_rail_bridge_catenary(
+                commands,
+                asset_server,
+                px,
+                py,
+                surface_z,
+                axis_y,
+                index,
+                middle_length,
+                tint,
+                catenary_newgrf,
+                catenary_sprites,
+                images,
+            );
         }
 
         if let Some((def, source_coord, source_tile)) = road_source
@@ -681,5 +822,27 @@ mod tests {
             Some("tramway_095.png")
         );
         assert!(crate::sprites::catenary_sprite_gfx(front).is_some());
+    }
+
+    #[test]
+    fn rail_bridge_preview_uses_the_world_van_geometry_contract() {
+        let mut draws = Vec::new();
+        collect_catenary_bridge_draws(true, 1, 2, catenary_tile_location_group(8, 6), &mut draws);
+        assert_eq!(draws[0].sprite_id, crate::sprites::WIRE_SPRITE_BASE + 16);
+        assert_eq!(draws[0].tile_dx, 8.0);
+        assert!(draws[1].pcp_direction.is_some());
+        assert!(crate::sprites::catenary_sprite_gfx(draws[1].sprite_id).is_some());
+    }
+
+    #[test]
+    fn rail_bridge_preview_resolves_virtual_catenary_aliases() {
+        assert_eq!(
+            crate::sprites::catenary_sprite_atlas_key(crate::sprites::WIRE_SPRITE_BASE),
+            Some("rail_1039.png".into())
+        );
+        assert_eq!(
+            crate::sprites::catenary_sprite_atlas_key(crate::sprites::PYLON_SPRITE_BASE),
+            Some("rail_pylon_0.png".into())
+        );
     }
 }

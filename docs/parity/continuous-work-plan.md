@@ -7046,3 +7046,12 @@ fachada completa de la relocalización Action5. La regresión conjunta conserva
 las fachadas `6099/6100` y exige cero overlays duplicados. #326/#565 siguen
 abiertas por la selección Action5 de tramtypes custom, clipping, pivotes y
 framebuffer.
+
+Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
+construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
+bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan
+los postes PPP con la misma paridad, grupo de tesela y anclas NFO que el
+renderer del mapa. La caché Action5 activa tiene prioridad sobre OpenGFX y
+los aliases virtuales (`rail_pylon_*`, `rail_catenary_entrance_*`) se resuelven
+al atlas correcto. Las rampas ferroviarias —que consultan fundación, pendiente
+y vecinos— quedan separadas para la siguiente etapa; #326 continúa abierta.

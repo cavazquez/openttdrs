@@ -136,6 +136,29 @@ pub fn catenary_sprite_gfx(sprite_id: u32) -> Option<CatenarySpriteGfx> {
     tramway_sprite_gfx(sprite_id)
 }
 
+/// Clave del atlas OpenGFX para una pieza de catenaria ferroviaria.
+///
+/// Los wires usan el namespace `rail_<id>`, mientras que los postes y las
+/// bocas son aliases virtuales extraídos con nombre propio. Mantener esta
+/// traducción junto a los metadatos evita que una preview cargue el alias
+/// inexistente `rail_910067.png` cuando el mapa ya usa `rail_pylon_0.png`.
+#[must_use]
+pub fn catenary_sprite_atlas_key(sprite_id: u32) -> Option<String> {
+    if (WIRE_SPRITE_BASE..=WIRE_SPRITE_LAST).contains(&sprite_id) {
+        return Some(format!("rail_{sprite_id}.png"));
+    }
+    if (CATENARY_ENTRANCE_SPRITE_BASE..=CATENARY_ENTRANCE_SPRITE_BASE + 3).contains(&sprite_id) {
+        return Some(format!(
+            "rail_catenary_entrance_{}.png",
+            sprite_id - CATENARY_ENTRANCE_SPRITE_BASE
+        ));
+    }
+    if (PYLON_SPRITE_BASE..=PYLON_SPRITE_BASE + 7).contains(&sprite_id) {
+        return Some(format!("rail_pylon_{}.png", sprite_id - PYLON_SPRITE_BASE));
+    }
+    None
+}
+
 /// Metadatos NFO de un sprite del bloque vanilla de tranvía.
 #[must_use]
 pub fn tramway_sprite_gfx(sprite_id: u32) -> Option<CatenarySpriteGfx> {

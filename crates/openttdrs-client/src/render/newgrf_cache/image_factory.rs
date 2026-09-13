@@ -67,6 +67,21 @@ pub(crate) fn decoded_tile_layout_image_with_twocc_map(
     decoded_sprite_image_with_twocc_map(sprite, policy, twocc_map)
 }
 
+/// Color de una entrada `TileLayout` después de aplicar la preferencia de
+/// transparencia de su categoría.
+///
+/// `SPRITE_MODIFIER_OPAQUE` no cambia la paleta ni los píxeles: sólo impide
+/// que `IsTransparencySet`/`IsInvisibilitySet` afecte a esa entrada. En Bevy
+/// la preferencia se representa en el alpha del `Sprite`, por eso la entrada
+/// opaca recupera alpha 1 sin perder un RGB que el caller ya haya elegido.
+pub(crate) fn tile_layout_sprite_color(color: Color, sprite_modifiers: u8) -> Color {
+    if sprite_modifiers & openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE == 0 {
+        return color;
+    }
+    let rgba = color.to_srgba();
+    Color::srgba(rgba.red, rgba.green, rgba.blue, 1.0)
+}
+
 pub(crate) fn decoded_sprite_image_with_twocc_map(
     sprite: &DecodedSprite,
     policy: DecodedSpriteImagePolicy,
@@ -200,5 +215,22 @@ mod tests {
             policy,
         );
         assert_ne!(recoloured.data.as_deref(), Some(&[8, 24, 88, 255][..]));
+    }
+
+    #[test]
+    fn tile_layout_opaque_modifier_bypasses_category_alpha() {
+        let transparent = Color::srgba(0.2, 0.3, 0.4, 0.45);
+        let regular = tile_layout_sprite_color(transparent, 0);
+        let opaque = tile_layout_sprite_color(
+            transparent,
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE,
+        );
+
+        assert_eq!(regular, transparent);
+        let rgba = opaque.to_srgba();
+        assert_eq!(
+            (rgba.red, rgba.green, rgba.blue, rgba.alpha),
+            (0.2, 0.3, 0.4, 1.0)
+        );
     }
 }

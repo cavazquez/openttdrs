@@ -36,7 +36,8 @@ use crate::render::catenary_newgrf::{
     catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
 };
 use crate::render::newgrf_cache::{
-    direct_tile_layout_ground, runtime_fingerprint, tile_layout_is_renderable, vars,
+    direct_tile_layout_ground, runtime_fingerprint, tile_layout_is_renderable,
+    tile_layout_sprite_color, vars,
 };
 use crate::render::road_newgrf::{
     newgrf_road_def_for_tile, newgrf_tram_def_for_tile, road_newgrf_view_index,
@@ -3410,11 +3411,12 @@ fn spawn_newgrf_station_layout_sequence(
             remap_x_adj: 0.0,
         };
         let layer_z = 0.05 + index as f32 * 0.0003;
-        let sprite = tint_building_sprite(Sprite {
+        let mut sprite = tint_building_sprite(Sprite {
             image: handle,
             color: Color::WHITE,
             ..default()
         });
+        sprite.color = tile_layout_sprite_color(sprite.color, layer.sprite_modifiers);
 
         if layer.is_parent() {
             let position = road_stop_build_sprite_center(
@@ -3811,11 +3813,12 @@ fn spawn_newgrf_road_stop_layout_sequence(
             remap_x_adj: 0.0,
         };
         let layer_z = 0.05 + index as f32 * 0.0003;
-        let sprite = tint_building_sprite(Sprite {
+        let mut sprite = tint_building_sprite(Sprite {
             image: handle,
             color: Color::WHITE,
             ..default()
         });
+        sprite.color = tile_layout_sprite_color(sprite.color, layer.sprite_modifiers);
 
         if layer.is_parent() {
             let position = road_stop_build_sprite_center(
@@ -4545,11 +4548,12 @@ fn spawn_newgrf_airport_layout_sequence(
             remap_x_adj: 0.0,
         };
         let layer_z = 0.05 + index as f32 * 0.0003;
-        let sprite = tint_building_sprite(Sprite {
+        let mut sprite = tint_building_sprite(Sprite {
             image: handle,
             color: Color::WHITE,
             ..default()
         });
+        sprite.color = tile_layout_sprite_color(sprite.color, layer.sprite_modifiers);
 
         if layer.is_parent() {
             let position = road_stop_build_sprite_center(

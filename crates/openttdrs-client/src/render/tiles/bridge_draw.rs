@@ -17,6 +17,7 @@ use crate::iso::{
 use crate::render::catenary_newgrf::{
     CatenarySpriteAnchor, catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
 };
+use crate::render::newgrf_cache::decoded_bridge_sprite_image;
 use crate::render::road_newgrf::specific_sprite_for_tile;
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
@@ -25,6 +26,7 @@ use crate::render::{
     TileRenderContext, ViewportSortableChild, ViewportSortableParent, WorldAssets,
     viewport_insertion_key, viewport_source_depth,
 };
+use crate::sprites::bridge_structure_palette::BridgeStructurePalette;
 use crate::sprites::{
     OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, TRAMWAY_SPRITE_BASE, bridge_deck_sprite_ids,
     bridge_ramp_sprite_id, bridge_sprite_meta, bridge_structure_palette_for_sprite,
@@ -1559,6 +1561,83 @@ fn bridge_middle_structure_trace_placement(
     }
 }
 
+fn bridge_piece_table_index(piece: openttdrs_core::BridgePiece) -> usize {
+    match piece {
+        openttdrs_core::BridgePiece::North => 0,
+        openttdrs_core::BridgePiece::South => 1,
+        openttdrs_core::BridgePiece::InnerNorth => 2,
+        openttdrs_core::BridgePiece::InnerSouth => 3,
+        openttdrs_core::BridgePiece::MiddleOdd => 4,
+        openttdrs_core::BridgePiece::MiddleEven => 5,
+    }
+}
+
+/// Offset de transporte de `GetBridgeSpriteTableBaseOffset`.
+///
+/// Los tres bloques ferroviarios no son contiguos por accidente: los ocho
+/// sprites rail/electric ocupan `0..8`, monorriel `16..24` y maglev `24..32`.
+/// Carretera comparte el bloque `8..16` con sus cuatro direcciones y cuatro
+/// variantes de pendiente.
+fn bridge_sprite_table_transport_offset(span: &BridgeSpanInfo) -> usize {
+    if !span.rail {
+        return 8;
+    }
+    match span.rail_type {
+        openttdrs_core::RailType::Rail | openttdrs_core::RailType::Electric => 0,
+        openttdrs_core::RailType::Monorail => 16,
+        openttdrs_core::RailType::Maglev => 24,
+    }
+}
+
+/// Recupera la referencia Action0 que OpenTTD consume para una capa de una
+/// rampa o de un vano. `layer_offset` es 0 para el suelo/baranda trasera, 1
+/// para la baranda frontal y 2 para el pilar.
+///
+/// Se devuelve `Some((ref, None))` cuando la tabla existe pero sus píxeles no
+/// pudieron resolverse. Esto es intencional: una entrada cuyo sprite es cero
+/// o cuyo gráfico falta no debe reactivar silenciosamente el sprite vanilla.
+fn custom_bridge_sprite<'a>(
+    bridge_spec_catalog: &'a [openttdrs_core::BridgeSpecDef],
+    span: &BridgeSpanInfo,
+    on_ramp: bool,
+    tile: Option<Tile>,
+    effective_tileh: u8,
+    layer_offset: usize,
+) -> Option<(
+    openttdrs_core::BridgeSpriteRef,
+    Option<&'a openttdrs_core::DecodedSprite>,
+)> {
+    let (piece_index, base_offset) = if on_ramp {
+        let tile = tile?;
+        // `GetBridgeRampDirectionBaseOffset`: SW, SE, NE, NW.
+        let direction_offset = [2usize, 1, 0, 3][usize::from(tile.m5 & 0x03)];
+        let slope_offset = usize::from(effective_tileh == 0) * 4;
+        (
+            openttdrs_core::BRIDGE_PIECE_COUNT - 1,
+            direction_offset + slope_offset,
+        )
+    } else {
+        let axis_offset = span.axis.min(1) * 4;
+        (bridge_piece_table_index(span.piece), axis_offset)
+    };
+    let index = base_offset
+        .checked_add(bridge_sprite_table_transport_offset(span))?
+        .checked_add(layer_offset)?;
+    if index >= openttdrs_core::BRIDGE_SPRITE_COUNT {
+        return None;
+    }
+    let spec = openttdrs_core::bridge_spec_def(bridge_spec_catalog, span.bridge_type)?;
+    let table = spec.custom_sprite_tables.get(piece_index)?.as_ref()?;
+    let reference = table[index];
+    let graphics = spec
+        .custom_sprite_graphics
+        .get(piece_index)
+        .and_then(Option::as_ref)
+        .and_then(|table| table.get(index))
+        .and_then(Option::as_ref);
+    Some((reference, graphics))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_layer(
     commands: &mut Commands,
@@ -1662,6 +1741,163 @@ fn spawn_layer(
     Some(entity.id())
 }
 
+/// Variante de [`spawn_layer`] para una entrada Action0 de puente.
+///
+/// Las imágenes Action1 no viven en el atlas vanilla y traen sus propios
+/// `width/height/x_offs/y_offs`; por eso se conserva la misma geometría de
+/// sorting de la capa nativa, pero se calcula el ancla visual con el
+/// `DecodedSprite` real. Las referencias directas al baseset siguen usando el
+/// atlas y la cache de recolor estructural existentes.
+#[allow(clippy::too_many_arguments)]
+fn spawn_custom_layer(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    reference: openttdrs_core::BridgeSpriteRef,
+    view: Option<&openttdrs_core::DecodedSprite>,
+    shift: Vec2,
+    z_px: f32,
+    layer: f32,
+    deck_z: u8,
+    trace_bounds: Option<TraceSpriteBounds>,
+    trace_placement: Option<BridgeTracePlacement>,
+    map_width: u32,
+    draw_ordinal: u8,
+    pillar_half: Option<(usize, PillarHalf)>,
+    images: Option<&mut Assets<Image>>,
+) -> Option<Entity> {
+    if reference.sprite_id == 0 {
+        return None;
+    }
+    use crate::sprites::{TransparencyOption, sprite_color};
+
+    let sprite_id = u32::from(reference.sprite_id);
+    let (mut sprite, w, h, xrel, yrel, fallback) = if let Some(view) = view {
+        let Some(images) = images else {
+            record_bridge_structure_trace(
+                ctx,
+                sprite_id,
+                u32::from(reference.palette),
+                true,
+                deck_z,
+                trace_bounds,
+                trace_placement,
+            );
+            return None;
+        };
+        let image = images.add(decoded_bridge_sprite_image(
+            view,
+            reference.modifiers,
+            reference.palette,
+        ));
+        (
+            Sprite { image, ..default() },
+            f32::from(view.width),
+            f32::from(view.height),
+            f32::from(view.x_offs),
+            f32::from(view.y_offs),
+            false,
+        )
+    } else {
+        let explicit_palette =
+            BridgeStructurePalette::from_openttd_palette_id(u32::from(reference.palette));
+        if let Some(palette) = explicit_palette
+            && let Some(handle) = assets.bridge_palettes.handle(sprite_id, palette)
+        {
+            let (w, h, xrel, yrel) =
+                bridge_sprite_meta(sprite_id).unwrap_or((64.0, 32.0, -32.0, -16.0));
+            (
+                Sprite {
+                    image: handle.clone(),
+                    ..default()
+                },
+                w,
+                h,
+                xrel,
+                yrel,
+                false,
+            )
+        } else if let Some(img) = assets.bridge_sprite(sprite_id) {
+            let (w, h, xrel, yrel) =
+                bridge_sprite_meta(sprite_id).unwrap_or((64.0, 32.0, -32.0, -16.0));
+            (
+                img.sprite(),
+                w,
+                h,
+                xrel,
+                yrel,
+                explicit_palette.is_some() || reference.palette != 0,
+            )
+        } else {
+            record_bridge_structure_trace(
+                ctx,
+                sprite_id,
+                u32::from(reference.palette),
+                true,
+                deck_z,
+                trace_bounds,
+                trace_placement,
+            );
+            return None;
+        }
+    };
+    // Las cabezas de rampa no traen un `M(...)` separado en el call site,
+    // pero su `TraceSpriteBounds` sigue siendo la caja que OpenTTD entrega al
+    // sorter. Normalizar ambos caminos a una colocación permite que también
+    // las rampas participen del orden global, no sólo los vanos y pilares.
+    let effective_placement = trace_placement.or_else(|| {
+        trace_bounds.map(|bounds| BridgeTracePlacement {
+            world_xy_delta: (0, 0),
+            world_z_delta: (i32::from(deck_z) - i32::from(ctx.info.base_z)) * 8,
+            offset: (0, 0, 0),
+            bounds,
+        })
+    });
+    record_bridge_structure_trace(
+        ctx,
+        sprite_id,
+        u32::from(reference.palette),
+        fallback,
+        deck_z,
+        trace_bounds,
+        effective_placement,
+    );
+    sprite.color = sprite_color(TransparencyOption::Bridges);
+    let crop_x_shift = if let Some((axis, half)) = pillar_half {
+        let (rect, x_shift) = pillar_half_crop(axis, half, w, h, xrel)?;
+        sprite.rect = Some(rect);
+        x_shift
+    } else {
+        0.0
+    };
+    let pos = Vec3::new(
+        ctx.iso_pos.x + shift.x + xrel + w / 2.0 + crop_x_shift,
+        ctx.iso_pos.y + shift.y - yrel - h / 2.0 + z_px,
+        crate::iso::sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), deck_z, layer),
+    );
+    let sortable_parent = effective_placement.map(|placement| {
+        bridge_sortable_parent(
+            ctx,
+            map_width,
+            sprite_id,
+            deck_z,
+            layer,
+            draw_ordinal,
+            placement,
+        )
+    });
+    let mut entity = commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        sprite,
+        Transform::from_translation(pos),
+    ));
+    if let Some(parent) = sortable_parent {
+        entity.insert(parent);
+    }
+    Some(entity.id())
+}
+
 /// Las cabezas de puente se comparan con el `AddSortableSpriteToDraw` de
 /// OpenTTD. La traza debe usar la Z posterior a `DrawFoundation`, no el
 /// `base_z` crudo que conserva el contexto de la tesela.
@@ -1710,9 +1946,9 @@ fn record_bridge_structure_trace(
 mod tests {
     use bevy::prelude::{Rect, Vec2};
     use openttdrs_core::{
-        BridgePiece, BridgeType, Map, RailType, RoadStopSpecDef, Station, StopKind, Tile,
-        TileCoord, TileKind, WaterClass, set_bridge_middle_mapt, set_bridge_type_m6,
-        set_water_class_m1,
+        BridgePiece, BridgeSpriteRef, BridgeType, Map, RailType, RoadStopSpecDef, Station,
+        StopKind, Tile, TileCoord, TileKind, WaterClass, set_bridge_middle_mapt,
+        set_bridge_type_m6, set_water_class_m1, vanilla_bridge_spec_catalog,
     };
 
     use super::{
@@ -1723,9 +1959,9 @@ mod tests {
         bridge_pillar_flags, bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta,
         bridge_ramp_ground_kind, bridge_ramp_ground_sprite_id, bridge_road_catenary_sprite_ids,
         bridge_road_catenary_trace_geometry, bridge_road_sprite_offset, bridge_span_at,
-        bridge_surface_z, catenary_under_low_bridge, pillar_ground_heights, pillar_half_crop,
-        pillar_segments, road_stop_blocks_bridge_pillars, roadside_detail_visible_under_bridge,
-        vanilla_road_stop_disallowed_pillars,
+        bridge_surface_z, catenary_under_low_bridge, custom_bridge_sprite, pillar_ground_heights,
+        pillar_half_crop, pillar_segments, road_stop_blocks_bridge_pillars,
+        roadside_detail_visible_under_bridge, vanilla_road_stop_disallowed_pillars,
     };
     use crate::sprites::bridge_deck_sprite_ids;
 
@@ -2082,6 +2318,62 @@ mod tests {
             suspension.rear_for_transport(true, RailType::Maglev, 1),
             4374
         );
+    }
+
+    #[test]
+    fn custom_bridge_sprite_uses_native_ramp_and_middle_offsets() {
+        let mut catalog = vanilla_bridge_spec_catalog();
+        let mut table = [BridgeSpriteRef::default(); openttdrs_core::BRIDGE_SPRITE_COUNT];
+        for (index, reference) in table.iter_mut().enumerate() {
+            reference.sprite_id = u16::try_from(index + 1).expect("test sprite id");
+        }
+        let wooden = &mut catalog[usize::from(BridgeType::Wooden.as_u8())];
+        wooden.custom_sprite_tables[openttdrs_core::BRIDGE_PIECE_COUNT - 1] = Some(table);
+        wooden.custom_sprite_tables[5] = Some(table);
+
+        let span = BridgeSpanInfo {
+            deck_z: 3,
+            rail: true,
+            pbs_reserved: false,
+            bridge_type: BridgeType::Wooden,
+            axis: 1,
+            piece: BridgePiece::MiddleEven,
+            middle_length: 2,
+            middle_num: 1,
+            electric: false,
+            rail_type: RailType::Maglev,
+        };
+        let ramp = Tile {
+            height: 0,
+            kind: TileKind::RailBridge,
+            mapt: 0,
+            m5: 0, // SW: direction offset 2
+            m1: 0,
+            m6: 0,
+            m8: 0,
+            m3: 0,
+            m2: 0,
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 0,
+        };
+        // Maglev starts at 24; a flat ramp adds the four sloped-head rows,
+        // and SW contributes offset 2: 24 + 4 + 2 = 30.
+        let (ramp_ref, _) = custom_bridge_sprite(&catalog, &span, true, Some(ramp), 0, 0)
+            .expect("custom ramp table");
+        assert_eq!(ramp_ref.sprite_id, 31);
+
+        // Axis Y starts at 4 in the middle table. The three consecutive
+        // entries are rear/front/pillar, hence 24 + 4 + 0/1/2.
+        let (rear, _) =
+            custom_bridge_sprite(&catalog, &span, false, None, 0, 0).expect("custom rear table");
+        let (front, _) =
+            custom_bridge_sprite(&catalog, &span, false, None, 0, 1).expect("custom front table");
+        let (pillar, _) =
+            custom_bridge_sprite(&catalog, &span, false, None, 0, 2).expect("custom pillar table");
+        assert_eq!(rear.sprite_id, 29);
+        assert_eq!(front.sprite_id, 30);
+        assert_eq!(pillar.sprite_id, 31);
     }
 
     #[test]
@@ -2694,6 +2986,38 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
     let pillar_id = if on_ramp { 0 } else { ids.pillar[span.axis] };
     let surface_z = bridge_surface_z(foundation_base_z, span.deck_z, on_ramp);
     let z_draw_px = f32::from(surface_z) * HEIGHT_PX - BRIDGE_Z_START;
+    let custom_rear = custom_bridge_sprite(
+        bridge_spec_catalog,
+        span,
+        on_ramp,
+        ctx.tile,
+        foundation_tileh,
+        0,
+    );
+    let custom_front = (!on_ramp)
+        .then(|| {
+            custom_bridge_sprite(
+                bridge_spec_catalog,
+                span,
+                false,
+                ctx.tile,
+                foundation_tileh,
+                1,
+            )
+        })
+        .flatten();
+    let custom_pillar = (!on_ramp)
+        .then(|| {
+            custom_bridge_sprite(
+                bridge_spec_catalog,
+                span,
+                false,
+                ctx.tile,
+                foundation_tileh,
+                2,
+            )
+        })
+        .flatten();
 
     if !on_ramp {
         // `DrawBridgeMiddle` inserta el helper antes de comenzar el bloque
@@ -2723,37 +3047,82 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
         remap_tile_offset(3.0, 0.0, 0.0) * 0.5
     };
 
-    let rear_parent = spawn_layer(
-        commands,
-        assets,
-        ctx,
-        rear_id,
-        Vec2::ZERO,
-        z_draw_px,
-        DECK_LAYER_FRAC,
-        surface_z,
-        span.bridge_type,
-        on_ramp.then(|| {
-            TraceSpriteBounds::new(
-                0,
-                0,
-                0,
-                16,
-                16,
-                if foundation_tileh == 0 {
-                    0
-                } else {
-                    TILE_HEIGHT_PX as i32
-                },
-            )
-        }),
-        (!on_ramp).then(|| {
-            bridge_middle_structure_trace_placement(ctx.info.base_z, span.axis, false, z_draw_px)
-        }),
-        dims.0,
-        BRIDGE_REAR_ORDINAL,
-        None,
-    );
+    let rear_parent = if let Some((reference, view)) = custom_rear {
+        spawn_custom_layer(
+            commands,
+            assets,
+            ctx,
+            reference,
+            view,
+            Vec2::ZERO,
+            z_draw_px,
+            DECK_LAYER_FRAC,
+            surface_z,
+            on_ramp.then(|| {
+                TraceSpriteBounds::new(
+                    0,
+                    0,
+                    0,
+                    16,
+                    16,
+                    if foundation_tileh == 0 {
+                        0
+                    } else {
+                        TILE_HEIGHT_PX as i32
+                    },
+                )
+            }),
+            (!on_ramp).then(|| {
+                bridge_middle_structure_trace_placement(
+                    ctx.info.base_z,
+                    span.axis,
+                    false,
+                    z_draw_px,
+                )
+            }),
+            dims.0,
+            BRIDGE_REAR_ORDINAL,
+            None,
+            images.as_deref_mut(),
+        )
+    } else {
+        spawn_layer(
+            commands,
+            assets,
+            ctx,
+            rear_id,
+            Vec2::ZERO,
+            z_draw_px,
+            DECK_LAYER_FRAC,
+            surface_z,
+            span.bridge_type,
+            on_ramp.then(|| {
+                TraceSpriteBounds::new(
+                    0,
+                    0,
+                    0,
+                    16,
+                    16,
+                    if foundation_tileh == 0 {
+                        0
+                    } else {
+                        TILE_HEIGHT_PX as i32
+                    },
+                )
+            }),
+            (!on_ramp).then(|| {
+                bridge_middle_structure_trace_placement(
+                    ctx.info.base_z,
+                    span.axis,
+                    false,
+                    z_draw_px,
+                )
+            }),
+            dims.0,
+            BRIDGE_REAR_ORDINAL,
+            None,
+        )
+    };
     let transport_source = bridge_transport_source(map, ctx.coord, dims, on_ramp);
     let mut custom_bridge_surface = false;
     let mut custom_tram_overlay = false;
@@ -3133,7 +3502,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 foundation_base_z,
                 catenary_newgrf,
                 catenary_sprites,
-                images,
+                images.as_deref_mut(),
             );
         } else if span.middle_num > 0 && span.middle_length > 0 {
             spawn_bridge_catenary(
@@ -3144,28 +3513,53 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 dims.0,
                 catenary_newgrf,
                 catenary_sprites,
-                images,
+                images.as_deref_mut(),
             );
         }
     }
-    let front_parent = spawn_layer(
-        commands,
-        assets,
-        ctx,
-        front_id,
-        front_shift,
-        z_draw_px,
-        FRONT_LAYER_FRAC,
-        surface_z,
-        span.bridge_type,
-        None,
-        (!on_ramp).then(|| {
-            bridge_middle_structure_trace_placement(ctx.info.base_z, span.axis, true, z_draw_px)
-        }),
-        dims.0,
-        BRIDGE_FRONT_ORDINAL,
-        None,
-    );
+    let front_parent = if let Some((reference, view)) = custom_front {
+        spawn_custom_layer(
+            commands,
+            assets,
+            ctx,
+            reference,
+            view,
+            front_shift,
+            z_draw_px,
+            FRONT_LAYER_FRAC,
+            surface_z,
+            None,
+            Some(bridge_middle_structure_trace_placement(
+                ctx.info.base_z,
+                span.axis,
+                true,
+                z_draw_px,
+            )),
+            dims.0,
+            BRIDGE_FRONT_ORDINAL,
+            None,
+            images.as_deref_mut(),
+        )
+    } else {
+        spawn_layer(
+            commands,
+            assets,
+            ctx,
+            front_id,
+            front_shift,
+            z_draw_px,
+            FRONT_LAYER_FRAC,
+            surface_z,
+            span.bridge_type,
+            None,
+            (!on_ramp).then(|| {
+                bridge_middle_structure_trace_placement(ctx.info.base_z, span.axis, true, z_draw_px)
+            }),
+            dims.0,
+            BRIDGE_FRONT_ORDINAL,
+            None,
+        )
+    };
     if let Some((sprite, view)) = custom_front_catenary {
         // En una rampa no hay baranda frontal independiente; el bloque de
         // catenaria sigue siendo parte del combine de la cabeza y se ancla al
@@ -3257,7 +3651,63 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
     let (pillar_tileh, pillar_base_z) =
         foundation_surface_at(map, ctx.coord, dims).unwrap_or((ctx.info.tileh, ctx.info.base_z));
     let ground = pillar_ground_heights(pillar_tileh, pillar_base_z, span.axis);
-    if pillar_id != 0 && bridge_sprite_meta(pillar_id).is_some() {
+    if let Some((reference, view)) = custom_pillar {
+        for segment in pillar_segments(
+            z_draw_px.round() as i32,
+            ground.front_north,
+            ground.front_south,
+        ) {
+            spawn_custom_layer(
+                commands,
+                assets,
+                ctx,
+                reference,
+                view,
+                front_shift,
+                segment.z_px as f32,
+                PILLAR_LAYER_FRAC,
+                span.deck_z,
+                None,
+                Some(pillar_trace_placement(
+                    ctx,
+                    span.axis,
+                    false,
+                    segment.z_px as f32,
+                )),
+                dims.0,
+                BRIDGE_PILLAR_ORDINAL_BASE,
+                segment.half.map(|half| (span.axis, half)),
+                images.as_deref_mut(),
+            );
+        }
+        let back_top_px = z_draw_px.round() as i32 - 2 * TILE_HEIGHT_PX as i32;
+        if ground.back_north <= back_top_px || ground.back_south <= back_top_px {
+            for segment in pillar_segments(back_top_px, ground.back_north, ground.back_south) {
+                spawn_custom_layer(
+                    commands,
+                    assets,
+                    ctx,
+                    reference,
+                    view,
+                    back_shift,
+                    segment.z_px as f32,
+                    PILLAR_BACK_LAYER_FRAC,
+                    span.deck_z,
+                    None,
+                    Some(pillar_trace_placement(
+                        ctx,
+                        span.axis,
+                        true,
+                        segment.z_px as f32,
+                    )),
+                    dims.0,
+                    BRIDGE_PILLAR_ORDINAL_BASE + 1,
+                    segment.half.map(|half| (span.axis, half)),
+                    images.as_deref_mut(),
+                );
+            }
+        }
+    } else if pillar_id != 0 && bridge_sprite_meta(pillar_id).is_some() {
         for segment in pillar_segments(
             z_draw_px.round() as i32,
             ground.front_north,

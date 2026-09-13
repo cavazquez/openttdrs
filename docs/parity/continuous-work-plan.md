@@ -7332,3 +7332,15 @@ baseset y los huecos sin resolución quedan explícitos; también se conserva el
 `Bridges` con Action1 y comprueba los offsets/píxeles resueltos. Falta conectar
 esta tabla al draw de Bevy, incluyendo offsets nativos, paletas/modificadores,
 recortes de pilares y fallback trazable; #326 permanece abierta.
+
+Corrección #326-GLOBAL-SPRITE-DRAW (2026-09-13): el renderer de Bevy consulta
+la tabla materializada para cabezas/rampas y para las tres capas de cada vano,
+respetando los offsets nativos de dirección, pendiente, transporte y eje. Las
+imágenes Action1 conservan sus offsets y dimensiones reales, se aplican las
+paletas directas de compañía/estructura/2CC/crash/transparencia disponibles y
+los pilares custom reutilizan los recortes de media columna y el sorting 3D
+existente. Las referencias directas al baseset usan el atlas/cache actual; los
+ids sin imagen quedan como fallback trazable y no reactivan la capa vanilla.
+La cobertura está validada con regresiones de índices, materialización y
+paleta directa; #326 permanece abierta por paletas Action5 específicas,
+callbacks/layouts restantes y aceptación raster sobre saves reales.

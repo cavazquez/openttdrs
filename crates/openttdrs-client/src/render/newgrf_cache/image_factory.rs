@@ -13,6 +13,9 @@ use crate::sprites::bridge_structure_palette::{BridgeStructurePalette, recolor_s
 const TILE_LAYOUT_PALETTE_MODIFIERS: u8 =
     openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
         | openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR;
+const PALETTE_RECOLOUR_START: u16 = 775;
+const PALETTE_RECOLOUR_END: u16 = PALETTE_RECOLOUR_START + 15;
+const PALETTE_CRASH: u16 = 804;
 const PALETTE_TO_TRANSPARENT: u16 = 802;
 
 /// Política de bake/recolor al subir un sprite NewGRF a textura.
@@ -44,6 +47,45 @@ pub(crate) fn decoded_sprite_image(
     policy: DecodedSpriteImagePolicy,
 ) -> Image {
     decoded_sprite_image_with_twocc_map(sprite, policy, None)
+}
+
+/// Convierte una referencia directa de una tabla `BridgeSpriteRef` a una
+/// imagen Bevy. A diferencia de un `TileLayout`, `DrawBridgeMiddle` entrega
+/// la paleta explícita directamente a `AddSortableSpriteToDraw`, por lo que
+/// `775..=790` y `804` deben aplicarse incluso si el GRF no activó un bit de
+/// recoloración en el sprite.
+pub(crate) fn decoded_bridge_sprite_image(
+    sprite: &DecodedSprite,
+    sprite_modifiers: u8,
+    direct_palette: u16,
+) -> Image {
+    let policy = if let Some(palette) =
+        BridgeStructurePalette::from_openttd_palette_id(u32::from(direct_palette))
+    {
+        DecodedSpriteImagePolicy::Structure { palette }
+    } else if (PALETTE_RECOLOUR_START..=PALETTE_RECOLOUR_END).contains(&direct_palette) {
+        DecodedSpriteImagePolicy::CompanyPalette {
+            colour: CompanyColour::from_u8((direct_palette - PALETTE_RECOLOUR_START) as u8),
+        }
+    } else if direct_palette == PALETTE_CRASH {
+        DecodedSpriteImagePolicy::Crash
+    } else if direct_palette == PALETTE_TO_TRANSPARENT
+        || sprite_modifiers & openttdrs_core::BRIDGE_SPRITE_MODIFIER_TRANSPARENT != 0
+    {
+        DecodedSpriteImagePolicy::Transparent
+    } else if (openttdrs_core::TWOCC_PALETTE_BASE
+        ..openttdrs_core::TWOCC_PALETTE_BASE + openttdrs_core::TWOCC_ACTION5_SLOT_COUNT as u16)
+        .contains(&direct_palette)
+    {
+        let slot = direct_palette - openttdrs_core::TWOCC_PALETTE_BASE;
+        DecodedSpriteImagePolicy::TwoCompany {
+            primary: CompanyColour::from_u8((slot & 0x0F) as u8),
+            secondary: CompanyColour::from_u8((slot >> 4) as u8),
+        }
+    } else {
+        DecodedSpriteImagePolicy::Raw
+    };
+    decoded_sprite_image(sprite, policy)
 }
 
 /// Selecciona la paleta por defecto de `DrawCommonTileSeq` sólo cuando el
@@ -273,6 +315,14 @@ mod tests {
                 colour: CompanyColour::Green,
             },
         );
+        assert_ne!(img.data.as_deref(), Some(&[8, 24, 88, 255][..]));
+        assert_eq!(img.data.as_deref().map(|rgba| rgba[3]), Some(255));
+    }
+
+    #[test]
+    fn bridge_direct_company_palette_is_applied_without_recolour_modifier() {
+        let sprite = sprite_with_rgba(vec![8, 24, 88, 255]); // author ramp, shade 0
+        let img = decoded_bridge_sprite_image(&sprite, 0, 775 + 6);
         assert_ne!(img.data.as_deref(), Some(&[8, 24, 88, 255][..]));
         assert_eq!(img.data.as_deref().map(|rgba| rgba[3]), Some(255));
     }

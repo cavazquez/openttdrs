@@ -7055,3 +7055,12 @@ renderer del mapa. La caché Action5 activa tiene prioridad sobre OpenGFX y
 los aliases virtuales (`rail_pylon_*`, `rail_catenary_entrance_*`) se resuelven
 al atlas correcto. Las rampas ferroviarias —que consultan fundación, pendiente
 y vecinos— quedan separadas para la siguiente etapa; #326 continúa abierta.
+
+Corrección #326-MAIN-MENU-SHOWCASE-READABILITY (2026-09-13): la escena
+determinista de `Kale_TitleGame` ya materializa doce actores de transporte,
+incluidos tren, maglev, bus, barco, avión y camiones; el panel raíz ya no la
+oculta con una superficie casi opaca de `520 px`. El backdrop baja a alfa
+`0.28`, el panel a `0.86` y su ancho a `440 px`; los botones siguen siendo
+opacos para conservar contraste y accesibilidad. Esto mejora la composición
+visible del escaparate sin alterar el mapa, las rutas ni la simulación; #326
+continúa abierta.

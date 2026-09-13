@@ -25,6 +25,10 @@ use super::{
     MainMenuSummaryText, MainMenuTitleText, MainMenuToggle, MainMenuUi,
 };
 
+const MAIN_MENU_BACKDROP_ALPHA: f32 = 0.28;
+const MAIN_MENU_PANEL_ALPHA: f32 = 0.86;
+const MAIN_MENU_PANEL_WIDTH: f32 = 440.0;
+
 pub(crate) fn setup_main_menu(
     mut commands: Commands,
     net_cli: Res<NetCli>,
@@ -45,14 +49,14 @@ pub(crate) fn setup_main_menu(
                 align_items: AlignItems::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.04, 0.06, 0.09, 0.42)),
+            BackgroundColor(Color::srgba(0.04, 0.06, 0.09, MAIN_MENU_BACKDROP_ALPHA)),
             GlobalZIndex(3000),
             MainMenuUi,
         ))
         .with_children(|p| {
             p.spawn((
                 Node {
-                    width: Val::Px(520.0),
+                    width: Val::Px(MAIN_MENU_PANEL_WIDTH),
                     height: Val::Percent(90.0),
                     max_height: Val::Percent(90.0),
                     flex_direction: FlexDirection::Column,
@@ -69,7 +73,7 @@ pub(crate) fn setup_main_menu(
                     overflow: Overflow::clip(),
                     ..default()
                 },
-                BackgroundColor(Color::srgba(0.18, 0.17, 0.12, 0.96)),
+                BackgroundColor(Color::srgba(0.18, 0.17, 0.12, MAIN_MENU_PANEL_ALPHA)),
                 BorderColor::all(Color::srgb(0.74, 0.68, 0.5)),
             ))
             .with_children(|panel| {

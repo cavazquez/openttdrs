@@ -201,3 +201,37 @@ fn rust_matches_openttd_oracle_for_forty_ticks() {
         assert_eq!(got, want, "reservas PBS en muestra oracle índice {i}");
     }
 }
+
+#[test]
+fn rich_fixture_matches_native_after_unresolved_train_line_end() {
+    let raw = std::fs::read(fixture_path("mvp_openttd_rich.sav")).expect("fixture rico");
+    let sav = sav::load(&raw).expect("load fixture rico");
+    let mut state = GameState::from_sav_game(sav);
+
+    // El save parte en el tick 12345. En el tick 12400 OpenTTD ya invirtió
+    // al llegar al extremo, pero conservó el avance que quedaba de ese
+    // intento y siguió avanzando mientras aún estaba lejos del extremo
+    // opuesto. Este punto era la primera divergencia del replay largo.
+    for _ in 0..55 {
+        state.step();
+    }
+
+    let train = state
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.kind == VehicleKind::Train)
+        .expect("tren rico");
+    assert_eq!(
+        (
+            state.tick.get(),
+            train.pos,
+            train.progress,
+            train.cur_speed,
+            train.subspeed,
+            train.direction,
+            train.rail_pixel,
+        ),
+        (12_400, TileCoord::new(20, 40), 1, 10, 160, 5, 2),
+        "el fallback ferroviario debe coincidir con el replay nativo"
+    );
+}

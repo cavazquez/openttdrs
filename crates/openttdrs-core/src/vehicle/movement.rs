@@ -383,6 +383,7 @@ impl super::model::Vehicle {
     }
 
     /// Un `TrainLocoHandler` de `OpenTTD`: actualizar velocidad y consumir distancia.
+    #[allow(clippy::too_many_lines)]
     fn train_loco_handler(
         &mut self,
         map: Option<&Map>,
@@ -415,20 +416,66 @@ impl super::model::Vehicle {
             let advance_distance = get_advance_distance(self.direction);
             // `255` es el ancla de llegada/carga de una estación, no un
             // remanente físico que deba disparar el fin de vía.
-            if result.advance >= advance_distance && self.progress != 255 {
-                // `TrainController` se ejecuta aunque todavía no haya un
-                // path cacheado. En un fin de vía nativo invierte el consist,
-                // detiene la velocidad y deja el remanente del intento para
-                // la próxima posición; no se debe descartar como si fuera un
-                // tren estático.
-                self.reverse_at_line_end(result.advance - advance_distance);
-            } else {
+            if result.advance < advance_distance || self.progress == 255 {
                 // Igual que `TrainLocoHandler`: `DoUpdateSpeed` limpia el
                 // campo y el handler vuelve a guardar `j` antes de retornar.
                 // La segunda llamada del mismo tick debe recibir este
                 // remanente en `prior_progress`.
                 self.progress =
                     u8::try_from(result.advance.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
+                return;
+            }
+
+            // Las APIs históricas sin mapa no pueden consultar la tesela ni
+            // distinguir una vía continua de un extremo; conservan el
+            // comportamiento conservador anterior en ese caso.
+            if map.is_none() {
+                self.reverse_at_line_end(result.advance - advance_distance);
+                return;
+            }
+
+            // `TrainController` se ejecuta aunque todavía no haya un path
+            // cacheado. OpenTTD consume la distancia píxel a píxel dentro de
+            // la tesela y sólo invierte si el frente del consist ya no cabe;
+            // tratar la primera unidad de avance como fin de vía invertía un
+            // tren que todavía estaba lejos del borde.
+            let mut j = result.advance;
+            let mut adv_spd = advance_distance;
+            loop {
+                let next = map.and_then(|map| self.train_next_tile_without_path(map));
+                if next.is_none() {
+                    if self.train_is_near_line_end() {
+                        // `TrainLocoHandler` ya había decidido ejecutar
+                        // `TrainController`: el avance intentado se descuenta
+                        // aun cuando `TrainApproachingLineEnd` invierte, y el
+                        // remanente guardado es `j - adv_spd`.
+                        self.reverse_at_line_end(j.saturating_sub(adv_spd));
+                        return;
+                    }
+                    self.slow_train_at_line_end();
+                }
+
+                j = j.saturating_sub(adv_spd);
+                self.rail_pixel = self.rail_pixel.saturating_add(1);
+                if self.rail_pixel >= 16 {
+                    self.rail_pixel = 0;
+                    if let Some(next) = next {
+                        self.path.push_back(next);
+                    }
+                    self.advance_one_tile_with_catalog(map, engine_catalog);
+                }
+                if self.cur_speed == 0 || (self.pos == self.dest && self.path.is_empty()) {
+                    break;
+                }
+                adv_spd = get_advance_distance(self.movement_direction());
+                if j < adv_spd {
+                    break;
+                }
+            }
+
+            // `TrainLocoHandler`: `if (v->progress == 0) v->progress = j`.
+            if self.progress == 0 {
+                self.progress = u8::try_from(j.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
             }
             return;
         }
@@ -1144,6 +1191,96 @@ impl super::model::Vehicle {
     /// Equivalente acotado de `TrainApproachingLineEnd` +
     /// `ReverseTrainDirection` cuando `TrainController` no tiene una ruta
     /// cacheada para la siguiente tesela.
+    fn train_track_bit_for_line_end(&self, map: &Map) -> Option<u8> {
+        let bits = crate::map::rail_traversal_bits(map, self.pos);
+        if bits == 0 {
+            return None;
+        }
+
+        // `train_track` se importa como índice de Track, mientras que el mapa
+        // y los helpers de movimiento usan TrackBits. Las reservas actuales
+        // tienen prioridad porque ya representan la pista elegida al entrar.
+        let reserved = self
+            .reserved_steps
+            .iter()
+            .find(|step| step.tile == self.pos)
+            .map(|step| step.track)
+            .filter(|track| bits & track != 0);
+        let imported = (self.train_track < 6)
+            .then_some(1_u8 << self.train_track)
+            .filter(|track| bits & track != 0);
+        reserved
+            .or(imported)
+            .or_else(|| crate::train_movement::track_bit_for_movement(self.direction, bits))
+    }
+
+    /// Equivalente de `VehicleExitDir(direction, track)` de `OpenTTD`.
+    #[must_use]
+    const fn train_exit_diag(direction: u8, track: u8) -> u8 {
+        const STATE_DIR_TABLE: [u8; 4] = [0x20, 0x08, 0x10, 0x04];
+        let diag = (direction >> 1) & 3;
+        if direction & 1 == 0 && track != STATE_DIR_TABLE[diag as usize] {
+            (diag + 3) & 3
+        } else {
+            diag
+        }
+    }
+
+    /// Próxima tesela física cuando el pathfinder todavía no entregó un path.
+    ///
+    /// La consulta queda limitada al track que conserva la cabeza: en un cruce
+    /// no se inventa una rama, y en una pieza única sí permite que
+    /// `TrainController` siga consumiendo la vía nativa.
+    #[must_use]
+    fn train_next_tile_without_path(&self, map: &Map) -> Option<TileCoord> {
+        if self.kind != super::model::VehicleKind::Train || !self.is_consist_head() {
+            return None;
+        }
+        let track = self.train_track_bit_for_line_end(map)?;
+        let exit = Self::train_exit_diag(self.direction, track);
+        let (dx, dy) = crate::map::diag_dir_offset(exit);
+        let next = TileCoord::new(self.pos.x + dx, self.pos.y + dy);
+        let entry = crate::map::opposite_diag_dir(exit);
+        (crate::map::rail_traversal_bits(map, next) & crate::map::rail_bits_touching_side(entry)
+            != 0)
+            .then_some(next)
+    }
+
+    /// Posición longitudinal equivalente a `x` en `TrainApproachingLineEnd`.
+    ///
+    /// Para diagonales `rail_pixel` ya es la coordenada física 0..15. En
+    /// direcciones rectas el original sólo observa posiciones impares; el
+    /// mapeo conserva ese rango para aplicar el mismo margen de longitud.
+    #[must_use]
+    fn train_line_end_position(&self) -> u16 {
+        let pixel = u16::from(self.rail_pixel.min(15));
+        if self.direction & 1 == 1 {
+            pixel
+        } else {
+            pixel.saturating_mul(2).saturating_add(1).min(15)
+        }
+    }
+
+    #[must_use]
+    fn train_is_near_line_end(&self) -> bool {
+        let half_length = u16::from(self.unit_length).div_ceil(2);
+        let length_margin = if self.direction & 1 == 1 {
+            half_length
+        } else {
+            half_length.saturating_mul(2)
+        };
+        self.train_line_end_position().saturating_add(length_margin) >= 16
+    }
+
+    /// `_breakdown_speeds[x & 0xF]` de `TrainApproachingLineEnd`.
+    fn slow_train_at_line_end(&mut self) {
+        const BREAKDOWN_SPEEDS: [u16; 16] = [
+            225, 210, 195, 180, 165, 150, 135, 120, 105, 90, 75, 60, 45, 30, 15, 15,
+        ];
+        let position = usize::from(self.train_line_end_position().min(15));
+        self.cur_speed = self.cur_speed.min(BREAKDOWN_SPEEDS[position]);
+    }
+
     fn reverse_at_line_end(&mut self, remainder: u32) {
         self.direction = super::reverse_direction(self.direction);
         self.cur_speed = 0;

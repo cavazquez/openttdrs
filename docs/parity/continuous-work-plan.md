@@ -7592,3 +7592,25 @@ El caso diferencial usa `mvp_openttd_rich.sav`: el vehículo empieza con
 devuelve `OK: dinámica vial externa sin divergencias (41 ticks)` y la suite
 core pasa 2736 tests, con 1 ignorado. El bloque no cierra #330: siguen
 pendientes las rutas multi-tick, tráfico complejo, presignals y aire/mar.
+
+Corrección #330-ROAD-STATION-M5-CONNECTIVITY (2026-09-14, `53035542`): el
+destino importado de una orden vial conserva la tesela ancla de la estación,
+igual que `RoadVehicle::GetOrderStationLocation`, y la conectividad se deriva
+de `m5` (bahía/eje drive-through), no de `m3`. El A* dejó de permitir una
+entrada artificial desde cualquier vecino; cuando la estación no es alcanzable,
+el controlador conserva el rumbo único de `RoadFindPathToDest` en vez de
+convertir la boca de acceso en una llegada. La entrada a tesela actualiza Z,
+pendiente y contador de adelantamiento con el contrato nativo. Las regresiones
+cubren conectividad de pathfinder, rechazo de depósito orientado a una boca
+incompatible y continuación más allá de una parada desorientada. El replay
+actual de `mvp_openttd_rich.sav` coincide en **251/251 muestras** para PBS y
+dinámica vial, y el workspace queda en verde (core `2744` tests, cliente
+`1532` tests, 2 ignorados). #330 sigue abierto por rutas ferroviarias
+multi-tick, tráfico complejo, presignals y aire/mar.
+
+Corrección de build del cliente (2026-09-14, `4fe24b14`): el test de la lista
+de subvenciones importaba `IndustrySpec` sólo desde el prelude, aunque el tipo
+se exporta por la raíz del core. El import explícito restaura la compilación del
+workspace sin alterar el binario ni la lógica de UI. `cargo check --workspace`
+`cargo test --workspace --quiet` pasan; el cliente ejecuta `1532` tests y
+ el core `2744` tests, con los ignorados documentados en sus fixtures.

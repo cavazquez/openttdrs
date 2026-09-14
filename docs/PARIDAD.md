@@ -3227,8 +3227,9 @@ OPENTTDRS_AIRPORT_FTA_TRACE_TICKS=80 \
 ```
 
 Filas: `metadata` → `initial` → N× `tick`. Cada muestra lleva `aircraft[]`
-(`pos`, `previous_pos`, `state`=heading, tile/pixel, speed) y `airports[]`
-(`type`, `blocks`, footprint).
+(`pos`, `previous_pos`, `state`=heading, tile/pixel, `speed`, `progress`,
+`subspeed`, `direction`, `running`) y `airports[]` (`type`, `blocks`,
+footprint).
 
 ### Fixture Helidepot
 
@@ -3237,17 +3238,21 @@ Filas: `metadata` → `initial` → N× `tick`. Cada muestra lleva `aircraft[]`
 - Tests: `tests/airport_fta_openttd_oracle.rs`
 
 2× Helidepot + 1 Tricario A↔B. El `initial` y las 80 muestras dinámicas
-coinciden en `pos`, `previous_pos`, `state` y `z_pos` (altura 117→126). El
-import conserva `x_pos/y_pos` (696/744), `progress` (195), el rotor (32) y la
-caché nativa de velocidad (320); `HELI_RAISE` ejecuta las dos actualizaciones
-por tick del controlador nativo y salta a la entrada 4 del aeropuerto destino.
-El comparador JSONL valida `pos`/`state` y la integración Rust valida también
-la altura física; ambos recorren la misma ventana de 80 ticks.
+versionadas coinciden en `pos`, `previous_pos`, `state` y `z_pos` (altura
+117→126). El import conserva `x_pos/y_pos` (696/744), `progress` (195), el
+rotor (32) y la caché nativa de velocidad (320); `HELI_RAISE` ejecuta las dos
+actualizaciones por tick del controlador nativo y salta a la entrada 4 del
+aeropuerto destino.
 
-La velocidad/progreso del vuelo libre posterior a la salida todavía usa el
-controlador genérico de aeronaves y no se compara como contrato cerrado. Esta
-etapa reduce el residual de #330, pero no cierra #330 ni #329: quedan la
-cinemática aire/mar fuera de FTA, callbacks/runtime NewGRF y redes amplias.
+La evidencia extendida reconstruida con el mismo save y el exportador nativo
+recompilado cubre `initial` más 300 ticks. En esa ventana coinciden los campos
+FTA vivos `pos`, `previous_pos`, `state`, `targetairport`, `speed`, `progress`,
+`subspeed`, `direction` y `running`; la inspección de la traza confirma además
+`x_pos`, `y_pos` y `z_pos` en cada muestra. El comparador JSONL automatiza los
+campos FTA vivos y la regresión unitaria fija la acumulación fraccional de
+velocidad. Esto cierra el tramo de vuelo libre de esta fixture, no la paridad
+global de aeronaves: #330/#329 mantienen pendientes otros perfiles, cinemática
+aire/mar, callbacks/runtime NewGRF y redes amplias.
 
 ### Regenerar
 
@@ -3267,6 +3272,25 @@ cargo run -p openttdrs-core --bin sav_airport_fta_runner -- \
 python3 scripts/compare_airport_fta_traces.py \
   crates/openttdrs-core/tests/fixtures/parity/helidepot_fta_cycle_15_3_openttd.jsonl \
   /tmp/helidepot-openttdrs.jsonl
+```
+
+Para repetir la ventana extendida sin reemplazar el oráculo versionado de 80
+ticks:
+
+```bash
+OPENTTD_BIN="$PWD/reference/openttd-upstream/build/openttd" \
+OPENTTDRS_AIRPORT_FTA_TRACE_TICKS=300 \
+./scripts/export_openttd_airport_fta_trace.sh \
+  crates/openttdrs-core/tests/fixtures/helidepot_fta_cycle_15_3.sav \
+  /tmp/helidepot-openttd-native-300.jsonl 300
+
+cargo run -p openttdrs-core --bin sav_airport_fta_runner -- \
+  crates/openttdrs-core/tests/fixtures/helidepot_fta_cycle_15_3.sav \
+  --ticks 300 --out /tmp/helidepot-openttdrs-300.jsonl
+
+python3 scripts/compare_airport_fta_traces.py \
+  /tmp/helidepot-openttd-native-300.jsonl \
+  /tmp/helidepot-openttdrs-300.jsonl
 ```
 
 Actualización #326/#564-AIRPORT-ROTATION-FOUNDATION (2026-09-10, `1c5cc49a`):

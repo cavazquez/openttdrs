@@ -41,6 +41,29 @@ ignorado), los 4 tests del oráculo, `cargo clippy -p openttdrs-core --lib
 residual separado; #330/#329 permanecen abiertos para la cinemática aire/mar,
 callbacks NewGRF y redes amplias.
 
+## Etapa publicada — 2026-09-14 — #330 aeronave FTA vuelo libre
+
+El mismo fixture de Helidepot ahora reproduce también el tramo posterior al
+despegue: la traza reconstruida contra OpenTTD 15.3 coincide durante `initial`
+más 300 ticks (`301` muestras). El controlador Rust ejecuta las dos pasadas de
+`AircraftEventHandler` por tick, conserva la posición física subtesela,
+dirección y altura, y entra al FTA del aeropuerto destino sólo al alcanzar su
+ventana de aproximación. El comparador JSONL amplió su contrato a
+`pos`/`previous_pos`/`state`/`targetairport`/`speed`/`progress`/`subspeed`/
+`direction`/`running`; una revisión de la misma traza confirma además
+`x_pos`/`y_pos`/`z_pos` idénticos en los 300 ticks.
+
+La regresión unitaria
+`aircraft_update_speed_preserves_native_fractional_accumulation` fija el
+remanente nativo de `subspeed` y `progress` (incluido el escalado direccional)
+para evitar que una futura simplificación vuelva a desfasar la salida del
+helipuerto. Validación publicada: `cargo test -p openttdrs-core --lib` (2758
+pasados, 1 ignorado), 28 tests FTA focalizados, Clippy estricto, formato,
+`git diff --check` y el comparador externo (300/300). Commit `3293ed74`.
+Esto cierra sólo esta ventana reproducida; #330/#329 siguen abiertas para la
+cinemática de aire completa, otros perfiles/aeropuertos, callbacks NewGRF y
+redes amplias.
+
 ## Etapa publicada — 2026-09-14 — #330/#328/#567 ship dinámico
 
 La fixture `mvp_openttd_ship.sav` coincide con OpenTTD 15.3 en `initial` más

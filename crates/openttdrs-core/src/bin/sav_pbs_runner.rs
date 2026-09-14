@@ -188,6 +188,41 @@ fn trace_row(state: &GameState, kind: &'static str) -> PbsTraceRow {
     }
 }
 
+fn train_diagnostics(state: &GameState) -> Vec<serde_json::Value> {
+    state
+        .vehicles
+        .iter()
+        .filter(|vehicle| vehicle.kind == VehicleKind::Train && vehicle.is_consist_head())
+        .map(|vehicle| {
+            let engine = openttdrs_core::engine_for_vehicle_catalog(&state.engine_catalog, vehicle);
+            serde_json::json!({
+                "vehicle": vehicle.id,
+                "engine_id": vehicle.engine_id,
+                "native_engine_type": vehicle.native_engine_type,
+                "engine_power_hp": engine.power_hp,
+                "engine_weight_t": engine.weight_t,
+                "engine_max_speed": engine.max_speed,
+                "acceleration_from_engine": openttdrs_core::train_acceleration(
+                    engine.power_hp,
+                    engine.weight_t,
+                ),
+                "cached_power_hp": vehicle.cached_power_hp,
+                "cached_weight_t": vehicle.cached_weight_t,
+                "cached_max_speed": vehicle.cached_max_speed,
+                "cached_max_track_speed": vehicle.cached_max_track_speed,
+                "cached_max_te_n": vehicle.cached_max_te_n,
+                "cached_air_drag": vehicle.cached_air_drag,
+                "train_track": vehicle.train_track,
+                "train_flags": vehicle.train_flags,
+                "running": vehicle.running,
+                "pbs_stuck": vehicle.pbs_stuck,
+                "path_len": vehicle.path.len(),
+                "movement_target": vehicle.movement_target(),
+            })
+        })
+        .collect()
+}
+
 fn write_row(writer: &mut BufWriter<std::fs::File>, row: &impl Serialize) -> Result<(), String> {
     serde_json::to_writer(&mut *writer, row).map_err(|e| format!("error serializando: {e}"))?;
     writer
@@ -248,7 +283,9 @@ fn run(args: &Args) -> Result<(), String> {
             "initial_sample_point": "after_sav_import",
             "tick_sample_point": "after_game_state_step",
             "max_ticks": args.ticks,
+            "train_acceleration_model": state.train_acceleration_model as u8,
             "roadveh_acceleration_model": state.road_vehicle_acceleration_model as u8,
+            "train_diagnostics": train_diagnostics(&state),
         }),
     )?;
     write_row(&mut writer, &trace_row(&state, "initial"))?;

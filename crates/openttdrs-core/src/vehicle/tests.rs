@@ -142,6 +142,24 @@ fn train_tile_prediction_uses_newgrf_speed_property() {
 }
 
 #[test]
+fn train_without_resolved_path_keeps_native_acceleration() {
+    let pos = TileCoord::new(1, 1);
+    let mut train = Vehicle::new(1, VehicleKind::Train, pos, pos);
+    train.running = true;
+
+    train.step_with_map_and_accel_and_catalog(
+        None,
+        crate::engine::TrainAccelerationModel::Original,
+        &[],
+    );
+
+    // Kirby: floor(300 / 47) * 4 = 24; Train::Tick llama dos veces a
+    // TrainLocoHandler y AM_ORIGINAL suma acceleration * 2 por llamada.
+    assert_eq!(train.cur_speed, 0);
+    assert_eq!(train.subspeed, 96);
+}
+
+#[test]
 fn catalog_aware_step_keeps_custom_road_speed_cap() {
     let custom_id = crate::engine::NEWGRF_ENGINE_ID_BASE + 59;
     let mut custom = crate::engine::engine_by_id(crate::engine::ENGINE_BUS_MPS)

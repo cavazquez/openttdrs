@@ -397,7 +397,18 @@ impl super::model::Vehicle {
         self.apply_immediate_train_turnaround(map, train_accel);
 
         if self.movement_target().is_none() {
-            self.update_movement_speed_with_catalog(map, train_accel, engine_catalog);
+            // `Train::UpdateSpeed` no depende de que `TrainController` haya
+            // encontrado un siguiente tile. OpenTTD puede conservar la
+            // locomotora en la tesela actual (por ejemplo, durante una ruta
+            // aún no resuelta) y aun así ejecutar la aceleración; sólo una
+            // señal/PBS o una parada explícita pone `AS_BRAKE`. El helper
+            // genérico usaba "sin target" como freno y convertía `0 → 96`
+            // en `0 → 64` después de los dos handlers del tick.
+            let result =
+                self.train_do_update_speed(map, train_accel, self.pbs_stuck, engine_catalog);
+            self.cur_speed = result.cur_speed;
+            self.subspeed = result.subspeed;
+            self.progress = 0;
             if self.cur_speed == 0 && self.pos == self.dest {
                 self.advance_destination_after_arrival_with_catalog(engine_catalog);
             }

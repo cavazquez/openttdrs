@@ -927,6 +927,7 @@ void OpenttdrsMaybeStartPbsTrace(const std::string &source_path)
 	metadata["schema_version"] = 2;
 	metadata["producer"] = "openttd";
 	metadata["trace"] = "pbs_and_road_vehicle_dynamics";
+	metadata["train_acceleration_model"] = _settings_game.vehicle.train_acceleration_model;
 	metadata["roadveh_acceleration_model"] = _settings_game.vehicle.roadveh_acceleration_model;
 	const char *commit = std::getenv("OPENTTDRS_OPENTTD_COMMIT");
 	metadata["openttd_commit"] = commit != nullptr ? commit : "";

@@ -7556,3 +7556,13 @@ return de `RoadVehFindCloseTo` durante `reverse_ctr` —que conserva
 Las regresiones focales y la suite vial pasan. #330 continúa abierta por la
 divergencia ferroviaria/PBS global y por tráfico complejo, presignals, aire y
 mar.
+
+Corrección #330-TRAIN-PBS-ORACLE (2026-09-14, `71f445c1`): el mismo replay de
+`mvp_openttd_rich.sav` coincide en las cinco muestras iniciales de tren,
+carretera y PBS. Rust conserva la aceleración nativa de un tren sin
+`movement_target`, mantiene el overlay PBS importado de `MAP2` durante la
+primera sincronización y evita convertir el footprint físico de un tren sin
+ruta en una reserva PBS. Pasaron 31 tests focalizados, 2735 tests del core (1
+ignorado), `test_pbs_trace_tools.py` y la comparación externa. El alcance es
+sólo la ventana inicial del escenario: #330 permanece abierta por rutas de
+tren multi-tick, tráfico complejo, presignals, aire y mar.

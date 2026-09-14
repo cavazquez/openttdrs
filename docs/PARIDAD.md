@@ -5000,3 +5000,15 @@ nativo de `RoadVehFindCloseTo` durante `reverse_ctr` conserva `blocked_ctr`, y
 ahora replica ambos contratos con regresiones focales. #330 sigue abierta por
 la divergencia ferroviaria/PBS global, tráfico complejo, presignals, aire y
 mar.
+
+Corrección #330-TRAIN-PBS-ORACLE (2026-09-14, `71f445c1`): el replay externo
+sobre `mvp_openttd_rich.sav` ya coincide en las cinco muestras iniciales de
+tren, carretera y PBS. Se corrigieron dos contratos de carga: un tren sin
+`movement_target` sigue acelerando dentro de `Train::UpdateSpeed` y no entra
+artificialmente en frenado, y las reservas PBS importadas desde `MAP2` se
+conservan hasta que el runtime conoce su propietario; además, un tren sin
+ruta PBS ya no fabrica una reserva sobre su tesela física. Pasaron 31 tests
+focalizados, 2735 tests del core (1 ignorado) y las herramientas externas de
+trazas. Es evidencia de la primera ventana del escenario, no paridad global:
+#330 continúa abierta por rutas ferroviarias multi-tick, tráfico complejo,
+presignals, aire y mar.

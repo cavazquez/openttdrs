@@ -208,6 +208,12 @@ fn rich_fixture_matches_native_after_unresolved_train_line_end() {
     let sav = sav::load(&raw).expect("load fixture rico");
     let mut state = GameState::from_sav_game(sav);
 
+    assert_eq!(
+        state.random.state,
+        [3_554_369_977, 1_602_748_415],
+        "AfterLoadGame nativo consume el fallback de face_style desconocido"
+    );
+
     // El save parte en el tick 12345. En el tick 12400 OpenTTD ya invirtió
     // al llegar al extremo, pero conservó el avance que quedaba de ese
     // intento y siguió avanzando mientras aún estaba lejos del extremo

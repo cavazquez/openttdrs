@@ -462,10 +462,40 @@ pub struct SavGame {
 const SLV_DEPOT_RESERVATION_PERSISTED: u16 = 100;
 /// `vehicle.freight_trains` se introdujo en `SLV_39`.
 const SLV_FREIGHT_TRAINS: u16 = 39;
+/// `CompanyManagerFace::style_label` se añadió en `SLV_FACE_STYLES` (355).
+const SLV_FACE_STYLES: u16 = 355;
 /// `SLV_SERVE_NEUTRAL_INDUSTRIES` de `OpenTTD` (210). Antes de esta versión el
 /// comportamiento histórico siempre permitía a estaciones de compañías
 /// servir industrias con estación neutral.
 const SLV_SERVE_NEUTRAL_INDUSTRIES: u16 = 210;
+
+/// Estilos compilados en `table/company_face.h` del OpenTTD de referencia.
+///
+/// Los estilos NewGRF se resuelven en el runtime nativo. Como el importador
+/// todavía conserva esas etiquetas como texto opaco, una etiqueta que no
+/// pertenece a esta lista debe seguir el fallback nativo de
+/// `AfterLoadGame()`: generar un estilo y sus bits consumiendo dos tiradas.
+const NATIVE_FACE_STYLE_LABELS: [&str; 4] = [
+    "default/face1",
+    "default/face2",
+    "default/face3",
+    "default/face4",
+];
+
+fn afterload_face_randomization_count(version: u16, companies: &[entities::SavCompany]) -> usize {
+    if version < SLV_FACE_STYLES {
+        return 0;
+    }
+    companies
+        .iter()
+        .filter(|company| {
+            !company
+                .manager_face_style
+                .as_deref()
+                .is_some_and(|style| NATIVE_FACE_STYLE_LABELS.contains(&style))
+        })
+        .count()
+}
 
 /// Carga un savegame de `OpenTTD` desde sus bytes.
 ///
@@ -1275,6 +1305,8 @@ impl GameState {
         let date_raw_chunk = sav.date_raw_chunk.take();
         let cargo_pool_raw_chunk = sav.capa_raw_chunk.take();
         let random_state = sav.random_state;
+        let afterload_face_randomizations =
+            afterload_face_randomization_count(sav.version, &sav.companies);
         let mut map = sav.map;
         normalize_rail_trackbits_from_neighbors(&mut map);
         // `AfterLoadGame()` de OpenTTD sólo reconstruye estas reservas para
@@ -1293,6 +1325,13 @@ impl GameState {
             state.random = crate::linkgraph_parity::Randomizer {
                 state: random_state,
             };
+            // `AfterLoadGame()` llama `RandomiseCompanyManagerFace()` cuando
+            // no puede resolver `face_style`; ese fallback consume primero la
+            // selección del estilo y luego los bits del rostro.
+            for _ in 0..afterload_face_randomizations {
+                let _ = state.random.next();
+                let _ = state.random.next();
+            }
         }
         state.climate = sav.climate;
         state.snow_line_height = sav.snow_line_height;

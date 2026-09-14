@@ -181,6 +181,16 @@ fn append_company_yearly_expenses(record: &mut Vec<u8>, expenses: &[i64]) -> Res
     Ok(())
 }
 
+/// Etiqueta que usa OpenTTD para el primer estilo vanilla cuando el estado
+/// creado por el core todavía no trae una selección de retrato.
+///
+/// Emitir una etiqueta válida evita que `AfterLoadGame()` descarte el estilo y
+/// consuma dos tiradas del RNG global al abrir un SAV recién exportado. Las
+/// etiquetas explícitas (incluidas las NewGRF) se conservan sin alterarlas.
+fn face_style_for_save(style: Option<&str>) -> &str {
+    style.unwrap_or("default/face1")
+}
+
 #[allow(clippy::too_many_lines)] // Una fila PLYR debe conservar el orden wire completo.
 pub(super) fn plyr_records(
     state: &GameState,
@@ -200,7 +210,7 @@ pub(super) fn plyr_records(
         append_company_allow_list(&mut rec, &company.allow_list)?;
         rec.extend_from_slice(&company.manager_face.to_be_bytes());
         write_str(
-            company.manager_face_style.as_deref().unwrap_or(""),
+            face_style_for_save(company.manager_face_style.as_deref()),
             &mut rec,
         )?;
         rec.extend_from_slice(&state.economy.money.to_be_bytes());
@@ -263,7 +273,7 @@ pub(super) fn plyr_records(
             append_company_allow_list(&mut rec, &company_to_write.allow_list)?;
             rec.extend_from_slice(&company.manager_face.to_be_bytes());
             write_str(
-                company.manager_face_style.as_deref().unwrap_or(""),
+                face_style_for_save(company.manager_face_style.as_deref()),
                 &mut rec,
             )?;
             rec.extend_from_slice(&money.to_be_bytes());

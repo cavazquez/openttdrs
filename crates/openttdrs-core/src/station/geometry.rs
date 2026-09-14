@@ -1,4 +1,4 @@
-use crate::map::{Map, TileCoord, TileKind};
+use crate::map::{Map, Tile, TileCoord, TileKind};
 use crate::pathfinder::diag_dir_offset;
 use crate::vehicle::VehicleKind;
 
@@ -466,7 +466,71 @@ fn is_road_approach_kind(kind: TileKind) -> bool {
     )
 }
 
-/// Parada bahía bus/camión con boca conectada (`m3` con bits de acceso).
+/// Bits de carretera efectivos de una parada nativa.
+///
+/// En `MP_STATION`, `OpenTTD` no usa `m3` para la topología vial: la orientación
+/// gráfica de `m5` contiene la boca de una bahía o el eje de un drive-through,
+/// y `GetAnyRoadBits` deriva de ahí los bits de red.
+#[must_use]
+pub fn road_stop_road_bits(tile: &Tile) -> u8 {
+    if crate::road_stop_spec::is_drive_through_orientation(tile.m5) {
+        if crate::road_stop_spec::drive_through_axis_y(tile.m5) {
+            0x05 // ROAD_Y
+        } else {
+            0x0A // ROAD_X
+        }
+    } else {
+        1u8 << (3 ^ (tile.m5 & 0x03))
+    }
+}
+
+#[must_use]
+fn road_bits_toward_neighbor(dx: i32, dy: i32) -> u8 {
+    match (dx, dy) {
+        (-1, 0) => 0x08,
+        (0, -1) => 0x01,
+        (1, 0) => 0x02,
+        (0, 1) => 0x04,
+        _ => 0,
+    }
+}
+
+#[must_use]
+fn effective_road_bits_for_connection(tile: &Tile) -> u8 {
+    crate::map::effective_road_bits(
+        tile.mapt,
+        tile.m5,
+        tile.kind,
+        crate::map::OTTD_MP_ROAD,
+        crate::map::OTTD_MP_TUNNELBRIDGE,
+    )
+    .unwrap_or_else(|| {
+        if tile.kind == TileKind::Road {
+            let bits = tile.m5 & 0x0F;
+            if bits == 0 { 0x0F } else { bits }
+        } else {
+            0
+        }
+    })
+}
+
+#[must_use]
+fn road_stop_has_connected_mouth(map: &Map, station_pos: TileCoord, tile: &Tile) -> bool {
+    let (dx, dy) = diag_dir_offset(tile.m5 & 0x03);
+    let approach = TileCoord::new(station_pos.x + dx, station_pos.y + dy);
+    let Some(approach_tile) = map.get(approach) else {
+        return false;
+    };
+    if !is_road_approach_kind(approach_tile.kind) {
+        return false;
+    }
+    let station_bits = road_stop_road_bits(tile);
+    let approach_bits = effective_road_bits_for_connection(&approach_tile);
+    station_bits & road_bits_toward_neighbor(dx, dy) != 0
+        && approach_bits & road_bits_toward_neighbor(-dx, -dy) != 0
+}
+
+/// Parada bahía bus/camión con boca conectada según la topología `m5`/vecino.
 /// Solo estas paradas son destino de movimiento «dentro de la tesela»
 /// (paridad con `OpenTTD`, donde el vehículo entra a la bahía).
 #[must_use]
@@ -475,18 +539,17 @@ pub fn is_connected_bay_road_stop(map: &Map, station_pos: TileCoord) -> bool {
         t.kind == TileKind::Station
             && matches!(station_type_from_m6(t.m6), 2 | 3)
             && !crate::road_stop_spec::is_drive_through_orientation(t.m5)
-            && (t.m3 & 0x0F) != 0
+            && road_stop_has_connected_mouth(map, station_pos, &t)
     })
 }
 
-/// Parada bus/camión atravesable, con eje vial codificado en `m3`.
+/// Parada bus/camión atravesable, con eje vial codificado en `m5`.
 #[must_use]
 pub fn is_drive_through_road_stop(map: &Map, station_pos: TileCoord) -> bool {
     map.get(station_pos).is_some_and(|t| {
         t.kind == TileKind::Station
             && matches!(station_type_from_m6(t.m6), 2 | 3)
             && crate::road_stop_spec::is_drive_through_orientation(t.m5)
-            && matches!(t.m3 & 0x0F, 0x05 | 0x0A)
     })
 }
 
@@ -539,9 +602,9 @@ pub fn road_stop_approach_tile(map: &Map, station_pos: TileCoord) -> Option<Tile
 
 /// El vehículo está en su posición de servicio de la parada.
 ///
-/// Bus/camión en bahía conectada: SOLO dentro de la tesela de la estación
-/// (paridad `OpenTTD`: la carga empieza al alcanzar el stop frame dentro de la
-/// Bahía sin boca: carretera de acceso (fallback). Tren: sobre la plataforma rail.
+/// Bus/camión en una parada: sólo la tesela física de estación cuenta para
+/// servicio; una tesela de carretera vecina no se convierte en una llegada.
+/// Tren: sobre la plataforma rail.
 #[must_use]
 pub fn vehicle_physically_at_station(
     map: &Map,
@@ -572,19 +635,7 @@ pub fn vehicle_physically_at_station(
         };
     }
     match vehicle.kind {
-        VehicleKind::Truck | VehicleKind::Bus | VehicleKind::Tram => {
-            // Acceso a bahía: ancla o cualquiera de las teselas unidas.
-            station
-                .joined_tiles
-                .iter()
-                .copied()
-                .chain(std::iter::once(station.pos))
-                .any(|stop| {
-                    !is_connected_bay_road_stop(map, stop)
-                        && road_stop_approach_tile(map, stop)
-                            .is_some_and(|approach| vpos == approach)
-                })
-        }
+        VehicleKind::Truck | VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => false,
         VehicleKind::Train => {
             station_footprint_tiles(map, station.pos).contains(&vpos)
                 && train_on_rail_platform(map, vpos)
@@ -626,12 +677,11 @@ pub fn vehicle_physically_at_station(
                 }
             }
         }
-        VehicleKind::Aircraft => false,
     }
 }
 
-/// El vehículo llegó a la parada de la orden actual (dentro de la bahía; la
-/// carretera de acceso solo cuenta como fallback si la bahía no tiene boca).
+/// El vehículo llegó a la tesela de la orden actual (dentro de la bahía o en
+/// un drive-through). La carretera de acceso no es una llegada nativa.
 #[must_use]
 pub fn vehicle_at_road_stop(map: &Map, vehicle: &crate::Vehicle) -> bool {
     if is_connected_bay_road_stop(map, vehicle.pos) {
@@ -650,6 +700,5 @@ pub fn vehicle_at_road_stop(map: &Map, vehicle: &crate::Vehicle) -> bool {
         return !is_connected_bay_road_stop(map, *station)
             || crate::road_movement::bay::road_vehicle_stopped_in_bay(vehicle);
     }
-    !is_connected_bay_road_stop(map, *station)
-        && road_stop_approach_tile(map, *station).is_some_and(|approach| vehicle.pos == approach)
+    false
 }

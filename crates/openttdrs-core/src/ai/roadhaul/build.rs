@@ -76,8 +76,11 @@ pub(super) fn build_bus_line(
         return None;
     }
     // No encolar línea a medias: paradas + depósito deben estar unidos por road.
-    find_path(&state.map, stop_a, stop_b, PathNetwork::Road)?;
-    find_path(&state.map, depot, stop_a, PathNetwork::Road)?;
+    if find_path(&state.map, stop_a, stop_b, PathNetwork::Road).is_none()
+        || find_path(&state.map, depot, stop_a, PathNetwork::Road).is_none()
+    {
+        return None;
+    }
     Some((stop_a, stop_b, depot))
 }
 
@@ -383,7 +386,53 @@ fn try_place_road_depot_near(state: &mut GameState, stop: TileCoord) -> Option<T
         (TileCoord::new(stop.x, stop.y + 2), 3u8),
         (TileCoord::new(stop.x, stop.y - 2), 1u8),
     ];
-    for (depot, dir) in preferred {
+    let mut candidates = preferred.to_vec();
+    let mut seen: HashSet<(TileCoord, u8)> = preferred.into_iter().collect();
+    // Si la parada mira hacia un corredor lateral, los candidatos inmediatos
+    // pueden quedar del lado equivocado. Agregar sólo hierba/bosque con una
+    // boca de carretera existente permite encontrar una entrada conectada sin
+    // tender caminos aislados ni alterar la topología de la parada.
+    for radius in 1..=8_i32 {
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                if dx.abs().max(dy.abs()) != radius {
+                    continue;
+                }
+                let depot = TileCoord::new(stop.x + dx, stop.y + dy);
+                if !matches!(
+                    state.map.get_kind(depot),
+                    Some(TileKind::Grass | TileKind::Forest)
+                ) {
+                    continue;
+                }
+                for dir in 0..4u8 {
+                    let (mx, my) = match dir {
+                        0 => (-1_i32, 0),
+                        1 => (0, 1),
+                        2 => (1, 0),
+                        _ => (0, -1),
+                    };
+                    let mouth = TileCoord::new(depot.x + mx, depot.y + my);
+                    if !matches!(
+                        state.map.get_kind(mouth),
+                        Some(
+                            TileKind::Road
+                                | TileKind::RoadBridge
+                                | TileKind::RoadTunnel
+                                | TileKind::RoadDepot
+                        )
+                    ) {
+                        continue;
+                    }
+                    if seen.insert((depot, dir)) {
+                        candidates.push((depot, dir));
+                    }
+                }
+            }
+        }
+    }
+
+    for (depot, dir) in candidates {
         if state.map.get(depot).is_none() {
             continue;
         }

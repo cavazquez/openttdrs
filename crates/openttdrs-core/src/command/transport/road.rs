@@ -52,14 +52,16 @@ pub(in crate::command::transport) fn road_depot_entrance_faces_road(
     depot_pos: TileCoord,
     dir: u8,
 ) -> bool {
-    let Some((exit, _)) = road_depot_exit_for_dir(map, depot_pos, dir) else {
+    let Some((exit, road_bits)) = road_depot_exit_for_dir(map, depot_pos, dir) else {
         return false;
     };
     map.get(exit).is_some_and(|t| {
         matches!(
             t.kind,
             TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge
-        ) || (t.kind == TileKind::Station && (t.m3 & 0x0F) != 0)
+        ) || (t.kind == TileKind::Station
+            && matches!((t.m6 >> 3) & 0x0F, 2 | 3 | 8)
+            && crate::station::road_stop_road_bits(&t) & road_bits != 0)
     })
 }
 

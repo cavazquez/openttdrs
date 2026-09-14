@@ -213,6 +213,13 @@ fn enter_next_tile(
     drive_on_right: bool,
     engine_catalog: &[crate::engine::EngineDef],
 ) -> bool {
+    let fallback_target = vehicles[v_idx]
+        .movement_target()
+        .is_none()
+        .then(|| map.and_then(|map| road_next_tile_without_path(&vehicles[v_idx], map)));
+    if let Some(Some(target)) = fallback_target {
+        vehicles[v_idx].path.push_front(target);
+    }
     let Some(target) = vehicles[v_idx].movement_target() else {
         vehicles[v_idx].cur_speed = 0;
         return false;
@@ -228,6 +235,7 @@ fn enter_next_tile(
         vehicles[v_idx].overtaking = 0;
         vehicles[v_idx].overtaking_ctr = 0;
         sync_road_position_from_table(&mut vehicles[v_idx], drive_on_right);
+        sync_road_tile_entry(&mut vehicles[v_idx], map, engine_catalog);
         return true;
     }
     if !was_in_bay
@@ -254,6 +262,7 @@ fn enter_next_tile(
         vehicles[v_idx].overtaking = 0;
         vehicles[v_idx].overtaking_ctr = 0;
         sync_road_position_from_table(&mut vehicles[v_idx], drive_on_right);
+        sync_road_tile_entry(&mut vehicles[v_idx], map, engine_catalog);
         return true;
     }
 
@@ -269,7 +278,62 @@ fn enter_next_tile(
     }
     v.frame = RVC_DEFAULT_START_FRAME;
     sync_road_position_from_table(v, drive_on_right);
+    sync_road_tile_entry(v, map, engine_catalog);
     true
+}
+
+/// Equivalente al `UpdateInclination(true, true)` de `GroundVehicle` al
+/// cruzar el borde de una tesela.
+///
+/// La posición Z importada puede pertenecer todavía a la tesela anterior. En
+/// particular, `OpenTTD` recalcula primero `GetSlopePixelZ(x_pos, y_pos)` y
+/// recién después vuelve a cachear los bits de subida/bajada. Hacer sólo el
+/// avance de la tesela deja un vehículo a una altura vieja y omite el ajuste
+/// inmediato de `RoadZPosAffectSpeed`.
+fn sync_road_tile_entry(
+    v: &mut Vehicle,
+    map: Option<&Map>,
+    engine_catalog: &[crate::engine::EngineDef],
+) {
+    let Some(map) = map else {
+        return;
+    };
+
+    sync_road_slope_speed_with_catalog(v, map, engine_catalog);
+
+    // `UpdateZPositionAndInclination` siempre recalcula estos dos bits en una
+    // entrada; conservar flags de un save sólo sería correcto dentro de la
+    // tesela que los originó.
+    v.road_gv_flags &= !0x3;
+    let Some(current_z) = v.z_pos else {
+        return;
+    };
+    if !road_tile_may_have_sloped_track(map, v) {
+        return;
+    }
+
+    let middle_z = crate::map::slope_pixel_z(map, v.pos, 8.0, 8.0);
+    if middle_z != current_z {
+        v.road_gv_flags |= if middle_z > current_z { 1 } else { 2 };
+    }
+}
+
+/// Proyección de `RoadVehicle::TileMayHaveSlopedTrack` para los bytes de mapa
+/// que conserva el modelo Rust. Una carretera recta X/Y es el único caso en
+/// que `OpenTTD` cachea una inclinación vial.
+fn road_tile_may_have_sloped_track(map: &Map, v: &Vehicle) -> bool {
+    let Some(tile) = map.get(v.pos) else {
+        return false;
+    };
+    let road_bits = crate::map::effective_road_bits(
+        tile.mapt,
+        tile.m5,
+        tile.kind,
+        crate::map::OTTD_MP_ROAD,
+        crate::map::OTTD_MP_TUNNELBRIDGE,
+    )
+    .or_else(|| (tile.kind == crate::map::TileKind::Road).then_some(tile.m5 & 0x0F));
+    matches!(road_bits, Some(0x05 | 0x0A))
 }
 
 fn drive_through_should_stop(v: &Vehicle, map: Option<&Map>) -> bool {
@@ -363,9 +427,46 @@ fn bay_entrance_busy(
     })
 }
 
-fn road_vehicle_has_motion_target(v: &Vehicle) -> bool {
+fn road_vehicle_has_motion_target(v: &Vehicle, map: Option<&Map>) -> bool {
     v.movement_target().is_some()
         || is_bay_road_state(v.road_state) && v.road_state & RVSB_ENTERED_STOP == 0
+        || is_drive_through_road_state(v.road_state)
+        || map.is_some_and(|map| road_next_tile_without_path(v, map).is_some())
+}
+
+/// `RoadFindPathToDest` mantiene el rumbo cuando en la tesela siguiente sólo
+/// existe una vía, aunque el destino de estación no sea alcanzable. Sin este
+/// fallback un camino que termina en la boca de acceso transforma el acceso en
+/// una llegada falsa y deja al vehículo inmóvil.
+fn road_next_tile_without_path(v: &Vehicle, map: &Map) -> Option<crate::map::TileCoord> {
+    if !v.path.is_empty()
+        || v.pos == v.dest
+        || is_bay_road_state(v.road_state)
+        || is_drive_through_road_state(v.road_state)
+    {
+        return None;
+    }
+    let direction = match v.road_state & RVSB_TRACKDIR_MASK {
+        0 | 1 | 8 | 9 => {
+            crate::road_movement::rvsb::direction_from_trackdir(v.road_state & RVSB_TRACKDIR_MASK)
+        }
+        _ => return None,
+    };
+    let (dx, dy) = crate::map::diag_dir_offset(direction >> 1);
+    let next = crate::map::TileCoord::new(v.pos.x + dx, v.pos.y + dy);
+    let network = if v.kind == crate::vehicle::VehicleKind::Tram {
+        crate::pathfinder::PathNetwork::Tram
+    } else if matches!(
+        v.kind,
+        crate::vehicle::VehicleKind::Bus | crate::vehicle::VehicleKind::Truck
+    ) {
+        crate::pathfinder::PathNetwork::Road
+    } else {
+        return None;
+    };
+    crate::pathfinder::find_path(map, v.pos, next, network)
+        .is_some()
+        .then_some(next)
 }
 
 const ROAD_TILE_SIZE: i32 = 16;
@@ -695,7 +796,7 @@ fn road_vehicle_tick_side_with_traffic(
         v.progress = 0;
     }
 
-    let result = if road_vehicle_has_motion_target(v) {
+    let result = if road_vehicle_has_motion_target(v, map) {
         update_road_vehicle_speed(
             v.cur_speed,
             v.subspeed,
@@ -727,7 +828,15 @@ fn road_vehicle_tick_side_with_traffic(
         );
         v.cur_speed = result.cur_speed;
         v.subspeed = result.subspeed;
-        if v.cur_speed == 0 && v.pos == v.dest && !is_bay_road_state(v.road_state) {
+        if v.cur_speed == 0
+            && v.pos == v.dest
+            && !is_bay_road_state(v.road_state)
+            && !is_drive_through_road_state(v.road_state)
+            && !(map.is_some()
+                && v.current_order_ref().is_some_and(|order| {
+                    matches!(order, crate::vehicle::VehicleOrder::Station { .. })
+                }))
+        {
             v.advance_destination_after_arrival_with_catalog(engine_catalog);
         }
         return;
@@ -756,7 +865,8 @@ fn road_vehicle_tick_side_with_traffic(
             blocked = true;
             break;
         }
-        if vehicles[v_idx].cur_speed == 0 || !road_vehicle_has_motion_target(&vehicles[v_idx]) {
+        if vehicles[v_idx].cur_speed == 0 || !road_vehicle_has_motion_target(&vehicles[v_idx], map)
+        {
             break;
         }
         adv_spd = get_advance_distance(vehicles[v_idx].direction);
@@ -1056,6 +1166,84 @@ mod tests {
         assert_eq!((vehicles[0].road_x, vehicles[0].road_y), (215, 261));
         assert_eq!(vehicles[0].direction, DIR_E);
         assert_eq!(vehicles[0].cur_speed, 75);
+    }
+
+    #[test]
+    fn entering_flat_road_tile_refreshes_z_and_clears_old_inclination() {
+        let start = TileCoord::new(13, 16);
+        let end = TileCoord::new(14, 16);
+        let mut map = Map::new_flat(32, 32, 1);
+        for tile_pos in [start, end] {
+            map.set_kind(tile_pos, TileKind::Road).unwrap();
+            let mut tile = map.get(tile_pos).unwrap();
+            tile.m5 = 0x0A; // carretera recta X en el formato generado
+            map.set_tile(tile_pos, tile).unwrap();
+        }
+
+        let mut v = Vehicle::new(1, VehicleKind::Bus, start, end);
+        v.direction = DIR_SW;
+        v.road_state = 8;
+        v.frame = 15;
+        v.road_x = 223;
+        v.road_y = 261;
+        v.road_pos_valid = true;
+        v.overtaking = crate::road_movement::rvsb::RVSB_DRIVE_SIDE;
+        v.road_gv_flags = 0x4567;
+        v.z_pos = Some(0);
+        v.cur_speed = 83;
+        v.path = VecDeque::from([end]);
+        let mut vehicles = vec![v];
+
+        assert!(individual_road_vehicle_controller(
+            &mut vehicles,
+            0,
+            Some(&map)
+        ));
+
+        assert_eq!(vehicles[0].pos, end);
+        assert_eq!(vehicles[0].z_pos, Some(8));
+        assert_eq!(vehicles[0].cur_speed, 75);
+        assert_eq!(vehicles[0].road_gv_flags & 0x3, 0);
+    }
+
+    #[test]
+    fn unreachable_bay_does_not_turn_access_tile_into_arrival() {
+        let mut map = Map::new_flat(8, 8, 0);
+        for x in 1..=5_i32 {
+            let pos = TileCoord::new(x, 3);
+            map.set_kind(pos, TileKind::Road).unwrap();
+            let mut tile = map.get(pos).unwrap();
+            tile.m5 = 0x0A;
+            map.set_tile(pos, tile).unwrap();
+        }
+        let stop = TileCoord::new(3, 2);
+        map.set_kind(stop, TileKind::Station).unwrap();
+        let mut station = map.get(stop).unwrap();
+        station.mapt = 0x50;
+        station.m5 = 0; // boca oeste; la carretera está al sur y no conecta.
+        station.m6 = 3 << 3;
+        station.m3 = 0;
+        map.set_tile(stop, station).unwrap();
+
+        let mut vehicle = Vehicle::new(1, VehicleKind::Bus, TileCoord::new(2, 3), stop);
+        vehicle.running = true;
+        vehicle.direction = crate::vehicle::DIR_SW;
+        vehicle.road_state = 8;
+        vehicle.frame = 15;
+        vehicle.set_station_orders(vec![stop]);
+        vehicle.dest = stop;
+        vehicle.path = VecDeque::from([TileCoord::new(3, 3)]);
+        let mut vehicles = vec![vehicle];
+
+        assert!(enter_next_tile(&mut vehicles, 0, Some(&map), false, &[]));
+        assert_eq!(vehicles[0].pos, TileCoord::new(3, 3));
+        assert_eq!(vehicles[0].road_state, 8);
+        assert!(!vehicles[0].awaiting_load_window);
+
+        assert!(enter_next_tile(&mut vehicles, 0, Some(&map), false, &[]));
+        assert_eq!(vehicles[0].pos, TileCoord::new(4, 3));
+        assert_eq!(vehicles[0].road_state, 8);
+        assert!(!vehicles[0].awaiting_load_window);
     }
 
     #[test]

@@ -117,7 +117,6 @@ pub fn tick_overtaking(v: &mut Vehicle, map: Option<&Map>) {
     }
     if map.is_some_and(|m| tile_is_station(m, v.pos)) {
         v.overtaking = 0;
-        v.overtaking_ctr = 0;
         return;
     }
     v.overtaking_ctr = v.overtaking_ctr.saturating_add(1);
@@ -126,7 +125,6 @@ pub fn tick_overtaking(v: &mut Vehicle, map: Option<&Map>) {
         && is_straight_road_trackdir(v.road_state)
     {
         v.overtaking = 0;
-        v.overtaking_ctr = 0;
     }
 }
 
@@ -276,5 +274,6 @@ mod tests {
         v.overtaking_ctr = RV_OVERTAKE_TIMEOUT - 1;
         tick_overtaking(&mut v, None);
         assert_eq!(v.overtaking, 0);
+        assert_eq!(v.overtaking_ctr, RV_OVERTAKE_TIMEOUT);
     }
 }

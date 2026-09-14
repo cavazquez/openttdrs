@@ -3,8 +3,7 @@ use crate::vehicle::{VehicleKind, VehicleOrder};
 
 use super::Station;
 use super::geometry::{
-    dock_station_tiles, is_connected_bay_road_stop, is_drive_through_road_stop,
-    rail_station_approach_tile, rail_station_stop_tile_for_approach, road_stop_approach_tile,
+    dock_station_tiles, rail_station_approach_tile, rail_station_stop_tile_for_approach,
 };
 
 /// Enumera las teselas de amarre que `YapfShip` puede usar para una estación.
@@ -100,9 +99,10 @@ fn ship_docking_tile_for_station(
 
 /// Destino de movimiento según tipo de vehículo y orden.
 ///
-/// Bus/camión: la tesela de la bahía misma — como `OpenTTD`, el vehículo ENTRA
-/// a la parada y se detiene dentro (`_rv_station_*` / `_road_stop_stop_frame`).
-/// Si la bahía no tiene boca conectada, cae a la carretera de acceso.
+/// Bus/camión: la tesela de la estación — como `OpenTTD`,
+/// `RoadVehicle::GetOrderStationLocation` conserva el ancla de la estación y
+/// el controlador decide si puede entrar a la bahía, atravesar un drive-through
+/// o continuar por la carretera cuando la ruta no alcanza la parada.
 /// Tren: la tesela de parada en la plataforma (`GetTrainStopLocation` simplificado).
 #[must_use]
 pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrder) -> TileCoord {
@@ -168,14 +168,7 @@ pub fn resolve_order_destination_from_with_stations(
         (
             VehicleKind::Truck | VehicleKind::Bus | VehicleKind::Tram,
             VehicleOrder::Station { station, .. },
-        ) => {
-            if is_connected_bay_road_stop(map, station) || is_drive_through_road_stop(map, station)
-            {
-                station
-            } else {
-                road_stop_approach_tile(map, station).unwrap_or(station)
-            }
-        }
+        ) => station,
         (_, order) => order.destination(),
     }
 }

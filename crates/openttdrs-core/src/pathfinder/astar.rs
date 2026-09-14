@@ -7,8 +7,7 @@ use crate::bridge_spec::road_bridge_other_end;
 use crate::map::{Map, TileCoord, TileKind};
 
 use super::network::{
-    PathNetwork, TunnelWormholes, is_network_tile, is_road_stop_station_tile, tiles_connected,
-    tunnel_other_end,
+    PathNetwork, TunnelWormholes, is_network_tile, tiles_connected, tunnel_other_end,
 };
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -100,21 +99,8 @@ pub(super) fn find_road_or_tram_path_with_wormholes(
                 continue;
             }
             let next_kind = map.get_kind(next).unwrap_or(TileKind::Grass);
-            let cur_kind = map.get_kind(cur).unwrap_or(TileKind::Grass);
-            let reachable = if is_network_tile(map, next, next_kind, network) {
-                tiles_connected(map, cur, next, network)
-                    // Destino parada road: entrar desde cualquier tesela de red adyacente
-                    // (la boca m3 puede mirar a otro lado tras el corredor IA).
-                    || (network == PathNetwork::Road
-                        && next == to
-                        && is_road_stop_station_tile(map, next)
-                        && is_network_tile(map, cur, cur_kind, network))
-            } else if network == PathNetwork::Road && next == to {
-                // Paradas bus/camión: la tesela de destino puede no ser carretera pura.
-                is_network_tile(map, cur, cur_kind, network)
-            } else {
-                false
-            };
+            let reachable = is_network_tile(map, next, next_kind, network)
+                && tiles_connected(map, cur, next, network);
             if !reachable {
                 continue;
             }

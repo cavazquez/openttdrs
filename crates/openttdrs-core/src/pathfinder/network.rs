@@ -85,11 +85,11 @@ pub(crate) fn is_road_network_tile(kind: TileKind) -> bool {
     )
 }
 
-/// Parada bus/camión con boca a carretera (`m3` = road bits de acceso).
+/// Tesela de parada bus/camión (`MP_STATION` siempre pertenece a la red si su
+/// tipo es de road stop; sus bits efectivos salen de `m5`, igual que nativo).
 #[must_use]
 pub(super) fn is_road_stop_station_tile(map: &Map, c: TileCoord) -> bool {
-    map.get(c)
-        .is_some_and(|t| is_road_stop_station(&t) && (t.m3 & 0x0F) != 0)
+    map.get(c).is_some_and(|t| is_road_stop_station(&t))
 }
 
 /// Tesela de red de tranvía: overlay m3, depósito de carretera, o parada bus.
@@ -233,7 +233,7 @@ fn effective_road_bits(map: &Map, c: TileCoord) -> u8 {
             2 => 0x02, // boca este
             _ => 0x01, // boca norte
         },
-        TileKind::Station if is_road_stop_station(&t) => t.m3 & 0x0F,
+        TileKind::Station if is_road_stop_station(&t) => crate::station::road_stop_road_bits(&t),
         _ => 0,
     }
 }
@@ -258,7 +258,7 @@ fn effective_tram_bits(map: &Map, c: TileCoord) -> u8 {
                 if bits == 0 { 0x0F } else { bits }
             }
         }
-        TileKind::Station if is_road_stop_station(&t) => t.m3 & 0x0F,
+        TileKind::Station if is_road_stop_station(&t) => crate::station::road_stop_road_bits(&t),
         _ => 0,
     }
 }

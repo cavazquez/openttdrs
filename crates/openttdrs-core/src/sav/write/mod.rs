@@ -3643,9 +3643,9 @@ mod tests {
         assert_eq!(imported_bus.native_sprite_num, 7);
         assert_eq!(imported_bus.acceleration, 13);
         assert_eq!(imported_bus.refit_capacity, 29);
-        // La orden de parada vuelve a proyectar el destino operativo sobre la
-        // estación; el `dest_tile` crudo ya se verificó en `saved_bus`.
-        assert_eq!(imported_bus.dest, TileCoord::new(17, 16));
+        // OpenTTD conserva el ancla de la estación como `dest`; la boca de
+        // aproximación se resuelve al ejecutar el movimiento vial.
+        assert_eq!(imported_bus.dest, TileCoord::new(17, 15));
         assert_eq!(imported_bus.motion_counter, 0x1234_5678);
         assert_eq!(imported_bus.cur_speed, 41);
         assert_eq!(imported_bus.subspeed, 99);

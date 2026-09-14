@@ -911,10 +911,10 @@ impl super::model::Vehicle {
             self.pos = next;
             self.push_rail_tile_history(left);
             self.push_road_tile_history(left);
-            if self.pos == self.dest && !self.defers_connected_bay_arrival(map) {
+            if self.pos == self.dest && !self.defers_road_station_arrival(map) {
                 self.advance_destination_after_arrival_with_catalog(engine_catalog);
             }
-        } else if self.pos == self.dest && !self.defers_connected_bay_arrival(map) {
+        } else if self.pos == self.dest && !self.defers_road_station_arrival(map) {
             self.advance_destination_after_arrival_with_catalog(engine_catalog);
         } else {
             if matches!(
@@ -943,7 +943,7 @@ impl super::model::Vehicle {
             }
             if self.pos == self.dest
                 && !self.orders.is_empty()
-                && !self.defers_connected_bay_arrival(map)
+                && !self.defers_road_station_arrival(map)
             {
                 self.advance_destination_after_arrival_with_catalog(engine_catalog);
             }
@@ -955,16 +955,26 @@ impl super::model::Vehicle {
 
     /// En una parada de bahía la llegada ocurre en `_road_stop_stop_frame`,
     /// varios frames después de cruzar el límite de la tesela.
-    fn defers_connected_bay_arrival(&self, map: Option<&Map>) -> bool {
-        matches!(
+    fn defers_road_station_arrival(&self, map: Option<&Map>) -> bool {
+        let is_road_vehicle = matches!(
             self.kind,
             super::model::VehicleKind::Bus
                 | super::model::VehicleKind::Truck
                 | super::model::VehicleKind::Tram
-        ) && map.is_some_and(|map| {
-            crate::station::is_connected_bay_road_stop(map, self.pos)
-                || crate::station::is_drive_through_road_stop(map, self.pos)
-        })
+        );
+        if map.is_some()
+            && is_road_vehicle
+            && self
+                .current_order_ref()
+                .is_some_and(|order| matches!(order, super::order::VehicleOrder::Station { .. }))
+        {
+            return true;
+        }
+        is_road_vehicle
+            && map.is_some_and(|map| {
+                crate::station::is_connected_bay_road_stop(map, self.pos)
+                    || crate::station::is_drive_through_road_stop(map, self.pos)
+            })
     }
 
     /// `UpdateInclination` + `AffectSpeedByZChange` (`ground_vehicle.hpp` / `train_cmd.cpp`).

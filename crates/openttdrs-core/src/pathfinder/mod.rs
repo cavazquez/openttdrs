@@ -647,4 +647,26 @@ mod tests {
             "tile solo-road sin m3 no es red de tranvía"
         );
     }
+
+    #[test]
+    fn road_stop_connectivity_uses_station_m5_not_m3() {
+        let mut map = Map::new_flat(8, 8, 0);
+        write_road(&mut map, TileCoord::new(1, 2), 0x0A);
+        write_road(&mut map, TileCoord::new(2, 2), 0x0A);
+        let stop = TileCoord::new(3, 2);
+        map.set_kind(stop, TileKind::Station).unwrap();
+        let mut tile = map.get(stop).unwrap();
+        tile.mapt = 0x50; // MP_STATION.
+        tile.m5 = 0; // boca hacia el oeste, conectada con (2, 2).
+        tile.m6 = 3 << 3; // parada de bus.
+        tile.m3 = 0; // m3 no contiene la topología de la parada nativa.
+        map.set_tile(stop, tile).unwrap();
+
+        assert!(find_path(&map, TileCoord::new(1, 2), stop, PathNetwork::Road).is_some());
+
+        let mut tile = map.get(stop).unwrap();
+        tile.m5 = 1; // boca hacia el sur, sin carretera en esa dirección.
+        map.set_tile(stop, tile).unwrap();
+        assert!(find_path(&map, TileCoord::new(1, 2), stop, PathNetwork::Road).is_none());
+    }
 }

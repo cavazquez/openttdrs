@@ -508,6 +508,29 @@ fn place_road_depot_dir_requires_road_at_entrance() {
 }
 
 #[test]
+fn place_road_depot_dir_uses_station_m5_connection() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    let station = TileCoord::new(2, 1);
+    s.map.set_kind(station, TileKind::Station).unwrap();
+    let mut tile = s.map.get(station).unwrap();
+    tile.mapt = 0x50;
+    tile.m3 = 0x0F; // No debe sustituir a los bits topológicos de m5.
+    tile.m5 = 0; // Bahía hacia el oeste: no conecta con el depósito al sur.
+    tile.m6 = 3 << 3;
+    s.map.set_tile(station, tile).unwrap();
+
+    let error = apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 3)).unwrap_err();
+    assert_eq!(error, CommandError::StationNotAdjacentToTransport);
+
+    let mut tile = s.map.get(station).unwrap();
+    tile.m5 = 1; // Bahía hacia el sur: ahora sí conecta con la salida norte.
+    s.map.set_tile(station, tile).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 3)).unwrap();
+    assert_eq!(s.map.get_kind(depot), Some(TileKind::RoadDepot));
+}
+
+#[test]
 fn toggle_road_vehicle_running_targets_depot_exit() {
     let mut s = GameState::new(8, 8);
     let depot = TileCoord::new(2, 2);

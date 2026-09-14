@@ -23,6 +23,22 @@ El bloque termina sólo con `git commit` y `git push`. La captura raster se usa
 cuando hay compositor WGPU; si el entorno no lo permite, se registra el bloqueo
 y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
+## Etapa publicada — 2026-09-14 — #330/#328/#567 ship dinámico
+
+La fixture `mvp_openttd_ship.sav` coincide con OpenTTD 15.3 en `initial` más
+300 ticks (`301` muestras) para la proyección naval completa: posición de
+tesela y subtesela, altura, progreso, velocidad, `subspeed`, dirección, estado,
+rotación, ejecución, ruta y contador interno. El escenario nativo se activa
+de forma opt-in para no modificar el save base. La primera ruta hasta la boya
+se conserva, pero cuando una orden `Station` apunta a una boya se mantiene el
+estado de ruta perdida después de consumirla, igual que el controlador nativo;
+el pathfinder genérico no vuelve a girar el barco hacia la misma tesela.
+También se hidratan y reemiten los slots globales y velocidades de los motores
+navales vanilla. La suite workspace, el replay externo y las herramientas de
+traza pasan. El resultado es una ventana dinámica reproducida, no el cierre de
+#328/#330/#567: siguen pendientes YAPF/wormholes, callbacks NewGRF, redes
+navales amplias y aceptación raster completa.
+
 ## Etapa publicada — 2026-09-14 — #330 rail/PBS
 
 La frontera ferroviaria del fixture de consist quedó reproducible y exacta: la

@@ -5081,3 +5081,19 @@ los estados antiguos sin posición naval siguen usando el fallback centrado.
 La regresión `vehs_preserves_ship_subtile_position` cubre ambos ejes y el core
 queda en `2753` tests, con 1 ignorado. Esto no cierra #567: faltan el oráculo
 dinámico externo, callbacks y la aceptación visual completa del depósito naval.
+
+Corrección #330/#328/#567-SHIP-DYNAMIC-ORACLE (2026-09-14, `6ca76e2c`): el
+runner de `VEHS` conserva ahora la posición subtesela, altura, velocidad,
+`subspeed`, dirección, estado, rotación, ejecución, ruta y contador interno de
+los barcos importados. El exportador nativo puede iniciar explícitamente la
+nave de la fixture en movimiento (`OPENTTDRS_FIXTURE_START_SHIPS=1`) para
+comparar el controlador real, sin alterar el save base. La traza
+`mvp_openttd_ship.sav` coincide con OpenTTD 15.3 durante `initial` más 300
+ticks (`301` muestras), incluyendo la salida del depósito, la llegada a la
+boya, la selección de pista perdida y la navegación posterior. La ruta hacia
+la boya se calcula una sola vez; una orden `Station` cuyo destino es una boya
+conserva luego el estado nativo de ruta perdida y no vuelve a inyectar un path
+genérico. La tabla de motores navales vanilla también se rehidrata y reemite
+con sus slots globales y velocidades máximas. Esto cubre la ventana dinámica
+de la fixture, no la semántica YAPF/wormhole completa, callbacks NewGRF ni la
+aceptación raster amplia; #328/#330/#567 permanecen abiertas.

@@ -7614,3 +7614,20 @@ se exporta por la raíz del core. El import explícito restaura la compilación 
 workspace sin alterar el binario ni la lógica de UI. `cargo check --workspace`
 `cargo test --workspace --quiet` pasan; el cliente ejecuta `1532` tests y
  el core `2744` tests, con los ignorados documentados en sus fixtures.
+
+Corrección #330-ROAD-BREAKDOWN-IMPORT (2026-09-14, `02225714`): el controlador
+vial ejecuta `HandleBreakdown` en la misma fase que `RoadVehController`, antes
+de actualizar velocidad o posición, y publica el evento de entrada de avería
+también para vehículos de carretera. La carga de SAV conserva la fiabilidad
+actual y `chance16i` usa sólo la palabra baja del RNG nativo; antes se
+reinicializaba la fiabilidad guardada y se perdían averías reproducibles. Las
+regresiones cubren la transición `breakdown_ctr=2→1`, la escala de fiabilidad
+importada y el enmascarado de RNG. En el replay largo, la carretera coincide
+hasta la primera divergencia independiente de tren en el tick `13065`; el
+comparador entonces encuentra tren nativo a velocidad `144` frente a `96` en
+Rust. #330 continúa abierta para esa divergencia ferroviaria y las rutas
+multi-tick, tráfico complejo, presignals, aire y mar. El core pasa `2745`
+tests con el escenario IA no relacionado omitido (`1` ignorado), el cliente
+pasa `1532` (`2` ignorados) y Clippy de la librería queda verde; el escenario
+`ai_rival_builds_third_oil_route` sigue fallando por timeout y no se atribuye a
+esta corrección.

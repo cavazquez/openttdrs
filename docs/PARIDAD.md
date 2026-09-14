@@ -4953,3 +4953,10 @@ con fragmentos ambiguos o malformados no se traducen para no tocar datos de la
 partida. La regresión cubre ambos locales, entidades creadas después del cambio
 de idioma y el fallback seguro; #331 permanece abierta por catálogos upstream,
 settings no modelados y las demás noticias generadas.
+
+Corrección #331-NEWS-INDUSTRY-OPENING-LABEL (2026-09-14, `12cdb730`): la
+categoría `Apertura de industria` de la ventana de preferencias de noticias
+ya se registra en el catálogo inglés como `Industry opening`, manteniendo el
+enum y la preferencia persistida sin cambios. La regresión del catálogo cubre
+las diez categorías disponibles; #331 continúa abierta por los catálogos
+upstream, settings no modelados y superficies pendientes.

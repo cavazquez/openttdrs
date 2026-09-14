@@ -457,11 +457,10 @@ fn road_sliding_direction(v: &Vehicle, next_x: i32, next_y: i32) -> u8 {
     let x = next_x - v.road_x + 1;
     let y = next_y - v.road_y + 1;
     let new_dir = match (x, y) {
-        (0, 0) => crate::vehicle::DIR_N,
+        (0, 0) | (1, 1) => crate::vehicle::DIR_N,
         (1, 0) => crate::vehicle::DIR_NW,
         (2, 0) => crate::vehicle::DIR_W,
         (0, 1) => crate::vehicle::DIR_NE,
-        (1, 1) => crate::vehicle::DIR_N,
         (2, 1) => crate::vehicle::DIR_SW,
         (0, 2) => crate::vehicle::DIR_E,
         (1, 2) => crate::vehicle::DIR_SE,

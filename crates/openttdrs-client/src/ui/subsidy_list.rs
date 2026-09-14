@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{IndustrySpec, TICKS_PER_MONTH, cargo_display_name};
+use openttdrs_core::{TICKS_PER_MONTH, cargo_display_name};
 
 use crate::i18n::{Locale, localized_text};
 use crate::iso::tile_pos;

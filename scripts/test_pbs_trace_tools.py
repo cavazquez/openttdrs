@@ -79,6 +79,84 @@ def main() -> None:
         run(sys.executable, "scripts/validate_pbs_trace.py", str(oracle), "1", "openttd")
         run(sys.executable, "scripts/compare_pbs_traces.py", str(oracle), str(candidate))
 
+        road_raw = work / "road-candidate.raw.jsonl"
+        road_candidate = work / "road-candidate.jsonl"
+        road_oracle = work / "road-oracle.jsonl"
+        road_state = {
+            "state": 9,
+            "frame": 4,
+            "blocked_ctr": 2,
+            "overtaking": 1,
+            "overtaking_ctr": 7,
+            "crashed_ctr": 0,
+            "reverse_ctr": 3,
+        }
+        write_jsonl(
+            road_raw,
+            [
+                {
+                    "tick": 8,
+                    "vehicles": [
+                        {
+                            "id": 99,
+                            "tile": {"x": 4, "y": 5},
+                            "progress": 17,
+                            "speed": 23,
+                            "subspeed": 6,
+                            "dir": 2,
+                            "road": road_state,
+                        }
+                    ],
+                    "rail_reservations": [],
+                }
+            ],
+        )
+        write_jsonl(
+            road_oracle,
+            [
+                {
+                    "kind": "metadata",
+                    "schema_version": 2,
+                    "producer": "openttd",
+                    "sample_point": "after_state_game_loop",
+                },
+                {
+                    "kind": "tick",
+                    "tick": 8,
+                    "trains": [],
+                    "road_vehicles": [
+                        {
+                            "vehicle": 13,
+                            "x": 4,
+                            "y": 5,
+                            "progress": 17,
+                            "speed": 23,
+                            "subspeed": 6,
+                            "direction": 2,
+                            **road_state,
+                        }
+                    ],
+                    "rail_reservations": [],
+                },
+            ],
+        )
+        run(
+            sys.executable,
+            "scripts/normalize_pbs_trace.py",
+            str(road_raw),
+            str(road_candidate),
+        )
+        run(sys.executable, "scripts/validate_pbs_trace.py", str(road_candidate), "1", "openttdrs")
+        run(sys.executable, "scripts/validate_pbs_trace.py", str(road_oracle), "1", "openttd")
+        run(
+            sys.executable,
+            "scripts/compare_pbs_traces.py",
+            str(road_oracle),
+            str(road_candidate),
+            "--scope",
+            "road",
+        )
+
         html = work / "trace.html"
         fixture = (
             ROOT

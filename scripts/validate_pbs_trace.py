@@ -41,6 +41,7 @@ def main() -> None:
         fail(f"metadata producer debe ser {expected_producer}")
     if metadata.get("schema_version") not in {1, 2}:
         fail("schema_version PBS no soportada")
+    schema_version = metadata["schema_version"]
     allowed_tick_points = {"after_state_game_loop", "after_game_state_step"}
     tick_point = metadata.get("tick_sample_point", metadata.get("sample_point"))
     if tick_point not in allowed_tick_points:
@@ -80,6 +81,8 @@ def main() -> None:
                     ):
                         fail("unidad PBS inválida")
         for road in row.get("road_vehicles", []):
+            if schema_version < 2:
+                fail("road_vehicles requiere schema_version PBS 2")
             if not all(
                 isinstance(road.get(field), int)
                 for field in (

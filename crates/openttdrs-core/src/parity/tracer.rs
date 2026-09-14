@@ -12,8 +12,8 @@ use crate::vehicle::VehicleKind;
 use crate::{GameState, rail_signals, refit, road_movement, station};
 
 use super::record::{
-    ParityEvent, RailPartRecord, RailRecord, RailReservationRecord, SpeedTrend, TickRecord,
-    VehicleRecord, derive_vehicle_state, order_kind_name,
+    ParityEvent, RailPartRecord, RailRecord, RailReservationRecord, RoadVehicleRecord, SpeedTrend,
+    TickRecord, VehicleRecord, derive_vehicle_state, order_kind_name,
 };
 
 /// Estado mínimo del tick anterior para derivar eventos por diff.
@@ -462,6 +462,26 @@ fn diff_events(
     events
 }
 
+fn road_snapshot(v: &crate::Vehicle) -> Option<RoadVehicleRecord> {
+    if !v.is_consist_head()
+        || !matches!(
+            v.kind,
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+        )
+    {
+        return None;
+    }
+    Some(RoadVehicleRecord {
+        state: v.road_state,
+        frame: v.frame,
+        blocked_ctr: v.blocked_ctr,
+        overtaking: v.overtaking,
+        overtaking_ctr: v.overtaking_ctr,
+        crashed_ctr: v.crashed_ctr,
+        reverse_ctr: v.reverse_ctr,
+    })
+}
+
 fn vehicle_record(v: &crate::Vehicle, rail: Option<RailRecord>) -> VehicleRecord {
     VehicleRecord {
         id: v.id,
@@ -482,6 +502,7 @@ fn vehicle_record(v: &crate::Vehicle, rail: Option<RailRecord>) -> VehicleRecord
         cargo: v.cargo,
         depart_turn: v.depart_turn,
         rail,
+        road: road_snapshot(v),
     }
 }
 

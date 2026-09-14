@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convierte la traza JSONL de parity_runner al contrato PBS externo v1."""
+"""Convierte parity_runner al contrato PBS externo v1/v2."""
 
 from __future__ import annotations
 
@@ -27,10 +27,17 @@ def main() -> None:
     if not records:
         fail("traza candidata vacía")
 
+    has_road = any(
+        isinstance(vehicle, dict) and isinstance(vehicle.get("road"), dict)
+        for record in records
+        for vehicle in record.get("vehicles", [])
+    )
+    schema_version = 2 if has_road else 1
+
     rows: list[dict[str, object]] = [
         {
             "kind": "metadata",
-            "schema_version": 1,
+            "schema_version": schema_version,
             "producer": "openttdrs",
             "tick_sample_point": "after_game_state_step",
             "source_path": str(source),
@@ -38,23 +45,46 @@ def main() -> None:
     ]
     for record in records:
         trains = []
+        road_vehicles = []
         for vehicle in record.get("vehicles", []):
             rail = vehicle.get("rail")
-            if rail is None:
-                continue
             tile = vehicle["tile"]
-            trains.append(
-                {
-                    "vehicle": vehicle["id"],
-                    "x": tile["x"],
-                    "y": tile["y"],
-                    "progress": vehicle["progress"],
-                    "speed": vehicle["speed"],
-                    "subspeed": vehicle["subspeed"],
-                    "direction": vehicle["dir"],
-                }
-            )
+            if rail is not None:
+                trains.append(
+                    {
+                        "vehicle": vehicle["id"],
+                        "x": tile["x"],
+                        "y": tile["y"],
+                        "progress": vehicle["progress"],
+                        "speed": vehicle["speed"],
+                        "subspeed": vehicle["subspeed"],
+                        "direction": vehicle["dir"],
+                    }
+                )
+            road = vehicle.get("road")
+            if road is not None:
+                road_vehicles.append(
+                    {
+                        "vehicle": vehicle["id"],
+                        "x": tile["x"],
+                        "y": tile["y"],
+                        "progress": vehicle["progress"],
+                        "speed": vehicle["speed"],
+                        "subspeed": vehicle["subspeed"],
+                        "direction": vehicle["dir"],
+                        "state": road["state"],
+                        "frame": road["frame"],
+                        "blocked_ctr": road["blocked_ctr"],
+                        "overtaking": road["overtaking"],
+                        "overtaking_ctr": road["overtaking_ctr"],
+                        "crashed_ctr": road["crashed_ctr"],
+                        "reverse_ctr": road["reverse_ctr"],
+                    }
+                )
         trains.sort(key=lambda train: (train["x"], train["y"], train["vehicle"]))
+        road_vehicles.sort(
+            key=lambda vehicle: (vehicle["x"], vehicle["y"], vehicle["vehicle"])
+        )
         reservations = [
             {
                 "x": reservation["tile"]["x"],
@@ -69,6 +99,7 @@ def main() -> None:
                 "kind": "tick",
                 "tick": record["tick"],
                 "trains": trains,
+                "road_vehicles": road_vehicles,
                 "rail_reservations": reservations,
             }
         )

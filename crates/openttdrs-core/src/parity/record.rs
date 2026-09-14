@@ -76,6 +76,29 @@ pub struct RailRecord {
     pub at_platform: bool,
 }
 
+/// Estado persistible de una cabeza de vehículo de carretera.
+///
+/// Es la proyección que necesita el contrato PBS externo. Los remolques
+/// articulados no se emiten aquí, igual que `OpenTTD` sólo exporta
+/// `IsPrimaryVehicle()`.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct RoadVehicleRecord {
+    /// Estado de conducción (`RVSB_*` / trackdir).
+    pub state: u8,
+    /// Frame dentro de la tabla `_road_drive_data`.
+    pub frame: u8,
+    /// Contador de bloqueo por tráfico.
+    pub blocked_ctr: u16,
+    /// Carril opuesto durante adelantamiento, o 0.
+    pub overtaking: u8,
+    /// Contador de ticks de adelantamiento.
+    pub overtaking_ctr: u8,
+    /// Animación / eliminación tras choque.
+    pub crashed_ctr: u16,
+    /// Ventana para ejecutar una reversa vial forzada.
+    pub reverse_ctr: u8,
+}
+
 /// Reserva PBS observada directamente en una tesela del mapa.
 ///
 /// Es independiente del ID de vehículo para que una traza emitida por `OpenTTD`
@@ -112,6 +135,10 @@ pub struct VehicleRecord {
     /// Bloque ferroviario (solo trenes; ausente en el JSONL para el resto).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rail: Option<RailRecord>,
+    /// Estado vial de la cabeza de un vehículo de carretera. Ausente para
+    /// trenes, barcos, aeronaves y unidades articuladas secundarias.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub road: Option<RoadVehicleRecord>,
 }
 
 /// Tendencia de velocidad (para detectar inicio de aceleración/frenado).

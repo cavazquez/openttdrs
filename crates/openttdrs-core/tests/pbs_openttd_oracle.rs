@@ -342,4 +342,30 @@ fn rich_fixture_matches_native_after_unresolved_train_line_end() {
         (12_400, TileCoord::new(20, 40), 1, 10, 160, 5, 2),
         "el fallback ferroviario debe coincidir con el replay nativo"
     );
+
+    // El segundo retorno ocurre en el tick 12465. Al invertir desde el
+    // pixel interior 12, `ReverseTrainSwapVeh` conserva el complemento 4;
+    // una corrección que trate cualquier fin de vía como pixel 0 desplaza el
+    // siguiente retorno varios ticks antes.
+    for _ in 0..65 {
+        state.step();
+    }
+    let train = state
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.kind == VehicleKind::Train)
+        .expect("tren rico");
+    assert_eq!(
+        (
+            state.tick.get(),
+            train.pos,
+            train.progress,
+            train.cur_speed,
+            train.subspeed,
+            train.direction,
+            train.rail_pixel,
+        ),
+        (12_465, TileCoord::new(20, 40), 2, 1, 0, 1, 4),
+        "la reversa ferroviaria debe conservar el complemento del pixel interior"
+    );
 }

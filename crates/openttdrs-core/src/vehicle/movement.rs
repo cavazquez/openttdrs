@@ -498,7 +498,7 @@ impl super::model::Vehicle {
             // distinguir una vía continua de un extremo; conservan el
             // comportamiento conservador anterior en ese caso.
             if map.is_none() {
-                self.reverse_at_line_end(result.advance - advance_distance);
+                self.reverse_at_line_end(result.advance - advance_distance, true);
                 return;
             }
 
@@ -517,15 +517,8 @@ impl super::model::Vehicle {
                         // `TrainController`: el avance intentado se descuenta
                         // aun cuando `TrainApproachingLineEnd` invierte, y el
                         // remanente guardado es `j - adv_spd`.
-                        self.reverse_at_line_end(j.saturating_sub(adv_spd));
-                        // Tras invertir en un extremo sin salida, el
-                        // `TrainController` nativo todavía intenta el
-                        // píxel siguiente dentro de la misma tesela. La
-                        // reserva/ruta reconstruida después se ocupa de
-                        // los extremos que sí tienen una salida válida.
-                        if map.is_some_and(|map| self.train_next_tile_without_path(map).is_none()) {
-                            self.rail_pixel = self.rail_pixel.saturating_add(1).min(15);
-                        }
+                        let remainder = j.saturating_sub(adv_spd);
+                        self.reverse_at_line_end(remainder, false);
                         return;
                     }
                     self.slow_train_at_line_end();
@@ -635,7 +628,7 @@ impl super::model::Vehicle {
                 // `ReverseTrainDirection`; the next locomotive handler must
                 // accelerate from that same fractional state.
                 self.subspeed = 0;
-                self.reverse_at_line_end(j);
+                self.reverse_at_line_end(j, true);
                 return;
             }
             self.rail_pixel = self.rail_pixel.saturating_add(1);
@@ -1734,15 +1727,16 @@ impl super::model::Vehicle {
         self.progress = u8::try_from(result.advance.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
     }
 
-    fn reverse_at_line_end(&mut self, remainder: u32) {
+    fn reverse_at_line_end(&mut self, remainder: u32, edge_pixel_zero: bool) {
         self.direction = super::reverse_direction(self.direction);
         self.cur_speed = 0;
         self.progress = u8::try_from(remainder.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
         let pixel = self.rail_pixel.min(16);
-        // `RailPixelFromPos` maps the tile-boundary coordinate back to zero
-        // after `ReverseTrainSwapVeh`; the usual interior positions use the
-        // complementary 16-based coordinate.
-        self.rail_pixel = if pixel == 15 {
+        // `ReverseTrainSwapVeh` normally uses the complementary 16-based
+        // coordinate. When `TrainController` reverses at an opposing signal,
+        // however, the native edge coordinate remains at pixel 0; a physical
+        // no-next-tile line end uses the complement, including 15 -> 1.
+        self.rail_pixel = if edge_pixel_zero && pixel == 15 {
             0
         } else {
             16_u8.saturating_sub(pixel)

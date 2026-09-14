@@ -442,6 +442,14 @@ fn merge_consist_footprint(
     head_id: u32,
     mut reserved: Vec<ReservedRailStep>,
 ) -> Vec<ReservedRailStep> {
+    // Una lista vacía significa que el segmento actual no requiere PBS
+    // (por ejemplo, un tren importado sin ruta o una red de block signals con
+    // `reserve_paths=false`). El footprint físico no es por sí solo una
+    // reserva nativa: añadir la tesela actual aquí fabrica `m2_hi` aunque
+    // OpenTTD todavía no haya elegido una ruta.
+    if reserved.is_empty() {
+        return reserved;
+    }
     let occupied = crate::train_consist::consist_occupied_tiles_indexed(vehicles, fleet, head_id);
     let existing: HashSet<TileCoord> = reserved.iter().map(|s| s.tile).collect();
     for tile in occupied {

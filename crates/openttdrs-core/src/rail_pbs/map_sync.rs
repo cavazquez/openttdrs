@@ -69,12 +69,18 @@ pub fn sync_reservations_to_map(
     prev_active: &mut HashSet<TileCoord>,
     dirty: &mut Vec<TileCoord>,
 ) {
-    if prev_active.is_empty() {
+    // `OpenTTD` persiste el overlay PBS en MAP2, pero no lo duplica en cada
+    // `Train` al cargar la partida. En la primera pasada del runtime no
+    // podemos saber qué tren era su dueño: conservar esos bits evita borrar
+    // reservas válidas (y también respeta saves con una reserva huérfana que
+    // el oráculo mantiene hasta tocar ese segmento).
+    let preserve_loaded = prev_active.is_empty();
+    if preserve_loaded {
         seed_previous_active(map, prev_active);
     }
 
     let next_tracks = collect_next_tracks(map, vehicles);
-    apply_reservation_map_sync(map, prev_active, &next_tracks, dirty);
+    apply_reservation_map_sync(map, prev_active, &next_tracks, dirty, preserve_loaded);
     *prev_active = next_tracks.keys().copied().collect();
 }
 
@@ -155,6 +161,7 @@ fn apply_reservation_map_sync(
     prev_active: &HashSet<TileCoord>,
     next_tracks: &HashMap<TileCoord, u8>,
     dirty: &mut Vec<TileCoord>,
+    preserve_loaded: bool,
 ) {
     let mut touch = HashSet::new();
     for c in prev_active.iter().chain(next_tracks.keys()) {
@@ -162,6 +169,13 @@ fn apply_reservation_map_sync(
     }
 
     for c in touch {
+        // Las reservas encontradas al arrancar una partida no tienen todavía
+        // propietario en `Vehicle::reserved_steps`. No las conviertas en una
+        // liberación artificial; una reserva runtime sí entra en `prev_active`
+        // después de esta pasada y conserva la semántica de transición normal.
+        if preserve_loaded && !next_tracks.contains_key(&c) {
+            continue;
+        }
         let Some(mut tile) = map.get(c) else {
             continue;
         };

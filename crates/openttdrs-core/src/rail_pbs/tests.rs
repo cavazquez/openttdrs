@@ -214,6 +214,55 @@ fn sync_sets_m2_reservation_bits_on_rail() {
 }
 
 #[test]
+fn sync_preserves_map_reservation_loaded_before_runtime_ownership() {
+    let mut state = GameState::new(8, 4);
+    let tile = TileCoord::new(2, 1);
+    state.map.set_kind(tile, TileKind::Rail).expect("vía");
+    let mut data = state.map.get(tile).expect("vía");
+    data.m5 = RAIL_TB_HORZ;
+    data.m2_hi = encode_rail_reservation_to_m2_hi(RAIL_TB_HORZ);
+    state.map.set_tile(tile, data).expect("reserva cargada");
+
+    let mut active = HashSet::new();
+    let mut dirty = Vec::new();
+    sync_reservations_to_map(&mut state.map, &state.vehicles, &mut active, &mut dirty);
+
+    assert_eq!(
+        decode_rail_reservation_m2_hi(state.map.get(tile).expect("vía").m2_hi),
+        RAIL_TB_HORZ,
+        "la primera pasada no debe borrar MAP2 importado"
+    );
+}
+
+#[test]
+fn incremental_reservations_do_not_reserve_a_train_without_pbs_path() {
+    let mut state = GameState::new(8, 4);
+    let tile = TileCoord::new(2, 1);
+    state.map.set_kind(tile, TileKind::Rail).expect("vía");
+    let mut data = state.map.get(tile).expect("vía");
+    data.m5 = 0x01;
+    state.map.set_tile(tile, data).expect("vía");
+
+    let mut train = Vehicle::new(1, VehicleKind::Train, tile, tile);
+    train.running = true;
+    state.vehicles = vec![train];
+
+    crate::rail_pbs::update_train_reservations_incremental_with_wormholes(
+        &state.map,
+        &mut state.vehicles,
+        crate::pathfinding_settings::PathfindingSettings::default(),
+        None,
+    );
+
+    assert!(state.vehicles[0].reserved_steps.is_empty());
+    assert_eq!(
+        decode_rail_reservation_m2_hi(state.map.get(tile).expect("vía").m2_hi),
+        0,
+        "sin ruta PBS no debe escribir bits de reserva en MAP2"
+    );
+}
+
+#[test]
 fn sync_sets_m5_reservation_bits_on_rail_bridge_ramps() {
     let mut state = GameState::new(8, 4);
     let west = TileCoord::new(2, 1);

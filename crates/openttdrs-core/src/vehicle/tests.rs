@@ -157,6 +157,27 @@ fn train_without_resolved_path_keeps_native_acceleration() {
     // TrainLocoHandler y AM_ORIGINAL suma acceleration * 2 por llamada.
     assert_eq!(train.cur_speed, 0);
     assert_eq!(train.subspeed, 96);
+
+    // `TrainLocoHandler` conserva el remanente de distancia de la segunda
+    // llamada aunque todavía no haya una ruta que permita cambiar de tesela.
+    for _ in 0..5 {
+        train.step_with_map_and_accel_and_catalog(
+            None,
+            crate::engine::TrainAccelerationModel::Original,
+            &[],
+        );
+    }
+    assert_eq!(train.progress, 2);
+
+    for _ in 0..23 {
+        train.step_with_map_and_accel_and_catalog(
+            None,
+            crate::engine::TrainAccelerationModel::Original,
+            &[],
+        );
+    }
+    assert_eq!(train.cur_speed, 0);
+    assert_eq!(train.direction, super::super::reverse_direction(DIR_NE));
 }
 
 #[test]

@@ -412,6 +412,24 @@ impl super::model::Vehicle {
             if self.cur_speed == 0 && self.pos == self.dest {
                 self.advance_destination_after_arrival_with_catalog(engine_catalog);
             }
+            let advance_distance = get_advance_distance(self.direction);
+            // `255` es el ancla de llegada/carga de una estación, no un
+            // remanente físico que deba disparar el fin de vía.
+            if result.advance >= advance_distance && self.progress != 255 {
+                // `TrainController` se ejecuta aunque todavía no haya un
+                // path cacheado. En un fin de vía nativo invierte el consist,
+                // detiene la velocidad y deja el remanente del intento para
+                // la próxima posición; no se debe descartar como si fuera un
+                // tren estático.
+                self.reverse_at_line_end(result.advance - advance_distance);
+            } else {
+                // Igual que `TrainLocoHandler`: `DoUpdateSpeed` limpia el
+                // campo y el handler vuelve a guardar `j` antes de retornar.
+                // La segunda llamada del mismo tick debe recibir este
+                // remanente en `prior_progress`.
+                self.progress =
+                    u8::try_from(result.advance.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
+            }
             return;
         }
 
@@ -1121,6 +1139,18 @@ impl super::model::Vehicle {
         self.rail_tile_history.clear();
         self.depart_turn = 0;
         self.progress = 0;
+    }
+
+    /// Equivalente acotado de `TrainApproachingLineEnd` +
+    /// `ReverseTrainDirection` cuando `TrainController` no tiene una ruta
+    /// cacheada para la siguiente tesela.
+    fn reverse_at_line_end(&mut self, remainder: u32) {
+        self.direction = super::reverse_direction(self.direction);
+        self.cur_speed = 0;
+        self.progress = u8::try_from(remainder.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
+        self.rail_pixel = 16_u8.saturating_sub(self.rail_pixel.min(16));
+        self.rail_tile_history.clear();
+        self.depart_turn = 0;
     }
 
     #[must_use]

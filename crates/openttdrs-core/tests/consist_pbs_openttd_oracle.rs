@@ -114,7 +114,7 @@ fn imports_consist_2wagon_with_three_chained_units() {
 #[test]
 fn oracle_trace_declares_schema_v2_with_units() {
     let rows = load_oracle();
-    assert_eq!(rows.len(), 42, "metadata + initial + 40 ticks");
+    assert_eq!(rows.len(), 502, "metadata + initial + 500 ticks");
     assert_eq!(rows[0].kind, "metadata");
     assert_eq!(rows[0].schema_version, Some(2));
     assert_eq!(rows[0].producer.as_deref(), Some("openttd"));
@@ -129,7 +129,7 @@ fn oracle_trace_declares_schema_v2_with_units() {
 }
 
 #[test]
-fn rust_matches_openttd_consist_oracle_for_forty_ticks() {
+fn rust_matches_openttd_consist_oracle_for_five_hundred_ticks() {
     let oracle = load_oracle();
     let raw = std::fs::read(fixture_path("train_consist_2wagon_pbs_15_3.sav")).expect("fixture");
     let sav = sav::load(&raw).expect("load");

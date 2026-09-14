@@ -202,6 +202,7 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
     let mut total_cap = 0_u32;
     let mut total_weight = 0_u16;
     let mut total_power = 0_u32;
+    let mut max_te_weighted = 0_u32;
     let mut cargo_type = None;
     let mut tilt = true;
     let mut curve_mod = i16::MAX;
@@ -281,6 +282,25 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
             crate::newgrf_callback::vehicle_power_hp(eng, v)
         };
         total_power = total_power.saturating_add(unit_power);
+        // `GroundVehicle::PowerChanged` sums tractive effort only for units
+        // that actually provide power.  It uses each unit's own weight (plus
+        // cargo and, for powered wagons, `pow_wag_weight`), not the total
+        // consist weight.  Using `total_weight * head_te` makes a locomotive
+        // gain the wagons' mass as extra tractive effort and diverges as soon
+        // as a long consist reaches a low-speed braking/acceleration branch.
+        if unit_power > 0 || v.powered_wagon {
+            let powered_unit_weight =
+                unit_weight
+                    .saturating_add(cargo_weight)
+                    .saturating_add(if v.powered_wagon {
+                        head_pow_wag_weight
+                    } else {
+                        0
+                    });
+            let te = crate::newgrf_callback::vehicle_tractive_effort(eng, v);
+            max_te_weighted = max_te_weighted
+                .saturating_add(u32::from(powered_unit_weight).saturating_mul(u32::from(te)));
+        }
         if capacity > 0 {
             total_cap = total_cap.saturating_add(capacity);
             if cargo_type.is_none() {
@@ -320,16 +340,13 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
     if total_cap == 0 {
         total_cap = crate::vehicle::VEHICLE_CAPACITY;
     }
-    let te_coeff = vehicles.iter_mut().find(|v| v.id == head_id).map_or_else(
-        || crate::engine::engine_tractive_effort(head_eng),
-        |head| crate::newgrf_callback::vehicle_tractive_effort(head_eng, head),
-    );
     if let Some(head) = vehicles.iter_mut().find(|v| v.id == head_id) {
         head.cached_total_length = total_len.max(u16::from(super::VEHICLE_LENGTH));
         head.capacity = total_cap;
         head.cached_power_hp = total_power;
         head.cached_weight_t = total_weight.max(1);
-        head.cached_max_te_n = crate::engine::train_max_te_n(head.cached_weight_t, te_coeff);
+        head.cached_max_te_n =
+            max_te_weighted.saturating_mul(crate::engine::GROUND_ACCELERATION) / 256;
         let parts = u32::try_from(ids.len()).unwrap_or(1);
         head.cached_air_drag = crate::engine::engine_air_drag(head_eng, parts);
         head.cached_tilt = tilt;

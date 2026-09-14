@@ -1,9 +1,10 @@
 //! Lógica de movimiento del vehículo: step, progress, dirección, velocidad.
 
 use crate::engine::{
-    ROAD_ACCEL_ORIGINAL, TrainAccelerationModel, decelerate_road_speed, engine_air_drag,
-    engine_tractive_effort, get_advance_distance, progress_step_for_speed, train_max_te_n,
-    train_realistic_station_max_speed, update_road_speed, update_train_speed,
+    ROAD_ACCEL_ORIGINAL, TrainAccelerationModel, decelerate_road_speed, do_update_speed,
+    engine_air_drag, engine_tractive_effort, get_advance_distance, progress_step_for_speed,
+    train_max_te_n, train_realistic_braking_acceleration, train_realistic_station_max_speed,
+    update_road_speed, update_train_speed,
 };
 use crate::map::{Map, TileCoord, slope_pixel_z};
 use crate::rail_type::rail_type_from_tile;
@@ -284,11 +285,22 @@ impl super::model::Vehicle {
                 return;
             }
             // `Train::Tick` llama `TrainLocoHandler` dos veces por tick de juego.
-            for _ in 0..2 {
-                if !self.handle_breakdown(self.sim_tick) {
+            let hold_second_handler = self.train_station_departure_hold;
+            for handler in 0..2 {
+                let previous_train_flags = self.train_flags;
+                let breakdown_stopped = self.handle_breakdown(self.sim_tick);
+                if !(breakdown_stopped || handler == 1 && hold_second_handler) {
                     self.train_loco_handler(map, train_accel, engine_catalog);
                 }
+                if handler == 0 && ((self.train_flags ^ previous_train_flags) & (1 << 7)) != 0 {
+                    // `ReverseTrainDirection` swaps the consist before the
+                    // second `TrainLocoHandler`; give that handler a path in
+                    // the new direction even though the fleet-level physical
+                    // swap is completed just after `step` returns.
+                    self.rebuild_line_end_reverse_path(map);
+                }
             }
+            self.train_station_departure_hold = false;
             return;
         }
 
@@ -415,6 +427,23 @@ impl super::model::Vehicle {
         self.apply_immediate_train_turnaround(map, train_accel);
 
         if self.movement_target().is_none() {
+            let already_at_station_anchor = self.cur_speed == 0
+                && self.pos == self.dest
+                && self.path.is_empty()
+                && self.train_station_arrival_target.is_none()
+                && self.rail_pixel == 0
+                && self.progress == 0
+                && self
+                    .current_order_ref()
+                    .is_some_and(|order| order.is_station_like());
+            if already_at_station_anchor {
+                // A vehicle loaded directly on its destination platform is
+                // already at the station; it must open BeginLoading instead
+                // of applying the in-platform stop coordinate as approach
+                // distance.
+                self.finish_arrival_processing_with_catalog(engine_catalog);
+                return;
+            }
             // `Train::UpdateSpeed` no depende de que `TrainController` haya
             // encontrado un siguiente tile. OpenTTD puede conservar la
             // locomotora en la tesela actual (por ejemplo, durante una ruta
@@ -428,7 +457,10 @@ impl super::model::Vehicle {
             self.subspeed = result.subspeed;
             self.apply_train_breakdown_speed_cap(result.advance);
             self.progress = 0;
-            if self.cur_speed == 0 && self.pos == self.dest {
+            if self.cur_speed == 0
+                && self.at_train_movement_destination()
+                && !self.train_station_stop_pending(map)
+            {
                 self.advance_destination_after_arrival_with_catalog(engine_catalog);
             }
             let advance_distance = get_advance_distance(self.direction);
@@ -475,17 +507,22 @@ impl super::model::Vehicle {
 
                 j = j.saturating_sub(adv_spd);
                 self.rail_pixel = self.rail_pixel.saturating_add(1);
-                if self.rail_pixel >= 16 {
+                if self.rail_pixel >= crate::train_movement::rail_pixels_per_tile(self.direction) {
                     self.rail_pixel = 0;
                     if let Some(next) = next {
                         self.path.push_back(next);
                     }
-                    self.advance_one_tile_with_catalog(map, engine_catalog);
+                    self.advance_one_tile_with_catalog_and_accel(map, train_accel, engine_catalog);
                 }
-                if self.cur_speed == 0 || (self.pos == self.dest && self.path.is_empty()) {
+                if self.train_enter_station_if_reached(map, engine_catalog)
+                    || self.cur_speed == 0
+                    || (self.at_train_movement_destination()
+                        && self.path.is_empty()
+                        && !self.train_station_stop_pending(map))
+                {
                     break;
                 }
-                adv_spd = get_advance_distance(self.movement_direction());
+                adv_spd = get_advance_distance(self.direction);
                 if j < adv_spd {
                     break;
                 }
@@ -522,9 +559,23 @@ impl super::model::Vehicle {
         }
 
         let braking = !self.running || self.pbs_stuck;
+        let red_signal_ahead =
+            map.is_some_and(|map| crate::rail_signals::train_approaching_red_signal(map, self));
+        let one_way_line_end_ahead = map.is_some_and(|map| {
+            self.movement_target()
+                .is_some_and(|next| self.train_next_tile_is_oneway_signal_boundary(map, next))
+        });
         let result = self.train_do_update_speed(map, train_accel, braking, engine_catalog);
         self.cur_speed = result.cur_speed;
         self.subspeed = result.subspeed;
+        if (red_signal_ahead || one_way_line_end_ahead)
+            && result.advance >= get_advance_distance(self.direction)
+        {
+            // `TrainCheckIfLineEnds` runs after `UpdateSpeed` in each of the
+            // two locomotive handlers and applies the positional slowdown
+            // even when the current tile is not crossed yet.
+            self.slow_train_at_line_end();
+        }
         self.apply_train_breakdown_speed_cap(result.advance);
         self.progress = 0;
 
@@ -533,7 +584,7 @@ impl super::model::Vehicle {
         }
 
         let mut j = result.advance;
-        let mut adv_spd = get_advance_distance(self.movement_direction());
+        let mut adv_spd = get_advance_distance(self.direction);
         if j < adv_spd {
             self.progress = u8::try_from(j.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
             if let Some(map) = map {
@@ -544,15 +595,35 @@ impl super::model::Vehicle {
 
         loop {
             j -= adv_spd;
-            self.rail_pixel = self.rail_pixel.saturating_add(1);
-            if self.rail_pixel >= 16 {
-                self.rail_pixel = 0;
-                self.advance_one_tile_with_catalog(map, engine_catalog);
+            let entering_oneway_boundary = map.is_some_and(|map| {
+                self.movement_target()
+                    .is_some_and(|next| self.train_next_tile_is_oneway_signal_boundary(map, next))
+            });
+            let crossing_tile_edge = self.rail_pixel.saturating_add(1)
+                >= crate::train_movement::rail_pixels_per_tile(self.direction);
+            if entering_oneway_boundary && crossing_tile_edge && self.train_is_near_line_end() {
+                // The native controller reaches this branch only when the
+                // next pixel would enter the one-way signal tile. `j` is the
+                // unused distance that becomes progress after reversing.
+                // The red-signal branch resets `subspeed` before calling
+                // `ReverseTrainDirection`; the next locomotive handler must
+                // accelerate from that same fractional state.
+                self.subspeed = 0;
+                self.reverse_at_line_end(j);
+                return;
             }
-            if self.cur_speed == 0 || self.movement_target().is_none() {
+            self.rail_pixel = self.rail_pixel.saturating_add(1);
+            if self.rail_pixel >= crate::train_movement::rail_pixels_per_tile(self.direction) {
+                self.rail_pixel = 0;
+                self.advance_one_tile_with_catalog_and_accel(map, train_accel, engine_catalog);
+            }
+            if self.train_enter_station_if_reached(map, engine_catalog)
+                || self.cur_speed == 0
+                || self.movement_target().is_none()
+            {
                 break;
             }
-            adv_spd = get_advance_distance(self.movement_direction());
+            adv_spd = get_advance_distance(self.direction);
             if j < adv_spd {
                 break;
             }
@@ -640,18 +711,29 @@ impl super::model::Vehicle {
         } else {
             engine_air_drag(engine, 1)
         };
-        update_train_speed(
-            self.cur_speed,
-            self.subspeed,
-            self.progress,
-            train_accel,
-            power,
-            weight,
-            te,
-            air,
-            max_speed,
-            braking,
-        )
+        if matches!(train_accel, TrainAccelerationModel::Realistic) && braking {
+            do_update_speed(
+                self.cur_speed,
+                self.subspeed,
+                train_realistic_braking_acceleration(self.cur_speed, power, weight, air, 0, 0),
+                0,
+                max_speed,
+                self.progress,
+            )
+        } else {
+            update_train_speed(
+                self.cur_speed,
+                self.subspeed,
+                self.progress,
+                train_accel,
+                power,
+                weight,
+                te,
+                air,
+                max_speed,
+                braking,
+            )
+        }
     }
 
     /// Distancia en teselas hasta el stop (`Train::GetCurrentMaxSpeed` estación).
@@ -660,9 +742,6 @@ impl super::model::Vehicle {
     /// con parada Middle ≈ `station_ahead - station_length/2`.
     fn realistic_station_distance_to_go(&self, map: &Map) -> Option<i32> {
         if !crate::station::train_on_rail_platform(map, self.pos) {
-            return None;
-        }
-        if self.pos == self.dest {
             return None;
         }
         if !crate::station::train_on_rail_platform(map, self.dest) {
@@ -709,7 +788,8 @@ impl super::model::Vehicle {
             return None;
         }
         let pos_i = platforms.iter().position(|c| *c == self.pos)?;
-        let dest_i = platforms.iter().position(|c| *c == self.dest)?;
+        let stop_target = self.train_station_arrival_target.unwrap_or(self.dest);
+        let dest_i = platforms.iter().position(|c| *c == stop_target)?;
         let going_positive = dest_i > pos_i;
         let station_ahead = if going_positive {
             station_length - i32::try_from(pos_i).unwrap_or(0)
@@ -834,14 +914,14 @@ impl super::model::Vehicle {
             speed = r.cur_speed;
             sub = r.subspeed;
             let mut j = r.advance;
-            let mut adv = get_advance_distance(self.movement_direction());
+            let mut adv = get_advance_distance(self.direction);
             while j >= adv && speed > 0 {
                 j -= adv;
                 pixel = pixel.saturating_add(1);
-                if pixel >= 16 {
+                if pixel >= crate::train_movement::rail_pixels_per_tile(self.direction) {
                     return true;
                 }
-                adv = get_advance_distance(self.movement_direction());
+                adv = get_advance_distance(self.direction);
             }
             progress = u8::try_from(j.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
         }
@@ -897,26 +977,93 @@ impl super::model::Vehicle {
         map: Option<&Map>,
         engine_catalog: &[crate::engine::EngineDef],
     ) {
+        self.advance_one_tile_with_catalog_and_accel(
+            map,
+            TrainAccelerationModel::Original,
+            engine_catalog,
+        );
+    }
+
+    #[allow(clippy::too_many_lines)]
+    pub(crate) fn advance_one_tile_with_catalog_and_accel(
+        &mut self,
+        map: Option<&Map>,
+        train_accel: TrainAccelerationModel,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
         // P2.7: en cruces elegir vía con YAPF y reservar atómicamente al entrar.
-        if self.kind == super::model::VehicleKind::Train
+        let chosen_train_track = if self.kind == super::model::VehicleKind::Train
             && self.is_consist_head()
             && let Some(map) = map
         {
-            let _ = crate::rail_pbs::choose_train_track_on_enter(map, self, None);
-        }
+            crate::rail_pbs::choose_train_track_on_enter(map, self, None)
+        } else {
+            None
+        };
         if let Some(next) = self.path.pop_front() {
-            self.update_direction_step(self.pos, next, map);
+            let previous = self.pos;
+            let entered_dir = crate::rail_signals::dir_from_to(previous, next);
+            let entered_render_dir = chosen_train_track
+                .filter(|chosen| {
+                    chosen.next == next
+                        && entered_dir.is_some_and(|enter_dir| {
+                            map.is_some_and(|map| {
+                                crate::rail_pbs::tile_is_track_choice(map, next, enter_dir)
+                            })
+                        })
+                        && map.is_some_and(|map| {
+                            matches!(
+                                map.get_kind(next),
+                                Some(
+                                    super::super::map::TileKind::Rail
+                                        | super::super::map::TileKind::Station
+                                )
+                            )
+                        })
+                })
+                .and_then(|chosen| {
+                    entered_dir
+                        .map(|enter| match enter & 3 {
+                            0 => 2,
+                            2 => 0,
+                            other => other,
+                        })
+                        .map(|enter| enter * 2 + 1)
+                        .and_then(|enter| {
+                            crate::train_movement::train_render_dir_on_track(
+                                enter,
+                                chosen.track,
+                                0.0,
+                            )
+                        })
+                });
+            if let Some(new_dir) = entered_render_dir {
+                // `TrainController` obtiene el rumbo de `_initial_tile_subcoord`
+                // usando la pista elegida en la tesela que acaba de entrar. Es
+                // distinto del desplazamiento entre teselas en curvas: p. ej.
+                // la entrada norte a LOWER usa `DIR_W` (6), no `DIR_NW` (7).
+                self.set_direction_with_curve_penalty(new_dir, map, train_accel);
+            } else {
+                self.update_direction_step(previous, next, map, train_accel);
+            }
             if self.orders.is_empty() {
                 self.origin = self.pos;
             }
             let left = self.pos;
             self.pos = next;
+            if self.kind == super::model::VehicleKind::Train && self.is_consist_head() {
+                self.train_tile_entered_this_tick = true;
+            }
             self.push_rail_tile_history(left);
             self.push_road_tile_history(left);
-            if self.pos == self.dest && !self.defers_road_station_arrival(map) {
+            if self.at_train_movement_destination()
+                && !self.defers_road_station_arrival(map)
+                && !(self.kind == super::model::VehicleKind::Train
+                    && self.train_station_stop_pending(map))
+            {
                 self.advance_destination_after_arrival_with_catalog(engine_catalog);
             }
-        } else if self.pos == self.dest && !self.defers_road_station_arrival(map) {
+        } else if self.at_train_movement_destination() && !self.defers_road_station_arrival(map) {
             self.advance_destination_after_arrival_with_catalog(engine_catalog);
         } else {
             if matches!(
@@ -937,7 +1084,7 @@ impl super::model::Vehicle {
                 self.pos.y += dy.signum();
             }
             if self.pos != previous {
-                self.update_direction_step(previous, self.pos, map);
+                self.update_direction_step(previous, self.pos, map, train_accel);
                 self.push_road_tile_history(previous);
             }
             if self.orders.is_empty() && self.pos != previous {
@@ -977,6 +1124,128 @@ impl super::model::Vehicle {
                 crate::station::is_connected_bay_road_stop(map, self.pos)
                     || crate::station::is_drive_through_road_stop(map, self.pos)
             })
+    }
+
+    /// `dest` es el extremo geométrico del path, pero `VehicleEnter_Station`
+    /// puede confirmar el stop en el tile siguiente cuando la coordenada
+    /// exacta cae sobre un borde de tesela.
+    #[must_use]
+    fn at_train_movement_destination(&self) -> bool {
+        if let Some(target) = self.train_station_arrival_target {
+            return self.pos == target;
+        }
+        self.pos == self.dest
+    }
+
+    /// Devuelve la posición longitudinal donde `VehicleEnter_Station` acepta
+    /// la llegada dentro de la plataforma actual.
+    ///
+    /// `dest` identifica la tesela de andén, pero `OpenTTD` no llama a
+    /// `TrainEnterStation` al cruzar su borde. `VehicleEnter_Station` vuelve a
+    /// evaluarse en cada movimiento sub-tile y compara la coordenada física
+    /// con `GetTrainStopLocation`; conservar esa frontera es importante para
+    /// trenes más largos que una plataforma y para el remanente del consist.
+    #[must_use]
+    fn train_station_stop_coordinate(&self, map: Option<&Map>) -> Option<u16> {
+        if self.kind != super::model::VehicleKind::Train || !self.is_consist_head() {
+            return None;
+        }
+        let map = map?;
+        let Some(super::order::VehicleOrder::Station {
+            station,
+            stop_location,
+            ..
+        }) = self.current_order_ref().copied()
+        else {
+            return None;
+        };
+        let platform = crate::station::rail_station_platform_track_tiles(map, station, self.pos);
+        let &_first = platform.first()?;
+        let diag = self.direction >> 1;
+        let (dx, dy) = crate::map::diag_dir_offset(diag);
+        let mut tile = self.pos;
+        let mut station_ahead = 0_i32;
+        while platform.contains(&tile) {
+            station_ahead += 16;
+            tile = TileCoord::new(tile.x + dx, tile.y + dy);
+        }
+        if station_ahead == 0 {
+            return None;
+        }
+
+        // `GetTrainStopLocation` measures the platform in sixteenths and
+        // switches to FarEnd when the consist is longer than that platform.
+        let station_length = i32::try_from(platform.len())
+            .unwrap_or(i32::MAX)
+            .saturating_mul(16);
+        let train_length = u16::from(self.unit_length.max(1)).max(self.cached_total_length);
+        let stop = if i32::from(train_length) >= station_length {
+            station_length
+        } else {
+            match stop_location {
+                super::order::OrderStopLocation::NearEnd => i32::from(train_length),
+                super::order::OrderStopLocation::Middle => {
+                    station_length - (station_length - i32::from(train_length)) / 2
+                }
+                super::order::OrderStopLocation::FarEnd => station_length,
+            }
+        };
+        let front_vehicle_half = u16::from(self.unit_length.max(1)).div_ceil(2);
+        let stop = stop.saturating_sub(i32::from(front_vehicle_half));
+        // Igual que `VehicleEnter_Station`: si el punto quedó antes de la
+        // tesela actual, este paso no es una parada válida para ella.
+        if stop + station_ahead - 16 >= station_length {
+            return None;
+        }
+
+        u16::try_from(stop & 0x0F).ok()
+    }
+
+    /// Marca la entrada cuando la posición sub-tile coincide con el stop
+    /// nativo. Devuelve `true` para que el handler no consuma distancia
+    /// adicional después de abrir `BeginLoading`.
+    fn train_enter_station_if_reached(
+        &mut self,
+        map: Option<&Map>,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) -> bool {
+        if self.awaiting_load_window {
+            return true;
+        }
+        let Some(target) = self.train_station_stop_coordinate(map) else {
+            return false;
+        };
+        let coordinate = if self.direction & 1 == 1 {
+            u16::from(self.rail_pixel.min(15))
+        } else {
+            u16::from(self.rail_pixel.min(7))
+                .saturating_mul(2)
+                .saturating_add(1)
+        };
+        if coordinate < target {
+            // `VehicleEnter_Station` applies a positional cap before the
+            // exact stop coordinate.  The next handler must see that cap,
+            // while the distance for this handler still comes from the
+            // speed calculated at its start (as in OpenTTD).
+            let cap = target
+                .saturating_sub(coordinate)
+                .saturating_mul(20)
+                .saturating_sub(15);
+            self.cur_speed = self.cur_speed.min(cap);
+            return false;
+        }
+        if coordinate != target {
+            return false;
+        }
+        self.finish_arrival_processing_with_catalog(engine_catalog);
+        true
+    }
+
+    /// Indica si `dest == pos` pertenece a una orden de estación que aún debe
+    /// recorrer el remanente físico hasta `VehicleEnter_Station`.
+    #[must_use]
+    fn train_station_stop_pending(&self, map: Option<&Map>) -> bool {
+        self.train_station_stop_coordinate(map).is_some()
     }
 
     /// `UpdateInclination` + `AffectSpeedByZChange` (`ground_vehicle.hpp` / `train_cmd.cpp`).
@@ -1026,11 +1295,17 @@ impl super::model::Vehicle {
         self.cur_speed = affect_speed_by_z_change(self.cur_speed, z_diff, rail_idx, max_speed);
     }
 
-    fn update_direction_step(&mut self, from: TileCoord, to: TileCoord, map: Option<&Map>) {
+    fn update_direction_step(
+        &mut self,
+        from: TileCoord,
+        to: TileCoord,
+        map: Option<&Map>,
+        train_accel: TrainAccelerationModel,
+    ) {
         self.set_direction_with_curve_penalty(
             direction_for_path_step(from, to, self.path.front().copied(), self.direction),
             map,
-            TrainAccelerationModel::Original,
+            train_accel,
         );
     }
 
@@ -1168,6 +1443,10 @@ impl super::model::Vehicle {
         &mut self,
         engine_catalog: &[crate::engine::EngineDef],
     ) {
+        if self.train_station_arrival_target == Some(self.pos) {
+            self.dest = self.pos;
+        }
+        self.train_station_arrival_target = None;
         self.path.clear();
         self.depart_turn = 0;
         if self.orders.is_empty() {
@@ -1273,7 +1552,7 @@ impl super::model::Vehicle {
     /// no se inventa una rama, y en una pieza única sí permite que
     /// `TrainController` siga consumiendo la vía nativa.
     #[must_use]
-    fn train_next_tile_without_path(&self, map: &Map) -> Option<TileCoord> {
+    pub(crate) fn train_next_tile_without_path(&self, map: &Map) -> Option<TileCoord> {
         if self.kind != super::model::VehicleKind::Train || !self.is_consist_head() {
             return None;
         }
@@ -1285,6 +1564,58 @@ impl super::model::Vehicle {
         (crate::map::rail_traversal_bits(map, next) & crate::map::rail_bits_touching_side(entry)
             != 0)
             .then_some(next)
+    }
+
+    /// `TrainCheckIfLineEnds` puede ver una señal `PathOneWay` en contra en la
+    /// siguiente tesela sin considerarla una señal roja para el rumbo actual.
+    /// La locomotora, sin embargo, no puede cruzarla: cuando su frente ya está
+    /// cerca del borde debe invertir antes de entrar en esa tesela.
+    #[must_use]
+    fn train_next_tile_is_oneway_signal_boundary(&self, map: &Map, next: TileCoord) -> bool {
+        let Some(tile) = map.get(next) else {
+            return false;
+        };
+        if tile.kind != super::super::map::TileKind::Rail
+            || !crate::rail_signals::rail_tile_is_signals(tile.m5)
+        {
+            return false;
+        }
+        let beyond = if self.path.front() == Some(&next) {
+            self.path.get(1).copied()
+        } else {
+            None
+        }
+        .or_else(|| {
+            let mut probe = self.clone();
+            probe.pos = next;
+            probe.path.clear();
+            probe.train_next_tile_without_path(map)
+        });
+        let Some(beyond) = beyond else {
+            return false;
+        };
+        let Some(exit_dir) = crate::rail_signals::dir_from_to(next, beyond) else {
+            return false;
+        };
+        matches!(
+            crate::rail_signals::yapf_routing_signal(map, next, exit_dir),
+            crate::rail_signals::YapfSignalRouting::DeadEnd
+        )
+    }
+
+    fn rebuild_line_end_reverse_path(&mut self, map: Option<&Map>) {
+        self.path.clear();
+        let Some(map) = map else {
+            return;
+        };
+        let mut probe = self.clone();
+        for _ in 0..4 {
+            let Some(next) = probe.train_next_tile_without_path(map) else {
+                break;
+            };
+            self.path.push_back(next);
+            probe.pos = next;
+        }
     }
 
     /// Posición longitudinal equivalente a `x` en `TrainApproachingLineEnd`.
@@ -1322,11 +1653,66 @@ impl super::model::Vehicle {
         self.cur_speed = self.cur_speed.min(BREAKDOWN_SPEEDS[position]);
     }
 
+    /// Ejecuta la parte física de `TrainLocoHandler` cuando PBS corta el
+    /// avance en el borde de una señal. El controlador nativo todavía procesa
+    /// `UpdateSpeed` antes de detenerse; el handler de modo `true` vuelve a
+    /// actualizar el frenado en el mismo tick y en los siguientes.
+    pub(crate) fn train_wait_at_pbs_signal_with_catalog(
+        &mut self,
+        map: Option<&Map>,
+        train_accel: TrainAccelerationModel,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
+        if !self.pbs_stuck {
+            let result = self.train_do_update_speed(map, train_accel, false, engine_catalog);
+            self.cur_speed = result.cur_speed;
+            self.subspeed = result.subspeed;
+            self.progress = 0;
+
+            let advance_distance = get_advance_distance(self.direction);
+            if result.advance >= advance_distance {
+                self.slow_train_at_line_end();
+                // `TrainController` detecta la señal roja al intentar el
+                // borde y deja el primer handler con velocidad/subspeed cero.
+                let remainder = result.advance - advance_distance;
+                self.cur_speed = 0;
+                self.subspeed = 0;
+                self.progress = u8::try_from(remainder.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
+                self.pbs_stuck = true;
+            } else {
+                self.cur_speed = 0;
+                self.progress =
+                    u8::try_from(result.advance.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
+                return;
+            }
+        }
+
+        // Segundo `TrainLocoHandler` del tick, o único handler efectivo de
+        // los ticks siguientes cuando el primero retorna por `Stuck`.
+        let result = self.train_do_update_speed(map, train_accel, true, engine_catalog);
+        self.cur_speed = result.cur_speed;
+        self.subspeed = result.subspeed;
+        self.progress = u8::try_from(result.advance.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
+    }
+
     fn reverse_at_line_end(&mut self, remainder: u32) {
         self.direction = super::reverse_direction(self.direction);
         self.cur_speed = 0;
         self.progress = u8::try_from(remainder.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
-        self.rail_pixel = 16_u8.saturating_sub(self.rail_pixel.min(16));
+        let pixel = self.rail_pixel.min(16);
+        // `RailPixelFromPos` maps the tile-boundary coordinate back to zero
+        // after `ReverseTrainSwapVeh`; the usual interior positions use the
+        // complementary 16-based coordinate.
+        self.rail_pixel = if pixel == 15 {
+            0
+        } else {
+            16_u8.saturating_sub(pixel)
+        };
+        // `VehicleRailFlag::Reversed` es el bit 7 y se alterna únicamente en
+        // la cabeza al ejecutar `ReverseTrainDirection`. Además de conservar
+        // el contrato SAV/var 0xFE, el loop de flota usa el cambio para
+        // completar el intercambio físico con el último vagón.
+        self.train_flags ^= 1 << 7;
         self.rail_tile_history.clear();
         self.depart_turn = 0;
     }
@@ -1380,7 +1766,7 @@ impl super::model::Vehicle {
             return;
         }
         self.awaiting_load_window = false;
-        if !self.orders.is_empty() && self.pos == self.dest && self.progress == 255 {
+        if !self.orders.is_empty() && self.at_train_movement_destination() {
             self.finish_arrival_after_load_window_with_catalog(engine_catalog);
         }
     }
@@ -1412,10 +1798,15 @@ impl super::model::Vehicle {
             }
             self.awaiting_load_window = true;
             if self.kind == super::model::VehicleKind::Train {
+                // `TrainEnterStation` llama a `BeginLoading`, que sólo pone
+                // `cur_speed` a cero. El `subspeed` y el `progress` restante
+                // pertenecen al mismo `TrainLocoHandler` y se guardan al
+                // retornar; sobrescribirlos aquí salta el remanente físico
+                // de la entrada a plataforma (`train_cmd.cpp`).
                 self.cur_speed = 0;
-                self.subspeed = 0;
+            } else {
+                self.progress = 255;
             }
-            self.progress = 255;
             return;
         }
         self.finish_arrival_after_load_window_with_catalog(engine_catalog);

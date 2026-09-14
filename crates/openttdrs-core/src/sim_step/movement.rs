@@ -169,6 +169,11 @@ pub(super) fn move_vehicles(state: &mut GameState) {
     let tick = state.tick.get();
     let vehicle_count = state.vehicles.len();
     let pf = state.pathfinding;
+    for vehicle in &mut state.vehicles {
+        if vehicle.kind == VehicleKind::Train && vehicle.is_consist_head() {
+            vehicle.train_tile_entered_this_tick = false;
+        }
+    }
     let mut road_traffic = crate::road_movement::RoadTrafficIndex::default();
     road_traffic.rebuild(&state.vehicles);
     let mut train_crashes = crate::ground_crash::TrainCrashIndex::default();
@@ -321,13 +326,22 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             if was_at_station && !state.vehicles[i].awaiting_load_window {
                 state.vehicles[i].sync_order_destination_with_stations(&state.map, &state.stations);
             }
+            if was_at_station && state.vehicles[i].train_station_departure_hold {
+                // La ruta global del tick se ejecutó antes de que la llegada
+                // avanzara la orden. Resolver ahora el próximo andén permite
+                // que `TrainCheckIfLineEnds` invierta en este mismo tick,
+                // como el `OT_LEAVESTATION` nativo.
+                super::routing::reroute_train_after_station_departure(state, i);
+            }
             let head_id = state.vehicles[i].id;
-            if crate::train_consist::reverse_consist_at_stop_indexed(
+            let reversed = crate::train_consist::reverse_consist_at_stop_indexed(
                 &mut state.vehicles,
                 &state.runtime.fleet_index,
                 head_id,
                 &state.map,
-            ) {
+            );
+            if reversed {
+                state.vehicles[i].train_station_departure_hold = false;
                 continue;
             }
         }
@@ -376,16 +390,34 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                     &state.vehicles[i],
                     &state.engine_catalog,
                 );
-            state.vehicles[i].cur_speed = 0;
+            let pbs_stuck_before_wait = state.vehicles[i].pbs_stuck;
+            if waiting_pbs && !head_on && state.vehicles[i].kind == VehicleKind::Train {
+                state.vehicles[i].train_wait_at_pbs_signal_with_catalog(
+                    Some(&state.map),
+                    state.train_acceleration_model,
+                    &state.engine_catalog,
+                );
+            } else {
+                state.vehicles[i].cur_speed = 0;
+            }
             // PBS / head-on: timeout `wait_for_pbs_path`. Señal de bloque: oneway/twoway.
             let steps_before = state.vehicles[i].reserved_steps.clone();
+            let pbs_marked_by_line_end =
+                waiting_pbs && !pbs_stuck_before_wait && state.vehicles[i].pbs_stuck;
             let reversed = if waiting_pbs || head_on {
-                crate::rail_pbs::tick_pbs_wait_and_maybe_reverse(
-                    &state.map,
-                    &mut state.vehicles[i],
-                    pf,
-                    head_on,
-                )
+                if pbs_marked_by_line_end {
+                    // El primer `TrainLocoHandler` que detecta el borde rojo
+                    // marca Stuck, pero el contador empieza en el handler del
+                    // tick siguiente (el segundo handler sólo frena).
+                    false
+                } else {
+                    crate::rail_pbs::tick_pbs_wait_and_maybe_reverse(
+                        &state.map,
+                        &mut state.vehicles[i],
+                        pf,
+                        head_on,
+                    )
+                }
             } else if waiting_signal {
                 crate::rail_pbs::tick_signal_wait_and_maybe_reverse(
                     &state.map,
@@ -455,6 +487,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         let vehicle_id = state.vehicles[i].id;
         let vehicle_kind = state.vehicles[i].kind;
         let vehicle_running = state.vehicles[i].running;
+        let previous_train_flags = state.vehicles[i].train_flags;
         let was_waiting_for_station_load = state.vehicles[i].awaiting_load_window;
         let train_previous_positions: Vec<(usize, crate::TileCoord)> =
             if vehicle_kind == VehicleKind::Train {
@@ -482,6 +515,57 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             &state.engine_catalog,
             state.construction.plane_speed,
         );
+        if vehicle_kind == VehicleKind::Train
+            && state.vehicles[i].is_consist_head()
+            && ((state.vehicles[i].train_flags ^ previous_train_flags) & (1 << 7)) != 0
+        {
+            // La reversa por extremo ocurre dentro del primer
+            // `TrainLocoHandler`; terminar el intercambio antes de proyectar
+            // los seguidores reproduce el nuevo frente en el mismo tick.
+            crate::train_consist::finish_line_end_reverse_indexed(
+                &mut state.vehicles,
+                &state.runtime.fleet_index,
+                vehicle_id,
+            );
+            // El path anterior sigue apuntando al extremo que acaba de
+            // quedar detrás del consist. `ReverseTrainDirection` invalida
+            // esa ruta antes de volver a pedir PBS; reconstruirla desde la
+            // nueva cabeza evita que el segundo handler avance hacia atrás.
+            state.vehicles[i].path.clear();
+            let mut probe = state.vehicles[i].clone();
+            for _ in 0..4 {
+                let Some(next) = probe.train_next_tile_without_path(&state.map) else {
+                    break;
+                };
+                state.vehicles[i].path.push_back(next);
+                probe.pos = next;
+            }
+            let reverse_had_active_reservation = !state.vehicles[i].reserved_steps.is_empty();
+            crate::rail_pbs::free_train_track_reservation(
+                &mut state.map,
+                &mut state.vehicles[i],
+                &mut state.runtime.reservation_tile_dirty,
+            );
+            // `ReverseTrainDirection` vuelve a ejecutar `TryPathReserve`
+            // sobre el frente recién invertido antes de terminar el tick.
+            let reverse_pathfinding =
+                if reverse_had_active_reservation && !state.pathfinding.reserve_paths {
+                    crate::pathfinding_settings::PathfindingSettings {
+                        reserve_paths: true,
+                        ..state.pathfinding
+                    }
+                } else {
+                    state.pathfinding
+                };
+            let reverse_reservation = crate::rail_pbs::try_path_reserve(
+                &mut state.map,
+                &mut state.vehicles,
+                i,
+                false,
+                reverse_pathfinding,
+            );
+            let _ = reverse_reservation;
+        }
         if vehicle_kind == VehicleKind::Train
             && !was_broken_down
             && state.vehicles[i].is_broken_down()

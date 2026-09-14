@@ -23,6 +23,27 @@ El bloque termina sólo con `git commit` y `git push`. La captura raster se usa
 cuando hay compositor WGPU; si el entorno no lo permite, se registra el bloqueo
 y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
+## Etapa publicada — 2026-09-14 — #330 rail/PBS
+
+La frontera ferroviaria del fixture de consist quedó reproducible y exacta: la
+traza Rust coincide con el oráculo OpenTTD 15.3 en `initial` más 500 ticks
+(501 muestras). El caso cubre la entrada y salida de estación, la huella de
+dos vagones, la señal PathOneWay opuesta, el rebote físico en el extremo de
+línea y la reserva PBS que se reconstruye después del giro. La suite específica
+de PBS queda en 32/32 y la regresión diferencial del consist compara también
+las tres unidades, velocidad, `subspeed`, `progress` y reservas en las 501
+muestras.
+
+La selección de pista en cruces conserva la transición entrada→salida completa;
+esto evita interpretar una recta junto a un depósito como un giro y mantiene
+el frenado `_accel_slowdown` sólo para curvas reales.
+
+El ajuste también conserva la cardinalidad nativa de movimiento: una entrada
+cardinal consume ocho posiciones de `rail_pixel`, mientras una entrada
+diagonal consume dieciséis. #330 sigue abierto para los escenarios no cubiertos
+por este fixture: cruces y desempates YAPF grandes, presignals completas,
+tráfico complejo y redes aire/mar.
+
 ## Handoff de issues — 2026-09-08
 
 ### Lote acotado solicitado: Road/Rail, SAV y UI

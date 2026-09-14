@@ -461,6 +461,11 @@ fn route_station_bound_trains(
                 && vehicle.is_consist_head()
                 && vehicle.running
                 && vehicle.path.is_empty()
+                // `OT_LOADING` mantiene el destino físico en el andén hasta
+                // que `HandleLoading` cierra la parada. No volver a adjudicar
+                // otro andén durante esa ventana: ProcessOrders nativo tampoco
+                // reescribe la orden mientras el tren está cargando.
+                && !vehicle.awaiting_load_window
                 // Un fallo de ruta ya se registra en esta bandera. Reintentar
                 // la misma búsqueda YAPF en cada tick vuelve a congelar una
                 // partida importada hasta que cambie la red u órdenes.
@@ -489,9 +494,15 @@ fn route_station_bound_trains(
         if crate::rail_pbs::track_on_departure_tile(&state.map, from, to).is_some()
             && crate::rail_pbs::track_for_rail_step(&state.map, from, to).is_some()
         {
-            let train = &mut state.vehicles[index];
-            train.path = VecDeque::from([to]);
-            train.no_network_route_to_order = false;
+            let Some(crate::vehicle::VehicleOrder::Station {
+                station,
+                stop_location,
+                ..
+            }) = state.vehicles[index].current_order_ref().copied()
+            else {
+                continue;
+            };
+            assign_train_station_route(state, index, station, stop_location, to, vec![to]);
             station_route_resolved[index] = true;
             continue;
         }
@@ -505,6 +516,95 @@ fn route_station_bound_trains(
         );
     }
     (station_route_resolved, profile)
+}
+
+/// Recalcula únicamente el próximo andén de un tren cuya orden avanzó durante
+/// `LoadUnloadStation`. La pasada normal de routing ocurre antes de
+/// `Train::Tick`; este punto reproduce el `ProcessOrders` que `OpenTTD` ejecuta
+/// al cerrar `OT_LOADING`, sin rehacer las rutas de toda la flota.
+pub(super) fn reroute_train_after_station_departure(state: &mut GameState, vehicle_idx: usize) {
+    let Some(vehicle) = state.vehicles.get(vehicle_idx) else {
+        return;
+    };
+    if vehicle.kind != VehicleKind::Train
+        || !vehicle.is_consist_head()
+        || !matches!(
+            vehicle.current_order_ref(),
+            Some(crate::vehicle::VehicleOrder::Station { .. })
+        )
+    {
+        return;
+    }
+    let wormholes =
+        pathfinder::TunnelWormholes::from_jgr_records(&state.map, &state.jgr_tunnels_from_footer);
+    let wh = (!wormholes.is_empty()).then_some(&wormholes);
+    let mut claimed_platform_tiles = HashSet::new();
+    let platform_occupancy = TrainPlatformOccupancy::from_state(state);
+    let mut profile = StationRouteProfile::default();
+    let _ = route_train_to_available_platform(
+        state,
+        vehicle_idx,
+        wh,
+        &mut claimed_platform_tiles,
+        &platform_occupancy,
+        &mut profile,
+    );
+}
+
+/// Conserva el destino geométrico que usa YAPF y, sólo cuando el controlador
+/// ferroviario lo necesita, añade el tile contiguo donde se confirma la
+/// llegada. El destino geométrico no se reemplaza: hacerlo cambia la ruta y
+/// las reservas varios ticks antes del stop real.
+fn assign_train_station_route(
+    state: &mut GameState,
+    vehicle_idx: usize,
+    station: TileCoord,
+    stop_location: crate::vehicle::OrderStopLocation,
+    candidate: TileCoord,
+    mut path: Vec<TileCoord>,
+) {
+    let (from, direction, train_length) = {
+        let vehicle = &state.vehicles[vehicle_idx];
+        (vehicle.pos, vehicle.direction, vehicle.cached_total_length)
+    };
+    let controller_target = crate::station::rail_station_controller_stop_tile_for_platform_osl(
+        &state.map,
+        station,
+        from,
+        candidate,
+        stop_location,
+        train_length,
+    );
+    let previous = if path.len() >= 2 {
+        path[path.len() - 2]
+    } else {
+        from
+    };
+    let can_extend =
+        path.last().copied() == Some(candidate) || (path.is_empty() && from == candidate);
+    let route_heading = if path.is_empty() && from == candidate {
+        direction
+    } else {
+        crate::vehicle::direction_from_tile_step(previous, candidate)
+    };
+    let same_heading = controller_target.is_some_and(|target| {
+        route_heading == crate::vehicle::direction_from_tile_step(candidate, target)
+    });
+    let arrival_target = controller_target.filter(|&target| {
+        target != candidate
+            && can_extend
+            && same_heading
+            && crate::rail_pbs::track_on_departure_tile(&state.map, candidate, target).is_some()
+            && crate::rail_pbs::track_for_rail_step(&state.map, candidate, target).is_some()
+    });
+    if let Some(target) = arrival_target {
+        path.push(target);
+    }
+    let train = &mut state.vehicles[vehicle_idx];
+    train.dest = candidate;
+    train.path = VecDeque::from(path);
+    train.train_station_arrival_target = arrival_target;
+    train.no_network_route_to_order = false;
 }
 
 fn nanos(start: Instant) -> u64 {
@@ -522,22 +622,31 @@ fn route_train_to_available_platform(
     platform_occupancy: &TrainPlatformOccupancy,
     profile: &mut StationRouteProfile,
 ) -> bool {
-    let vehicle = &state.vehicles[vehicle_idx];
+    let (from, vehicle_id, engine_id, cached_total_length) = {
+        let vehicle = &state.vehicles[vehicle_idx];
+        (
+            vehicle.pos,
+            vehicle.id,
+            vehicle.engine_id,
+            vehicle.cached_total_length,
+        )
+    };
+    let order = state.vehicles[vehicle_idx].current_order_ref().copied();
     let Some(crate::vehicle::VehicleOrder::Station {
         station,
         stop_location,
         ..
-    }) = vehicle.current_order_ref().copied()
+    }) = order
     else {
         return false;
     };
-    let from = vehicle.pos;
+    state.vehicles[vehicle_idx].train_station_arrival_target = None;
     let candidates = crate::station::rail_station_stop_candidates_osl(
         &state.map,
         station,
         from,
         stop_location,
-        vehicle.cached_total_length,
+        cached_total_length,
     );
     profile.candidates = profile
         .candidates
@@ -552,10 +661,7 @@ fn route_train_to_available_platform(
     // actual vaya primero y eso disparaba YAPF hacia plataformas remotas en
     // cada tick aunque el tren ya hubiera llegado.
     if candidates.contains(&from) {
-        let train = &mut state.vehicles[vehicle_idx];
-        train.dest = from;
-        train.path.clear();
-        train.no_network_route_to_order = false;
+        assign_train_station_route(state, vehicle_idx, station, stop_location, from, Vec::new());
         return true;
     }
 
@@ -572,7 +678,7 @@ fn route_train_to_available_platform(
             .any(|tile| claimed_platform_tiles.contains(tile));
         let occupied = platform_occupancy.platform_reserved_or_occupied(
             &platform,
-            vehicle.id,
+            vehicle_id,
             &no_prior_reservations,
         );
         let path = if from == candidate {
@@ -584,7 +690,7 @@ fn route_train_to_available_platform(
                 from,
                 candidate,
                 wormholes,
-                vehicle.engine_id,
+                engine_id,
                 &state.engine_catalog,
             );
             profile.record_path(nanos(started), path.is_some());
@@ -603,10 +709,7 @@ fn route_train_to_available_platform(
             continue;
         }
         claimed_platform_tiles.extend(platform);
-        let train = &mut state.vehicles[vehicle_idx];
-        train.dest = candidate;
-        train.path = VecDeque::from(path);
-        train.no_network_route_to_order = false;
+        assign_train_station_route(state, vehicle_idx, station, stop_location, candidate, path);
         return true;
     }
 
@@ -618,12 +721,10 @@ fn route_train_to_available_platform(
         // En particular, su tren actual debe poder conservar la ruta hasta el
         // punto de parada y luego salir; adjudicárselo a un tren en espera lo
         // dejaba sin path y congelaba toda la cola.
-        let train = &mut state.vehicles[vehicle_idx];
-        train.dest = candidate;
-        train.path = VecDeque::from(path);
-        train.no_network_route_to_order = false;
+        assign_train_station_route(state, vehicle_idx, station, stop_location, candidate, path);
         return true;
     }
+    state.vehicles[vehicle_idx].train_station_arrival_target = None;
     state.vehicles[vehicle_idx].no_network_route_to_order = true;
     state.vehicles[vehicle_idx].path.clear();
     true

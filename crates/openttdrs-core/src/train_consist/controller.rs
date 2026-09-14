@@ -187,6 +187,62 @@ pub fn reverse_consist_at_stop_indexed(
     reverse_consist_at_stop_slots(vehicles, head_index, &slots)
 }
 
+/// Completa el intercambio físico de una formación después de que la cabeza
+/// haya detectado un extremo de vía dentro de `Vehicle::step`.
+///
+/// `TrainLocoHandler` nativo invierte la cabeza y cambia las poses de toda la
+/// cadena antes de consumir el remanente del mismo handler. El movimiento de
+/// una unidad se ejecuta con `&mut Vehicle`, por lo que el loop de simulación
+/// termina el intercambio justo después de ese handler y antes de propagar
+/// las poses derivadas. La cabeza ya conserva velocidad, `progress` y rumbo
+/// invertido; aquí sólo se coloca en la pose física del antiguo último vagón.
+pub(crate) fn finish_line_end_reverse_indexed(
+    vehicles: &mut [Vehicle],
+    fleet: &crate::fleet_index::FleetIndex,
+    head_id: u32,
+) -> bool {
+    let slots: Vec<usize> = fleet
+        .consist(head_id)
+        .iter()
+        .filter_map(|&id| fleet.slot(id))
+        .collect();
+    let Some(&head_slot) = slots.first() else {
+        return false;
+    };
+    let Some(&tail_slot) = slots.last() else {
+        return false;
+    };
+    let Some(tail) = vehicles.get(tail_slot) else {
+        return false;
+    };
+    let tail_pose = (
+        tail.pos,
+        tail.rail_pixel,
+        tail.direction,
+        tail.curve_prev_direction,
+        tail.z_pos,
+    );
+    let Some(head) = vehicles.get_mut(head_slot) else {
+        return false;
+    };
+
+    // `ReverseTrainSwapVeh` intercambia la posición continua del último
+    // vehículo y `UpdateStatusAfterSwap` vuelve a calcular su pixel con el
+    // rumbo opuesto. La convención de movimiento conserva el borde como
+    // `16 - pixel`, igual que `reverse_at_line_end` para la cabeza original.
+    head.pos = tail_pose.0;
+    let tail_pixel = tail_pose.1.min(16);
+    head.rail_pixel = if tail_pixel == 15 {
+        0
+    } else {
+        16_u8.saturating_sub(tail_pixel)
+    };
+    head.direction = reverse_direction(tail_pose.2);
+    head.curve_prev_direction = reverse_direction(tail_pose.3);
+    head.z_pos = tail_pose.4;
+    true
+}
+
 fn reverse_consist_at_stop_slots(
     vehicles: &mut [Vehicle],
     head_index: usize,
@@ -235,7 +291,10 @@ fn reverse_consist_at_stop_slots(
         unit.direction = reverse_direction(old_exit);
         unit.curve_prev_direction = reverse_direction(old_enter);
         unit.rail_pixel = 15_u8.saturating_sub(rail_pixel.min(15));
-        unit.progress = 0;
+        // `ReverseTrainSwapVeh` no resetea `progress`: la unidad conserva la
+        // distancia sobrante del handler que acaba de invertirla. En
+        // particular, una llegada a estación puede terminar con progress=15
+        // y la reversa del siguiente tick debe conservarlo.
         unit.depart_turn = 0;
         unit.cur_speed = 0;
         unit.subspeed = 0;

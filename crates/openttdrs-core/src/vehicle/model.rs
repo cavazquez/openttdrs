@@ -478,6 +478,18 @@ pub struct Vehicle {
     /// `VehicleDeparts` antes de iniciar el movimiento siguiente.
     #[serde(skip)]
     pub(crate) station_departure_pending: bool,
+    /// La segunda pasada de `TrainLocoHandler` aún debe limitarse a la salida
+    /// de estación (`OT_LEAVESTATION`) del tick actual.
+    #[serde(skip, default)]
+    pub(crate) train_station_departure_hold: bool,
+    /// Tile físico donde el controlador confirma un stop ferroviario cuando
+    /// el destino geométrico del path queda un tile antes del borde exacto.
+    #[serde(skip, default)]
+    pub(crate) train_station_arrival_target: Option<TileCoord>,
+    /// `TrainController` acaba de entrar en una tesela durante este tick.
+    /// `CheckNextTrainTile` sólo extiende PBS en ese borde o por backoff.
+    #[serde(skip, default)]
+    pub(crate) train_tile_entered_this_tick: bool,
     /// Ignorar señal roja en el próximo paso de simulación (trenes).
     #[serde(default)]
     pub force_proceed: bool,
@@ -885,6 +897,9 @@ impl Vehicle {
             depart_turn: 0,
             awaiting_load_window: false,
             station_departure_pending: false,
+            train_station_departure_hold: false,
+            train_station_arrival_target: None,
+            train_tile_entered_this_tick: false,
             force_proceed: false,
             wait_counter: 0,
             depot_leave_cleared: true,
@@ -1109,6 +1124,7 @@ impl Vehicle {
         self.progress = 0;
         self.depart_turn = 0;
         self.awaiting_load_window = false;
+        self.train_station_arrival_target = None;
         self.no_network_route_to_order = false;
         if self.orders.is_empty() {
             self.dest = self.pos;

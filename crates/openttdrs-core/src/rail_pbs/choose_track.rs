@@ -98,7 +98,13 @@ pub fn choose_train_track_on_enter(
     };
 
     // Reserva atómica al entrar: anotar el TrackBit de la tesela destino.
-    let enter_track = track_for_rail_step(map, from, next).unwrap_or(track);
+    let enter_track = vehicle
+        .path
+        .get(1)
+        .copied()
+        .and_then(|after| super::model::track_for_rail_transition(map, from, next, after))
+        .or_else(|| track_for_rail_step(map, from, next))
+        .unwrap_or(track);
     let step = ReservedRailStep::new(next, enter_track);
     if !vehicle
         .reserved_steps

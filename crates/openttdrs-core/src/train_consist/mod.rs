@@ -11,6 +11,7 @@ mod newgrf_vars;
 mod pose;
 mod topology;
 
+pub(crate) use controller::finish_line_end_reverse_indexed;
 pub use controller::{
     propagate_consist_unit_poses, propagate_consist_unit_poses_with_map_indexed,
     reverse_consist_at_stop, reverse_consist_at_stop_indexed,

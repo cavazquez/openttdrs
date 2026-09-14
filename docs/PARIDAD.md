@@ -1713,7 +1713,7 @@ aproximadas (Fases 2–3 del roadmap estructural).
 | Pendientes + fundaciones de vía | `map/rail_slope.rs` (`rail_trackbits_valid_on_slope`), `command/terraform.rs` (autoslope) | `rail_cmd.cpp` (foundations), `slope_func.h` | 3 · validado parcial (`computed_tileh_matches_openrtd_sw`) | tests de `map/rail_slope.rs` | Bajo |
 | Señales — colocación y encoding | `rail_signals.rs` (`signal_placement_for_track`, `m2`/`m3`/`m3hi`) | `rail_map.h:287-526`, `signal_type.h` | 2 · probado (encoding compatible con saves OpenTTD) | tests de `rail_signals.rs` (`signal_placement_is_single_bit`, `cycle_signal_side_*`) | Medio: ENTRY/EXIT/COMBO implementados; falta validación amplia de topologías complejas |
 | Señales — bloqueo | `rail_signals.rs` (`rail_block_ahead`, `train_blocked_by_signal`, `update_rail_signal_states`) + `sim_step.rs` | `signal.cpp:280-660` (`UpdateSignalsOnSegment`) | 3 · validado en escenarios acotados | tests de `rail_signals/presignal.rs`, `sim_train_waits_until_block_ahead_clears`, `signal_wait_events_emitted_with_two_trains` | Alto: políticas de reserva/espera y timing sin golden amplio contra OpenTTD |
-| Reservas de camino (PBS) | `rail_pbs.rs` (TryReserve, `follow_train_reservation`, path signals, plataforma) | `pbs.cpp` (`TryReserveRailTrack`, `FollowTrainReservation`) | 5 · equivalente en fixtures PBS 15.3 acotados (2 trenes/40 ticks y consist de 3 unidades) | `pbs_openttd_oracle.rs`, `pbs_dual_curve_oracle.rs`, `consist_pbs_openttd_oracle.rs`, `golden_pbs.rs` | Medio fuera de esos escenarios: cruces/merge/opuestos, redes grandes, tiempos largos y desempates YAPF aún sin golden externo |
+| Reservas de camino (PBS) | `rail_pbs.rs` (TryReserve, `follow_train_reservation`, path signals, plataforma) | `pbs.cpp` (`TryReserveRailTrack`, `FollowTrainReservation`) | 5 · equivalente en fixtures PBS 15.3 acotados (2 trenes/40 ticks y consist de 3 unidades/500 ticks) | `pbs_openttd_oracle.rs`, `pbs_dual_curve_oracle.rs`, `consist_pbs_openttd_oracle.rs`, `golden_pbs.rs` | Medio fuera de esos escenarios: cruces/merge/opuestos, redes grandes, tiempos largos y desempates YAPF aún sin golden externo |
 | Estaciones rail (plataformas 1..=7, waypoints) | `command/transport/station.rs` (`place_rail_station_area`, `rail_station_layout`), `station.rs` | `station_cmd.cpp:1416-1433`, `CmdBuildRailStation` | 2 · probado (layout + flags catenaria m3 compatibles; entrada exige vía adyacente) | `place_rail_station_area_*`, `place_rail_waypoint_*`, `station_*catenary*` | Medio |
 | Depósitos rail | `depot.rs` (`Has/SetDepotReservation`), `depot_leave.rs` (`CheckTrainStayInDepot` + `TryPathReserve` + `TicksToLeaveDepot`) | `rail_map.h:256-272`, `train_cmd.cpp:2354-2427`, `rail_cmd.cpp:2999-3044` | 4 · paridad PBS leave | `depot_leave::*`, `two_trains_leave_same_rail_depot_sequentially` | Medio: sin enum `Track` completo; `depot_leave_cleared` es el proxy |
 | Túneles/puentes rail | `command/transport/bridge.rs` (compartido con road), `map/slope.rs` | `tunnelbridge_cmd.cpp:1959-2087` | 2 · probado | `tunnel_hides_train_matches_visibility_frame`, `train_on_wooden_bridge_is_speed_capped` | Medio: wormhole y validación externa de casos complejos siguen simplificados |
@@ -3177,11 +3177,14 @@ cinemática y reservas PBS) en `tests/pbs_dual_curve_oracle.rs`.
 - Tests: `tests/consist_pbs_openttd_oracle.rs`
 
 Contenido: locomotora Ginzu A4 + 2 Goods Van sobre la recta PBS de
-`train_pbs_15_3`, sin NewGRF. La cola ocupa otra tesela/píxel que la cabeza.
+`train_pbs_15_3`, sin NewGRF. La cola ocupa otra tesela/píxel que la cabeza;
+el recorrido de 500 ticks atraviesa la estación, invierte ante la señal
+PathOneWay opuesta en el extremo de línea y vuelve a reservar hasta la huella
+completa del consist.
 Regeneración:
 
 ```bash
-./scripts/gen_consist_2wagon_fixture.sh 40
+./scripts/gen_consist_2wagon_fixture.sh 500
 ```
 
 El generador engancha vagones en AfterLoad (`OPENTTDRS_FIXTURE_ATTACH_WAGONS`)
@@ -3193,6 +3196,9 @@ Contrato rail (solo trenes):
 - `DoUpdateSpeed` devuelve distancia (`GetAdvanceSpeed` + remanente).
 - Umbral `GetAdvanceDistance` (192 axial / 256 corner); sobrante en `progress`.
 - Un tick de juego = 2× `TrainLocoHandler`; 16 pasos de píxel por tesela.
+- En el extremo: el intercambio de poses ocurre antes del segundo handler y
+  la reserva se reconstruye desde la nueva cabeza, incluyendo la huella física
+  de la cola.
 - Aceleración realista al importar `.sav` (`train_acceleration_model = Realistic`).
 - Render: `(rail_pixel + progress/GetAdvanceDistance) / 16` → progreso visual
   0..=255; el remanente sólo suaviza el dibujo y no adelanta la física de Z.

@@ -7,6 +7,7 @@ use crate::map::{Map, TileKind};
 use crate::pathfinding_settings::PathfindingSettings;
 use crate::vehicle::{Vehicle, VehicleKind};
 
+use super::search::is_safe_waiting_position;
 use super::train_reservation::{
     compute_train_reservation_with_settings, follow_train_reservation,
     reservation_ends_at_safe_wait_steps, vehicle_segment_requires_path_reserve,
@@ -53,11 +54,16 @@ pub fn try_path_reserve(
 
     let previous = vehicles[vehicle_idx].reserved_steps.clone();
     let path_hint: Vec<_> = vehicles[vehicle_idx].path.iter().copied().collect();
-    if reservation_ends_at_safe_wait_steps(map, depot_pos, &path_hint, &previous)
-        && previous
-            .iter()
-            .any(|s| s.tile == depot_pos || path_hint.contains(&s.tile))
-    {
+    let current_is_safe = previous.is_empty()
+        && path_hint
+            .first()
+            .is_some_and(|next| is_safe_waiting_position(map, depot_pos, Some(*next), true));
+    let reservation_is_safe =
+        reservation_ends_at_safe_wait_steps(map, depot_pos, &path_hint, &previous)
+            && previous
+                .iter()
+                .any(|s| s.tile == depot_pos || path_hint.contains(&s.tile));
+    if current_is_safe || reservation_is_safe {
         vehicles[vehicle_idx].pbs_stuck = false;
         return true;
     }
@@ -92,7 +98,12 @@ pub fn try_path_reserve(
 
     let reached_beyond = reserved.iter().any(|s| s.tile != depot_pos);
     let ends_safe = reservation_ends_at_safe_wait_steps(map, depot_pos, &path_hint, &reserved);
-    let ok = !reserved.is_empty() && (reached_beyond || ends_safe);
+    // Fuera de un depósito, conservar sólo la tesela actual es un resultado
+    // válido cuando el tren ya está detenido delante de un conflicto. Es la
+    // misma salida que `FollowTrainReservation` usa para un safe wait local;
+    // en depósitos se mantiene el requisito estricto de alcanzar la boca.
+    let current_only = !in_depot_track && reserved.len() == 1 && reserved[0].tile == depot_pos;
+    let ok = !reserved.is_empty() && (reached_beyond || ends_safe || current_only);
 
     if !ok {
         if in_depot_track {

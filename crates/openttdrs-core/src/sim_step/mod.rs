@@ -328,7 +328,7 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     refresh_road_stop_statuses(state);
     timings.crashed_vehicle_ns = nanos(crashed);
     let pbs = Instant::now();
-    phase_pbs_reservations(state);
+    phase_pbs_reservations_after_movement(state);
     timings.pbs_post_move_ns = nanos(pbs);
     timings.movement_ns = nanos(p0);
 
@@ -906,6 +906,17 @@ fn service_followers_after_generation_changes(state: &mut GameState, before: &[(
 
 /// Reservas PBS + sync a `m2_hi` (fase gruesa hasta B4).
 fn phase_pbs_reservations(state: &mut GameState) {
+    phase_pbs_reservations_with_wait_retry(state, true);
+}
+
+/// Igual que [`phase_pbs_reservations`], pero para el barrido posterior al
+/// movimiento. Ese pase actualiza huellas liberadas sin volver a ejecutar el
+/// `TryPathReserve` periódico de un tren que ya fue bloqueado este tick.
+fn phase_pbs_reservations_after_movement(state: &mut GameState) {
+    phase_pbs_reservations_with_wait_retry(state, false);
+}
+
+fn phase_pbs_reservations_with_wait_retry(state: &mut GameState, allow_stuck_wait_retry: bool) {
     let wormholes_pbs = state.jgr_tunnel_wormholes();
     let wh_pbs = if wormholes_pbs.is_empty() {
         None
@@ -914,11 +925,13 @@ fn phase_pbs_reservations(state: &mut GameState) {
     };
     let station_reservations_before = station_reservation_tiles(state);
     let dirty_before = state.runtime.reservation_tile_dirty.len();
-    crate::rail_pbs::update_train_reservations_incremental_with_wormholes(
+    crate::rail_pbs::update_train_reservations_incremental_with_wormholes_and_acceleration_phase(
         &state.map,
         &mut state.vehicles,
         state.pathfinding,
         wh_pbs,
+        state.train_acceleration_model,
+        allow_stuck_wait_retry,
     );
     trigger_station_path_reservation_animations(state, &station_reservations_before);
     crate::rail_pbs::sync_reservations_to_map(
@@ -1247,7 +1260,7 @@ fn phase_movement(state: &mut GameState) {
     crate::train_collision::resolve_train_collisions(state);
     crate::ground_crash::tick_crashed_vehicles(state);
     // OpenTTD sigue/libera la reserva al cruzar tesela; recalcular evita un tick de retraso.
-    phase_pbs_reservations(state);
+    phase_pbs_reservations_after_movement(state);
 }
 
 /// Refits, señales post-movimiento, sincronización de destinos, costos, noticias, paridad.

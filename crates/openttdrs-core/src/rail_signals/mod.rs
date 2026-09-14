@@ -24,6 +24,7 @@ pub use encoding::{
 };
 pub(crate) use encoding::{signal_exit_dir, signal_track_for_bit};
 pub(crate) use routing::signal_bits_for_exit;
+pub(crate) use routing::train_approaching_red_signal;
 
 pub(crate) use topology::{dir_from_to, rail_neighbors};
 pub use topology::{rail_block_ahead, rail_block_ahead_with_wormholes};

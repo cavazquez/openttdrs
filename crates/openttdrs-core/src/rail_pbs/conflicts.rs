@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::map::{Map, TileCoord, TileKind, rail_traversal_bits};
+use crate::map::{Map, RAIL_TB_HORZ, RAIL_TB_VERT, TileCoord, TileKind, rail_traversal_bits};
 use crate::vehicle::{Vehicle, VehicleKind};
 
 use super::model::{
@@ -11,7 +11,27 @@ use super::model::{
 };
 
 pub(super) fn tracks_overlap(a: u8, b: u8) -> bool {
-    a & b != 0
+    if a & b != 0 {
+        return true;
+    }
+    let combined = a | b;
+    // OpenTTD `TracksOverlap`: sólo las dos parejas paralelas (UPPER/LOWER
+    // y LEFT/RIGHT) pueden compartir una tesela sin conflicto. Las demás
+    // combinaciones se cruzan aunque sus bits sean distintos.
+    combined != 0
+        && !combined.is_power_of_two()
+        && combined != RAIL_TB_HORZ
+        && combined != RAIL_TB_VERT
+}
+
+pub(super) fn reserved_steps_overlap(
+    reserved: &HashSet<ReservedRailStep>,
+    tile: TileCoord,
+    track: u8,
+) -> bool {
+    reserved
+        .iter()
+        .any(|step| step.tile == tile && tracks_overlap(step.track, track))
 }
 
 /// Ocupación física de una tesela por la cabeza o la cola de un consist.
@@ -159,8 +179,16 @@ pub fn tile_track_reserved_by_map(map: &Map, tile: TileCoord, track: u8) -> bool
     if t.kind != TileKind::Rail {
         return false;
     }
+    // YAPF sólo consulta pistas presentes en la tesela. Mantener esta
+    // validación evita convertir una reserva X en penalización para una rama
+    // geométricamente cruzada pero inexistente en el mapa; la comprobación de
+    // conflicto de PBS sigue usando `TracksOverlap` cuando ambas ramas son
+    // válidas en el cruce.
+    if t.m5 & 0x3F & track == 0 {
+        return false;
+    }
     let reserved = decode_rail_reservation_m2_hi(t.m2_hi);
-    reserved != 0 && reserved & track != 0
+    tracks_overlap(reserved, track)
 }
 
 /// ¿Algún tren ajeno tiene reserva o cola sobre la plataforma de `station_anchor`?

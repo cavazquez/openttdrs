@@ -79,9 +79,51 @@ pub fn sync_reservations_to_map(
         seed_previous_active(map, prev_active);
     }
 
-    let next_tracks = collect_next_tracks(map, vehicles);
+    let mut next_tracks = collect_next_tracks(map, vehicles);
+    retain_loaded_reservations_under_trains(map, vehicles, prev_active, &mut next_tracks);
     apply_reservation_map_sync(map, prev_active, &next_tracks, dirty, preserve_loaded);
     *prev_active = next_tracks.keys().copied().collect();
+}
+
+/// Conserva el overlay PBS importado mientras el tren que lo heredó sigue
+/// ocupando la tesela. Un save no serializa el propietario en
+/// `Vehicle::reserved_steps`, por lo que la primera pasada no puede reconstruir
+/// ese paso; descartarlo inmediatamente deja una reserva fantasma o, peor,
+/// borra una reserva válida justo cuando el tren abandona el tile.
+fn retain_loaded_reservations_under_trains(
+    map: &Map,
+    vehicles: &[Vehicle],
+    previous_active: &HashSet<TileCoord>,
+    next_tracks: &mut HashMap<TileCoord, u8>,
+) {
+    for &tile_coord in previous_active {
+        if next_tracks.contains_key(&tile_coord)
+            || !vehicles.iter().any(|vehicle| {
+                vehicle.kind == VehicleKind::Train
+                    && (vehicle.pos == tile_coord
+                        || tunnel_bridge_other_end(map, vehicle.pos) == Some(tile_coord))
+            })
+        {
+            continue;
+        }
+        let Some(tile) = map.get(tile_coord) else {
+            continue;
+        };
+        let track = if is_rail_reservation_tile(tile.kind) {
+            decode_rail_reservation_m2_hi(tile.m2_hi)
+        } else {
+            u8::from(
+                (is_tunnel_bridge_rail_tile(&tile) && crate::tunnel_bridge_rail_reserved(tile))
+                    || (is_rail_station_reservation_tile(&tile)
+                        && station_tile_has_reservation(tile.m6))
+                    || (crate::map::is_road_level_crossing(tile.mapt, tile.m5, tile.kind)
+                        && tile.m5 & CROSSING_RESERVATION_M5_BIT != 0),
+            )
+        };
+        if track != 0 {
+            next_tracks.insert(tile_coord, track);
+        }
+    }
 }
 
 /// Importa reservas ya presentes en el mapa para que la primera sincronización

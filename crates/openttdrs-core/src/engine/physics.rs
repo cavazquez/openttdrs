@@ -19,6 +19,12 @@ pub const TRAIN_AIR_DRAG_AREA: u8 = 14;
 pub const ROAD_AIR_DRAG_AREA: u8 = 6;
 /// Esfuerzo tractor de los road vehicles vanilla (`RoadVehInfo::tractive_effort`).
 pub const ROAD_TRACTIVE_EFFORT_DEFAULT: u8 = 76;
+/// Esfuerzo tractor de los trenes vanilla (`RailVehicleInfo::tractive_effort`).
+///
+/// `RVI` inicializa todos los motores sin una propiedad `NewGRF` explícita con
+/// `0.30 * 256 = 76`; los números que aparecen junto a cada motor en
+/// `engines.h` son su coste/peso/potencia y no una sustitución de este valor.
+pub const TRAIN_TRACTIVE_EFFORT_DEFAULT: u8 = 76;
 
 const REFERENCE_MAX_SPEED: u16 = 112;
 const TILE_AXIAL_DISTANCE: u32 = 192;
@@ -176,13 +182,13 @@ pub fn engine_air_drag(engine: &super::EngineDef, consist_parts: u32) -> u32 {
     }
 }
 
-/// Esfuerzo tractor: Action0 `0x1F` si ≠0; si no, tabla vanilla por id.
+/// Esfuerzo tractor: Action0 `0x1F` si ≠0; si no, el valor vanilla común.
 #[must_use]
 pub fn engine_tractive_effort(engine: &super::EngineDef) -> u8 {
     if engine.tractive_effort != 0 {
         engine.tractive_effort
     } else {
-        vanilla_train_tractive_effort(engine.id)
+        TRAIN_TRACTIVE_EFFORT_DEFAULT
     }
 }
 
@@ -438,6 +444,36 @@ pub fn train_realistic_acceleration(
     }
 }
 
+/// `GroundVehicle::GetAcceleration` cuando el estado es `AS_BRAKE`.
+///
+/// En frenado `OpenTTD` no limita la fuerza por `cached_max_te` y usa la
+/// resistencia total como divisor, a diferencia de `AS_ACCEL`.
+#[must_use]
+pub fn train_realistic_braking_acceleration(
+    speed: u16,
+    power_hp: u32,
+    weight_t: u16,
+    air_drag: u32,
+    axle_resistance: u32,
+    slope_resistance: i64,
+) -> i32 {
+    let mass = i64::from(weight_t.max(1));
+    let power = i64::from(power_hp) * 746;
+    let speed_i = i64::from(speed);
+    let mut resistance = i64::from(axle_resistance.max(u32::from(weight_t) * 10));
+    resistance += mass * i64::from(train_rolling_friction(speed));
+    resistance += i64::from(TRAIN_AIR_DRAG_AREA) * i64::from(air_drag) * speed_i * speed_i / 1000;
+    resistance += slope_resistance;
+
+    let force = if speed > 0 {
+        power * 18 / (speed_i * 5)
+    } else {
+        power.max((mass * 8) + resistance)
+    };
+    let acceleration = -force.saturating_add(resistance).max(10_000) / mass;
+    i32::try_from(acceleration).unwrap_or(i32::MIN)
+}
+
 /// Avance de velocidad de tren `AM_ORIGINAL` (`Train::UpdateSpeed`, `accel·2`).
 #[must_use]
 pub fn accelerate_train_speed(
@@ -681,32 +717,10 @@ pub fn train_realistic_station_max_speed(
     current_max.min(st)
 }
 
-/// Esfuerzo tractor vanilla por `engine_id` interno (`RVI` param g).
+/// Esfuerzo tractor vanilla por `engine_id` interno (`RVI` default).
 #[must_use]
-pub fn vanilla_train_tractive_effort(engine_id: u16) -> u8 {
-    use super::{
-        ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_CHANEY_JUBILEE, ENGINE_TRAIN_DASH,
-        ENGINE_TRAIN_FLOSS_47, ENGINE_TRAIN_GINZU_A4, ENGINE_TRAIN_KIRBY, ENGINE_TRAIN_LEV1,
-        ENGINE_TRAIN_MANLEY_MOREL, ENGINE_TRAIN_SH_8P, ENGINE_TRAIN_SH_30, ENGINE_TRAIN_SH_40,
-        ENGINE_TRAIN_SH_125, ENGINE_TRAIN_SH_HENDRY_25, ENGINE_TRAIN_TIM, ENGINE_TRAIN_UU_37,
-        ENGINE_TRAIN_X2001,
-    };
-    match engine_id {
-        ENGINE_TRAIN_KIRBY => 50,
-        ENGINE_TRAIN_CHANEY_JUBILEE | ENGINE_TRAIN_UU_37 => 120,
-        ENGINE_TRAIN_GINZU_A4 | ENGINE_TRAIN_FLOSS_47 => 140,
-        ENGINE_TRAIN_SH_8P => 130,
-        ENGINE_TRAIN_MANLEY_MOREL => 85,
-        ENGINE_TRAIN_DASH => 70,
-        ENGINE_TRAIN_SH_HENDRY_25 => 95,
-        ENGINE_TRAIN_SH_125 => 190,
-        ENGINE_TRAIN_SH_30 | ENGINE_TRAIN_X2001 => 180,
-        ENGINE_TRAIN_SH_40 => 205,
-        ENGINE_TRAIN_TIM => 240,
-        ENGINE_TRAIN_ASIASTAR => 250,
-        ENGINE_TRAIN_LEV1 => 200,
-        _ => 75,
-    }
+pub const fn vanilla_train_tractive_effort(_engine_id: u16) -> u8 {
+    TRAIN_TRACTIVE_EFFORT_DEFAULT
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 //! Tipos de datos y helpers de codificación PBS.
 
-use crate::map::{Map, RAIL_TB_X, RAIL_TB_Y, TileCoord};
-use crate::map::{opposite_diag_dir as opposite_dir, rail_traversal_bits};
+use crate::map::opposite_diag_dir as opposite_dir;
+use crate::map::{Map, RAIL_TB_X, RAIL_TB_Y, TileCoord, rail_bit_for_sides, rail_traversal_bits};
 use crate::rail_signals::dir_from_to;
 use crate::train_movement::track_bit_for_movement;
 
@@ -112,4 +112,46 @@ pub fn track_on_departure_tile(map: &Map, from: TileCoord, to: TileCoord) -> Opt
     let entry = opposite_dir(exit_dir);
     let tb = rail_traversal_bits(map, from);
     track_bit_for_movement(entry, tb)
+}
+
+/// Pista exacta de la tesela intermedia de una transición `from → tile → to`.
+///
+/// En un cruce, mirar sólo el lado de entrada elige la primera rama que lo
+/// toca y puede cambiar la ruta (por ejemplo `LOWER` en lugar de `UPPER`).
+/// YAPF convierte las direcciones geométricas E/O a la convención de lados de
+/// `TrackBits`; aplicar esa misma conversión permite reconstruir el bit que
+/// `ChooseTrainTrack` conserva para la reserva.
+#[must_use]
+pub fn track_for_rail_transition(
+    map: &Map,
+    from: TileCoord,
+    tile: TileCoord,
+    to: TileCoord,
+) -> Option<u8> {
+    let rail_or_station = |coord| {
+        matches!(
+            map.get_kind(coord),
+            Some(crate::TileKind::Rail | crate::TileKind::Station)
+        )
+    };
+    if !rail_or_station(from)
+        || map.get_kind(tile) != Some(crate::TileKind::Rail)
+        || !rail_or_station(to)
+    {
+        return track_on_departure_tile(map, from, tile)
+            .or_else(|| track_for_rail_step(map, from, tile));
+    }
+    let entry = dir_from_to(tile, from)?;
+    let exit = dir_from_to(tile, to)?;
+    let pathfinder_side = |dir: u8| match dir & 3 {
+        0 => 2,
+        2 => 0,
+        other => other,
+    };
+    let track = rail_bit_for_sides(pathfinder_side(entry), pathfinder_side(exit));
+    if track != 0 && rail_traversal_bits(map, tile) & track != 0 {
+        Some(track)
+    } else {
+        track_for_rail_step(map, from, tile)
+    }
 }

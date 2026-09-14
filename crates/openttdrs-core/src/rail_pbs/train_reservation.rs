@@ -2,15 +2,17 @@
 
 use std::collections::HashSet;
 
+use crate::engine::TrainAccelerationModel;
 use crate::map::{Map, TileCoord, TileKind, rail_traversal_bits};
 use crate::vehicle::{Vehicle, VehicleKind};
 
 use super::conflicts::{
     TrainOccupancyIndex, append_platform_reservation, append_platform_reservation_indexed,
-    tile_occupied_by_other_train,
+    reserved_steps_overlap, tile_occupied_by_other_train,
 };
 use super::model::{
-    MAX_TRAIN_RESERVATION_LEN, ReservedRailStep, track_for_rail_step, track_on_departure_tile,
+    MAX_TRAIN_RESERVATION_LEN, ReservedRailStep, track_for_rail_step, track_for_rail_transition,
+    track_on_departure_tile,
 };
 use super::search::{
     find_path_to_safe_wait_with_wormholes, find_path_to_safe_wait_with_wormholes_indexed,
@@ -26,24 +28,69 @@ pub const MAX_INCREMENTAL_PBS_REFRESHES: usize = 8;
 
 /// `true` si delante del tren hay (o habrá) un segmento PBS que exige reserva.
 ///
-/// Aproxima `UpdateSignalsOnSegment == SigSegState::Path`: cualquier path signal
-/// en la tesela actual, en el destino inmediato o en las primeras teselas del
-/// path de órdenes activa la reserva aunque `reserve_paths` sea `false`.
+/// El segmento se activa cuando la salida del path está controlada por PBS o
+/// termina en una señal de sentido único que el tren no puede atravesar. En
+/// este último caso `TryPathReserve` debe dejar la reserva antes de la señal;
+/// si se omite, el controlador no tiene el safe wait que usa `OpenTTD` al
+/// invertir en el extremo de la línea.
 #[must_use]
 pub fn vehicle_segment_requires_path_reserve(map: &Map, vehicle: &Vehicle) -> bool {
-    if tile_has_any_pbs_signal(map, vehicle.pos) {
-        return true;
-    }
-    if let Some(next) = vehicle.movement_target()
-        && tile_has_any_pbs_signal(map, next)
-    {
-        return true;
-    }
-    vehicle
-        .path
-        .iter()
-        .take(16)
-        .any(|tile| tile_has_any_pbs_signal(map, *tile))
+    let route: Vec<_> = std::iter::once(vehicle.pos)
+        .chain(vehicle.path.iter().copied().take(16))
+        .collect();
+    // Una estación es una posición segura: un path que la atraviesa no debe
+    // activar PBS para señales que están detrás del andén. `TrainController`
+    // corta allí la ruta efectiva y puede dejar el tren cargando antes de
+    // volver a pedir una reserva.
+    route
+        .windows(2)
+        .enumerate()
+        .take_while(|(index, window)| {
+            *index == 0
+                || !map
+                    .get(window[0])
+                    .is_some_and(|tile| tile.kind == TileKind::Station)
+        })
+        .any(|(_, window)| {
+            let [from, to] = window else {
+                return false;
+            };
+            let Some(tile) = map.get(*from) else {
+                return false;
+            };
+            if tile.kind != TileKind::Rail || !crate::rail_signals::rail_tile_is_signals(tile.m5) {
+                return false;
+            }
+            let Some(step_track) = track_on_departure_tile(map, *from, *to)
+                .or_else(|| track_for_rail_step(map, *from, *to))
+            else {
+                return false;
+            };
+            let opposing_oneway =
+                crate::rail_signals::dir_from_to(*from, *to).is_some_and(|exit_dir| {
+                    matches!(
+                        crate::rail_signals::yapf_routing_signal(map, *from, exit_dir),
+                        crate::rail_signals::YapfSignalRouting::DeadEnd
+                    )
+                });
+            if opposing_oneway {
+                return true;
+            }
+            let rails = tile.m5 & 0x3F;
+            crate::rail_signals::signal_bits_for_exit(map, *from, *to)
+                .into_iter()
+                .any(|bit| {
+                    tile.m3 & (0x10 << bit) != 0
+                        && crate::rail_signals::signal_track_for_bit(rails, bit).is_some_and(
+                            |track| {
+                                track.track_bit() & step_track != 0
+                                    && crate::rail_signals::is_pbs_signal_type(
+                                        crate::rail_signals::signal_type_for_track(tile.m2, track),
+                                    )
+                            },
+                        )
+                })
+        })
 }
 
 /// Calcula la reserva de un tren sin mutar el mapa global de reservas.
@@ -276,13 +323,13 @@ fn reserve_along_path(
         return out;
     };
     let start_step = ReservedRailStep::new(cur, pos_track);
-    if already_reserved.contains(&start_step)
+    if reserved_steps_overlap(already_reserved, cur, pos_track)
         || reservation_tile_occupied(map, vehicles, vehicle.id, cur, pos_track, occupancy)
     {
         return out;
     }
     out.push(start_step);
-    extend_reservation_along_path(
+    let extension_blocked = extend_reservation_along_path(
         map,
         vehicles,
         vehicle.id,
@@ -293,6 +340,12 @@ fn reserve_along_path(
         0,
         occupancy,
     );
+    if extension_blocked {
+        // `ExtendTrainReservation` is transaccional: si no puede alcanzar una
+        // posición segura, OpenTTD deshace todos los pasos añadidos y
+        // `ChooseTrainTrack` conserva únicamente la tesela actual.
+        out.truncate(1);
+    }
     out
 }
 
@@ -322,7 +375,7 @@ fn reserve_along_path_from_depot(
         return out;
     };
     let step = ReservedRailStep::new(entrance, track);
-    if already_reserved.contains(&step)
+    if reserved_steps_overlap(already_reserved, entrance, track)
         || reservation_tile_occupied(map, vehicles, vehicle.id, entrance, track, occupancy)
     {
         return out;
@@ -332,7 +385,7 @@ fn reserve_along_path_from_depot(
     if is_safe_waiting_position(map, cur, beyond, tile_has_any_pbs_signal(map, cur)) {
         return out;
     }
-    extend_reservation_along_path(
+    let extension_blocked = extend_reservation_along_path(
         map,
         vehicles,
         vehicle.id,
@@ -343,6 +396,9 @@ fn reserve_along_path_from_depot(
         1,
         occupancy,
     );
+    if extension_blocked {
+        out.truncate(1);
+    }
     out
 }
 
@@ -357,7 +413,7 @@ fn extend_reservation_along_path(
     cur: &mut TileCoord,
     path_skip: usize,
     occupancy: Option<&TrainOccupancyIndex>,
-) {
+) -> bool {
     let mut passed_path = tile_has_any_pbs_signal(map, *cur);
     for (i, &next) in path.iter().enumerate().skip(path_skip) {
         if out.len() >= MAX_TRAIN_RESERVATION_LEN {
@@ -365,19 +421,29 @@ fn extend_reservation_along_path(
         }
         let beyond = path.get(i + 1).copied();
         if !crate::rail_signals::rail_step_signal_allows(map, vehicles, *cur, next, beyond) {
-            break;
+            // Una señal PathOneWay que mira en sentido contrario es un
+            // extremo de vía utilizable: se reserva hasta `cur` y se espera
+            // allí, igual que `IsSafeWaitingPosition` en el oráculo nativo.
+            // Las señales rojas normales no son una posición segura y deben
+            // conservar el rollback transaccional de `ExtendTrainReservation`.
+            if is_safe_waiting_position(map, *cur, Some(next), passed_path) {
+                break;
+            }
+            return true;
         }
-        let Some(track) = track_on_departure_tile(map, *cur, next)
+        let Some(track) = beyond
+            .and_then(|after| track_for_rail_transition(map, *cur, next, after))
+            .or_else(|| track_on_departure_tile(map, *cur, next))
             .or_else(|| track_for_rail_step(map, *cur, next))
         else {
-            break;
+            return true;
         };
         let step = ReservedRailStep::new(next, track);
-        if already_reserved.contains(&step) {
-            break;
+        if reserved_steps_overlap(already_reserved, next, track) {
+            return map.get_kind(next) == Some(TileKind::Station);
         }
         if reservation_tile_occupied(map, vehicles, vehicle_id, next, track, occupancy) {
-            break;
+            return map.get_kind(next) == Some(TileKind::Station);
         }
         out.push(step);
         *cur = next;
@@ -388,6 +454,7 @@ fn extend_reservation_along_path(
             break;
         }
     }
+    false
 }
 
 fn reservation_tile_occupied(
@@ -548,6 +615,53 @@ pub fn update_train_reservations_incremental_with_wormholes(
     settings: crate::pathfinding_settings::PathfindingSettings,
     wormholes: Option<&crate::pathfinder::TunnelWormholes>,
 ) -> usize {
+    update_train_reservations_incremental_with_wormholes_and_acceleration(
+        map,
+        vehicles,
+        settings,
+        wormholes,
+        TrainAccelerationModel::Original,
+    )
+}
+
+/// Variante incremental que usa el modelo físico real de la partida para
+/// decidir cuándo `TrainController` puede abandonar la tesela actual.
+///
+/// `OpenTTD` no reintenta `TryPathReserve` sólo porque exista un `path`: la
+/// reserva se actualiza desde el controlador cuando los dos handlers de ese
+/// tick pueden alcanzar el borde. Usar el modelo del save evita fabricar PBS
+/// anticipado al cerrar una estación, especialmente con aceleración realista.
+pub fn update_train_reservations_incremental_with_wormholes_and_acceleration(
+    map: &Map,
+    vehicles: &mut [Vehicle],
+    settings: crate::pathfinding_settings::PathfindingSettings,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+    train_accel: TrainAccelerationModel,
+) -> usize {
+    update_train_reservations_incremental_with_wormholes_and_acceleration_phase(
+        map,
+        vehicles,
+        settings,
+        wormholes,
+        train_accel,
+        true,
+    )
+}
+
+/// Variante interna que permite distinguir el barrido PBS previo al
+/// movimiento del barrido de limpieza posterior. El `TryPathReserve` nativo
+/// de un tren atascado ocurre en su handler de movimiento; el pase posterior
+/// no debe volver a intentarlo después de que otro tren ya haya avanzado en
+/// ese mismo tick.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn update_train_reservations_incremental_with_wormholes_and_acceleration_phase(
+    map: &Map,
+    vehicles: &mut [Vehicle],
+    settings: crate::pathfinding_settings::PathfindingSettings,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+    train_accel: TrainAccelerationModel,
+    allow_stuck_wait_retry: bool,
+) -> usize {
     let mut fleet = crate::fleet_index::FleetIndex::default();
     fleet.rebuild(vehicles);
     let occupancy = TrainOccupancyIndex::from_vehicles(map, vehicles, &fleet);
@@ -603,8 +717,12 @@ pub fn update_train_reservations_incremental_with_wormholes(
             vehicles[i].reserved_steps.clear();
             continue;
         }
-        if !train_reservation_needs_refresh(&vehicles[i])
-            || refreshed >= MAX_INCREMENTAL_PBS_REFRESHES
+        if !train_reservation_needs_refresh(
+            &vehicles[i],
+            train_accel,
+            settings,
+            allow_stuck_wait_retry,
+        ) || refreshed >= MAX_INCREMENTAL_PBS_REFRESHES
         {
             continue;
         }
@@ -617,7 +735,23 @@ pub fn update_train_reservations_incremental_with_wormholes(
         let reserved = compute_train_reservation_with_wormholes_indexed(
             map, vehicles, i, &global, settings, wormholes, &occupancy,
         );
-        let reserved = follow_train_reservation(&previous, reserved, &vehicles[i]);
+        let retry_due = allow_stuck_wait_retry
+            && vehicles[i].pbs_stuck
+            && settings.should_retry_reservation(vehicles[i].wait_counter.saturating_add(1));
+        let reserved = if retry_due
+            && !reservation_ends_at_safe_wait_steps(
+                map,
+                vehicles[i].pos,
+                &vehicles[i].path.iter().copied().collect::<Vec<_>>(),
+                &reserved,
+            ) {
+            // `TrainLocoHandler` hace rollback si el intento periódico no
+            // consigue una posición segura; no deja publicada la extensión
+            // parcial que haya recorrido `ChooseTrainTrack`.
+            previous.clone()
+        } else {
+            follow_train_reservation(&previous, reserved, &vehicles[i])
+        };
         let reserved = merge_consist_footprint(map, vehicles, &fleet, head_id, reserved);
         global.extend(reserved.iter().copied());
         vehicles[i].reserved_steps = reserved;
@@ -653,15 +787,42 @@ fn prune_train_reservation_to_active_path(
     merge_consist_footprint(map, vehicles, fleet, head_id, retained)
 }
 
-fn train_reservation_needs_refresh(vehicle: &Vehicle) -> bool {
+fn train_reservation_needs_refresh(
+    vehicle: &Vehicle,
+    train_accel: TrainAccelerationModel,
+    settings: crate::pathfinding_settings::PathfindingSettings,
+    allow_stuck_wait_retry: bool,
+) -> bool {
     if !vehicle.running || vehicle.path.is_empty() {
         return false;
     }
     if vehicle.reserved_steps.is_empty() {
-        // Un tren parado puede acelerar en este tick, pero no abandonará la
-        // tesela de inmediato. Esperar a que tenga velocidad evita recuperar
-        // cientos de reservas inactivas al abrir un SAV.
+        // Una cabeza que todavía no tiene reserva debe ejecutar el primer
+        // `TryPathReserve` tan pronto como pueda moverse. El backoff sólo
+        // gobierna reintentos de una reserva ya existente; aplicarlo aquí
+        // deja sin reservar escenarios PBS lentos cuyo contador comienza en
+        // cero.
         return vehicle.cur_speed > 0;
+    }
+    // `CheckNextTrainTile` se ejecuta al entrar una tesela o en el backoff
+    // periódico de `TrainController`; una predicción basada sólo en velocidad
+    // también dispara la reserva antes de tiempo al frenar ante una señal roja.
+    let backoff_due = settings.path_backoff_interval
+        != crate::pathfinding_settings::PBS_WAIT_FOREVER
+        && u32::from(vehicle.newgrf_tick_counter)
+            .is_multiple_of(u32::from(settings.path_backoff_interval.max(1)));
+    // La fase PBS corre antes de `Vehicle::Tick`, pero OpenTTD incrementa
+    // `wait_counter` dentro del handler que acaba de quedar bloqueado. Usar
+    // el valor siguiente permite que el reintento del múltiplo (20, 40, ...)
+    // ocurra en el mismo tick en que vence el backoff nativo.
+    let pbs_wait_backoff_due = allow_stuck_wait_retry
+        && vehicle.pbs_stuck
+        && settings.should_retry_reservation(vehicle.wait_counter.saturating_add(1));
+    if !vehicle.train_tile_entered_this_tick
+        && !pbs_wait_backoff_due
+        && (!backoff_due || !vehicle.train_would_leave_tile_this_tick(train_accel))
+    {
+        return false;
     }
     vehicle
         .movement_target()

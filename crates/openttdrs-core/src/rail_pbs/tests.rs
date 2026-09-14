@@ -114,6 +114,16 @@ fn disjoint_tracks_on_same_tile_do_not_conflict() {
 }
 
 #[test]
+fn crossing_track_bits_conflict_like_openttd() {
+    use super::conflicts::tracks_overlap;
+
+    assert!(!tracks_overlap(0x04, 0x08));
+    assert!(!tracks_overlap(0x10, 0x20));
+    assert!(tracks_overlap(0x02, 0x04));
+    assert!(tracks_overlap(0x04, 0x02));
+}
+
+#[test]
 fn follower_reservation_stops_before_leader_on_same_track() {
     let mut state = build_train_supply_dual();
     let leader_pos = TileCoord::new(10, TRAIN_DUAL_TRACK_OUT_Y);
@@ -412,7 +422,6 @@ fn pbs_reservation_crosses_bridge_blocks_second_train_and_releases() {
         .expect("ruta inversa sobre el puente")
         .into();
     state.vehicles = vec![westbound, eastbound];
-
     let settings = crate::PathfindingSettings {
         reserve_paths: true,
         ..crate::PathfindingSettings::default()

@@ -244,9 +244,15 @@ impl super::model::Vehicle {
         stations: &[crate::station::Station],
         order: crate::vehicle::order::VehicleOrder,
     ) {
-        if self.kind == super::model::VehicleKind::Aircraft && self.awaiting_load_window {
+        if matches!(
+            self.kind,
+            super::model::VehicleKind::Train | super::model::VehicleKind::Aircraft
+        ) && self.awaiting_load_window
+        {
             // FTA: `dest` es el stand exacto, que no necesariamente coincide
             // con el ancla de la orden ni con la primera tesela de terminal.
+            // En trenes, `TrainEnterStation` conserva el tile de plataforma
+            // mientras `OT_LOADING` espera su primera fase de carga.
             return;
         }
         if self.kind == super::model::VehicleKind::Train
@@ -255,6 +261,9 @@ impl super::model::Vehicle {
             && crate::station::rail_station_platform_tiles(map, station).contains(&self.dest)
         {
             return;
+        }
+        if self.kind == super::model::VehicleKind::Train {
+            self.train_station_arrival_target = None;
         }
         self.dest = if self.kind == super::model::VehicleKind::Aircraft {
             match order {
@@ -294,6 +303,7 @@ impl super::model::Vehicle {
     }
 
     fn do_advance_after_unloading(&mut self) {
+        self.mark_train_station_departure_hold();
         self.path.clear();
         self.depart_turn = 0;
         self.progress = 255;
@@ -320,6 +330,7 @@ impl super::model::Vehicle {
     }
 
     fn do_advance_after_loading(&mut self) {
+        self.mark_train_station_departure_hold();
         self.path.clear();
         self.depart_turn = 0;
         self.progress = 255;
@@ -329,6 +340,7 @@ impl super::model::Vehicle {
 
     pub(super) fn advance_to_next_order(&mut self) {
         self.awaiting_load_window = false;
+        self.train_station_arrival_target = None;
         if self.orders.is_empty() {
             return;
         }
@@ -471,12 +483,28 @@ impl super::model::Vehicle {
     }
 
     pub(super) fn do_advance_after_arrival(&mut self, pass_through: bool) {
-        if pass_through {
+        self.mark_train_station_departure_hold();
+        if self.kind == super::model::VehicleKind::Train {
+            // `TrainLocoHandler` conserva en `progress` la distancia que
+            // sobró al entrar a la plataforma. Cambiarla a 255 al cerrar
+            // BeginLoading haría que una salida/reversa posterior pierda ese
+            // remanente que OpenTTD deja visible hasta el siguiente handler.
+        } else if pass_through {
             self.progress = 0;
         } else {
             self.progress = 255;
         }
         self.mark_station_departure();
         self.advance_to_next_order();
+    }
+
+    fn mark_train_station_departure_hold(&mut self) {
+        if self.kind == super::model::VehicleKind::Train
+            && self
+                .current_order_ref()
+                .is_some_and(|order| order.is_station_like())
+        {
+            self.train_station_departure_hold = true;
+        }
     }
 }

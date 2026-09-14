@@ -99,6 +99,19 @@ pub const fn advance_train_pixel(rail_pixel: u8) -> (u8, bool) {
     if next >= 16 { (0, true) } else { (next, false) }
 }
 
+/// Cantidad de posiciones de `x_pos/y_pos` que recorre un tren dentro de una
+/// tesela antes de cruzar su borde.
+///
+/// Las direcciones diagonales (`DIR_NE/SE/SW/NW`) avanzan sobre un solo eje y
+/// consumen 16 posiciones. Las direcciones cardinales que produce
+/// `_initial_tile_subcoord` avanzan sobre ambos ejes a la vez y salen después
+/// de 8 posiciones; `RailPixelFromPos` también comprime ese segundo caso a
+/// `0..=7`.
+#[must_use]
+pub const fn rail_pixels_per_tile(direction: u8) -> u8 {
+    if direction & 1 == 0 { 8 } else { 16 }
+}
+
 /// `_tunnel_visibility_frame` NE, SE, SW, NW (`tunnelbridge_cmd.cpp:1956`).
 pub const TUNNEL_VISIBILITY_FRAME: [u8; 4] = [12, 8, 8, 12];
 
@@ -487,6 +500,14 @@ mod tests {
     fn openttd_subcoord_entry_for_x_track() {
         let (x, y) = openttd_subcoord_at_entry(DIR_NE, 0x01).unwrap();
         assert_eq!((x, y), (15.0, 8.0));
+    }
+
+    #[test]
+    fn cardinal_train_tiles_use_eight_positions() {
+        assert_eq!(rail_pixels_per_tile(crate::DIR_W), 8);
+        assert_eq!(rail_pixels_per_tile(crate::DIR_E), 8);
+        assert_eq!(rail_pixels_per_tile(crate::DIR_NW), 16);
+        assert_eq!(rail_pixels_per_tile(crate::DIR_SW), 16);
     }
 
     #[test]

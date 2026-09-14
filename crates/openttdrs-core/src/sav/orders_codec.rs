@@ -59,6 +59,10 @@ pub(crate) const OTTD_LOAD_FULL: u8 = 2;
 pub(crate) const OTTD_LOAD_FULL_ANY: u8 = 3;
 /// `OrderLoadType::NoLoad` en bits 4–6.
 pub(crate) const OTTD_LOAD_NO_LOAD: u8 = 4;
+/// `Order::IsWaitTimetabled` en órdenes no condicionales.
+pub(crate) const OTTD_WAIT_TIMETABLED: u8 = 1 << 3;
+/// `Order::IsTravelTimetabled` en órdenes no condicionales.
+pub(crate) const OTTD_TRAVEL_TIMETABLED: u8 = 1 << 7;
 /// `OrderNonStopFlag::GoVia` en bit 6 de `type`.
 pub(crate) const OTTD_NON_STOP_GO_VIA: u8 = 1 << 6;
 /// `OrderStopLocation` en bits 4–5 de `type` (`order_base.h` Get/SetStopLocation).
@@ -175,6 +179,12 @@ pub(crate) fn station_flags_to_sav(order: &VehicleOrder) -> (u8, u8) {
         OrderLoadType::FullLoadAny => OTTD_LOAD_FULL_ANY << 4,
         OrderLoadType::NoLoad => OTTD_LOAD_NO_LOAD << 4,
     };
+    if order.wait_ticks() != 0 {
+        flags |= OTTD_WAIT_TIMETABLED;
+    }
+    if order.travel_ticks() != 0 {
+        flags |= OTTD_TRAVEL_TIMETABLED;
+    }
     (order_type, flags)
 }
 
@@ -327,10 +337,15 @@ pub(crate) fn encode_vehicle_order(
             max_speed,
         } => {
             let id = station_id(waypoint)?;
+            let flags = if travel_ticks != 0 {
+                OTTD_TRAVEL_TIMETABLED
+            } else {
+                0
+            };
             (
                 OT_GOTO_WAYPOINT,
                 id,
-                0,
+                flags,
                 0xFF,
                 0,
                 u16::try_from(travel_ticks).unwrap_or(u16::MAX),
@@ -414,22 +429,37 @@ pub(crate) fn vehicle_orders_from_sav(
                         order.max_speed
                     };
                     if st.is_waypoint {
+                        let travel_ticks = if order.flags & OTTD_TRAVEL_TIMETABLED != 0 {
+                            order.travel_time
+                        } else {
+                            0
+                        };
                         out.push(VehicleOrder::Waypoint {
                             waypoint: st.pos,
-                            travel_ticks: u32::from(order.travel_time),
+                            travel_ticks: u32::from(travel_ticks),
                             max_speed: limit,
                         });
                     } else if ot == OT_IMPLICIT {
                         out.push(VehicleOrder::implicit(st.pos).with_max_speed(limit));
                     } else {
+                        let wait_ticks = if order.flags & OTTD_WAIT_TIMETABLED != 0 {
+                            order.wait_time
+                        } else {
+                            0
+                        };
+                        let travel_ticks = if order.flags & OTTD_TRAVEL_TIMETABLED != 0 {
+                            order.travel_time
+                        } else {
+                            0
+                        };
                         out.push(VehicleOrder::Station {
                             station: st.pos,
                             load_type: parsed.load_type,
                             unload_type: parsed.unload_type,
                             non_stop: parsed.non_stop,
                             stop_location: parsed.stop_location,
-                            wait_ticks: u32::from(order.wait_time),
-                            travel_ticks: u32::from(order.travel_time),
+                            wait_ticks: u32::from(wait_ticks),
+                            travel_ticks: u32::from(travel_ticks),
                             max_speed: limit,
                             refit_cargo: order.refit_cargo,
                             auto_refit: order.auto_refit,

@@ -127,6 +127,50 @@ mod coherence_tests {
     }
 
     #[test]
+    fn train_stop_on_tile_boundary_uses_tile_entered_by_controller() {
+        use crate::command::{Command, apply_command};
+        use crate::vehicle::OrderStopLocation;
+
+        let mut state = GameState::new(20, 20);
+        apply_command(
+            &mut state,
+            &Command::PlaceRailStationArea {
+                origin: TileCoord::new(4, 4),
+                axis_y: true,
+                platforms: 1,
+                length: 6,
+            },
+        )
+        .unwrap();
+        let anchor = state.stations[0].pos;
+
+        // Para un tren de longitud 8, Middle produce stop_at=48. En OpenTTD
+        // ese borde se confirma al entrar en la cuarta tesela del andén.
+        assert_eq!(
+            rail_station_controller_stop_tile_for_platform_osl(
+                &state.map,
+                anchor,
+                TileCoord::new(4, 12),
+                TileCoord::new(4, 4),
+                OrderStopLocation::Middle,
+                8,
+            ),
+            Some(TileCoord::new(4, 6))
+        );
+        assert_eq!(
+            rail_station_controller_stop_tile_for_platform_osl(
+                &state.map,
+                anchor,
+                TileCoord::new(4, 1),
+                TileCoord::new(4, 4),
+                OrderStopLocation::Middle,
+                8,
+            ),
+            Some(TileCoord::new(4, 7))
+        );
+    }
+
+    #[test]
     fn stop_kind_from_m6_maps_openttd_station_types() {
         assert_eq!(stop_kind_from_m6(2 << 3), StopKind::TruckStop);
         assert_eq!(stop_kind_from_m6(3 << 3), StopKind::BusStop);

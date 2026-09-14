@@ -12,6 +12,7 @@ use super::table::{SlRecord, SlValue, record_get};
 
 pub use super::orders_codec::SavOrder;
 pub(crate) use super::orders_codec::vehicle_orders_from_sav;
+pub(crate) use super::orders_codec::{OTTD_TRAVEL_TIMETABLED, OTTD_WAIT_TIMETABLED};
 
 /// `SLV_105` — listas de órdenes como pool `OrderList` (`ORDL`).
 pub(crate) const SLV_105: u16 = 105;

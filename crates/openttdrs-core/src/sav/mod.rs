@@ -1954,11 +1954,16 @@ impl GameState {
                     .iter()
                     .map(|order| (order.wait_ticks(), order.travel_ticks()))
                     .collect();
-                vehicle.timetable_active = v.timetable_start != 0
-                    || vehicle.orders.iter().any(|order| {
-                        order.wait_ticks() != 0
-                            || order.travel_ticks() != 0
-                            || order.max_speed_limit() != 0
+                // OpenTTD puede conservar tiempos en ORDL aunque el vehículo
+                // todavía no haya iniciado su horario. Sólo `timetable_start`
+                // o el flag nativo `TimetableStarted` hacen que esos tiempos
+                // gobiernen el avance; no se debe inferirlo de sus valores.
+                vehicle.timetable_active = vehicle.timetable_started
+                    || vehicle.timetable_start != 0
+                    || v.orders.iter().any(|order| {
+                        order.flags
+                            & (orders::OTTD_WAIT_TIMETABLED | orders::OTTD_TRAVEL_TIMETABLED)
+                            != 0
                     });
                 if let Some(target) = sav.station_index.get(&u32::from(v.airport_targetairport)) {
                     vehicle.dest = target.pos;
@@ -2173,11 +2178,15 @@ impl GameState {
                 .iter()
                 .map(|order| (order.wait_ticks(), order.travel_ticks()))
                 .collect();
-            vehicle.timetable_active = v.timetable_start != 0
-                || vehicle.orders.iter().any(|order| {
-                    order.wait_ticks() != 0
-                        || order.travel_ticks() != 0
-                        || order.max_speed_limit() != 0
+            // OpenTTD puede conservar tiempos en ORDL aunque el vehículo
+            // todavía no haya iniciado su horario. Sólo `timetable_start`
+            // o el flag nativo `TimetableStarted` hacen que esos tiempos
+            // gobiernen el avance; no se debe inferirlo de sus valores.
+            vehicle.timetable_active = vehicle.timetable_started
+                || vehicle.timetable_start != 0
+                || v.orders.iter().any(|order| {
+                    order.flags & (orders::OTTD_WAIT_TIMETABLED | orders::OTTD_TRAVEL_TIMETABLED)
+                        != 0
                 });
             // `set_vehicle_orders` reinicia progreso para comandos nuevos, pero
             // al importar debe conservar exactamente el estado sub-tesela del save.

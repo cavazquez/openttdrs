@@ -24,7 +24,7 @@ pub use model::{
     MAX_TRAIN_RESERVATION_LEN, RAIL_RESERVATION_M2_HI_MASK, ReservedRailStep,
     YAPF_RESERVATION_CROSS_PENALTY, YAPF_TILE_CORNER_LENGTH, YAPF_TILE_LENGTH,
     decode_rail_reservation_m2_hi, encode_rail_reservation_to_m2_hi, rail_tile_has_pbs_reservation,
-    track_for_rail_step, track_on_departure_tile,
+    track_for_rail_step, track_for_rail_transition, track_on_departure_tile,
 };
 
 // Reexports públicos desde search
@@ -44,9 +44,12 @@ pub use train_reservation::{
     MAX_INCREMENTAL_PBS_REFRESHES, compute_train_reservation,
     compute_train_reservation_with_settings, compute_train_reservation_with_wormholes,
     follow_train_reservation, train_blocked_by_reservation, update_train_reservations,
-    update_train_reservations_incremental_with_wormholes, update_train_reservations_with_settings,
-    update_train_reservations_with_wormholes,
+    update_train_reservations_incremental_with_wormholes,
+    update_train_reservations_incremental_with_wormholes_and_acceleration,
+    update_train_reservations_with_settings, update_train_reservations_with_wormholes,
 };
+
+pub(crate) use train_reservation::update_train_reservations_incremental_with_wormholes_and_acceleration_phase;
 
 // Reexports públicos desde try_reserve
 pub use try_reserve::try_path_reserve;

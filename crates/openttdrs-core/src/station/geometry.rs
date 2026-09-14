@@ -284,6 +284,43 @@ pub fn rail_station_stop_tile_for_approach_osl(
         .next()
 }
 
+/// Calcula el tile donde el controlador ferroviario confirma la llegada para
+/// una plataforma concreta.
+///
+/// Se separa de [`rail_station_stop_candidates_osl`]: el pathfinder conserva
+/// como destino el tile geométrico del andén, mientras `VehicleEnter_Station`
+/// puede confirmar el stop en el tile siguiente cuando `stop_at` cae justo en
+/// un borde. `platform_tile` debe pertenecer al andén elegido por la ruta.
+#[must_use]
+pub fn rail_station_controller_stop_tile_for_platform_osl(
+    map: &Map,
+    station_anchor: TileCoord,
+    from: TileCoord,
+    platform_tile: TileCoord,
+    osl: crate::vehicle::OrderStopLocation,
+    train_length: u16,
+) -> Option<TileCoord> {
+    let mut tiles = rail_station_platform_track_tiles(map, station_anchor, platform_tile);
+    let first = *tiles.first()?;
+    let axis_y = map.get(first).is_some_and(|tile| tile.m5 & 1 != 0);
+    tiles.sort_by(|a, b| if axis_y { a.y.cmp(&b.y) } else { a.x.cmp(&b.x) });
+    let approaching_positive = if axis_y {
+        from.y <= tiles[0].y
+    } else {
+        from.x <= tiles[0].x
+    };
+    let oriented = if approaching_positive {
+        tiles
+    } else {
+        tiles.into_iter().rev().collect()
+    };
+    Some(pick_train_controller_stop_tile(
+        &oriented,
+        osl,
+        train_length,
+    ))
+}
+
 /// Paradas candidatas: primero el andén alineado con `from`, luego el resto
 /// (middle de cada vía). Sirve para reintentar YAPF si la vía preferida no
 /// tiene ruta (red dual / PBS one-way).
@@ -395,6 +432,46 @@ pub fn pick_stop_tile(
             .saturating_sub(u16::from(crate::train_consist::VEHICLE_LENGTH.div_ceil(2)));
         usize::from(front_stop.saturating_sub(1) / 16).min(n.saturating_sub(1))
     };
+    platform_entry_to_exit[idx]
+}
+
+/// Selecciona la tesela en la que `VehicleEnter_Station` puede confirmar la
+/// llegada del tren.
+///
+/// `GetTrainStopLocation` devuelve una coordenada en unidades de 1/16 de
+/// tesela y el controlador nativo compara esa coordenada con la posición
+/// local después de haber entrado en la tesela. Por eso, cuando el punto de
+/// parada cae exactamente en un borde, pertenece a la tesela siguiente en el
+/// sentido de marcha. [`pick_stop_tile`] conserva la semántica geométrica
+/// anterior para sus consumidores generales; las rutas de tren usan esta
+/// variante que respeta ese borde de entrada.
+#[must_use]
+fn pick_train_controller_stop_tile(
+    platform_entry_to_exit: &[TileCoord],
+    osl: crate::vehicle::OrderStopLocation,
+    train_length: u16,
+) -> TileCoord {
+    if train_length == 0 {
+        return pick_stop_tile(platform_entry_to_exit, osl, train_length);
+    }
+    let n = platform_entry_to_exit.len();
+    debug_assert!(n > 0);
+    let station_len = u16::try_from(n.saturating_mul(16)).unwrap_or(u16::MAX);
+    let effective = if train_length >= station_len {
+        crate::vehicle::OrderStopLocation::FarEnd
+    } else {
+        osl
+    };
+    let front_center = match effective {
+        crate::vehicle::OrderStopLocation::NearEnd => train_length,
+        crate::vehicle::OrderStopLocation::Middle => {
+            station_len - station_len.saturating_sub(train_length) / 2
+        }
+        crate::vehicle::OrderStopLocation::FarEnd => station_len,
+    };
+    let front_stop =
+        front_center.saturating_sub(u16::from(crate::train_consist::VEHICLE_LENGTH.div_ceil(2)));
+    let idx = usize::from(front_stop / 16).min(n.saturating_sub(1));
     platform_entry_to_exit[idx]
 }
 

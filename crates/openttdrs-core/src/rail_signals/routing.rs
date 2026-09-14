@@ -268,7 +268,11 @@ fn path_exit_lacks_reservation(
         yapf_routing_signal(map, signal_tile, exit_dir),
         YapfSignalRouting::DeadEnd
     ) {
-        return true;
+        // Una PathOneWay en contra no es una señal roja que detenga al tren
+        // antes de la tesela. `TrainCheckIfLineEnds` deja que el convoy se
+        // aproxime y `TrainApproachingLineEnd` lo invierte por longitud;
+        // la reserva PBS sí corta antes (en `rail_step_signal_allows`).
+        return false;
     }
     let bits = signal_bits_for_exit(map, signal_tile, beyond);
     if bits.is_empty() {
@@ -300,8 +304,14 @@ fn train_held_before_signal_tile(
     let Some(beyond) = path_continuation_after(vehicle, to) else {
         return false;
     };
-    let denied = signal_exit_denied(map, vehicles, to, beyond, signal_tile)
-        || path_exit_lacks_reservation(map, vehicle, to, beyond, signal_tile);
+    let exit_dir = dir_from_to(to, beyond).unwrap_or(0);
+    let one_way_boundary = matches!(
+        yapf_routing_signal(map, to, exit_dir),
+        YapfSignalRouting::DeadEnd
+    );
+    let denied = !one_way_boundary
+        && (signal_exit_denied(map, vehicles, to, beyond, signal_tile)
+            || path_exit_lacks_reservation(map, vehicle, to, beyond, signal_tile));
     if !denied {
         return false;
     }
@@ -384,6 +394,49 @@ pub fn train_blocked_by_signal_with_catalog(
     }
     signal_exit_denied(map, vehicles, from, to, &tile)
         || path_exit_lacks_reservation(map, vehicle, from, to, &tile)
+}
+
+/// `true` cuando la siguiente tesela contiene una señal roja en la salida que
+/// sigue el path del tren.
+///
+/// `TrainCheckIfLineEnds` aplica `_breakdown_speeds` al acercarse a una señal
+/// roja incluso si todavía no se puede cruzar la tesela actual durante este
+/// tick. El predicado de bloqueo anterior conserva la decisión de detenerse
+/// sólo para el borde que realmente se va a cruzar; este segundo predicado
+/// reproduce el límite gradual de velocidad previo a ese borde.
+#[must_use]
+pub(crate) fn train_approaching_red_signal(map: &Map, vehicle: &Vehicle) -> bool {
+    if vehicle.kind != VehicleKind::Train || !vehicle.running {
+        return false;
+    }
+    let Some(signal_tile) = vehicle.movement_target() else {
+        return false;
+    };
+    let Some(beyond) = path_continuation_after(vehicle, signal_tile) else {
+        return false;
+    };
+    let Some(tile) = map.get(signal_tile) else {
+        return false;
+    };
+    if tile.kind != TileKind::Rail || !rail_tile_is_signals(tile.m5) {
+        return false;
+    }
+    let rails = tile.m5 & 0x3F;
+    signal_bits_for_exit(map, signal_tile, beyond)
+        .into_iter()
+        .any(|bit| {
+            !signal_is_green(tile.m3hi, bit) && {
+                let track = signal_track_for_bit(rails, bit);
+                let signal_type = track.map_or(super::encoding::SIGTYPE_BLOCK, |track| {
+                    signal_type_for_track(tile.m2, track)
+                });
+                // The native TrackStatus includes both block and PBS red states.
+                // Keeping the type lookup here documents that the selected face
+                // belongs to the actual rail under the path, rather than to an
+                // unrelated signal on a crossing tile.
+                track.is_some() || signal_type == super::encoding::SIGTYPE_BLOCK
+            }
+        })
 }
 
 /// `true` si otro tren ocupa la vía delante (misma dirección o frente a frente).

@@ -32,7 +32,8 @@ pub use destination::{
 pub use geometry::{
     bay_entry_direction, dock_station_native_id, dock_station_tiles, is_connected_bay_road_stop,
     is_drive_through_road_stop, pick_stop_tile, platform_past_stop_tiles,
-    rail_station_approach_tile, rail_station_axis_y, rail_station_owned_tiles,
+    rail_station_approach_tile, rail_station_axis_y,
+    rail_station_controller_stop_tile_for_platform_osl, rail_station_owned_tiles,
     rail_station_platform_tiles, rail_station_platform_track_tiles, rail_station_stop_candidates,
     rail_station_stop_candidates_osl, rail_station_stop_tile, rail_station_stop_tile_for_approach,
     rail_station_stop_tile_for_approach_osl, rail_station_stop_tile_with_osl,

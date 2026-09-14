@@ -10,7 +10,7 @@ use crate::rail_signals::{
 };
 use crate::vehicle::Vehicle;
 
-use super::conflicts::{TrainOccupancyIndex, tile_occupied_by_other_train};
+use super::conflicts::{TrainOccupancyIndex, reserved_steps_overlap, tile_occupied_by_other_train};
 use super::model::{
     MAX_TRAIN_RESERVATION_LEN, ReservedRailStep, YAPF_RESERVATION_CROSS_PENALTY, YAPF_TILE_LENGTH,
     track_for_rail_step, track_on_departure_tile,
@@ -310,8 +310,7 @@ fn find_path_to_safe_wait_with_wormholes_impl(
             else {
                 continue;
             };
-            let step = ReservedRailStep::new(next, track);
-            if already_reserved.contains(&step) {
+            if reserved_steps_overlap(already_reserved, next, track) {
                 continue;
             }
             let occupied = occupancy.map_or_else(

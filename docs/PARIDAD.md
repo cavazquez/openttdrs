@@ -4969,3 +4969,10 @@ locales en la fila de estación y en las 32 entradas vanilla de tarifas; la
 suite completa del cliente queda en `1532` tests exitosos y `2` ignorados.
 #331 continúa abierta por catálogos upstream, settings no modelados, cargos
 custom/NewGRF y otras superficies generadas.
+
+Corrección #331-SUBSIDY-ROW-LOCALE (2026-09-14, `2ed4ddab`): la lista de
+subvenciones localiza el cargo y el nombre de la industria vanilla en las filas
+dinámicas cuando el locale es inglés, preservando nombres custom/NewGRF,
+compañías, coordenadas, IDs, importes y vencimientos. La regresión ejercita una
+industria materializada y el fallback de estación en ambos locales; #331 sigue
+abierta por catálogos upstream y superficies generadas pendientes.

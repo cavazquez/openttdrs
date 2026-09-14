@@ -50,6 +50,22 @@ const SHIP_RELIABILITY_BONUS: u32 = 0x6666;
 /// Bonus de fiabilidad efectiva con averías reducidas (`vehicle.cpp:1358`).
 const REDUCED_BREAKDOWN_RELIABILITY_BONUS: u32 = 0x6666;
 
+/// Escala de fiabilidad persistida por el modelo del núcleo.
+const PORT_RELIABILITY_MAX: u32 = 10_000;
+
+/// Convierte `Vehicle::reliability` del wire nativo (0..=65535) a la escala
+/// porcentual interna del núcleo (0..=10000).
+pub(crate) fn reliability_from_openttd(value: u16) -> u16 {
+    u16::try_from(u32::from(value) * PORT_RELIABILITY_MAX / u32::from(u16::MAX)).unwrap_or(u16::MAX)
+}
+
+/// Convierte la escala porcentual interna al campo `Vehicle::reliability` del
+/// wire SAV nativo.
+pub(crate) fn reliability_to_openttd(value: u16) -> u16 {
+    let value = u32::from(value.min(10_000));
+    u16::try_from(value * u32::from(u16::MAX) / PORT_RELIABILITY_MAX).unwrap_or(u16::MAX)
+}
+
 pub(crate) fn initial_reliability_for_engine(
     engine_id: u16,
     kind: super::model::VehicleKind,
@@ -346,7 +362,13 @@ impl super::model::Vehicle {
         let build_day =
             crate::news::calendar_day_index(crate::tick::GameTick::new(self.build_tick));
         let age_days = calendar_day.saturating_sub(build_day);
-        let past_max = age_days.saturating_sub(u64::from(self.max_age_days));
+        // `OpenTTD` calcula `age = v->age - v->max_age` con signo. Un
+        // vehículo que todavía no alcanzó su vida útil no está en el límite
+        // cero; convertir ese valor negativo a cero duplicaría el decaimiento
+        // en cada barrido diario previo a la primera renovación.
+        let Some(past_max) = age_days.checked_sub(u64::from(self.max_age_days)) else {
+            return;
+        };
         for i in 0_u32..=4_u32 {
             let boundary = u64::from(i) * u64::from(DAYS_PER_VEHICLE_YEAR);
             if past_max == boundary {
@@ -1161,6 +1183,16 @@ mod tests {
     }
 
     #[test]
+    fn sav_reliability_conversion_uses_native_wire_scale() {
+        assert_eq!(reliability_from_openttd(0), 0);
+        assert_eq!(reliability_from_openttd(u16::MAX), 10_000);
+        assert_eq!(reliability_from_openttd(7_500), 1_144);
+        assert_eq!(reliability_to_openttd(0), 0);
+        assert_eq!(reliability_to_openttd(10_000), u16::MAX);
+        assert_eq!(reliability_to_openttd(7_654), 50_160);
+    }
+
+    #[test]
     fn reliability_spd_dec_doubles_after_max_age_year_boundary() {
         let mut v = Vehicle::new(
             1,
@@ -1174,6 +1206,23 @@ mod tests {
         let calendar_day = u64::from(DAYS_PER_VEHICLE_YEAR);
         v.age_vehicle_calendar_day(calendar_day);
         assert_eq!(v.reliability_spd_dec, 160);
+    }
+
+    #[test]
+    fn reliability_spd_dec_stays_constant_before_max_age() {
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        v.reliability_spd_dec = 80;
+        v.max_age_days = DAYS_PER_VEHICLE_YEAR;
+        v.build_tick = 0;
+
+        v.age_vehicle_calendar_day(u64::from(DAYS_PER_VEHICLE_YEAR - 1));
+
+        assert_eq!(v.reliability_spd_dec, 80);
     }
 
     #[test]

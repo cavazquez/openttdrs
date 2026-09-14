@@ -12,6 +12,21 @@ use crate::train_movement::{ACCEL_SLOWDOWN, affect_speed_by_z_change, is_45_degr
 /// Paso sub-tile de referencia (bus MPS en diagonal). Ver [`crate::REFERENCE_PROGRESS_STEP`].
 pub const VEHICLE_PROGRESS_STEP: u8 = crate::engine::REFERENCE_PROGRESS_STEP;
 
+/// Velocidades máximas durante una avería (`train_cmd.cpp`).
+const TRAIN_BREAKDOWN_SPEEDS: [u16; 16] = [
+    225, 210, 195, 180, 165, 150, 135, 120, 105, 90, 75, 60, 45, 30, 15, 15,
+];
+
+/// Replica `GB(~breakdown_ctr, 4, 4)` de `TrainCheckIfLineEnds`.
+#[must_use]
+const fn train_breakdown_speed_cap(breakdown_ctr: u8) -> Option<u16> {
+    if breakdown_ctr <= 1 {
+        return None;
+    }
+    let index = ((!breakdown_ctr) >> 4) & 0x0F;
+    Some(TRAIN_BREAKDOWN_SPEEDS[index as usize])
+}
+
 /// Escala la distancia sub-tile de una aeronave con `vehicle.plane_speed`.
 ///
 /// El oráculo divide la distancia después de actualizar la velocidad. El
@@ -409,6 +424,7 @@ impl super::model::Vehicle {
                 self.train_do_update_speed(map, train_accel, self.pbs_stuck, engine_catalog);
             self.cur_speed = result.cur_speed;
             self.subspeed = result.subspeed;
+            self.apply_train_breakdown_speed_cap(result.advance);
             self.progress = 0;
             if self.cur_speed == 0 && self.pos == self.dest {
                 self.advance_destination_after_arrival_with_catalog(engine_catalog);
@@ -507,6 +523,7 @@ impl super::model::Vehicle {
         let result = self.train_do_update_speed(map, train_accel, braking, engine_catalog);
         self.cur_speed = result.cur_speed;
         self.subspeed = result.subspeed;
+        self.apply_train_breakdown_speed_cap(result.advance);
         self.progress = 0;
 
         if self.cur_speed == 0 {
@@ -544,6 +561,18 @@ impl super::model::Vehicle {
         }
         if let Some(map) = map {
             self.sync_train_slope_speed_with_catalog(map, engine_catalog);
+        }
+    }
+
+    /// `TrainCheckIfLineEnds` limita la velocidad sólo cuando el handler tiene
+    /// remanente suficiente para intentar un paso de tesela. El remanente se
+    /// calculó con la velocidad previa al límite y no debe recalcularse.
+    fn apply_train_breakdown_speed_cap(&mut self, advance: u32) {
+        if advance < get_advance_distance(self.direction) {
+            return;
+        }
+        if let Some(cap) = train_breakdown_speed_cap(self.breakdown_ctr) {
+            self.cur_speed = self.cur_speed.min(cap);
         }
     }
 
@@ -1462,7 +1491,7 @@ impl super::model::Vehicle {
 
 #[cfg(test)]
 mod tests {
-    use super::aircraft_progress_step_for_plane_speed;
+    use super::{aircraft_progress_step_for_plane_speed, train_breakdown_speed_cap};
     use crate::{DIR_SW, Map, TileCoord, TileKind, Vehicle, VehicleKind};
     use std::collections::VecDeque;
 
@@ -1474,6 +1503,13 @@ mod tests {
         assert_eq!(aircraft_progress_step_for_plane_speed(64, 4), 16);
         assert_eq!(aircraft_progress_step_for_plane_speed(64, 0), 64);
         assert_eq!(aircraft_progress_step_for_plane_speed(64, 9), 16);
+    }
+
+    #[test]
+    fn train_breakdown_speed_cap_matches_native_table() {
+        assert_eq!(train_breakdown_speed_cap(26), Some(15));
+        assert_eq!(train_breakdown_speed_cap(72), Some(60));
+        assert_eq!(train_breakdown_speed_cap(1), None);
     }
 
     #[test]

@@ -469,9 +469,9 @@ const SLV_FACE_STYLES: u16 = 355;
 /// servir industrias con estación neutral.
 const SLV_SERVE_NEUTRAL_INDUSTRIES: u16 = 210;
 
-/// Estilos compilados en `table/company_face.h` del OpenTTD de referencia.
+/// Estilos compilados en `table/company_face.h` del `OpenTTD` de referencia.
 ///
-/// Los estilos NewGRF se resuelven en el runtime nativo. Como el importador
+/// Los estilos `NewGRF` se resuelven en el runtime nativo. Como el importador
 /// todavía conserva esas etiquetas como texto opaco, una etiqueta que no
 /// pertenece a esta lista debe seguir el fallback nativo de
 /// `AfterLoadGame()`: generar un estilo y sus bits consumiendo dos tiradas.
@@ -1884,7 +1884,7 @@ impl GameState {
                 vehicle.last_depart_tick =
                     (v.last_loading_tick != 0).then_some(v.last_loading_tick);
                 vehicle.service_interval_days = v.service_interval;
-                vehicle.reliability = v.reliability;
+                vehicle.reliability = crate::vehicle::reliability_from_openttd(v.reliability);
                 vehicle.reliability_spd_dec = v.reliability_spd_dec;
                 vehicle.breakdown_ctr = v.breakdown_ctr;
                 vehicle.breakdown_delay = v.breakdown_delay;
@@ -2032,7 +2032,7 @@ impl GameState {
                 .and_then(|station_id| station_positions.get(&station_id).copied());
             vehicle.last_depart_tick = (v.last_loading_tick != 0).then_some(v.last_loading_tick);
             vehicle.service_interval_days = v.service_interval;
-            vehicle.reliability = v.reliability;
+            vehicle.reliability = crate::vehicle::reliability_from_openttd(v.reliability);
             vehicle.reliability_spd_dec = v.reliability_spd_dec;
             vehicle.breakdown_ctr = v.breakdown_ctr;
             vehicle.breakdown_delay = v.breakdown_delay;

@@ -181,12 +181,12 @@ fn append_company_yearly_expenses(record: &mut Vec<u8>, expenses: &[i64]) -> Res
     Ok(())
 }
 
-/// Etiqueta que usa OpenTTD para el primer estilo vanilla cuando el estado
+/// Etiqueta que usa `OpenTTD` para el primer estilo vanilla cuando el estado
 /// creado por el core todavía no trae una selección de retrato.
 ///
 /// Emitir una etiqueta válida evita que `AfterLoadGame()` descarte el estilo y
 /// consuma dos tiradas del RNG global al abrir un SAV recién exportado. Las
-/// etiquetas explícitas (incluidas las NewGRF) se conservan sin alterarlas.
+/// etiquetas explícitas (incluidas las `NewGRF`) se conservan sin alterarlas.
 fn face_style_for_save(style: Option<&str>) -> &str {
     style.unwrap_or("default/face1")
 }

@@ -863,7 +863,7 @@ fn common_wire_for(
         last_loading_station,
         last_loading_tick: v.last_depart_tick.unwrap_or(0),
         service_interval: v.service_interval_days,
-        reliability: v.reliability,
+        reliability: crate::vehicle::reliability_to_openttd(v.reliability),
         reliability_spd_dec: v.reliability_spd_dec,
         breakdown_ctr: v.breakdown_ctr,
         breakdown_delay: v.breakdown_delay,
@@ -2507,7 +2507,7 @@ mod tests {
         );
         assert_eq!(
             record_get(common, "reliability").and_then(SlValue::as_u64),
-            Some(7_654)
+            Some(u64::from(crate::vehicle::reliability_to_openttd(7_654)))
         );
         assert_eq!(
             record_get(common, "reliability_spd_dec").and_then(SlValue::as_u64),

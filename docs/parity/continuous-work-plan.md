@@ -38,6 +38,14 @@ La selección de pista en cruces conserva la transición entrada→salida comple
 esto evita interpretar una recta junto a un depósito como un giro y mantiene
 el frenado `_accel_slowdown` sólo para curvas reales.
 
+La misma fixture dual de trenes se extendió de 40 a 500 ticks con un oráculo
+OpenTTD 15.3 versionado. La comparación cubre cinemática y reservas PBS durante
+la espera, la curva, la plataforma alternativa y la recuperación posterior del
+head-on (`502` filas incluyendo metadata e inicial); la traza Rust coincide en
+las `501` muestras comparables. Esto reduce el residual temporal de #330, pero
+no cubre todavía redes grandes, cruces/merge adicionales ni todos los
+desempates de YAPF.
+
 El ajuste también conserva la cardinalidad nativa de movimiento: una entrada
 cardinal consume ocho posiciones de `rail_pixel`, mientras una entrada
 diagonal consume dieciséis. #330 sigue abierto para los escenarios no cubiertos

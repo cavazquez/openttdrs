@@ -1,6 +1,6 @@
 //! Oráculo externo: `train_dual_pbs_curve_15_3.sav` (2 trenes, PBS, curva, plataformas).
 //!
-//! Paridad cerrada: muestra `initial` + 40 ticks (cinemática y reservas PBS).
+//! Paridad cerrada: muestra `initial` + 500 ticks (cinemática y reservas PBS).
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
@@ -128,9 +128,9 @@ fn imports_dual_pbs_curve_fixture_shape() {
 }
 
 #[test]
-fn oracle_trace_has_two_trains_and_forty_ticks() {
+fn oracle_trace_has_two_trains_and_five_hundred_ticks() {
     let rows = load_oracle();
-    assert_eq!(rows.len(), 42, "metadata + initial + 40 ticks");
+    assert_eq!(rows.len(), 502, "metadata + initial + 500 ticks");
     assert_eq!(rows[0].kind, "metadata");
     assert_eq!(rows[1].kind, "initial");
     let initial = rows[1].trains.as_ref().expect("trains");
@@ -168,7 +168,7 @@ fn oracle_trace_has_two_trains_and_forty_ticks() {
 }
 
 #[test]
-fn rust_matches_openttd_oracle_for_forty_ticks() {
+fn rust_matches_openttd_oracle_for_five_hundred_ticks() {
     let oracle = load_oracle();
     let raw = std::fs::read(fixture_path("train_dual_pbs_curve_15_3.sav")).expect("fixture");
     let mut state = GameState::from_sav_game(sav::load(&raw).expect("load"));

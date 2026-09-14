@@ -1713,7 +1713,7 @@ aproximadas (Fases 2–3 del roadmap estructural).
 | Pendientes + fundaciones de vía | `map/rail_slope.rs` (`rail_trackbits_valid_on_slope`), `command/terraform.rs` (autoslope) | `rail_cmd.cpp` (foundations), `slope_func.h` | 3 · validado parcial (`computed_tileh_matches_openrtd_sw`) | tests de `map/rail_slope.rs` | Bajo |
 | Señales — colocación y encoding | `rail_signals.rs` (`signal_placement_for_track`, `m2`/`m3`/`m3hi`) | `rail_map.h:287-526`, `signal_type.h` | 2 · probado (encoding compatible con saves OpenTTD) | tests de `rail_signals.rs` (`signal_placement_is_single_bit`, `cycle_signal_side_*`) | Medio: ENTRY/EXIT/COMBO implementados; falta validación amplia de topologías complejas |
 | Señales — bloqueo | `rail_signals.rs` (`rail_block_ahead`, `train_blocked_by_signal`, `update_rail_signal_states`) + `sim_step.rs` | `signal.cpp:280-660` (`UpdateSignalsOnSegment`) | 3 · validado en escenarios acotados | tests de `rail_signals/presignal.rs`, `sim_train_waits_until_block_ahead_clears`, `signal_wait_events_emitted_with_two_trains` | Alto: políticas de reserva/espera y timing sin golden amplio contra OpenTTD |
-| Reservas de camino (PBS) | `rail_pbs.rs` (TryReserve, `follow_train_reservation`, path signals, plataforma) | `pbs.cpp` (`TryReserveRailTrack`, `FollowTrainReservation`) | 5 · equivalente en fixtures PBS 15.3 acotados (2 trenes/40 ticks y consist de 3 unidades/500 ticks) | `pbs_openttd_oracle.rs`, `pbs_dual_curve_oracle.rs`, `consist_pbs_openttd_oracle.rs`, `golden_pbs.rs` | Medio fuera de esos escenarios: cruces/merge/opuestos, redes grandes, tiempos largos y desempates YAPF aún sin golden externo |
+| Reservas de camino (PBS) | `rail_pbs.rs` (TryReserve, `follow_train_reservation`, path signals, plataforma) | `pbs.cpp` (`TryReserveRailTrack`, `FollowTrainReservation`) | 5 · equivalente en fixtures PBS 15.3 acotados (2 trenes/500 ticks y consist de 3 unidades/500 ticks) | `pbs_openttd_oracle.rs`, `pbs_dual_curve_oracle.rs`, `consist_pbs_openttd_oracle.rs`, `golden_pbs.rs` | Medio fuera de esos escenarios: cruces/merge/opuestos adicionales, redes grandes y desempates YAPF aún sin golden externo |
 | Estaciones rail (plataformas 1..=7, waypoints) | `command/transport/station.rs` (`place_rail_station_area`, `rail_station_layout`), `station.rs` | `station_cmd.cpp:1416-1433`, `CmdBuildRailStation` | 2 · probado (layout + flags catenaria m3 compatibles; entrada exige vía adyacente) | `place_rail_station_area_*`, `place_rail_waypoint_*`, `station_*catenary*` | Medio |
 | Depósitos rail | `depot.rs` (`Has/SetDepotReservation`), `depot_leave.rs` (`CheckTrainStayInDepot` + `TryPathReserve` + `TicksToLeaveDepot`) | `rail_map.h:256-272`, `train_cmd.cpp:2354-2427`, `rail_cmd.cpp:2999-3044` | 4 · paridad PBS leave | `depot_leave::*`, `two_trains_leave_same_rail_depot_sequentially` | Medio: sin enum `Track` completo; `depot_leave_cleared` es el proxy |
 | Túneles/puentes rail | `command/transport/bridge.rs` (compartido con road), `map/slope.rs` | `tunnelbridge_cmd.cpp:1959-2087` | 2 · probado | `tunnel_hides_train_matches_visibility_frame`, `train_on_wooden_bridge_is_speed_capped` | Medio: wormhole y validación externa de casos complejos siguen simplificados |
@@ -3167,8 +3167,11 @@ oráculo de 40 ticks están versionados.
 - Tests: `tests/pbs_dual_curve_oracle.rs`
 
 Contenido: 2 trenes Ginzu A4, 2 estaciones duales, path / path-oneway, curva en
-`(25–26, 8)`, depósito `(24, 9)`. **Paridad cerrada** (`initial` + 40 ticks:
-cinemática y reservas PBS) en `tests/pbs_dual_curve_oracle.rs`.
+`(25–26, 8)`, depósito `(24, 9)`. **Paridad cerrada** (`initial` + 500 ticks:
+cinemática y reservas PBS) en `tests/pbs_dual_curve_oracle.rs`. La ventana larga
+incluye la espera frente a la ruta ocupada, la elección de plataforma alternativa,
+el cruce por la curva y la recuperación del head-on; no se observan divergencias
+en las 501 muestras post-iniciales.
 
 #### Fixture multi-vagón (consist + PBS, schema v2)
 

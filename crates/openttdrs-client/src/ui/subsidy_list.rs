@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{TICKS_PER_MONTH, cargo_display_name};
+use openttdrs_core::{IndustrySpec, TICKS_PER_MONTH, cargo_display_name};
 
 use crate::i18n::{Locale, localized_text};
 use crate::iso::tile_pos;
@@ -166,7 +166,7 @@ fn industry_label(locale: Locale, sim: &SimWorld, pos: TileCoord) -> String {
         let name = industry
             .spec
             .map_or_else(|| kind_label(industry.kind), spec_label);
-        format!("{name} ({}, {})", pos.x, pos.y)
+        format!("{} ({}, {})", localized_text(locale, name), pos.x, pos.y)
     } else {
         format!(
             "{} ({}, {})",
@@ -207,7 +207,7 @@ fn format_subsidy_row(
     subsidy: &openttdrs_core::Subsidy,
     tick: u64,
 ) -> String {
-    let cargo = cargo_display_name(subsidy.cargo);
+    let cargo = localized_text(locale, cargo_display_name(subsidy.cargo));
     let source = industry_label(locale, sim, subsidy.source_industry_pos);
     let dest = station_label(locale, sim, subsidy.dest_station_pos);
     if subsidy.is_award_active(tick) {
@@ -501,8 +501,11 @@ mod tests {
     }
 
     #[test]
-    fn subsidy_rows_follow_locale_without_translating_cargo_data() {
-        let state = GameState::new(8, 8);
+    fn subsidy_rows_follow_locale_for_vanilla_labels() {
+        let mut state = GameState::new(8, 8);
+        let mut industry = Industry::new(TileCoord::new(1, 2), IndustryKind::CoalMine);
+        industry.spec = Some(IndustrySpec::CoalMine);
+        state.industries.push(industry);
         let sim = SimWorld {
             state,
             ..SimWorld::default()
@@ -522,15 +525,16 @@ mod tests {
 
         let english = format_subsidy_row(Locale::En, &sim, &subsidy, 0);
         assert!(english.starts_with("[Offer]"));
-        assert!(english.contains(cargo_display_name(CargoType::Coal)));
-        assert!(english.contains("Industry (1, 2)"));
+        assert!(english.contains("coal"));
+        assert!(!english.contains("carbón"));
+        assert!(english.contains("Coal mine (1, 2)"));
         assert!(english.contains("Station (5, 6)"));
         assert!(english.ends_with("2 months"));
 
         let spanish = format_subsidy_row(Locale::Es, &sim, &subsidy, 0);
         assert!(spanish.starts_with("[Oferta]"));
         assert!(spanish.contains(cargo_display_name(CargoType::Coal)));
-        assert!(spanish.contains("Industria (1, 2)"));
+        assert!(spanish.contains("Mina de carbón (1, 2)"));
         assert!(spanish.contains("Estación (5, 6)"));
         assert!(spanish.ends_with("2 meses"));
     }

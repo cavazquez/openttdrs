@@ -72,6 +72,11 @@ pub fn road_veh_find_close_to(vehicles: &[Vehicle], v_idx: usize) -> Option<usiz
     if !is_road_vehicle_kind(v.kind) || v.is_articulated_unit() || !v.running {
         return None;
     }
+    // `RoadVehFindCloseTo` sale antes de tocar `blocked_ctr` durante una
+    // reversa. El contador queda congelado hasta que termina la maniobra.
+    if v.reverse_ctr != 0 {
+        return None;
+    }
     // Dentro de una bahía la exclusión de boca y la asignación far/near son
     // autoritativas; el orden axial por tesela no representa ese lazo.
     if crate::road_movement::rvsb::is_bay_road_state(v.road_state) {
@@ -141,6 +146,11 @@ pub fn road_veh_find_close_to_indexed(
 ) -> Option<usize> {
     let v = vehicles.get(v_idx)?;
     if !is_road_vehicle_kind(v.kind) || v.is_articulated_unit() || !v.running {
+        return None;
+    }
+    // Igual que la variante lineal: el early return nativo ocurre antes del
+    // reset por ausencia de bloqueo cuando el vehículo está invirtiendo.
+    if v.reverse_ctr != 0 {
         return None;
     }
     if crate::road_movement::rvsb::is_bay_road_state(v.road_state)
@@ -233,6 +243,11 @@ fn apply_road_veh_close_to_with_blocker(
     blocker: Option<usize>,
     engine_catalog: &[crate::engine::EngineDef],
 ) -> bool {
+    // El early return nativo de `RoadVehFindCloseTo` ocurre antes de la rama
+    // de adelantamiento y, por tanto, tampoco borra `blocked_ctr`.
+    if vehicles.get(v_idx).is_some_and(|v| v.reverse_ctr != 0) {
+        return false;
+    }
     if vehicles
         .get(v_idx)
         .is_some_and(|v| v.overtaking != 0 || v.crashed)
@@ -402,5 +417,29 @@ mod tests {
 
         assert_eq!(road_veh_find_close_to_indexed(&vehicles, 0, &index), None);
         assert_eq!(road_veh_find_close_to(&vehicles, 1), None);
+    }
+
+    #[test]
+    fn reverse_counter_preserves_blocked_counter_while_skipping_traffic_lookup() {
+        let mut vehicle = bus_at(1, 0, 6, 41);
+        vehicle.blocked_ctr = 19;
+        vehicle.reverse_ctr = 3;
+        let mut vehicles = vec![vehicle];
+
+        assert_eq!(road_veh_find_close_to(&vehicles, 0), None);
+        assert_eq!(vehicles[0].blocked_ctr, 19);
+        assert!(!apply_road_veh_close_to(&mut vehicles, 0, None));
+        assert_eq!(vehicles[0].blocked_ctr, 19);
+
+        let mut index = RoadTrafficIndex::default();
+        index.rebuild(&vehicles);
+        assert_eq!(road_veh_find_close_to_indexed(&vehicles, 0, &index), None);
+        assert!(!apply_road_veh_close_to_indexed(
+            &mut vehicles,
+            0,
+            None,
+            &index
+        ));
+        assert_eq!(vehicles[0].blocked_ctr, 19);
     }
 }

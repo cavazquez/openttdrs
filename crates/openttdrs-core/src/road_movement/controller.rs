@@ -101,15 +101,6 @@ pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
         return false;
     }
 
-    // Mantener trackdir alineado con la dirección de marcha en rectas.
-    let expected = trackdir_from_direction(v.direction);
-    if !is_bay_road_state(v.road_state)
-        && matches!(v.road_state & RVSB_TRACKDIR_MASK, 0 | 1 | 8 | 9)
-        && v.road_state & RVSB_TRACKDIR_MASK != expected
-    {
-        v.road_state = (v.road_state & !RVSB_TRACKDIR_MASK) | expected;
-    }
-
     let state = v.road_state;
     let lookup = drive_state_with_overtake_and_side(state, v.overtaking, drive_on_right);
     let next_frame = v.frame.saturating_add(1);
@@ -859,6 +850,46 @@ mod tests {
                 assert_eq!(vehicles[0].direction, direction);
             }
         }
+    }
+
+    #[test]
+    fn imported_road_state_and_blocked_counter_follow_native_early_returns() {
+        let start = TileCoord::new(0, 0);
+        let end = TileCoord::new(10, 0);
+        let mut v = Vehicle::new(1, VehicleKind::Bus, start, end);
+        // Estado deliberadamente no alineado con el rumbo, igual que el
+        // fixture `mvp_openttd_rich.sav`: OpenTTD conserva ambos campos.
+        v.running = true;
+        v.direction = DIR_NE;
+        v.road_state = 8;
+        v.frame = 6;
+        v.blocked_ctr = 19;
+        v.reverse_ctr = 3;
+        v.overtaking = crate::road_movement::rvsb::RVSB_DRIVE_SIDE;
+        v.overtaking_ctr = 7;
+        v.crashed_ctr = 23;
+        v.progress = 173;
+        v.cur_speed = 41;
+        v.subspeed = 99;
+        v.path = VecDeque::from([TileCoord::new(1, 0)]);
+        let mut vehicles = vec![v];
+
+        road_vehicle_tick_side_with_traffic(
+            &mut vehicles,
+            0,
+            None,
+            false,
+            RoadVehicleAccelerationModel::Original,
+            None,
+            &[],
+            &[],
+        );
+
+        assert_eq!(vehicles[0].road_state, 8);
+        assert_eq!(vehicles[0].blocked_ctr, 19);
+        assert_eq!(vehicles[0].frame, 7);
+        assert_eq!(vehicles[0].overtaking_ctr, 8);
+        assert_eq!(vehicles[0].reverse_ctr, 2);
     }
 
     #[test]

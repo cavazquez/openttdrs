@@ -7692,7 +7692,27 @@ controlador cuando aún no había path cacheado. La regresión cubre la reversa
 ante una tesela vacía. El replay largo de `mvp_openttd_rich.sav` coincide en
 `2001/2001` muestras de PBS y dinámica vial; pasan los 19 tests del controlador
 vial, el cliente (`1532`, 2 ignorados), formato y Clippy de la librería. La
-suite completa del core mantiene pendiente el fallo aislado
-`vehicle::tests::timetable_wait_delays_order_advance` (`left=0`, `right=30`),
-por lo que #330 permanece abierta junto con rutas multi-tick, tráfico complejo,
-presignals, aire y mar.
+suite completa del core mantenía entonces pendiente el fallo aislado
+`vehicle::tests::timetable_wait_delays_order_advance` (`left=0`, `right=30`).
+
+Corrección #330-ROAD-STANDALONE-ARRIVAL (2026-09-14, `13d9912e`): una orden
+vial que ya está sobre una estación sin `movement_target` entra por la misma
+ruta de llegada que una estación alcanzada durante el movimiento. El controlador
+ya no queda detenido esperando una transición imposible de pathfinding; la
+regresión cubre la llegada standalone y la suite del core vuelve a quedar
+verde. #330 permanece abierta por los contratos de rutas multi-tick, tráfico
+complejo, presignals y los oráculos de aire y mar.
+
+Corrección #330-TRAIN-LINE-END-PIXEL (2026-09-14, `cdb2ca4c`): el fin de vía
+físico usa el complemento de coordenada de 16 píxeles (`12 → 4` y el borde
+`15 → 1`), mientras que la reversa provocada por una señal unidireccional
+conserva el caso nativo de borde `15 → 0`. Separar ambas rutas evita una
+regresión en `train_pbs_15_3` y reproduce la inversión del replay rico en el
+tick `12465`. La regresión quedó incorporada al oráculo PBS con su estado
+completo (`pos`, `progress`, velocidad, dirección y `rail_pixel`). La
+comparación externa de `mvp_openttd_rich.sav` queda en `2001/2001` muestras
+para PBS y dinámica vial; pasan el oráculo focalizado (5 tests), el core
+(`2752` tests, 1 ignorado), Clippy de la librería, formato y el gate de
+documentación. #330 sigue abierta: esta evidencia cubre una ventana concreta,
+no la resolución global de rutas multi-tick, tráfico complejo, presignals,
+aire y mar.

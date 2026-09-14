@@ -5053,3 +5053,22 @@ devuelve `OK: dinámica vial externa sin divergencias (41 ticks)`; la suite del
 core queda en 2736 tests exitosos y 1 ignorado. #330 permanece abierta: faltan
 resolución de rutas multi-tick, tráfico complejo, presignals y los oráculos de
 aire/mar.
+
+Corrección #330-ROAD-STANDALONE-ARRIVAL (2026-09-14, `13d9912e`): una orden
+vial que ya está sobre una estación sin `movement_target` entra por la ruta de
+llegada nativa. Se evita así que el vehículo quede esperando una transición de
+pathfinding que no puede producirse; la regresión cubre esta llegada
+standalone y la suite del core queda verde. El issue #330 sigue abierto por
+los contratos de rutas multi-tick, tráfico complejo, presignals y los oráculos
+de aire y mar.
+
+Corrección #330-TRAIN-LINE-END-PIXEL (2026-09-14, `cdb2ca4c`): el fin de vía
+físico transforma el `rail_pixel` con el complemento de 16 píxeles (`12 → 4`,
+`15 → 1`), pero una reversa provocada por una señal unidireccional conserva el
+caso nativo de borde `15 → 0`. La distinción reproduce la inversión del replay
+rico en el tick `12465` sin romper el caso PBS que invierte en el borde de una
+señal. El oráculo PBS valida el estado completo y la comparación externa de
+`mvp_openttd_rich.sav` queda en `2001/2001` muestras de PBS y dinámica vial;
+el core pasa `2752` tests, con 1 ignorado. Este bloque no cierra #330: aún
+faltan rutas multi-tick, tráfico complejo, presignals y los oráculos de aire y
+mar.

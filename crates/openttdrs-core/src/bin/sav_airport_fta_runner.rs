@@ -47,6 +47,8 @@ struct FtaAircraft {
     state: u8,
     targetairport: u32,
     speed: u16,
+    progress: u8,
+    subspeed: u8,
     running: bool,
 }
 
@@ -155,6 +157,8 @@ fn trace_row(
                 state: v.airport_heading.as_u8(),
                 targetairport,
                 speed: v.cur_speed,
+                progress: v.progress,
+                subspeed: v.subspeed,
                 running: v.running,
             }
         })

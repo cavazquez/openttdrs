@@ -18,9 +18,9 @@ comparan porque representan modelos distintos por diseño, no divergencias:
 
 Para los ticks, dado que el motor FTA de `openttdrs` es una reimplementación
 simplificada (sin el contador de espera exacto por nodo de OpenTTD), se
-reporta la primera fila donde la secuencia de `pos`/`state` diverge en vez de
-exigir igualdad total; solo falla si el *initial* no coincide o si la forma
-de la traza es inválida.
+reporta la primera fila donde los campos comparables divergen en vez de exigir
+igualdad total; solo falla si el *initial* no coincide o si la forma de la
+traza es inválida.
 """
 
 from __future__ import annotations
@@ -37,6 +37,8 @@ AIRCRAFT_FIELDS = (
     "state",
     "targetairport",
     "speed",
+    "progress",
+    "subspeed",
     "direction",
     "running",
 )
@@ -110,24 +112,30 @@ def main() -> None:
     first_divergence = None
     for frame in range(1, ticks + 1):
         exp_row, act_row = expected[frame], actual[frame]
-        exp_pos = [ac["pos"] for ac in sorted(exp_row.get("aircraft", []), key=lambda a: a["targetairport"])]
-        act_pos = [ac["pos"] for ac in sorted(act_row.get("aircraft", []), key=lambda a: a["targetairport"])]
-        exp_state = [ac["state"] for ac in sorted(exp_row.get("aircraft", []), key=lambda a: a["targetairport"])]
-        act_state = [ac["state"] for ac in sorted(act_row.get("aircraft", []), key=lambda a: a["targetairport"])]
-        if (exp_pos, exp_state) != (act_pos, act_state):
-            first_divergence = (frame, exp_row.get("tick"), act_row.get("tick"), exp_pos, exp_state, act_pos, act_state)
+        exp_aircraft = comparable_aircraft(exp_row)
+        act_aircraft = comparable_aircraft(act_row)
+        if exp_aircraft != act_aircraft:
+            first_divergence = (
+                frame,
+                exp_row.get("tick"),
+                act_row.get("tick"),
+                exp_aircraft,
+                act_aircraft,
+            )
             break
 
     if first_divergence is None:
-        print(f"OK ticks: secuencia pos/state idéntica en los {ticks} ticks comparados")
+        print(
+            "OK ticks: secuencia de campos aircraft comparables "
+            f"idéntica en los {ticks} ticks comparados"
+        )
         return
 
-    frame, exp_tick, act_tick, exp_pos, exp_state, act_pos, act_state = first_divergence
+    frame, exp_tick, act_tick, exp_aircraft, act_aircraft = first_divergence
     print(
         "DIVERGENCIA documentada (no fatal) en tick relativo "
         f"{frame}/{ticks} (OpenTTD tick={exp_tick}, openttdrs tick={act_tick}):\n"
-        f"  pos:   OpenTTD={exp_pos} openttdrs={act_pos}\n"
-        f"  state: OpenTTD={exp_state} openttdrs={act_state}\n"
+        f"  aircraft: OpenTTD={exp_aircraft} openttdrs={act_aircraft}\n"
         "  Causa esperada: el motor FTA de openttdrs es una reimplementación "
         "MVP sin el contador de espera exacto por nodo de OpenTTD "
         "(`aircraft_phase_ticks` se aproxima por flags al importar, no se "

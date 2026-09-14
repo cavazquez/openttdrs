@@ -1303,6 +1303,8 @@ void WriteAirportFtaTraceRow(const char *kind)
 		ac["state"] = a->state;
 		ac["targetairport"] = a->targetairport.base();
 		ac["speed"] = v->cur_speed;
+		ac["progress"] = v->progress;
+		ac["subspeed"] = v->subspeed;
 		ac["running"] = !v->vehstatus.Test(VehState::Stopped);
 		row["aircraft"].push_back(ac);
 	}

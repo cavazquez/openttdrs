@@ -9,8 +9,9 @@ use crate::vehicle::{
 
 use super::profile::fta_profile_for_spec;
 use super::types::{
-    AirportFtaEdge, AirportFtaKind, AirportFtaProfile, AirportHeading, FLAG_BRAKE, FLAG_HELI_LOWER,
-    FLAG_HELI_RAISE, FLAG_HOLD, FLAG_LAND, FLAG_NO_SPEED_CLAMP, FLAG_TAKEOFF,
+    AirportFtaEdge, AirportFtaKind, AirportFtaProfile, AirportHeading, AirportMovingData,
+    FLAG_BRAKE, FLAG_EXACT, FLAG_HELI_LOWER, FLAG_HELI_RAISE, FLAG_HOLD, FLAG_LAND,
+    FLAG_NO_SPEED_CLAMP, FLAG_SLOW_TURN, FLAG_TAKEOFF,
 };
 
 const FTA_DWELL_TICKS: u16 = 6;
@@ -116,7 +117,7 @@ pub fn tick_airport_fta_with_catalog_and_plane_speed(
         return Some(ev);
     }
     if v.aircraft_phase == AircraftPhase::Flying && !v.airport_fta_active {
-        return None;
+        return tick_aircraft_free_flight_fta(v, map, stations, engine_catalog, plane_speed);
     }
     let st_idx = resolve_fta_station_idx(v, stations)?;
     if v.airport_fta_station.is_none() {
@@ -220,6 +221,85 @@ fn vehicle_is_helicopter(v: &Vehicle, engine_catalog: &[crate::engine::EngineDef
     crate::engine::aircraft_is_helicopter_def(engine)
 }
 
+/// Controla el tramo entre la salida del aeropuerto y la entrada FTA del
+/// siguiente aeropuerto. `OpenTTD` sigue usando `AircraftController` durante
+/// este tramo: actualiza dos veces por tick y mueve la posición física en
+/// píxeles, aunque el nodo FTA no cambie hasta alcanzar su waypoint.
+fn tick_aircraft_free_flight_fta(
+    v: &mut Vehicle,
+    map: &Map,
+    stations: &[Station],
+    engine_catalog: &[crate::engine::EngineDef],
+    plane_speed: u8,
+) -> Option<AircraftPhaseEvent> {
+    let station_idx = target_fta_station_idx(v, stations)?;
+    let station = &stations[station_idx];
+    let profile = fta_profile_for_spec(station.airport_spec)?;
+    if !station_uses_airport_fta(station) {
+        return None;
+    }
+
+    ensure_airport_subpos(v);
+    if v.airport_pos == 0 {
+        let entry = profile.entries[0];
+        v.airport_pos = entry;
+        v.airport_prev_pos = entry;
+    }
+    v.airport_fta_tick_consumed = true;
+    let is_helicopter = vehicle_is_helicopter(v, engine_catalog);
+    // Los vehículos creados en runtime aún no pasan por `Aircraft::UpdateCache`
+    // y por eso no tienen la aceleración persistida del save. El catálogo
+    // reducido conserva la misma aceleración vanilla para sus aeronaves.
+    if v.acceleration == 0 {
+        v.acceleration = 20;
+    }
+    let max_speed = aircraft_speed_limit(v, engine_catalog);
+    let mut reached_entry = false;
+    for _ in 0..2 {
+        if advance_aircraft_flight_handler(
+            v,
+            map,
+            station,
+            &profile,
+            plane_speed,
+            max_speed,
+            is_helicopter,
+        ) {
+            reached_entry = true;
+            break;
+        }
+    }
+    if reached_entry {
+        // El handler siguiente de OpenTTD continúa directamente con el FTA
+        // del aeropuerto objetivo. Dejamos el nodo de entrada marcado como
+        // alcanzado para que el tick FTA siguiente elija la arista correcta.
+        v.airport_fta_active = true;
+        v.airport_fta_station = Some(station.pos);
+        v.airport_blocks_held = 0;
+        v.airport_waypoint_reached = true;
+        v.airport_loading_stand_reached = false;
+        let approach_is_helicopter = is_helicopter
+            || matches!(
+                profile.kind,
+                AirportFtaKind::Helidepot | AirportFtaKind::Heliport | AirportFtaKind::Helistation
+            );
+        v.aircraft_phase = AircraftPhase::Landing;
+        v.aircraft_phase_ticks = 0;
+        v.airport_heading = if approach_is_helicopter {
+            AirportHeading::HeliLanding
+        } else {
+            AirportHeading::Landing
+        };
+    }
+    Some(AircraftPhaseEvent::None)
+}
+
+fn target_fta_station_idx(v: &Vehicle, stations: &[Station]) -> Option<usize> {
+    stations
+        .iter()
+        .position(|s| station_uses_airport_fta(s) && s.covers_tile(v.dest))
+}
+
 /// Velocidad máxima en las unidades de `Aircraft::UpdateAircraftSpeed`.
 fn aircraft_speed_limit(v: &mut Vehicle, engine_catalog: &[crate::engine::EngineDef]) -> u32 {
     if v.cached_max_speed > 0 && v.cached_max_speed < u16::MAX {
@@ -238,26 +318,7 @@ fn advance_heli_raise(v: &mut Vehicle, map: &Map, plane_speed: u8, speed_limit: 
     }
 
     v.aircraft_rotor_speed = 32;
-    let acceleration = u32::from(v.acceleration).saturating_mul(77);
-    let old_subspeed = v.subspeed;
-    let low = u8::try_from(acceleration & u32::from(u8::MAX)).unwrap_or(0);
-    v.subspeed = old_subspeed.wrapping_add(low);
-    let speed = u32::from(v.cur_speed)
-        .saturating_add(acceleration >> 8)
-        .saturating_add(u32::from(v.subspeed < old_subspeed))
-        .min(speed_limit);
-    v.cur_speed = u16::try_from(speed).unwrap_or(u16::MAX);
-
-    let divisor = u32::from(plane_speed.clamp(1, 4));
-    let speed = speed / divisor;
-    let speed = if v.direction & 1 != 0 {
-        speed
-    } else {
-        speed.saturating_mul(3) / 4
-    };
-    let progress = u32::from(v.progress).saturating_add(speed);
-    v.progress = u8::try_from(progress & u32::from(u8::MAX)).unwrap_or(0);
-    let count = progress >> 8;
+    let count = update_aircraft_speed(v, plane_speed, None, speed_limit, true);
     if count == 0 {
         return false;
     }
@@ -276,10 +337,183 @@ fn advance_heli_raise(v: &mut Vehicle, map: &Map, plane_speed: u8, speed_limit: 
 /// Mínimo de vuelo calculado por `GetAircraftFlightLevelBounds` para un
 /// helicóptero que está despegando del nodo actual.
 fn aircraft_flight_level_min(v: &Vehicle, map: &Map) -> i32 {
-    let tile_height = map.get(v.pos).map_or(0, |tile| {
+    aircraft_flight_level_bounds(v, map, true).0
+}
+
+const VAF_IN_MAX_HEIGHT_CORRECTION: u8 = 1 << 0;
+const VAF_IN_MIN_HEIGHT_CORRECTION: u8 = 1 << 1;
+
+/// Copia `UpdateAircraftSpeed`, incluido el remanente fraccional de
+/// `subspeed` y el escalado direccional de `GetOldAdvanceSpeed`.
+fn update_aircraft_speed(
+    v: &mut Vehicle,
+    plane_speed: u8,
+    environmental_limit: Option<u32>,
+    max_speed: u32,
+    mut hard_limit: bool,
+) -> u32 {
+    let divisor = u32::from(plane_speed.clamp(1, 4));
+    let mut speed_limit = environmental_limit
+        .unwrap_or(u32::from(u16::MAX))
+        .saturating_mul(divisor);
+    if max_speed < speed_limit {
+        if u32::from(v.cur_speed) < speed_limit {
+            hard_limit = false;
+        }
+        speed_limit = max_speed;
+    }
+
+    let acceleration = u32::from(v.acceleration).saturating_mul(77);
+    let old_subspeed = v.subspeed;
+    v.subspeed =
+        old_subspeed.wrapping_add(u8::try_from(acceleration & u32::from(u8::MAX)).unwrap_or(0));
+    if !hard_limit && u32::from(v.cur_speed) > speed_limit {
+        let slowdown = ((u32::from(v.cur_speed) * u32::from(v.cur_speed)) / 16_384) / divisor;
+        speed_limit = u32::from(v.cur_speed).saturating_sub(slowdown.max(1));
+    }
+    let speed = u32::from(v.cur_speed)
+        .saturating_add(acceleration >> 8)
+        .saturating_add(u32::from(v.subspeed < old_subspeed))
+        .min(speed_limit);
+    v.cur_speed = u16::try_from(speed).unwrap_or(u16::MAX);
+
+    let speed = speed / divisor;
+    let speed = if v.direction & 1 != 0 {
+        speed
+    } else {
+        speed.saturating_mul(3) / 4
+    };
+    let progress = u32::from(v.progress).saturating_add(speed);
+    v.progress = u8::try_from(progress & u32::from(u8::MAX)).unwrap_or(0);
+    progress >> 8
+}
+
+fn rotated_airport_moving_data(
+    station: &Station,
+    profile: &AirportFtaProfile,
+    moving: AirportMovingData,
+) -> AirportMovingData {
+    let (num_tiles_x, num_tiles_y) = airport_footprint_dimensions(station, profile);
+    let rotation = station.airport_rotation & 6;
+    let (x, y) = match rotation {
+        2 => (
+            i32::from(moving.y),
+            num_tiles_y.saturating_mul(16) - i32::from(moving.x) - 1,
+        ),
+        4 => (
+            num_tiles_x.saturating_mul(16) - i32::from(moving.x) - 1,
+            num_tiles_y.saturating_mul(16) - i32::from(moving.y) - 1,
+        ),
+        6 => (
+            num_tiles_x.saturating_mul(16) - i32::from(moving.y) - 1,
+            i32::from(moving.x),
+        ),
+        _ => (i32::from(moving.x), i32::from(moving.y)),
+    };
+    AirportMovingData {
+        x: i16::try_from(x).unwrap_or_else(|_| if x.is_negative() { i16::MIN } else { i16::MAX }),
+        y: i16::try_from(y).unwrap_or_else(|_| if y.is_negative() { i16::MIN } else { i16::MAX }),
+        flags: moving.flags,
+        direction: (moving.direction + rotation) & 7,
+    }
+}
+
+fn airport_footprint_dimensions(station: &Station, profile: &AirportFtaProfile) -> (i32, i32) {
+    let Some(first) = station.airport_tiles.first().copied() else {
+        return (profile.footprint_w.max(1), profile.footprint_h.max(1));
+    };
+    let (min_x, max_x, min_y, max_y) = station.airport_tiles.iter().copied().fold(
+        (first.x, first.x, first.y, first.y),
+        |(min_x, max_x, min_y, max_y), tile| {
+            (
+                min_x.min(tile.x),
+                max_x.max(tile.x),
+                min_y.min(tile.y),
+                max_y.max(tile.y),
+            )
+        },
+    );
+    (
+        (max_x - min_x + 1).max(profile.footprint_w.max(1)),
+        (max_y - min_y + 1).max(profile.footprint_h.max(1)),
+    )
+}
+
+fn aircraft_flight_target(station: &Station, moving: AirportMovingData) -> (i32, i32) {
+    let nw = airport_nw_origin(station);
+    (
+        nw.x.saturating_mul(16).saturating_add(i32::from(moving.x)),
+        nw.y.saturating_mul(16).saturating_add(i32::from(moving.y)),
+    )
+}
+
+fn aircraft_direction_towards(x: i32, y: i32, target_x: i32, target_y: i32, current: u8) -> u8 {
+    const DIRECTIONS: [u8; 9] = [
+        DIR_N, DIR_NW, DIR_W, DIR_NE, DIR_SE, DIR_SW, DIR_E, DIR_SE, DIR_S,
+    ];
+    let mut index = 0_usize;
+    if target_y >= y {
+        if target_y != y {
+            index += 3;
+        }
+        index += 3;
+    }
+    if target_x >= x {
+        if target_x != x {
+            index += 1;
+        }
+        index += 1;
+    }
+    let desired = DIRECTIONS[index];
+    turn_direction_towards(current, desired)
+}
+
+fn turn_direction_towards(current: u8, desired: u8) -> u8 {
+    let difference = desired.wrapping_add(8).wrapping_sub(current) & 7;
+    if difference == 0 {
+        current
+    } else if difference > 4 {
+        current.wrapping_add(7) & 7
+    } else {
+        current.wrapping_add(1) & 7
+    }
+}
+
+fn aircraft_direction_delta(direction: u8) -> (i32, i32) {
+    match direction & 7 {
+        DIR_N => (-1, -1),
+        DIR_NE => (-1, 0),
+        DIR_E => (-1, 1),
+        DIR_SE => (0, 1),
+        DIR_S => (1, 1),
+        DIR_SW => (1, 0),
+        DIR_W => (1, -1),
+        DIR_NW => (0, -1),
+        _ => (0, 0),
+    }
+}
+
+fn aircraft_tile_height(map: &Map, x_pos: i32, y_pos: i32) -> i32 {
+    let (width, height) = map.dimensions();
+    if width == 0 || height == 0 {
+        return 0;
+    }
+    let x = x_pos
+        .div_euclid(16)
+        .clamp(0, i32::try_from(width - 1).unwrap_or(i32::MAX));
+    let y = y_pos
+        .div_euclid(16)
+        .clamp(0, i32::try_from(height - 1).unwrap_or(i32::MAX));
+    map.get(TileCoord::new(x, y)).map_or(0, |tile| {
         i32::from(tile.height) * i32::from(TILE_PIXEL_HEIGHT)
-    });
-    let mut base = tile_height + 34; // HELICOPTER_HOLD_MAX - PLANE_HOLD_MAX.
+    })
+}
+
+fn aircraft_flight_level_bounds(v: &Vehicle, map: &Map, is_helicopter: bool) -> (i32, i32) {
+    let mut base = aircraft_tile_height(map, v.airport_sub_x, v.airport_sub_y);
+    if is_helicopter {
+        base += 34; // HELICOPTER_HOLD_MAX - PLANE_HOLD_MAX.
+    }
     if matches!(v.direction, DIR_N | DIR_NE | DIR_E | DIR_SE) {
         base += 10;
     }
@@ -289,7 +523,151 @@ fn aircraft_flight_level_min(v: &Vehicle, map: &Map) -> i32 {
         i32::from(v.cur_speed)
     };
     base += (20 * (max_speed / 200) - 90).min(0);
-    base + 120
+    (base + 120, base + 360)
+}
+
+fn update_aircraft_flight_level(v: &mut Vehicle, map: &Map, is_helicopter: bool, takeoff: bool) {
+    let (min_level, max_level) = aircraft_flight_level_bounds(v, map, is_helicopter);
+    let middle = min_level.midpoint(max_level);
+    let mut z = i32::from(v.z_pos.unwrap_or(0));
+    if z < min_level || (v.aircraft_flags & VAF_IN_MIN_HEIGHT_CORRECTION != 0 && z < middle) {
+        v.aircraft_flags |= VAF_IN_MIN_HEIGHT_CORRECTION;
+        z += if takeoff { 2 } else { 1 };
+    } else if !takeoff
+        && (z > max_level || (v.aircraft_flags & VAF_IN_MAX_HEIGHT_CORRECTION != 0 && z > middle))
+    {
+        v.aircraft_flags |= VAF_IN_MAX_HEIGHT_CORRECTION;
+        z -= 1;
+    } else if v.aircraft_flags & VAF_IN_MIN_HEIGHT_CORRECTION != 0 && z >= middle {
+        v.aircraft_flags &= !VAF_IN_MIN_HEIGHT_CORRECTION;
+    } else if v.aircraft_flags & VAF_IN_MAX_HEIGHT_CORRECTION != 0 && z <= middle {
+        v.aircraft_flags &= !VAF_IN_MAX_HEIGHT_CORRECTION;
+    }
+    v.z_pos = Some(
+        i16::try_from(z).unwrap_or_else(|_| if z.is_negative() { i16::MIN } else { i16::MAX }),
+    );
+}
+
+#[allow(clippy::too_many_lines)]
+fn advance_aircraft_flight_handler(
+    v: &mut Vehicle,
+    map: &Map,
+    station: &Station,
+    profile: &AirportFtaProfile,
+    plane_speed: u8,
+    max_speed: u32,
+    is_helicopter: bool,
+) -> bool {
+    let idx = usize::from(v.airport_pos).min(profile.moving_data.len() - 1);
+    let moving = rotated_airport_moving_data(station, profile, profile.moving_data[idx]);
+    let (target_x, target_y) = aircraft_flight_target(station, moving);
+    let dx = target_x.saturating_sub(v.airport_sub_x);
+    let dy = target_y.saturating_sub(v.airport_sub_y);
+    let distance = dx.unsigned_abs().saturating_add(dy.unsigned_abs());
+    if moving.flags & FLAG_EXACT == 0
+        && distance
+            <= if moving.flags & FLAG_SLOW_TURN != 0 {
+                8
+            } else {
+                4
+            }
+    {
+        return true;
+    }
+    if distance == 0 {
+        let desired = moving.direction;
+        if desired == v.direction {
+            v.cur_speed = 0;
+            return true;
+        }
+        if update_aircraft_speed(v, plane_speed, Some(50), max_speed, true) == 0 {
+            return false;
+        }
+        v.direction = turn_direction_towards(v.direction, desired);
+        v.cur_speed >>= 1;
+        return false;
+    }
+
+    let mut environmental_limit = Some(50);
+    let mut hard_limit = true;
+    if moving.flags & FLAG_NO_SPEED_CLAMP != 0 {
+        environmental_limit = None;
+    }
+    if moving.flags & FLAG_HOLD != 0 {
+        environmental_limit = Some(425);
+        hard_limit = false;
+    }
+    if moving.flags & FLAG_LAND != 0 {
+        environmental_limit = Some(230);
+        hard_limit = false;
+    }
+    if moving.flags & FLAG_BRAKE != 0 {
+        environmental_limit = Some(50);
+        hard_limit = false;
+    }
+    let count = update_aircraft_speed(v, plane_speed, environmental_limit, max_speed, hard_limit);
+    if count == 0 {
+        return false;
+    }
+    let nudge_towards_target = count.saturating_add(3) > distance;
+    v.aircraft_turn_counter = v.aircraft_turn_counter.saturating_sub(1);
+    for _ in 0..count {
+        if nudge_towards_target || moving.flags & FLAG_LAND != 0 {
+            v.airport_sub_x = v
+                .airport_sub_x
+                .saturating_add((target_x - v.airport_sub_x).signum());
+            v.airport_sub_y = v
+                .airport_sub_y
+                .saturating_add((target_y - v.airport_sub_y).signum());
+        } else {
+            let new_direction = aircraft_direction_towards(
+                v.airport_sub_x,
+                v.airport_sub_y,
+                target_x,
+                target_y,
+                v.direction,
+            );
+            if new_direction == v.direction {
+                v.aircraft_number_consecutive_turns = 0;
+                let (step_x, step_y) = aircraft_direction_delta(v.direction);
+                v.airport_sub_x = v.airport_sub_x.saturating_add(step_x);
+                v.airport_sub_y = v.airport_sub_y.saturating_add(step_y);
+            } else if moving.flags & FLAG_SLOW_TURN != 0 && !is_helicopter {
+                if v.aircraft_turn_counter == 0 && v.aircraft_number_consecutive_turns < 8 {
+                    v.aircraft_number_consecutive_turns =
+                        v.aircraft_number_consecutive_turns.saturating_add(1);
+                    v.aircraft_turn_counter = 2 * plane_speed.clamp(1, 4);
+                    v.direction = new_direction;
+                }
+                let (step_x, step_y) = aircraft_direction_delta(v.direction);
+                v.airport_sub_x = v.airport_sub_x.saturating_add(step_x);
+                v.airport_sub_y = v.airport_sub_y.saturating_add(step_y);
+            } else {
+                v.cur_speed >>= 1;
+                v.direction = new_direction;
+            }
+        }
+        v.airport_subpos_valid = true;
+        v.pos = TileCoord::new(
+            v.airport_sub_x.div_euclid(16),
+            v.airport_sub_y.div_euclid(16),
+        );
+        if moving.flags & FLAG_TAKEOFF != 0 {
+            update_aircraft_flight_level(v, map, is_helicopter, true);
+        } else if moving.flags & FLAG_HOLD != 0 {
+            let hold_altitude = aircraft_tile_height(map, v.airport_sub_x, v.airport_sub_y)
+                + if is_helicopter { 184 } else { 150 };
+            let z = i32::from(v.z_pos.unwrap_or(0));
+            if z > hold_altitude {
+                v.z_pos = Some(i16::try_from(z - 1).unwrap_or(i16::MIN));
+            }
+        } else if moving.flags & (FLAG_SLOW_TURN | FLAG_NO_SPEED_CLAMP)
+            == (FLAG_SLOW_TURN | FLAG_NO_SPEED_CLAMP)
+        {
+            update_aircraft_flight_level(v, map, is_helicopter, false);
+        }
+    }
+    false
 }
 
 fn try_enter_approach(
@@ -306,7 +684,7 @@ fn try_enter_approach(
         .find(|s| s.covers_tile(target) && station_uses_airport_fta(s))?;
     let profile = fta_profile_for_spec(st.airport_spec)?;
     let manhattan = (v.pos.x - target.x).abs() + (v.pos.y - target.y).abs();
-    if manhattan > 4 && !v.path.is_empty() {
+    if manhattan > 4 {
         return None;
     }
     let entry = profile.entries[0];
@@ -1644,5 +2022,31 @@ mod tests {
             AirportHeading::HeliLanding,
             "el flag Action0 debe seleccionar la entrada heli aunque el id no sea vanilla"
         );
+    }
+
+    #[test]
+    fn aircraft_update_speed_preserves_native_fractional_accumulation() {
+        let mut vehicle = Vehicle::new(
+            3,
+            VehicleKind::Aircraft,
+            TileCoord::new(4, 4),
+            TileCoord::new(20, 20),
+        );
+        vehicle.acceleration = 20;
+        vehicle.direction = DIR_E;
+        vehicle.progress = 35;
+        vehicle.subspeed = 140;
+
+        let first_count = update_aircraft_speed(&mut vehicle, 4, None, 320, true);
+        assert_eq!(first_count, 0);
+        assert_eq!(vehicle.cur_speed, 6);
+        assert_eq!(vehicle.progress, 35);
+        assert_eq!(vehicle.subspeed, 144);
+
+        let second_count = update_aircraft_speed(&mut vehicle, 4, None, 320, true);
+        assert_eq!(second_count, 0);
+        assert_eq!(vehicle.cur_speed, 12);
+        assert_eq!(vehicle.progress, 37);
+        assert_eq!(vehicle.subspeed, 148);
     }
 }

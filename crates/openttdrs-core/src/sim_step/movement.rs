@@ -55,11 +55,16 @@ fn record_vehicle_running_tick(
 /// consist; ambos caminos empiezan por `HandleBreakdown()`. Los demás tipos
 /// tienen una sola pasada por tick.
 fn handle_vehicle_breakdown(vehicle: &mut crate::vehicle::Vehicle, tick: u64) -> bool {
-    let mut stopped = vehicle.handle_breakdown(tick);
     if vehicle.kind == VehicleKind::Train {
-        stopped |= vehicle.handle_breakdown(tick);
+        // `Train::Tick` invoca el segundo `TrainLocoHandler` aunque el
+        // primero haya retornado por una avería. Si ese primer handler
+        // consume el último tick (`breakdown_ctr: 1 -> 0`), el segundo debe
+        // poder actualizar velocidad en el mismo tick.
+        let _ = vehicle.handle_breakdown(tick);
+        vehicle.handle_breakdown(tick)
+    } else {
+        vehicle.handle_breakdown(tick)
     }
-    stopped
 }
 
 /// Dispara el evento común al cruzar desde fuera hacia el interior del depot.
@@ -424,7 +429,14 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         }
         let had_force = state.vehicles[i].force_proceed;
         let was_broken_down = state.vehicles[i].is_broken_down();
-        let breakdown_stopped = handle_vehicle_breakdown(&mut state.vehicles[i], tick);
+        let breakdown_stopped = if state.vehicles[i].kind == VehicleKind::Train {
+            // El controlador ferroviario consume `HandleBreakdown` dentro de
+            // cada una de sus dos pasadas; no preconsumirlo aquí o se
+            // perdería la pasada de movimiento posterior al vencimiento.
+            false
+        } else {
+            handle_vehicle_breakdown(&mut state.vehicles[i], tick)
+        };
         if breakdown_stopped && !was_broken_down {
             state
                 .runtime
@@ -470,6 +482,19 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             &state.engine_catalog,
             state.construction.plane_speed,
         );
+        if vehicle_kind == VehicleKind::Train
+            && !was_broken_down
+            && state.vehicles[i].is_broken_down()
+        {
+            state
+                .runtime
+                .pending_sim_events
+                .push(crate::sim_events::SimEvent::Breakdown {
+                    vehicle_id,
+                    at: state.vehicles[i].pos,
+                    kind: vehicle_kind,
+                });
+        }
         if state.vehicles[i].service_generation != service_generation_before {
             crate::vehicle::service_vehicle_followers_with_catalog(
                 &mut state.vehicles,
@@ -1075,6 +1100,19 @@ mod tests {
 
         assert!(!handle_vehicle_breakdown(&mut train, 0));
         assert_eq!(train.breakdown_ctr, 4);
+    }
+
+    #[test]
+    fn train_breakdown_expiry_allows_second_loco_handler_to_run() {
+        let pos = TileCoord::new(2, 2);
+        let mut train = Vehicle::new(1, VehicleKind::Train, pos, pos);
+        train.breakdown_ctr = 1;
+        train.breakdown_delay = 1;
+        train.newgrf_tick_counter = 4;
+
+        assert!(!handle_vehicle_breakdown(&mut train, 0));
+        assert_eq!(train.breakdown_ctr, 0);
+        assert_eq!(train.breakdown_delay, 0);
     }
 
     #[test]

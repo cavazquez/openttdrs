@@ -285,7 +285,9 @@ impl super::model::Vehicle {
             }
             // `Train::Tick` llama `TrainLocoHandler` dos veces por tick de juego.
             for _ in 0..2 {
-                self.train_loco_handler(map, train_accel, engine_catalog);
+                if !self.handle_breakdown(self.sim_tick) {
+                    self.train_loco_handler(map, train_accel, engine_catalog);
+                }
             }
             return;
         }

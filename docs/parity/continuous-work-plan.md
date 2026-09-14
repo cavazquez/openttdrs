@@ -7538,3 +7538,14 @@ dinámicas cuando el locale es inglés, preservando nombres custom/NewGRF,
 compañías, coordenadas, IDs, importes y vencimientos. La regresión ejercita una
 industria materializada y el fallback de estación en ambos locales; #331 sigue
 abierta por catálogos upstream y superficies generadas pendientes.
+
+Corrección #330-ROAD-TRACE-V2 (2026-09-14, `27e568dc`): la traza de paridad
+expone una proyección `road` opcional para las cabezas viales y el normalizador
+la publica como `road_vehicles` del contrato v2, conservando v1 para trazas
+ferroviarias. Se validan los campos nativos de estado, frame, bloqueos,
+adelantamiento, choque y reversa; una regresión de `scripts/test_pbs_trace_tools.py`
+compara una muestra v2 sin IDs de pool. `parity_runner` produce ocho ticks
+viales v2 y `sav_pbs_runner` valida cuatro ticks de `mvp_openttd_rich.sav`.
+Esto completa la instrumentación, no la evidencia externa: #330 sigue abierta
+hasta comparar contra una traza OpenTTD de la misma partida y cubrir tráfico,
+presignals, aire y mar.

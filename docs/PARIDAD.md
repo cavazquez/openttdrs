@@ -4976,3 +4976,16 @@ dinámicas cuando el locale es inglés, preservando nombres custom/NewGRF,
 compañías, coordenadas, IDs, importes y vencimientos. La regresión ejercita una
 industria materializada y el fallback de estación en ambos locales; #331 sigue
 abierta por catálogos upstream y superficies generadas pendientes.
+
+Corrección #330-ROAD-TRACE-V2 (2026-09-14, `27e568dc`): la traza de paridad
+expone ahora una proyección `road` opcional para las cabezas de bus, camión y
+tranvía, con `state`, `frame`, bloqueos, adelantamiento, choque y reversa. El
+normalizador convierte esa proyección al contrato externo `road_vehicles` v2 y
+mantiene v1 cuando la traza sólo contiene trenes; el validador rechaza una
+sección vial declarada bajo schema v1. La regresión compara una muestra vial
+v2 sin IDs de pool, y la ejecución de `parity_runner --scenario truck_bay`
+genera/valida ocho ticks v2; `sav_pbs_runner` valida además cuatro ticks de
+`mvp_openttd_rich.sav` con tren y vehículos de carretera. El núcleo queda en
+2730 pruebas exitosas y #330 permanece abierta: todavía falta ejecutar el
+comparador contra una traza OpenTTD de la misma partida para acreditar paridad
+dinámica, además de tráfico complejo, presignals, aire y mar.

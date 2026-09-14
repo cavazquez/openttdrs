@@ -7631,3 +7631,15 @@ tests con el escenario IA no relacionado omitido (`1` ignorado), el cliente
 pasa `1532` (`2` ignorados) y Clippy de la librería queda verde; el escenario
 `ai_rival_builds_third_oil_route` sigue fallando por timeout y no se atribuye a
 esta corrección.
+
+Corrección #330-TRAIN-BREAKDOWN-EXPIRY (2026-09-14, `4e81daea`): las dos
+pasadas ferroviarias consumen `HandleBreakdown` dentro de cada
+`TrainLocoHandler`, como `Train::Tick` nativo. Si la primera pasada termina
+una avería (`breakdown_ctr=1→0`), la segunda puede actualizar la velocidad en
+el mismo tick; Rust ya no preconsume la avería ni descarta ambas pasadas. La
+regresión cubre tanto el decremento doble de contador como el vencimiento con
+una sola pasada de movimiento. El replay `mvp_openttd_rich.sav` coincide en
+`731` muestras de tren/PBS hasta el tick `13075`; la siguiente frontera
+reproducible es vial en el tick `13072`, con tren/PBS ya alineados. #330 sigue
+abierta por esa dinámica vial posterior, rutas multi-tick adicionales,
+tráfico complejo, presignals, aire y mar.

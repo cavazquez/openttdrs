@@ -1,7 +1,7 @@
 //! Loop FTA por tick (`AirportGoToNextPosition` simplificado).
 
 use crate::aircraft_movement::{AIRCRAFT_CRUISE_ALTITUDE, AircraftPhaseEvent, straight_line_path};
-use crate::map::{Map, TileCoord};
+use crate::map::{Map, TILE_PIXEL_HEIGHT, TileCoord};
 use crate::station::Station;
 use crate::vehicle::{
     AircraftPhase, DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, Vehicle, VehicleKind,
@@ -139,7 +139,18 @@ pub fn tick_airport_fta_with_catalog_and_plane_speed(
         return Some(sync_phase_from_node(v, &profile));
     }
 
-    let just_reached = move_towards_waypoint(v, map, &stations[st_idx], &profile, plane_speed);
+    let node_flags = profile.moving_data
+        [usize::from(v.airport_pos).min(profile.moving_data.len().saturating_sub(1))]
+    .flags;
+    let heli_raise = vehicle_is_helicopter(v, engine_catalog)
+        && node_flags & FLAG_HELI_RAISE != 0
+        // Fixtures and legacy callers create a vehicle without the native
+        // acceleration cache. Keep their historical dwell behavior; the
+        // pixel-accurate HELI_RAISE controller is enabled once the imported
+        // native acceleration is available.
+        && v.acceleration != 0;
+    let just_reached =
+        move_towards_waypoint(v, map, &stations[st_idx], &profile, plane_speed, heli_raise);
     let ev = sync_phase_from_node(v, &profile);
     if just_reached && airport_node_is_loading_stand(profile.kind, v.airport_pos) {
         // La orden se completa recién al alcanzar físicamente el stand. Antes,
@@ -148,33 +159,133 @@ pub fn tick_airport_fta_with_catalog_and_plane_speed(
         v.cur_speed = 0;
         v.airport_loading_stand_reached = true;
     }
-    if v.aircraft_phase_ticks > 0 {
+    let heli_raise_ready = if heli_raise {
+        let speed_limit = aircraft_speed_limit(v, engine_catalog);
+        let mut ready = false;
+        // `Aircraft::Tick` ejecuta dos `AircraftEventHandler` por tick. El
+        // ascenso del helicóptero actualiza velocidad/progreso una vez por
+        // handler, no una vez por frame del FSM Rust.
+        for _ in 0..2 {
+            if advance_heli_raise(v, map, plane_speed, speed_limit) {
+                ready = true;
+                break;
+            }
+        }
+        // El contador de dwell no representa el ascenso físico nativo. Una
+        // vez recuperado el nodo, la altura/progreso guardados son la fuente
+        // de verdad para decidir cuándo termina el HELITAKEOFF.
+        v.aircraft_phase_ticks = 0;
+        ready
+    } else {
+        false
+    };
+    if !heli_raise && v.aircraft_phase_ticks > 0 {
         v.aircraft_phase_ticks -= 1;
         return Some(ev);
     }
-    if just_reached {
+    if just_reached && !heli_raise_ready {
         // Conservar el nodo alcanzado al menos hasta el siguiente tick. Esto
         // permite abrir la ventana de carga y evita atravesar un stand en el
         // mismo tick en que se llega físicamente a él.
         return Some(ev);
     }
+    if heli_raise && !heli_raise_ready {
+        return Some(ev);
+    }
     if !v.airport_waypoint_reached {
         return Some(ev);
     }
-    if should_finish_takeoff(v, &profile) {
-        return Some(finish_takeoff(v, &mut stations[st_idx], engine_catalog));
+    if (!heli_raise || heli_raise_ready) && should_finish_takeoff(v, &profile) {
+        let next_entry = target_airport_entry(v, stations);
+        let ev = finish_takeoff(v, &mut stations[st_idx], engine_catalog);
+        apply_target_airport_entry(v, next_entry);
+        return Some(ev);
     }
+    let next_entry = target_airport_entry(v, stations);
     Some(advance_fta_node(
         v,
         &mut stations[st_idx],
         &profile,
         engine_catalog,
+        next_entry,
     ))
 }
 
 fn vehicle_is_helicopter(v: &Vehicle, engine_catalog: &[crate::engine::EngineDef]) -> bool {
     let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
     crate::engine::aircraft_is_helicopter_def(engine)
+}
+
+/// Velocidad máxima en las unidades de `Aircraft::UpdateAircraftSpeed`.
+fn aircraft_speed_limit(v: &mut Vehicle, engine_catalog: &[crate::engine::EngineDef]) -> u32 {
+    if v.cached_max_speed > 0 && v.cached_max_speed < u16::MAX {
+        return u32::from(v.cached_max_speed);
+    }
+    let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
+    u32::from(crate::newgrf_callback::vehicle_max_speed(engine, v))
+}
+
+/// Replica el paso de `UpdateAircraftSpeed` que ocurre durante `HELI_RAISE`.
+fn advance_heli_raise(v: &mut Vehicle, map: &Map, plane_speed: u8, speed_limit: u32) -> bool {
+    if v.aircraft_rotor_speed > 32 {
+        v.cur_speed = 0;
+        v.aircraft_rotor_speed = v.aircraft_rotor_speed.saturating_sub(1);
+        return false;
+    }
+
+    v.aircraft_rotor_speed = 32;
+    let acceleration = u32::from(v.acceleration).saturating_mul(77);
+    let old_subspeed = v.subspeed;
+    let low = u8::try_from(acceleration & u32::from(u8::MAX)).unwrap_or(0);
+    v.subspeed = old_subspeed.wrapping_add(low);
+    let speed = u32::from(v.cur_speed)
+        .saturating_add(acceleration >> 8)
+        .saturating_add(u32::from(v.subspeed < old_subspeed))
+        .min(speed_limit);
+    v.cur_speed = u16::try_from(speed).unwrap_or(u16::MAX);
+
+    let divisor = u32::from(plane_speed.clamp(1, 4));
+    let speed = speed / divisor;
+    let speed = if v.direction & 1 != 0 {
+        speed
+    } else {
+        speed.saturating_mul(3) / 4
+    };
+    let progress = u32::from(v.progress).saturating_add(speed);
+    v.progress = u8::try_from(progress & u32::from(u8::MAX)).unwrap_or(0);
+    let count = progress >> 8;
+    if count == 0 {
+        return false;
+    }
+
+    let target_z = aircraft_flight_level_min(v, map);
+    let current_z = i32::from(v.z_pos.unwrap_or(0));
+    if current_z >= target_z {
+        v.cur_speed = 0;
+        return true;
+    }
+    let next_z = current_z.saturating_add(i32::try_from(count).unwrap_or(i32::MAX));
+    v.z_pos = Some(i16::try_from(next_z.min(target_z)).unwrap_or(i16::MAX));
+    false
+}
+
+/// Mínimo de vuelo calculado por `GetAircraftFlightLevelBounds` para un
+/// helicóptero que está despegando del nodo actual.
+fn aircraft_flight_level_min(v: &Vehicle, map: &Map) -> i32 {
+    let tile_height = map.get(v.pos).map_or(0, |tile| {
+        i32::from(tile.height) * i32::from(TILE_PIXEL_HEIGHT)
+    });
+    let mut base = tile_height + 34; // HELICOPTER_HOLD_MAX - PLANE_HOLD_MAX.
+    if matches!(v.direction, DIR_N | DIR_NE | DIR_E | DIR_SE) {
+        base += 10;
+    }
+    let max_speed = if v.cached_max_speed > 0 && v.cached_max_speed < u16::MAX {
+        i32::from(v.cached_max_speed)
+    } else {
+        i32::from(v.cur_speed)
+    };
+    base += (20 * (max_speed / 200) - 90).min(0);
+    base + 120
 }
 
 fn try_enter_approach(
@@ -254,6 +365,7 @@ fn advance_fta_node(
     station: &mut Station,
     profile: &AirportFtaProfile,
     engine_catalog: &[crate::engine::EngineDef],
+    next_entry: Option<u8>,
 ) -> AircraftPhaseEvent {
     let prev = v.airport_pos;
     nudge_heading_at_node(v, profile, engine_catalog);
@@ -262,7 +374,9 @@ fn advance_fta_node(
         if should_finish_takeoff(v, profile)
             || (profile.fixedwing_takeoff_pos == Some(v.airport_pos))
         {
-            return finish_takeoff(v, station, engine_catalog);
+            let ev = finish_takeoff(v, station, engine_catalog);
+            apply_target_airport_entry(v, next_entry);
+            return ev;
         }
         return AircraftPhaseEvent::None;
     };
@@ -274,7 +388,9 @@ fn advance_fta_node(
             AirportHeading::HeliTakeoff | AirportHeading::EndTakeoff
         )
     {
-        return finish_takeoff(v, station, engine_catalog);
+        let ev = finish_takeoff(v, station, engine_catalog);
+        apply_target_airport_entry(v, next_entry);
+        return ev;
     }
 
     // Multi-avión: no pisar reservas ajenas; mantener las propias hasta poder avanzar.
@@ -684,6 +800,21 @@ fn resolve_fta_station_idx(v: &Vehicle, stations: &[Station]) -> Option<usize> {
     None
 }
 
+fn target_airport_entry(v: &Vehicle, stations: &[Station]) -> Option<u8> {
+    let station = stations
+        .iter()
+        .find(|station| station_uses_airport_fta(station) && station.covers_tile(v.dest))?;
+    fta_profile_for_spec(station.airport_spec).map(|profile| profile.entries[0])
+}
+
+fn apply_target_airport_entry(v: &mut Vehicle, entry: Option<u8>) {
+    let Some(entry) = entry else {
+        return;
+    };
+    v.airport_pos = entry;
+    v.airport_prev_pos = entry;
+}
+
 fn activate_fta_in_hangar(v: &mut Vehicle) {
     v.airport_fta_active = true;
     v.airport_pos = 0;
@@ -944,10 +1075,17 @@ fn finish_takeoff(
     v.airport_loading_stand_reached = false;
     v.airport_subpos_valid = false;
     v.path = straight_line_path(v.pos, v.dest).into();
-    v.progress = 0;
+    let is_helicopter = vehicle_is_helicopter(v, engine_catalog);
     let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
-    v.cur_speed = crate::newgrf_callback::vehicle_max_speed(engine, v);
-    v.subspeed = 0;
+    if is_helicopter {
+        // `AircraftEventHandler_HeliTakeOff` conserva el progreso y deja la
+        // cabeza en cero; el tick siguiente vuelve a acelerar en vuelo.
+        v.cur_speed = 0;
+    } else {
+        v.progress = 0;
+        v.cur_speed = crate::newgrf_callback::vehicle_max_speed(engine, v);
+        v.subspeed = 0;
+    }
     AircraftPhaseEvent::None
 }
 
@@ -1328,10 +1466,13 @@ fn move_towards_waypoint(
     station: &Station,
     profile: &AirportFtaProfile,
     plane_speed: u8,
+    preserve_progress: bool,
 ) -> bool {
     ensure_airport_subpos(v);
     v.path.clear();
-    v.progress = 0;
+    if !preserve_progress {
+        v.progress = 0;
+    }
     if v.airport_waypoint_reached {
         return false;
     }

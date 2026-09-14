@@ -683,6 +683,13 @@ pub struct Vehicle {
     /// Flags nativos de aeronave (`Aircraft::flags`).
     #[serde(default)]
     pub aircraft_flags: u8,
+    /// Velocidad de la unidad rotor nativa durante el despegue de helicópteros.
+    ///
+    /// El rotor no tiene una entidad propia en el modelo Rust, pero su
+    /// velocidad determina cuántos ticks permanece bloqueado el nodo
+    /// `HELITAKEOFF` al reanudar un `.sav`.
+    #[serde(default)]
+    pub aircraft_rotor_speed: u16,
     /// `true` mientras el avión está bajo control FTA de un aeropuerto Country.
     #[serde(default)]
     pub airport_fta_active: bool,
@@ -960,6 +967,7 @@ impl Vehicle {
             aircraft_number_consecutive_turns: 0,
             aircraft_turn_counter: 0,
             aircraft_flags: 0,
+            aircraft_rotor_speed: 0,
             airport_fta_active: false,
             airport_fta_station: None,
             airport_blocks_held: 0,

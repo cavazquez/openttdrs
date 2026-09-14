@@ -1,13 +1,10 @@
 //! Fixture FTA de aeropuerto real de `OpenTTD` 15.3 (Helidepot): import +
 //! comparación con oráculo (issue #198).
 //!
-//! El estado *inicial* se compara de forma estricta contra el oráculo. Los
-//! ticks se comparan documentando la primera divergencia en vez de exigir
-//! igualdad total: el motor FTA de `openttdrs` es una reimplementación MVP
-//! que no persiste el contador de espera exacto por nodo de `OpenTTD`
-//! (`aircraft_phase_ticks`; se aproxima al importar por los flags del nodo
-//! actual), por lo que las transiciones heading/nodo se adelantan o atrasan
-//! respecto al oráculo tras el primer tramo. Ver
+//! El estado *inicial* y la secuencia dinámica de `pos`/`state`/`z_pos` se
+//! comparan contra el oráculo. El vuelo libre posterior al despegue conserva
+//! todavía un contrato separado para velocidad/progreso y no se usa para
+//! declarar cerrada la paridad completa de aeronaves. Ver
 //! `scripts/compare_airport_fta_traces.py` para el mismo contrato en Python.
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
@@ -34,6 +31,7 @@ struct OracleAircraft {
     direction: u8,
     running: bool,
     engine: u16,
+    z_pos: i32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -107,6 +105,10 @@ fn imports_two_helidepots_and_one_helicopter_with_active_fta() {
     assert!(heli.running);
     assert_eq!(heli.cur_speed, 320);
     assert_eq!(heli.direction, 2);
+    assert_eq!(heli.aircraft_rotor_speed, 32);
+    assert_eq!(heli.z_pos, Some(117));
+    assert_eq!(heli.airport_sub_x, 696);
+    assert_eq!(heli.airport_sub_y, 744);
 }
 
 #[test]
@@ -118,9 +120,7 @@ fn oracle_trace_declares_openttd_and_helidepot_cycle() {
     assert_eq!(rows[1].airports.len(), 2);
 }
 
-/// Compara el estado inicial importado contra el oráculo, campo a campo,
-/// sobre el subconjunto comparable entre ambos motores (ver doc de módulo:
-/// `x`/`y`/`x_pos`/`y_pos`/`z_pos` de aircraft quedan fuera a propósito).
+/// Compara el estado inicial importado contra el oráculo, campo a campo.
 #[test]
 fn initial_state_matches_openttd_oracle_strongly() {
     let oracle = load_oracle();
@@ -190,60 +190,35 @@ fn initial_state_matches_openttd_oracle_strongly() {
     assert_eq!(heli.dest.y, target_station.y, "dest.y = targetairport");
 }
 
-/// Recorre los ticks del oráculo y documenta la primera divergencia en la
-/// secuencia `pos`/`state` del FTA (no exige igualdad total; ver doc de
-/// módulo). Falla solo si el import se rompe (conteos, tipos) o si la
-/// divergencia aparece antes de agotar el dwell inicial esperado (regresión
-/// grosera), no por la reimplementación MVP en sí.
+/// Recorre los ticks del oráculo y exige igualdad en la secuencia dinámica
+/// `pos`/`state`/`z_pos` del FTA.
 #[test]
-fn tick_sequence_documents_first_divergence_from_oracle() {
+fn tick_sequence_matches_oracle_for_fta_and_flight_level() {
     let oracle = load_oracle();
     let mut state = load_state();
 
-    let mut first_divergence: Option<(usize, u8, u8, u8, u8)> = None;
     for (i, row) in oracle.iter().enumerate().skip(2) {
         state.step();
         let expected = row.aircraft.first().expect("aircraft esperado en oráculo");
+        let tick = row.tick;
         let heli = state
             .vehicles
             .iter()
             .find(|v| v.kind == VehicleKind::Aircraft)
             .expect("avión vivo durante toda la traza");
-        let actual_state = heli.airport_heading.as_u8();
-        if (heli.airport_pos, actual_state) != (expected.pos, expected.state) {
-            first_divergence = Some((
-                i,
-                expected.pos,
-                expected.state,
-                heli.airport_pos,
-                actual_state,
-            ));
-            break;
-        }
-    }
-
-    match first_divergence {
-        None => {
-            println!(
-                "sin divergencias: pos/state coinciden en los {} ticks del oráculo",
-                oracle.len().saturating_sub(2)
-            );
-        }
-        Some((idx, exp_pos, exp_state, act_pos, act_state)) => {
-            println!(
-                "divergencia documentada en muestra oráculo índice {idx} (tick={}): \
-                 pos OpenTTD={exp_pos} openttdrs={act_pos}, state OpenTTD={exp_state} \
-                 openttdrs={act_state} — causa esperada: dwell FTA reimplementado sin \
-                 el contador de espera exacto de OpenTTD (no persiste en el .sav).",
-                oracle[idx].tick
-            );
-            // Guarda de regresión grosera: no debería divergir antes de
-            // completar el dwell mínimo de takeoff que sí importamos
-            // (`FLAG_HELI_RAISE` ⇒ 12 ticks aproximados al importar).
-            assert!(
-                idx >= 12,
-                "divergencia demasiado temprana (índice {idx}); ¿se rompió el import FTA?"
-            );
-        }
+        assert_eq!(
+            heli.airport_pos, expected.pos,
+            "pos en tick {tick} (índice {i})"
+        );
+        assert_eq!(
+            heli.airport_heading.as_u8(),
+            expected.state,
+            "state en tick {tick} (índice {i})"
+        );
+        assert_eq!(
+            heli.z_pos.map_or(0, i32::from),
+            expected.z_pos,
+            "z_pos en tick {tick} (índice {i})"
+        );
     }
 }

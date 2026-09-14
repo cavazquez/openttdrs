@@ -2350,6 +2350,11 @@ pub struct SavVehicle {
     pub aircraft_turn_counter: u8,
     /// Avión: flags nativos (`Aircraft::flags`).
     pub aircraft_flags: u8,
+    /// Helicóptero: velocidad de la unidad rotor (`AIR_ROTOR::cur_speed`).
+    ///
+    /// La unidad rotor no se hidrata como vehículo independiente, pero su
+    /// velocidad forma parte del ascenso FTA que sigue al cargar un `.sav`.
+    pub aircraft_rotor_speed: u16,
 }
 
 /// Bit `GVSF_FRONT` de `Vehicle::subtype` (cabeza de convoy en tren/camión).
@@ -2519,6 +2524,44 @@ pub(crate) fn vehicles_from_chunks(
             Some((*sav_id, counter))
         })
         .collect();
+    let aircraft_rotor_speeds: HashMap<u32, u16> = rows
+        .iter()
+        .filter_map(|(sav_id, record)| {
+            let sub = nested_struct(record, "aircraft")?;
+            let common = nested_struct(sub, "common")?;
+            let subtype = record_get(common, "subtype").and_then(SlValue::as_u64)?;
+            if subtype != 6 {
+                return None;
+            }
+            let speed = record_get(common, "cur_speed")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())?;
+            Some((*sav_id, speed))
+        })
+        .collect();
+    let aircraft_rotor_speed_by_primary: HashMap<u32, u16> = rows
+        .iter()
+        .filter_map(|(sav_id, record)| {
+            let sub = nested_struct(record, "aircraft")?;
+            let common = nested_struct(sub, "common")?;
+            let subtype = record_get(common, "subtype").and_then(SlValue::as_u64)?;
+            if subtype != 0 {
+                return None;
+            }
+            let shadow_id = record_get(common, "next")
+                .and_then(SlValue::as_u64)
+                .and_then(|next| next.checked_sub(1))
+                .and_then(|next| u32::try_from(next).ok())?;
+            let (_, shadow) = rows.iter().find(|(id, _)| *id == shadow_id)?;
+            let shadow = nested_struct(shadow, "aircraft")?;
+            let shadow_common = nested_struct(shadow, "common")?;
+            let rotor_id = record_get(shadow_common, "next")
+                .and_then(SlValue::as_u64)
+                .and_then(|next| next.checked_sub(1))
+                .and_then(|next| u32::try_from(next).ok())?;
+            Some((*sav_id, aircraft_rotor_speeds.get(&rotor_id).copied()?))
+        })
+        .collect();
     let mut out = Vec::new();
     for (sav_id, record) in rows {
         let Some(vtype) = record_get(&record, "type").and_then(SlValue::as_u64) else {
@@ -2544,6 +2587,14 @@ pub(crate) fn vehicles_from_chunks(
             // siguiente `33` con la fila 33 en vez de la 32.
             .and_then(|next| next.checked_sub(1))
             .and_then(|next| u32::try_from(next).ok());
+        let aircraft_rotor_speed = if kind == SavVehicleKind::Aircraft {
+            aircraft_rotor_speed_by_primary
+                .get(&sav_id)
+                .copied()
+                .unwrap_or(0)
+        } else {
+            0
+        };
         let aircraft_mail_capacity = if kind == SavVehicleKind::Aircraft {
             next_sav_id
                 .and_then(|shadow_id| aircraft_shadow_capacities.get(&shadow_id).copied())
@@ -3219,6 +3270,7 @@ pub(crate) fn vehicles_from_chunks(
             aircraft_number_consecutive_turns,
             aircraft_turn_counter,
             aircraft_flags,
+            aircraft_rotor_speed,
         });
     }
     out

@@ -174,6 +174,25 @@ pub(crate) fn vanilla_ship_cached_max_speed(native_id: u16) -> Option<u16> {
     }
 }
 
+/// Velocidad máxima persistida en `AircraftVehicleInfo` para aeronaves
+/// vanilla.
+///
+/// `Aircraft::UpdateCache` reconstruye `vcache.cached_max_speed` al cargar,
+/// pero `VEHS` sólo conserva el `EngineID` nativo. La tabla original usa
+/// `(max_speed * 128) / 10`, que es la unidad que consume `UpdateAircraftSpeed`.
+/// Mantener esta caché permite reanudar un despegue de helicóptero sin
+/// sustituir, por ejemplo, los 320 del Tricario por el valor abstracto del
+/// catálogo runtime.
+pub(crate) fn vanilla_aircraft_cached_max_speed(native_id: u16) -> Option<u16> {
+    const MAX_SPEEDS: [u16; 41] = [
+        473, 473, 947, 2316, 473, 947, 947, 947, 947, 947, 947, 947, 947, 947, 947, 947, 947, 947,
+        947, 947, 947, 947, 947, 947, 947, 947, 947, 947, 947, 947, 2316, 947, 2316, 473, 473, 947,
+        947, 2316, 320, 512, 320,
+    ];
+    let index = usize::from(native_id.checked_sub(215)?);
+    MAX_SPEEDS.get(index).copied()
+}
+
 fn vehicle_kind_matches_native_type(kind: crate::vehicle::VehicleKind, native_type: u8) -> bool {
     match native_type {
         0 => kind == crate::vehicle::VehicleKind::Train,
@@ -361,5 +380,13 @@ mod tests {
             catalog_engine_id_for_native(84),
             Some(crate::engine::ENGINE_TRAIN_LEV1)
         );
+    }
+
+    #[test]
+    fn maps_vanilla_aircraft_cached_speed_units() {
+        assert_eq!(vanilla_aircraft_cached_max_speed(215), Some(473));
+        assert_eq!(vanilla_aircraft_cached_max_speed(253), Some(320));
+        assert_eq!(vanilla_aircraft_cached_max_speed(255), Some(320));
+        assert_eq!(vanilla_aircraft_cached_max_speed(214), None);
     }
 }

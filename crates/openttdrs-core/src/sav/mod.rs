@@ -1903,6 +1903,7 @@ impl GameState {
                 vehicle.timetable_started = v.vehicle_flags & (1 << 3) != 0;
                 vehicle.timetable_autofill = v.vehicle_flags & (1 << 4) != 0;
                 vehicle.running = v.running;
+                vehicle.progress = v.progress;
                 vehicle.cur_speed = v.cur_speed;
                 vehicle.subspeed = v.subspeed;
                 vehicle.motion_counter = v.motion_counter;
@@ -1950,6 +1951,10 @@ impl GameState {
                     vehicle.current_order = v.current_order.min(last);
                     vehicle.cur_implicit_order_index = v.cur_implicit_order_index.min(last);
                 }
+                // `set_vehicle_orders` normaliza el cursor sub-tile; en un
+                // save la posición persistida debe restaurarse después de
+                // hidratar las órdenes.
+                vehicle.progress = v.progress;
                 vehicle.timetable_autofill_samples = vehicle
                     .orders
                     .iter()
@@ -1976,6 +1981,20 @@ impl GameState {
                 vehicle.aircraft_number_consecutive_turns = v.aircraft_number_consecutive_turns;
                 vehicle.aircraft_turn_counter = v.aircraft_turn_counter;
                 vehicle.aircraft_flags = v.aircraft_flags;
+                vehicle.aircraft_rotor_speed = v.aircraft_rotor_speed;
+                vehicle.airport_sub_x = v.x_pos;
+                vehicle.airport_sub_y = v.y_pos;
+                vehicle.airport_subpos_valid = true;
+                vehicle.z_pos = Some(i16::try_from(v.z_pos).unwrap_or_else(|_| {
+                    if v.z_pos.is_negative() {
+                        i16::MIN
+                    } else {
+                        i16::MAX
+                    }
+                }));
+                if let Some(max_speed) = engine::vanilla_aircraft_cached_max_speed(v.engine_type) {
+                    vehicle.cached_max_speed = max_speed;
+                }
                 vehicle.aircraft_phase =
                     aircraft_phase_from_airport_heading(vehicle.airport_heading);
                 // El save no persiste el motor FTA como tal: si el avión está
@@ -3861,6 +3880,7 @@ mod tests {
                     aircraft_number_consecutive_turns: 0,
                     aircraft_turn_counter: 0,
                     aircraft_flags: 0,
+                    aircraft_rotor_speed: 0,
                 },
                 SavVehicle {
                     sav_id: 1,
@@ -3973,6 +3993,7 @@ mod tests {
                     aircraft_number_consecutive_turns: 0,
                     aircraft_turn_counter: 0,
                     aircraft_flags: 0,
+                    aircraft_rotor_speed: 0,
                 },
                 SavVehicle {
                     sav_id: 2,
@@ -4085,6 +4106,7 @@ mod tests {
                     aircraft_number_consecutive_turns: 0,
                     aircraft_turn_counter: 0,
                     aircraft_flags: 0,
+                    aircraft_rotor_speed: 0,
                 },
                 SavVehicle {
                     sav_id: 3,
@@ -4197,6 +4219,7 @@ mod tests {
                     aircraft_number_consecutive_turns: 0,
                     aircraft_turn_counter: 0,
                     aircraft_flags: 0,
+                    aircraft_rotor_speed: 0,
                 },
             ],
             companies: Vec::new(),

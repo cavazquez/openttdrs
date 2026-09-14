@@ -10,9 +10,10 @@
 //!   la posición real que trackeamos internamente en `Vehicle::pos`.
 //! - `pos`/`previous_pos`/`state`/`targetairport`/`speed`/`direction`/`running`:
 //!   estado FTA vivo, tomado de la simulación tick a tick.
-//! - `x_pos`/`y_pos`/`z_pos`: posición viva en sub-tesela calculada a partir de
-//!   `AirportMovingData`, más la altitud escalada. Al importar una aeronave que
-//!   todavía no activó FTA, usamos temporalmente el centro de su tesela.
+//! - `x_pos`/`y_pos`/`z_pos`: posición física viva en píxeles. Las dos primeras
+//!   coordenadas se conservan al importar y el último valor usa `Vehicle::z_pos`;
+//!   los aviones nuevos sin coordenada persistida siguen usando el centro de su
+//!   tesela como fallback.
 //! - `airports[].{x,y,w,h,type,layout}`: estáticos, tomados crudos del `.sav`
 //!   (no de nuestro `AirportSpecId` interno, que remapea el `type`).
 //! - `airports[].blocks`: dinámico, vivo desde `Station::airport_blocks`.
@@ -147,7 +148,7 @@ fn trace_row(
                 y: frozen.map_or(0, |f| f.tile.y),
                 x_pos,
                 y_pos,
-                z_pos: i32::from(v.altitude) * 16,
+                z_pos: i32::from(v.z_pos.unwrap_or_else(|| i16::from(v.altitude) * 16)),
                 direction: v.direction,
                 pos: v.airport_pos,
                 previous_pos: v.airport_prev_pos,

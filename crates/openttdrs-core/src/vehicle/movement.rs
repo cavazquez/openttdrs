@@ -342,6 +342,19 @@ impl super::model::Vehicle {
             return;
         }
 
+        // El controlador FTA ya consumió la actualización de velocidad y la
+        // posición física de este tick. No dejar que el movimiento genérico
+        // vuelva a desacelerar un avión que aún está dentro del aeropuerto.
+        if self.kind == super::model::VehicleKind::Aircraft && self.airport_fta_active {
+            // La llegada al stand se marca en el tick FTA anterior. Aunque
+            // no haya una ruta genérica que mover, el ciclo de órdenes debe
+            // abrir/cerrar la ventana de carga y pasar a la siguiente orden.
+            if self.airport_loading_stand_reached && self.pos == self.dest {
+                self.advance_destination_after_arrival_with_catalog(engine_catalog);
+            }
+            return;
+        }
+
         self.step_path_vehicle(map, train_accel, engine_catalog, plane_speed);
     }
 

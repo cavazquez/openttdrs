@@ -7546,6 +7546,13 @@ ferroviarias. Se validan los campos nativos de estado, frame, bloqueos,
 adelantamiento, choque y reversa; una regresión de `scripts/test_pbs_trace_tools.py`
 compara una muestra v2 sin IDs de pool. `parity_runner` produce ocho ticks
 viales v2 y `sav_pbs_runner` valida cuatro ticks de `mvp_openttd_rich.sav`.
-Esto completa la instrumentación, no la evidencia externa: #330 sigue abierta
-hasta comparar contra una traza OpenTTD de la misma partida y cubrir tráfico,
-presignals, aire y mar.
+La evidencia externa queda documentada en `#330-ROAD-ORACLE`.
+
+Corrección #330-ROAD-ORACLE (2026-09-14, `d4dcb249`): el exportador nativo y
+`sav_pbs_runner` se ejecutaron sobre el mismo `mvp_openttd_rich.sav`; el
+comparador `--scope road` pasa las cinco muestras. Se corrigieron el early
+return de `RoadVehFindCloseTo` durante `reverse_ctr` —que conserva
+`blocked_ctr`— y la reescritura indebida de `road_state` desde la dirección.
+Las regresiones focales y la suite vial pasan. #330 continúa abierta por la
+divergencia ferroviaria/PBS global y por tráfico complejo, presignals, aire y
+mar.

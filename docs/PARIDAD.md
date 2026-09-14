@@ -1635,7 +1635,7 @@ Cada subsistema se clasifica en cinco niveles acumulativos:
 
 | Subsistema | Módulo Rust | Referencia OpenTTD | Nivel alcanzado | Evidencia | Riesgo divergencia |
 |---|---|---|---|---|---|
-| Aceleración carretera (`AM_ORIGINAL` / `AM_REALISTIC`) | `engine/physics.rs` (`update_road_vehicle_speed`) + `road_movement/controller.rs`; `PATS.vehicle.roadveh_acceleration_model` | `roadveh_cmd.cpp::RoadVehicle::UpdateSpeed`, `ground_vehicle.cpp::GetAcceleration` | 5 · equivalente en el fixture vial acotado de 40 ticks | `mps_realistic_road_acceleration_matches_openttd_15_3_oracle`; `sav_pbs_runner`; comparador externo `--scope road` | Medio fuera del fixture: fuerza de pendientes, articulados, NewGRF y tráfico complejo aún no tienen oráculo diferencial |
+| Aceleración carretera (`AM_ORIGINAL` / `AM_REALISTIC`) | `engine/physics.rs` (`update_road_vehicle_speed`) + `road_movement/controller.rs`; `PATS.vehicle.roadveh_acceleration_model` | `roadveh_cmd.cpp::RoadVehicle::UpdateSpeed`, `ground_vehicle.cpp::GetAcceleration` | 5 · equivalente en el fixture vial externo de 5 muestras | `mps_realistic_road_acceleration_matches_openttd_15_3_oracle`; `sav_pbs_runner`; `scripts/compare_pbs_traces.py --scope road` contra `mvp_openttd_rich.sav` | Medio fuera del fixture: fuerza de pendientes, articulados, NewGRF y tráfico complejo aún no tienen oráculo diferencial |
 | Penalización de curva −25 % (AM_ORIGINAL) | `vehicle.rs` (`set_direction_with_curve_penalty`) | `roadveh_cmd.cpp:1481` (`cur_speed -= cur_speed >> 2`; también :1353 y :1426) | 3 · validado (Fase 2; el chequeo `curve_speed_penalty` del reporte quedó como regresión) | test `road_vehicle_loses_quarter_speed_on_turn`; `divergences_found.md` («no observada») | Bajo |
 | Paso sub-tesela (`progress` 0–255) | `engine/physics.rs` (`progress_step_for_speed`), `vehicle` (`step`) | `vehicle_base.h:439-454` (`GetAdvanceSpeed`, `GetAdvanceDistance`) | 3 · validado (proporcional a `speed*3/4` con 192/256; `REFERENCE_PROGRESS_STEP=112`) | `tests/golden_roadveh.rs` | Bajo–medio: escala alineada a ~37 Hz |
 | Tablas de trayectoria sub-tesela (render) | `road_movement.rs` (`STRAIGHT`, `CURVE_*`, `U_TURN_*`) | `src/table/roadveh_movement.h` | 3 · validado (golden compara data_0/2/3 punto a punto) | `tests/golden_roadveh.rs`, fixture `tests/fixtures/parity/roadveh_movement_golden.json` | Bajo en recta/curva; alto en bahías (`_rv_station_*` no portadas) |
@@ -1808,7 +1808,7 @@ los módulos Rust, con el mecanismo de validación disponible para cada pieza.
 
 | Concepto OpenTTD | Referencia C++ | Equivalente Rust | Validación |
 |---|---|---|---|
-| `RoadVehicle::UpdateSpeed` (`AM_ORIGINAL` / `AM_REALISTIC`) | `roadveh_cmd.cpp:742-748`, `ground_vehicle.cpp::GetAcceleration` | `engine/physics.rs::update_road_vehicle_speed`: `cur_speed / 2`, HP→W, masa/carga, TE=76, rozamiento/arrastre y `DoUpdateSpeed`; setting `PATS` llega al simulador | unidad MPS 15.3 + traza externa 40 ticks (`scripts/compare_pbs_traces.py --scope road`) |
+| `RoadVehicle::UpdateSpeed` (`AM_ORIGINAL` / `AM_REALISTIC`) | `roadveh_cmd.cpp:742-748`, `ground_vehicle.cpp::GetAcceleration` | `engine/physics.rs::update_road_vehicle_speed`: `cur_speed / 2`, HP→W, masa/carga, TE=76, rozamiento/arrastre y `DoUpdateSpeed`; setting `PATS` llega al simulador | unidad MPS 15.3 + traza externa de 5 muestras (`scripts/compare_pbs_traces.py --scope road`) |
 | `GroundVehicleBase::DoUpdateSpeed` (subspeed u8, tempmax) | `ground_vehicle.hpp` | `engine.rs::update_road_speed` (misma aritmética con truncado a u8) | tests `engine.rs` |
 | `GetAdvanceSpeed = speed * 3 / 4` | `vehicle_base.h:439-442` | `engine.rs::progress_step_for_speed` (numerador/denominador 3/4) | golden |
 | `GetAdvanceDistance` 192 diagonal / 256 cardinal | `vehicle_base.h:451-454` | `engine.rs::tile_progress_length` (`TILE_AXIAL_DISTANCE`/`TILE_CORNER_DISTANCE`) | golden |
@@ -3081,11 +3081,14 @@ comparación PBS todavía divergente, usar:
 python3 scripts/compare_pbs_traces.py openttd.jsonl openttdrs.jsonl --scope road
 ```
 
-El fixture `mvp_openttd_rich.sav` acredita 40 ticks (41 muestras contando
-`initial`) de un MPS Regal en `AM_REALISTIC`: el primer tick queda en
-`speed=4`, `subspeed=194`, `progress=3`, y toda la secuencia coincide con
-OpenTTD 15.3. No extrapolar esa evidencia a pendientes, articulados, tráfico
-denso, tranvías o vehículos NewGRF.
+El fixture `mvp_openttd_rich.sav` ya fue comparado contra el binario OpenTTD
+15.3 en cinco muestras (la inicial y cuatro ticks) para la sección
+`road_vehicles`, en `AM_ORIGINAL`: `speed`, `subspeed`, `progress`, dirección,
+`state`, `frame`, `blocked_ctr`, adelantamiento y sus contadores coinciden
+tick a tick. La misma corrida todavía no tiene paridad PBS global: el primer
+tick ferroviario difiere en `subspeed` (`96` nativo frente a `64` Rust) y en
+reservas, por lo que #330 permanece abierta. No extrapolar la evidencia vial a
+pendientes, articulados, tráfico denso, tranvías o vehículos NewGRF.
 
 ### Generación reproducible
 
@@ -4985,7 +4988,15 @@ mantiene v1 cuando la traza sólo contiene trenes; el validador rechaza una
 sección vial declarada bajo schema v1. La regresión compara una muestra vial
 v2 sin IDs de pool, y la ejecución de `parity_runner --scenario truck_bay`
 genera/valida ocho ticks v2; `sav_pbs_runner` valida además cuatro ticks de
-`mvp_openttd_rich.sav` con tren y vehículos de carretera. El núcleo queda en
-2730 pruebas exitosas y #330 permanece abierta: todavía falta ejecutar el
-comparador contra una traza OpenTTD de la misma partida para acreditar paridad
-dinámica, además de tráfico complejo, presignals, aire y mar.
+`mvp_openttd_rich.sav` con tren y vehículos de carretera. La comparación
+externa queda registrada en `#330-ROAD-ORACLE` abajo.
+
+Corrección #330-ROAD-ORACLE (2026-09-14, `d4dcb249`): contra la traza
+OpenTTD generada por `scripts/export_openttd_pbs_trace.sh` sobre el mismo
+`mvp_openttd_rich.sav`, `scripts/compare_pbs_traces.py --scope road` pasa las
+cinco muestras. La causa de la divergencia inicial era doble: el early return
+nativo de `RoadVehFindCloseTo` durante `reverse_ctr` conserva `blocked_ctr`, y
+`road_state` es autoritativo aunque no coincida con la dirección visual; Rust
+ahora replica ambos contratos con regresiones focales. #330 sigue abierta por
+la divergencia ferroviaria/PBS global, tráfico complejo, presignals, aire y
+mar.

@@ -4944,3 +4944,12 @@ cuando el sorter le asigna el slot independiente. En Kale el trace pasó de
 las bocas `2370` y `2366`; la captura no cambió (`77258/921600`, delta medio
 `2,814533`). #326 sigue abierta por el compositor segmentado general y las
 familias de combines que aún no publican este contrato.
+
+Corrección #331-NEWS-AVAILABILITY-OPENING (2026-09-14, `1cab5140`): el cliente
+localiza también las noticias generadas de disponibilidad de vehículos
+(`Nuevo`, preview exclusiva y cuerpo con motor/ID) y la apertura de una nueva
+industria, conservando literalmente nombres, IDs y coordenadas. Las plantillas
+con fragmentos ambiguos o malformados no se traducen para no tocar datos de la
+partida. La regresión cubre ambos locales, entidades creadas después del cambio
+de idioma y el fallback seguro; #331 permanece abierta por catálogos upstream,
+settings no modelados y las demás noticias generadas.

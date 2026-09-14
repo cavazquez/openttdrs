@@ -496,6 +496,14 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "mensuales" => "monthly",
         "trimestrales" => "quarterly",
         "Tarifas de carga" => "Cargo payment rates",
+        "pago base por unidad" => "base payment per unit",
+        "(antes de distancia/tiempo)" => "(before distance/time)",
+        "base" => "base",
+        "rápido" => "fast",
+        "lento" => "slow",
+        "La inflación y el tiempo de tránsito modifican el pago real." => {
+            "Inflation and transit time affect the actual payment."
+        }
         "Objetivos" => "Goals",
         "Liga" => "League",
         "Sonido y música" => "Sound and music",
@@ -1766,6 +1774,15 @@ mod tests {
             ("Último", "Last"),
             ("mensuales", "monthly"),
             ("trimestrales", "quarterly"),
+            ("pago base por unidad", "base payment per unit"),
+            ("(antes de distancia/tiempo)", "(before distance/time)"),
+            ("base", "base"),
+            ("rápido", "fast"),
+            ("lento", "slow"),
+            (
+                "La inflación y el tiempo de tránsito modifican el pago real.",
+                "Inflation and transit time affect the actual payment.",
+            ),
             ("Cierre de industria", "Industry closure"),
             ("Economía", "Economy"),
             ("Cartel", "Newspaper"),

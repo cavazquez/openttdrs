@@ -58,6 +58,20 @@ impl StationCargoFilter {
     }
 }
 
+fn station_cargo_summary(
+    locale: Locale,
+    cargo: CargoType,
+    waiting: u32,
+    accepted: bool,
+    rating: u8,
+) -> String {
+    format!(
+        "{} {waiting} {} {rating}",
+        localized_text(locale, cargo_display_name(cargo)),
+        if accepted { "A" } else { "-" }
+    )
+}
+
 #[derive(Resource, Default)]
 pub(crate) struct StationCargoPanelState {
     pub(crate) station_pos: Option<TileCoord>,
@@ -620,10 +634,8 @@ pub(crate) fn sync_station_cargo_panel(
                 continue;
             }
             let rating = station_rating_for_cargo(station, cargo);
-            cargo_summaries.push(format!(
-                "{} {waiting} {} {rating}",
-                cargo_display_name(cargo),
-                if accepted { "A" } else { "-" }
+            cargo_summaries.push(station_cargo_summary(
+                locale, cargo, waiting, accepted, rating,
             ));
         }
         let cargo_line = if let Some(first) = cargo_summaries.first() {
@@ -1244,6 +1256,18 @@ mod tests {
         assert_eq!(filter.next(), StationCargoFilter::Waiting);
         assert_eq!(filter.next().next(), StationCargoFilter::Accepted);
         assert_eq!(filter.next().next().next(), StationCargoFilter::All);
+    }
+
+    #[test]
+    fn station_cargo_summary_localizes_cargo_name() {
+        assert_eq!(
+            station_cargo_summary(Locale::Es, CargoType::Coal, 42, true, 128),
+            "carbón 42 A 128"
+        );
+        assert_eq!(
+            station_cargo_summary(Locale::En, CargoType::Coal, 42, true, 128),
+            "coal 42 A 128"
+        );
     }
 
     #[test]

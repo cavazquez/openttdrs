@@ -23,6 +23,24 @@ El bloque termina sólo con `git commit` y `git push`. La captura raster se usa
 cuando hay compositor WGPU; si el entorno no lo permite, se registra el bloqueo
 y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
+## Etapa publicada — 2026-09-14 — #330 aeronave FTA Helidepot
+
+El fixture `helidepot_fta_cycle_15_3.sav` coincide con OpenTTD 15.3 en el
+estado inicial y en 80 ticks de la secuencia FTA: `pos`, `previous_pos`,
+`state` y `z_pos` quedan alineados, incluida la transición de ascenso
+117→126 y la salida hacia la entrada 4 del aeropuerto destino. El importador
+restaura las coordenadas físicas `x_pos/y_pos`, `progress`, la velocidad del
+rotor y la caché nativa de velocidad; `HELI_RAISE` aplica las dos pasadas del
+`AircraftEventHandler` por tick. El comparador JSONL valida `pos`/`state` y la
+prueba de integración Rust agrega la comparación de altura física.
+
+Validación publicada: `cargo test -p openttdrs-core --lib` (2757 pasados, 1
+ignorado), los 4 tests del oráculo, `cargo clippy -p openttdrs-core --lib
+-- -D warnings`, formato y `compare_airport_fta_traces.py` (80/80). Commit
+`73c8fcb3`. La velocidad/progreso del vuelo libre posterior sigue siendo un
+residual separado; #330/#329 permanecen abiertos para la cinemática aire/mar,
+callbacks NewGRF y redes amplias.
+
 ## Etapa publicada — 2026-09-14 — #330/#328/#567 ship dinámico
 
 La fixture `mvp_openttd_ship.sav` coincide con OpenTTD 15.3 en `initial` más

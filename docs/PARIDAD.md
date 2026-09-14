@@ -3236,9 +3236,18 @@ Filas: `metadata` → `initial` → N× `tick`. Cada muestra lleva `aircraft[]`
 - Oráculo: `tests/fixtures/parity/helidepot_fta_cycle_15_3_openttd.jsonl`
 - Tests: `tests/airport_fta_openttd_oracle.rs`
 
-2× Helidepot + 1 Tricario A↔B. El `initial` coincide; tras ~14 ticks el
-heading puede adelantarse un tick respecto a OpenTTD (dwell FTA no persistido
-en el `.sav`).
+2× Helidepot + 1 Tricario A↔B. El `initial` y las 80 muestras dinámicas
+coinciden en `pos`, `previous_pos`, `state` y `z_pos` (altura 117→126). El
+import conserva `x_pos/y_pos` (696/744), `progress` (195), el rotor (32) y la
+caché nativa de velocidad (320); `HELI_RAISE` ejecuta las dos actualizaciones
+por tick del controlador nativo y salta a la entrada 4 del aeropuerto destino.
+El comparador JSONL valida `pos`/`state` y la integración Rust valida también
+la altura física; ambos recorren la misma ventana de 80 ticks.
+
+La velocidad/progreso del vuelo libre posterior a la salida todavía usa el
+controlador genérico de aeronaves y no se compara como contrato cerrado. Esta
+etapa reduce el residual de #330, pero no cierra #330 ni #329: quedan la
+cinemática aire/mar fuera de FTA, callbacks/runtime NewGRF y redes amplias.
 
 ### Regenerar
 

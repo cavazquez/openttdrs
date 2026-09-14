@@ -4934,3 +4934,13 @@ parents y la caja del árbol `1649` dejó de faltar; el raster se mantuvo en
 `77258/921600` porque la capa ya se rasterizaba con su profundidad histórica.
 Las dos bocas ferroviarias que aparecen en bandas distintas siguen pendientes
 de un compositor segmentado; no se cierra #326.
+
+Corrección #326-SEGMENTED-TUNNEL-COMBINE (2026-09-14): el frente de túnel
+ferroviario marca sus children combinados para separar el slot cuando el PNG
+cruza una frontera de banda nativa que la catenaria no alcanza. El parent ECS
+original conserva los demás children y el frente sólo se excluye de su ventana
+cuando el sorter le asigna el slot independiente. En Kale el trace pasó de
+`1572` a `1574` parents y de `2` a `0` cajas de referencia ausentes, incluyendo
+las bocas `2370` y `2366`; la captura no cambió (`77258/921600`, delta medio
+`2,814533`). #326 sigue abierta por el compositor segmentado general y las
+familias de combines que aún no publican este contrato.

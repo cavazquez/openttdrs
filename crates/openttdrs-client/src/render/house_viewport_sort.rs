@@ -7,7 +7,7 @@
 //! el sorter. Otras familias se incorporan cuando ya tengan el mismo contrato
 //! de parent y children; no se inventa geometría desde el atlas.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use bevy::asset::{AssetEvent, AssetId};
@@ -85,6 +85,14 @@ pub(crate) struct ViewportSortablePromotableChild {
     pub(crate) combine_ordinal: u8,
 }
 
+/// Child de un `SpriteCombine` que puede necesitar un parent propio cuando
+/// su imagen atraviesa una banda de `ViewportDoDraw` que el parent original
+/// no alcanza. Se mantiene separado de los metadatos de promoción: árboles y
+/// otros combines necesitan promoción por clipping, pero no esta separación
+/// de render global.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ViewportSortableSegmentedChild;
+
 /// Límite superior de la secuencia de children de cada parent ordenado.
 ///
 /// `ViewportDrawParentSprites` emite un parent y todos sus children como un
@@ -97,6 +105,9 @@ pub(crate) struct ViewportSortablePromotableChild {
 #[derive(Resource, Default)]
 pub(crate) struct ViewportSortableChildDepthWindows {
     next_parent_depth: HashMap<Entity, f32>,
+    /// Children promovidos a parents locales de una banda nativa. No deben
+    /// volver a entrar en la ventana del parent ECS original durante el sync.
+    independent_children: HashSet<Entity>,
     /// Sonda de tests para distinguir el fast path de una ejecución real del sorter.
     #[cfg(test)]
     pub(crate) sort_runs: usize,
@@ -154,6 +165,12 @@ const VIEWPORT_SORT_BUILDING_MARGIN_TILES: u32 = 11;
 /// alejar la cámara se conserva el conjunto AABB ya existente.
 const VIEWPORT_SORT_PRECISE_MAX_ORTHO_SCALE: f32 = 1.0;
 
+/// `LargeWorldCallback` usa bloques de 51 píxeles de salida a escala Normal
+/// (204 unidades virtuales / 4 de `ZOOM_BASE`). En el mundo Bevy la escala
+/// Normal es 1, por lo que éste es también el alto de una banda; los zooms
+/// precisos lo reducen proporcionalmente.
+const VIEWPORT_SORT_NORMAL_BAND_HEIGHT_PX: f32 = 51.0;
+
 #[must_use]
 fn precise_sort_scope_enabled(ortho_scale: f32) -> bool {
     ortho_scale <= VIEWPORT_SORT_PRECISE_MAX_ORTHO_SCALE
@@ -177,6 +194,7 @@ pub(crate) struct DiagonalViewportSortScope {
     screen_right: i64,
     screen_bottom: i64,
     screen_top: i64,
+    band_height: i64,
 }
 
 /// Alcances del último pase de sorter.
@@ -340,6 +358,9 @@ impl DiagonalViewportSortScope {
             screen_right: right.ceil() as i64,
             screen_bottom: bottom.floor() as i64,
             screen_top: top.ceil() as i64,
+            band_height: (VIEWPORT_SORT_NORMAL_BAND_HEIGHT_PX * ortho_scale)
+                .round()
+                .max(1.0) as i64,
         }
     }
 
@@ -432,6 +453,33 @@ impl DiagonalViewportSortScope {
             && sprite.right > self.screen_left as f32
             && sprite.bottom < self.screen_top as f32
             && sprite.top > self.screen_bottom as f32
+    }
+
+    /// Rango semiabierto de bandas nativas que toca el AABB de un sprite.
+    ///
+    /// Las bandas avanzan hacia abajo mientras el mundo Bevy usa Y positivo
+    /// hacia arriba. `ceil` en el extremo inferior conserva el clipping
+    /// estricto de OpenTTD: tocar exactamente la siguiente frontera no agrega
+    /// un píxel a la banda anterior.
+    #[must_use]
+    fn sprite_band_range(self, sprite: SpriteScreenBounds) -> (i64, i64) {
+        let band_height = self.band_height as f32;
+        let first = ((self.screen_top as f32 - sprite.top) / band_height).floor() as i64;
+        let end = ((self.screen_top as f32 - sprite.bottom) / band_height).ceil() as i64;
+        (first, end.max(first + 1))
+    }
+
+    #[must_use]
+    fn child_crosses_parent_band_range(
+        self,
+        parent_range: Option<(i64, i64)>,
+        child: SpriteScreenBounds,
+    ) -> bool {
+        let Some((parent_start, parent_end)) = parent_range else {
+            return false;
+        };
+        let (child_start, child_end) = self.sprite_band_range(child);
+        child_start < parent_start || child_end > parent_end
     }
 }
 
@@ -555,6 +603,7 @@ fn parent_is_in_viewport_sort_scope(
 struct ViewportParentSortState {
     included: bool,
     can_promote_child: bool,
+    screen_band_range: Option<(i64, i64)>,
 }
 
 impl ViewportParentSortState {
@@ -717,6 +766,7 @@ pub(crate) fn sort_viewport_sortable_parents(
             Entity,
             Ref<ViewportSortableChild>,
             Ref<ViewportSortablePromotableChild>,
+            Option<Ref<ViewportSortableSegmentedChild>>,
             Option<Ref<Visibility>>,
             &mut Transform,
             Option<(Ref<Sprite>, Ref<Anchor>)>,
@@ -783,11 +833,12 @@ pub(crate) fn sort_viewport_sortable_parents(
                 .as_ref()
                 .is_some_and(|(sprite, anchor)| sprite.is_changed() || anchor.is_changed());
     }
-    for (_, child, promotable, visibility, _, sprite) in &mut promotable_children {
+    for (_, child, promotable, segmented, visibility, _, sprite) in &mut promotable_children {
         needs_sort |= child.is_added()
             || child.is_changed()
             || promotable.is_added()
             || promotable.is_changed()
+            || segmented.as_ref().is_some_and(DetectChanges::is_added)
             || visibility.as_ref().is_some_and(DetectChanges::is_changed)
             || sprite
                 .as_ref()
@@ -822,6 +873,9 @@ pub(crate) fn sort_viewport_sortable_parents(
                 )
             })
         });
+        let screen_band_range = precise_scope
+            .zip(sprite_bounds)
+            .map(|(precise_scope, sprite)| precise_scope.sprite_band_range(sprite));
         let in_scope = !parent_excluded_from_clean_map_capture(&parent, clean_capture)
             && visible
             && parent_is_in_viewport_sort_scope(&parent, sprite_bounds, scope, precise_scope);
@@ -837,6 +891,7 @@ pub(crate) fn sort_viewport_sortable_parents(
             ViewportParentSortState {
                 included: in_scope,
                 can_promote_child,
+                screen_band_range,
             },
         );
         if !in_scope {
@@ -850,21 +905,16 @@ pub(crate) fn sort_viewport_sortable_parents(
     // ECS original para conservar el bloque completo; al final del sort se
     // mueve también ese parent original y la sincronización habitual mantiene
     // unidos los restantes children.
+    child_depth_windows.independent_children.clear();
     let mut promotion_by_parent: HashMap<Entity, (u8, u64, Entity, ViewportSortableParent, f32)> =
         HashMap::new();
     if precise_scope.is_some() {
-        for (entity, child, promotable, visibility, transform, sprite) in &mut promotable_children {
+        for (entity, child, promotable, segmented, visibility, transform, sprite) in
+            &mut promotable_children
+        {
             let Some(parent_state) = parent_states.get(&child.parent).copied() else {
                 continue;
             };
-            if parent_state.included
-                || !parent_state.can_promote_child()
-                || visibility
-                    .as_ref()
-                    .is_some_and(|visibility| **visibility == Visibility::Hidden)
-            {
-                continue;
-            }
             let Some(child_sprite_bounds) = precise_scope.and_then(|_| {
                 sprite.and_then(|(sprite, anchor)| {
                     sprite_screen_bounds(
@@ -878,6 +928,22 @@ pub(crate) fn sort_viewport_sortable_parents(
             }) else {
                 continue;
             };
+            let crosses_parent_band = segmented.is_some_and(|_| {
+                precise_scope.is_some_and(|precise_scope| {
+                    precise_scope.child_crosses_parent_band_range(
+                        parent_state.screen_band_range,
+                        child_sprite_bounds,
+                    )
+                })
+            });
+            if (parent_state.included && !crosses_parent_band)
+                || (!parent_state.included && !parent_state.can_promote_child())
+                || visibility
+                    .as_ref()
+                    .is_some_and(|visibility| **visibility == Visibility::Hidden)
+            {
+                continue;
+            }
             if !parent_is_in_viewport_sort_scope(
                 &child_promotion_parent(&promotable, transform.translation.z),
                 Some(child_sprite_bounds),
@@ -911,6 +977,9 @@ pub(crate) fn sort_viewport_sortable_parents(
         promotion_by_parent
     {
         promoted_origins.insert(child_entity, original_parent);
+        child_depth_windows
+            .independent_children
+            .insert(child_entity);
         input.push((child_entity, promoted_parent, current_depth));
     }
 
@@ -987,7 +1056,9 @@ pub(crate) fn sort_viewport_sortable_parents(
         if (current_depth - sorted_depth).abs() > f32::EPSILON {
             if let Ok((_, _, _, mut transform, _)) = parents.get_mut(entity) {
                 transform.translation.z = sorted_depth;
-            } else if let Ok((_, _, _, _, mut transform, _)) = promotable_children.get_mut(entity) {
+            } else if let Ok((_, _, _, _, _, mut transform, _)) =
+                promotable_children.get_mut(entity)
+            {
                 transform.translation.z = sorted_depth;
             }
         }
@@ -1010,6 +1081,9 @@ pub(crate) fn sync_viewport_sortable_children(
 ) {
     let mut children_by_parent: HashMap<Entity, Vec<(Entity, f32)>> = HashMap::new();
     for (entity, child) in &children {
+        if child_depth_windows.independent_children.contains(&entity) {
+            continue;
+        }
         children_by_parent
             .entry(child.parent)
             .or_default()
@@ -1186,6 +1260,7 @@ mod tests {
                 screen_right: -1_824,
                 screen_bottom: -5_200,
                 screen_top: -4_880,
+                band_height: 51,
             }
         );
 
@@ -1223,6 +1298,7 @@ mod tests {
             screen_right: 3,
             screen_bottom: 0,
             screen_top: 3,
+            band_height: 51,
         };
         assert!(edge_scope.parent_bounds_reach_viewport(ParentSpriteBounds::new(0, 0, 0, 0, 0, 0)));
 
@@ -1233,6 +1309,24 @@ mod tests {
         assert!(
             !touching_scope.parent_bounds_reach_viewport(ParentSpriteBounds::new(0, 0, 0, 0, 0, 0))
         );
+
+        let parent = SpriteScreenBounds {
+            left: 0.0,
+            right: 16.0,
+            bottom: -250.0,
+            top: -205.0,
+        };
+        let child = SpriteScreenBounds {
+            bottom: -300.0,
+            ..parent
+        };
+        let band_scope = DiagonalViewportSortScope {
+            screen_top: 0,
+            ..scope
+        };
+        assert_eq!(band_scope.sprite_band_range(parent), (4, 5));
+        assert_eq!(band_scope.sprite_band_range(child), (4, 6));
+        assert!(band_scope.child_crosses_parent_band_range(Some((4, 5)), child));
 
         // `AddSortableSpriteToDraw` recorta contra el rectángulo del PNG, no
         // contra el prisma del parent. Un píxel dentro del borde izquierdo se

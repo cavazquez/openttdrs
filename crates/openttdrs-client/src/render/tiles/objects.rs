@@ -58,9 +58,9 @@ use crate::render::viewport_sort::{
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     AirportStationAnim, AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext,
-    ViewportSortableChild, ViewportSortableParent, ViewportSortablePromotableChild, WaterTile,
-    WorldAssets, sprite_from_atlas_or_company_white_colour, viewport_insertion_key,
-    viewport_source_depth,
+    ViewportSortableChild, ViewportSortableParent, ViewportSortablePromotableChild,
+    ViewportSortableSegmentedChild, WaterTile, WorldAssets,
+    sprite_from_atlas_or_company_white_colour, viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
     CatenarySpriteDraw, CatenaryWireDraw, CompanyColour, DockTileLayer,
@@ -5684,6 +5684,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                         insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 1),
                         combine_ordinal: 1,
                     },
+                    ViewportSortableSegmentedChild,
                 ));
             }
             let front_parent_entity = front_entity.id();

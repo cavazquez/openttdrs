@@ -72,8 +72,9 @@ pub(crate) use house_lift_anim::{
 };
 pub(crate) use house_viewport_sort::{
     EMPTY_BOUNDING_BOX_SPRITE_ID, ViewportSortableChild, ViewportSortableChildDepthWindows,
-    ViewportSortableParent, ViewportSortablePromotableChild, sort_viewport_sortable_parents,
-    sync_viewport_sortable_children, viewport_insertion_key, viewport_source_depth,
+    ViewportSortableParent, ViewportSortablePromotableChild, ViewportSortableSegmentedChild,
+    sort_viewport_sortable_parents, sync_viewport_sortable_children, viewport_insertion_key,
+    viewport_source_depth,
 };
 pub(crate) use industry_anim::{
     IndustryBuildingAnim, IndustryBuildingAnimPlugin, IndustryOverlayContext, industry_anim_phase,

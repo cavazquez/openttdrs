@@ -16,7 +16,7 @@ use crate::road_movement::rvsb::{
     RVSB_USING_SECOND_BAY, RVSB_WORMHOLE, is_bay_road_state, is_drive_through_road_state,
     trackdir_for_entry_exit, trackdir_from_direction,
 };
-use crate::road_movement::slope::sync_road_slope_speed_with_catalog;
+use crate::road_movement::slope::{road_z_pos_affect_speed, sync_road_slope_speed_with_catalog};
 use crate::road_movement::traffic::{
     RoadTrafficIndex, apply_road_veh_close_to, apply_road_veh_close_to_indexed_with_catalog,
     is_road_vehicle_kind,
@@ -75,6 +75,12 @@ pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
         return false;
     }
 
+    ensure_road_position(&mut vehicles[v_idx], drive_on_right);
+    if vehicles[v_idx].z_pos.is_none()
+        && let Some(map) = map
+    {
+        sync_road_slope_speed_with_catalog(&mut vehicles[v_idx], map, engine_catalog);
+    }
     tick_overtaking(&mut vehicles[v_idx], map);
 
     let blocked_by_traffic = match traffic {
@@ -136,6 +142,7 @@ pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
         v.overtaking = 0;
         v.overtaking_ctr = 0;
         v.frame = RVC_DEFAULT_START_FRAME;
+        sync_road_position_from_table(v, drive_on_right);
         return true;
     }
 
@@ -150,6 +157,7 @@ pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
         }
 
         vehicles[v_idx].frame = next_frame;
+        sync_road_position_from_table(&mut vehicles[v_idx], drive_on_right);
         if !entered && next_frame == stop {
             let v = &mut vehicles[v_idx];
             v.road_state |= RVSB_ENTERED_STOP;
@@ -172,11 +180,28 @@ pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
         return true;
     }
 
+    let current_x = vehicles[v_idx].road_x;
+    let current_y = vehicles[v_idx].road_y;
+    let next_x = (current_x & !(ROAD_TILE_SIZE - 1)) + i32::from(rd.x & 15);
+    let next_y = (current_y & !(ROAD_TILE_SIZE - 1)) + i32::from(rd.y & 15);
+    let new_dir = road_sliding_direction(&vehicles[v_idx], next_x, next_y);
+    if new_dir != vehicles[v_idx].direction {
+        vehicles[v_idx].set_direction_with_curve_penalty(
+            new_dir,
+            map,
+            crate::engine::TrainAccelerationModel::Original,
+        );
+        return true;
+    }
+
     vehicles[v_idx].frame = next_frame;
+    vehicles[v_idx].road_x = next_x;
+    vehicles[v_idx].road_y = next_y;
+    vehicles[v_idx].road_pos_valid = true;
+    update_road_z_position(&mut vehicles[v_idx]);
     if handle_drive_through_stop(&mut vehicles[v_idx], state, next_frame, map, engine_catalog) {
         return true;
     }
-    let _ = (rd.x, rd.y); // pose visual: frame indexa la tabla
     let _ = RDE_NEXT_TILE;
     true
 }
@@ -202,6 +227,7 @@ fn enter_next_tile(
         vehicles[v_idx].direction = inbound;
         vehicles[v_idx].overtaking = 0;
         vehicles[v_idx].overtaking_ctr = 0;
+        sync_road_position_from_table(&mut vehicles[v_idx], drive_on_right);
         return true;
     }
     if !was_in_bay
@@ -227,6 +253,7 @@ fn enter_next_tile(
         vehicles[v_idx].direction = inbound;
         vehicles[v_idx].overtaking = 0;
         vehicles[v_idx].overtaking_ctr = 0;
+        sync_road_position_from_table(&mut vehicles[v_idx], drive_on_right);
         return true;
     }
 
@@ -241,6 +268,7 @@ fn enter_next_tile(
         v.road_state = trackdir_for_entry_exit(inbound, outbound);
     }
     v.frame = RVC_DEFAULT_START_FRAME;
+    sync_road_position_from_table(v, drive_on_right);
     true
 }
 
@@ -338,6 +366,117 @@ fn bay_entrance_busy(
 fn road_vehicle_has_motion_target(v: &Vehicle) -> bool {
     v.movement_target().is_some()
         || is_bay_road_state(v.road_state) && v.road_state & RVSB_ENTERED_STOP == 0
+}
+
+const ROAD_TILE_SIZE: i32 = 16;
+
+fn road_table_position(v: &Vehicle, drive_on_right: bool, frame: u8) -> Option<(i32, i32)> {
+    let entry = if is_bay_road_state(v.road_state) {
+        bay_drive_entry_side(v.road_state, frame, drive_on_right)
+    } else {
+        let lookup = drive_state_with_overtake_and_side(v.road_state, v.overtaking, drive_on_right);
+        road_drive_entry(lookup & 0x1F, frame)
+    }?;
+    if entry.is_next_tile() || entry.is_turned() {
+        return None;
+    }
+    Some((
+        v.pos
+            .x
+            .saturating_mul(ROAD_TILE_SIZE)
+            .saturating_add(i32::from(entry.x & 15)),
+        v.pos
+            .y
+            .saturating_mul(ROAD_TILE_SIZE)
+            .saturating_add(i32::from(entry.y & 15)),
+    ))
+}
+
+fn sync_road_position_from_table(v: &mut Vehicle, drive_on_right: bool) {
+    let (x, y) = road_table_position(v, drive_on_right, v.frame).unwrap_or((
+        v.pos.x.saturating_mul(ROAD_TILE_SIZE),
+        v.pos
+            .y
+            .saturating_mul(ROAD_TILE_SIZE)
+            .saturating_add(ROAD_TILE_SIZE / 2),
+    ));
+    v.road_x = x;
+    v.road_y = y;
+    v.road_pos_valid = true;
+}
+
+fn ensure_road_position(v: &mut Vehicle, drive_on_right: bool) {
+    if !v.road_pos_valid {
+        // `Vehicle::new` deja state=0. Si un caller local ya fijó el rumbo
+        // antes del primer tick, completar el trackdir evita interpretar la
+        // tabla de la recta NE como una posición incompatible con SE/SW/NW.
+        if v.road_state == 0 && v.frame == RVC_DEFAULT_START_FRAME {
+            let direction_state = trackdir_from_direction(v.direction);
+            if direction_state != 0 {
+                v.road_state = direction_state;
+            }
+        }
+        sync_road_position_from_table(v, drive_on_right);
+    }
+}
+
+/// Actualiza el Z incremental de `GroundVehicle::UpdateZPosition` para una
+/// posición vial ya movida. Los bits 0/1 son `GVF_GOINGUP/DOWN`.
+fn update_road_z_position(v: &mut Vehicle) {
+    let Some(old_z) = v.z_pos else {
+        return;
+    };
+    let going_up = v.road_gv_flags & 1 != 0;
+    let going_down = v.road_gv_flags & 2 != 0;
+    if !going_up && !going_down {
+        return;
+    }
+
+    // `DirToDiagDir` es un desplazamiento de un bit y `DiagDirToAxis`
+    // selecciona X para NE/SW, Y para SE/NW.
+    let diag = v.direction >> 1;
+    let coordinate = if diag & 1 == 0 { v.road_x } else { v.road_y };
+    let parity = coordinate & 1;
+    let step = if matches!(diag, 0 | 3) {
+        1 - parity
+    } else {
+        parity
+    };
+    let step = i16::try_from(step).unwrap_or(0);
+    let new_z = if going_up {
+        old_z.saturating_add(step)
+    } else {
+        old_z.saturating_sub(step)
+    };
+    v.z_pos = Some(new_z);
+    v.cur_speed = road_z_pos_affect_speed(v.cur_speed, old_z, new_z, v.cached_max_track_speed);
+}
+
+/// Equivalente a `RoadVehGetSlidingDirection` (`roadveh_cmd.cpp:751-775`).
+fn road_sliding_direction(v: &Vehicle, next_x: i32, next_y: i32) -> u8 {
+    let x = next_x - v.road_x + 1;
+    let y = next_y - v.road_y + 1;
+    let new_dir = match (x, y) {
+        (0, 0) => crate::vehicle::DIR_N,
+        (1, 0) => crate::vehicle::DIR_NW,
+        (2, 0) => crate::vehicle::DIR_W,
+        (0, 1) => crate::vehicle::DIR_NE,
+        (1, 1) => crate::vehicle::DIR_N,
+        (2, 1) => crate::vehicle::DIR_SW,
+        (0, 2) => crate::vehicle::DIR_E,
+        (1, 2) => crate::vehicle::DIR_SE,
+        (2, 2) => crate::vehicle::DIR_S,
+        _ => return v.direction,
+    };
+    if new_dir == v.direction {
+        return v.direction;
+    }
+    let delta = if crate::train_movement::dir_difference(new_dir, v.direction) > 4 {
+        7
+    } else {
+        1
+    };
+    v.direction.wrapping_add(delta) & 7
 }
 
 fn tick_reverse_counter(v: &mut Vehicle) -> bool {
@@ -630,9 +769,6 @@ fn road_vehicle_tick_side_with_traffic(
             u8::try_from(j.min(u32::from(u8::MAX))).unwrap_or(u8::MAX)
         };
     }
-    if let Some(map) = map {
-        sync_road_slope_speed_with_catalog(&mut vehicles[v_idx], map, engine_catalog);
-    }
 }
 
 /// Avance road sin vecinos (tests unitarios de un solo vehículo).
@@ -672,7 +808,7 @@ mod tests {
     use super::*;
     use crate::map::{Map, TileCoord, TileKind};
     use crate::road_movement::rvsb::{RVSB_ENTERED_STOP, RVSB_USING_SECOND_BAY};
-    use crate::vehicle::{DIR_NE, DIR_SW, VehicleKind};
+    use crate::vehicle::{DIR_E, DIR_NE, DIR_SW, VehicleKind};
     use std::collections::VecDeque;
 
     fn bay_map() -> (Map, TileCoord, TileCoord) {
@@ -864,6 +1000,9 @@ mod tests {
         v.road_state = 8;
         v.frame = 6;
         v.blocked_ctr = 19;
+        v.road_x = 208;
+        v.road_y = 264;
+        v.road_pos_valid = true;
         v.reverse_ctr = 3;
         v.overtaking = crate::road_movement::rvsb::RVSB_DRIVE_SIDE;
         v.overtaking_ctr = 7;
@@ -890,6 +1029,34 @@ mod tests {
         assert_eq!(vehicles[0].frame, 7);
         assert_eq!(vehicles[0].overtaking_ctr, 8);
         assert_eq!(vehicles[0].reverse_ctr, 2);
+    }
+
+    #[test]
+    fn imported_road_position_slides_direction_before_frame() {
+        let start = TileCoord::new(13, 16);
+        let end = TileCoord::new(14, 16);
+        let mut v = Vehicle::new(1, VehicleKind::Bus, start, end);
+        v.direction = DIR_NE;
+        v.road_state = 8;
+        v.frame = 6;
+        v.road_x = 208;
+        v.road_y = 264;
+        v.road_pos_valid = true;
+        v.overtaking = crate::road_movement::rvsb::RVSB_DRIVE_SIDE;
+        v.cur_speed = 100;
+        v.path = VecDeque::from([end]);
+        let mut vehicles = vec![v];
+
+        assert!(individual_road_vehicle_controller(&mut vehicles, 0, None));
+        assert_eq!(vehicles[0].frame, 7);
+        assert_eq!((vehicles[0].road_x, vehicles[0].road_y), (215, 261));
+        assert_eq!(vehicles[0].direction, DIR_NE);
+
+        assert!(individual_road_vehicle_controller(&mut vehicles, 0, None));
+        assert_eq!(vehicles[0].frame, 7);
+        assert_eq!((vehicles[0].road_x, vehicles[0].road_y), (215, 261));
+        assert_eq!(vehicles[0].direction, DIR_E);
+        assert_eq!(vehicles[0].cur_speed, 75);
     }
 
     #[test]

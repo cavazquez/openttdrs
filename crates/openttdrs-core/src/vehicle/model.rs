@@ -235,6 +235,16 @@ pub struct Vehicle {
     /// Remanente físico de `DoUpdateSpeed` (`Vehicle::progress` de `OpenTTD`).
     #[serde(default)]
     pub progress: u8,
+    /// Coordenada X absoluta del frente vial (`RoadVehicle::x_pos`).
+    #[serde(default)]
+    pub road_x: i32,
+    /// Coordenada Y absoluta del frente vial (`RoadVehicle::y_pos`).
+    #[serde(default)]
+    pub road_y: i32,
+    /// Indica que `road_x`/`road_y` provienen de una posición vial válida.
+    /// `false` permite hidratar JSON antiguo sin inventar una coordenada.
+    #[serde(default)]
+    pub road_pos_valid: bool,
     /// Estado de conducción road (`RVSB_*` / trackdir).
     #[serde(default)]
     pub road_state: u8,
@@ -757,6 +767,10 @@ impl Vehicle {
         };
         let engine_id = crate::engine::default_engine_id(kind);
         let engine = crate::engine::engine_for_vehicle(kind, engine_id);
+        let is_road = matches!(
+            kind,
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+        );
         let reliability =
             crate::vehicle::reliability::initial_reliability_for_engine(engine_id, kind);
         let reliability_spd_dec = engine.reliability_spd_dec;
@@ -780,6 +794,16 @@ impl Vehicle {
             aircraft_mail_age_counter: 0,
             running: true,
             progress: 0,
+            road_x: if is_road { pos.x.saturating_mul(16) } else { 0 },
+            road_y: if is_road {
+                pos.y.saturating_mul(16).saturating_add(8)
+            } else {
+                0
+            },
+            // El estado/frame vial suele hidratarse inmediatamente después
+            // del constructor; resolver la tabla al primer subpaso evita
+            // tratar el centro genérico como posición nativa.
+            road_pos_valid: false,
             road_state: 0,
             road_gv_flags: 0,
             road_path: Vec::new(),

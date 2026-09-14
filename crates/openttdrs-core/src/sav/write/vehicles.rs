@@ -792,8 +792,18 @@ fn common_wire_for(
     let cargo_action_counts = cargo_action_counts_for(v, cargo_count);
     let cur_order = u8::try_from(v.current_order.min(255)).unwrap_or(0);
     let vehstatus = if v.running { 0 } else { VEHSTATUS_STOPPED };
-    let x_pos = v.pos.x * TILE_SIZE + i32::from(v.rail_pixel.min(15));
-    let y_pos = v.pos.y * TILE_SIZE + TILE_SIZE / 2;
+    let (x_pos, y_pos) = if matches!(
+        v.kind,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    ) && v.road_pos_valid
+    {
+        (v.road_x, v.road_y)
+    } else {
+        (
+            v.pos.x * TILE_SIZE + i32::from(v.rail_pixel.min(15)),
+            v.pos.y * TILE_SIZE + TILE_SIZE / 2,
+        )
+    };
     let z_pos = i32::from(v.z_pos.unwrap_or(0));
     let age_days = v.vehicle_age_days(current_tick).min(u64::from(u32::MAX));
     let economy_age_days = if v.economy_age_days == 0 {

@@ -2035,6 +2035,16 @@ impl GameState {
             ))
             .unwrap_or(i32::MAX);
             if matches!(kind, VehicleKind::Bus | VehicleKind::Truck) {
+                vehicle.road_x = v.x_pos;
+                vehicle.road_y = v.y_pos;
+                vehicle.road_pos_valid = true;
+                vehicle.z_pos = Some(i16::try_from(v.z_pos).unwrap_or_else(|_| {
+                    if v.z_pos.is_negative() {
+                        i16::MIN
+                    } else {
+                        i16::MAX
+                    }
+                }));
                 vehicle.road_state = v.road_state;
                 vehicle.road_gv_flags = v.road_gv_flags;
                 vehicle.road_path.clone_from(&v.road_path);

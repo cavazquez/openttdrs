@@ -73,15 +73,6 @@ pub(crate) fn initial_reliability_for_engine(
     u16::from(crate::engine::engine_for_vehicle(kind, engine_id).reliability_pct) * 100
 }
 
-pub(crate) fn init_vehicle_reliability_from_engine(
-    vehicle: &mut super::model::Vehicle,
-    engine: &crate::engine::EngineDef,
-) {
-    vehicle.reliability = initial_reliability_for_engine(engine.id, engine.kind);
-    vehicle.reliability_spd_dec = engine.reliability_spd_dec;
-    vehicle.max_age_days = u32::from(engine.lifelength_years) * DAYS_PER_VEHICLE_YEAR;
-}
-
 pub(crate) fn init_vehicle_reliability_from_engine_with_catalog(
     vehicle: &mut super::model::Vehicle,
     engine: &crate::engine::EngineDef,
@@ -127,7 +118,7 @@ fn chance16i(a: u32, b: u32, r: u32) -> bool {
     if b == 0 {
         return false;
     }
-    ((u32::from(u16::try_from(r).unwrap_or(u16::MAX)) * b + b / 2) >> 16) < a
+    (((r & u32::from(u16::MAX)) * b + b / 2) >> 16) < a
 }
 
 fn extract_bits(value: u32, offset: u32, count: u32) -> u8 {
@@ -1190,6 +1181,13 @@ mod tests {
         assert_eq!(reliability_to_openttd(0), 0);
         assert_eq!(reliability_to_openttd(10_000), u16::MAX);
         assert_eq!(reliability_to_openttd(7_654), 50_160);
+    }
+
+    #[test]
+    fn breakdown_chance_uses_only_the_low_random_word() {
+        let random = 0xABCD_002B;
+        assert!(chance16i(1, 25, random));
+        assert_eq!(chance16i(1, 25, random), chance16i(1, 25, random & 0xFFFF));
     }
 
     #[test]

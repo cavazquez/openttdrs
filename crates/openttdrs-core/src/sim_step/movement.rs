@@ -245,6 +245,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             state.vehicles[i].kind,
             VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
         ) {
+            let was_broken_down = state.vehicles[i].is_broken_down();
             let was_waiting_for_station_load = state.vehicles[i].awaiting_load_window;
             let map = Some(&state.map);
             let drive_on_right = state.construction.road_drive_on_right();
@@ -262,6 +263,16 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                 &mut road_traffic,
             );
             state.vehicles = vehicles;
+            if !was_broken_down && state.vehicles[i].is_broken_down() {
+                state
+                    .runtime
+                    .pending_sim_events
+                    .push(crate::sim_events::SimEvent::Breakdown {
+                        vehicle_id: state.vehicles[i].id,
+                        at: state.vehicles[i].pos,
+                        kind: state.vehicles[i].kind,
+                    });
+            }
             if state.vehicles[i].service_generation != service_generation_before {
                 crate::vehicle::service_vehicle_followers_with_catalog(
                     &mut state.vehicles,

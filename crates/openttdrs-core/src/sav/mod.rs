@@ -2132,7 +2132,6 @@ impl GameState {
                 if engine.capacity > 0 {
                     vehicle.capacity = engine.capacity;
                 }
-                crate::vehicle::init_vehicle_reliability_from_engine(&mut vehicle, engine);
             }
             if v.cargo_capacity > 0 {
                 vehicle.capacity = u32::from(v.cargo_capacity);
@@ -4241,6 +4240,7 @@ mod tests {
         assert_eq!(state.vehicles[0].kind, VehicleKind::Train);
         assert_eq!(state.vehicles[1].kind, VehicleKind::Bus);
         assert_eq!(state.vehicles[2].kind, VehicleKind::Truck);
+        assert_eq!(state.vehicles[1].reliability, 1_297);
         assert_eq!(state.vehicles[0].next_unit, Some(3));
         assert!(state.vehicles[0].timetable_started);
         assert!(state.vehicles[0].timetable_autofill);

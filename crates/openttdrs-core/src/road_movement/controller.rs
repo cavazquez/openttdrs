@@ -741,6 +741,14 @@ fn road_vehicle_tick_side_with_traffic(
         v.cur_speed = 0;
         return;
     }
+    // `RoadVehController` llama a `HandleBreakdown` después de actualizar los
+    // contadores y antes de comprobar `Stopped`. La rama vial se ejecuta
+    // desde `move_vehicles` antes del handler común de trenes, por lo que
+    // debe consumir aquí las fases de avería para no seguir avanzando cuando
+    // `breakdown_ctr` llega a 1.
+    if v.handle_breakdown(v.sim_tick) {
+        return;
+    }
     if !v.running {
         v.cur_speed = 0;
         return;
@@ -1054,6 +1062,28 @@ mod tests {
     fn overtaking_uses_accel_512() {
         assert_eq!(crate::road_movement::ROAD_ACCEL_OVERTAKE, 512);
         assert_eq!(crate::engine::ROAD_ACCEL_ORIGINAL, 256);
+    }
+
+    #[test]
+    fn breakdown_stops_road_vehicle_before_speed_update() {
+        let start = TileCoord::new(0, 0);
+        let end = TileCoord::new(1, 0);
+        let mut v = Vehicle::new(1, VehicleKind::Bus, start, end);
+        v.direction = DIR_SW;
+        v.road_state = 8;
+        v.frame = 0;
+        v.cur_speed = 112;
+        v.path = VecDeque::from([end]);
+        v.breakdown_ctr = 2;
+        v.breakdown_delay = 120;
+
+        road_vehicle_step_solo(&mut v, None);
+
+        assert_eq!(v.breakdown_ctr, 1);
+        assert_eq!(v.breakdown_delay, 119);
+        assert_eq!(v.cur_speed, 0);
+        assert_eq!(v.progress, 0);
+        assert_eq!(v.pos, start);
     }
 
     #[test]

@@ -48,6 +48,20 @@ fn record_vehicle_running_tick(
     }
 }
 
+/// Ejecuta el mismo número de handlers de avería que `Vehicle::Tick()`.
+///
+/// Tren requiere dos pasadas porque `Train::Tick()` llama a
+/// `TrainLocoHandler` en modo normal y luego en modo de actualización de
+/// consist; ambos caminos empiezan por `HandleBreakdown()`. Los demás tipos
+/// tienen una sola pasada por tick.
+fn handle_vehicle_breakdown(vehicle: &mut crate::vehicle::Vehicle, tick: u64) -> bool {
+    let mut stopped = vehicle.handle_breakdown(tick);
+    if vehicle.kind == VehicleKind::Train {
+        stopped |= vehicle.handle_breakdown(tick);
+    }
+    stopped
+}
+
 /// Dispara el evento común al cruzar desde fuera hacia el interior del depot.
 fn trigger_depot_on_entry(state: &mut GameState, index: usize, was_in_depot: bool) {
     if was_in_depot || !vehicle_is_in_depot(state, index) {
@@ -399,7 +413,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         }
         let had_force = state.vehicles[i].force_proceed;
         let was_broken_down = state.vehicles[i].is_broken_down();
-        let breakdown_stopped = state.vehicles[i].handle_breakdown(tick);
+        let breakdown_stopped = handle_vehicle_breakdown(&mut state.vehicles[i], tick);
         if breakdown_stopped && !was_broken_down {
             state
                 .runtime
@@ -920,9 +934,9 @@ fn reroute_head_on_to_alt_platform(state: &mut GameState, vehicle_idx: usize) {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::{
-        move_vehicles, record_vehicle_running_tick, sync_road_articulated_parts,
-        tick_road_depot_movement, trigger_depot_on_entry, update_vehicle_running_sounds,
-        vehicle_entered_train_tunnel,
+        handle_vehicle_breakdown, move_vehicles, record_vehicle_running_tick,
+        sync_road_articulated_parts, tick_road_depot_movement, trigger_depot_on_entry,
+        update_vehicle_running_sounds, vehicle_entered_train_tunnel,
     };
     use crate::engine::engines_table;
     use crate::newgrf_sprites::{Action2RandomEntry, TrainSpriteAssign, TrainSpriteGraphics};
@@ -1040,6 +1054,16 @@ mod tests {
         record_vehicle_running_tick(&mut vehicle, &[]);
 
         assert_eq!(vehicle.running_ticks, 1);
+    }
+
+    #[test]
+    fn train_breakdown_counter_uses_both_native_loco_handlers() {
+        let pos = TileCoord::new(2, 2);
+        let mut train = Vehicle::new(1, VehicleKind::Train, pos, pos);
+        train.breakdown_ctr = 6;
+
+        assert!(!handle_vehicle_breakdown(&mut train, 0));
+        assert_eq!(train.breakdown_ctr, 4);
     }
 
     #[test]

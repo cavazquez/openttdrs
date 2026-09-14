@@ -7522,3 +7522,12 @@ ya se registra en el catálogo inglés como `Industry opening`, manteniendo el
 enum y la preferencia persistida sin cambios. La regresión del catálogo cubre
 las diez categorías disponibles; #331 continúa abierta por los catálogos
 upstream, settings no modelados y superficies pendientes.
+
+Corrección #331-CARGO-UI-LOCALE (2026-09-14, `569ee55c`): el panel de estación
+localiza ahora el nombre de cada carga vanilla en sus resúmenes dinámicos, y la
+ventana de tarifas de carga localiza título, año, encabezados, cargos y nota
+explicativa sin modificar importes ni reglas de pago. La regresión cubre ambos
+locales en la fila de estación y en las 32 entradas vanilla de tarifas; la
+suite completa del cliente queda en `1532` tests exitosos y `2` ignorados.
+#331 continúa abierta por catálogos upstream, settings no modelados, cargos
+custom/NewGRF y otras superficies generadas.

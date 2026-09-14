@@ -5022,3 +5022,22 @@ una llegada a estación queda fuera de esa regla. El replay externo de
 `mvp_openttd_rich.sav` pasa las 41 muestras de PBS, incluida la inversión del
 tick 12374; la suite core pasa 2735 tests (1 ignorado). #330 sigue abierta por
 la resolución de rutas multi-tick y los escenarios complejos restantes.
+
+Corrección #330-ROAD-SLIDING-DIRECTION (2026-09-14, `efb63805`): los vehículos
+viales importados conservan `RoadVehicle::x_pos/y_pos/z_pos` y el writer los
+vuelve a emitir cuando son posiciones nativas válidas. El controlador ahora
+aplica `RoadVehGetSlidingDirection` (`roadveh_cmd.cpp:751-775`) sobre la tabla
+de movimiento: durante un giro cambia un paso de 45 grados y mantiene frame y
+posición hasta que el siguiente intento sea compatible, igual que el early
+return de `roadveh_cmd.cpp:1447-1491`. También reproduce el Z incremental de
+`GroundVehicle::UpdateZPosition` y su `RoadZPosAffectSpeed` en los bits de
+subida/bajada persistidos.
+
+La evidencia es el mismo `mvp_openttd_rich.sav`, cuyo vehículo discrepante
+comienza en `(x_pos,y_pos)=(208,264)` (posición local `(0,8)`), `state=8`,
+`frame=6` y `overtaking=16`. La comparación reproducible
+`python3 scripts/compare_pbs_traces.py /tmp/openttd-mvp-rich-40.jsonl /tmp/openttdrs-mvp-rich-40-roadpos-final.jsonl --scope road`
+devuelve `OK: dinámica vial externa sin divergencias (41 ticks)`; la suite del
+core queda en 2736 tests exitosos y 1 ignorado. #330 permanece abierta: faltan
+resolución de rutas multi-tick, tráfico complejo, presignals y los oráculos de
+aire/mar.

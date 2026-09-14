@@ -7575,3 +7575,20 @@ marcador `progress=255` de una estación. `mvp_openttd_rich.sav` coincide en 41
 muestras PBS, incluyendo el tick 12374, y la suite core pasa 2735 tests (1
 ignorado). La resolución de rutas ferroviarias multi-tick y los escenarios de
 tráfico/presignals continúan pendientes en #330.
+
+Corrección #330-ROAD-SLIDING-DIRECTION (2026-09-14, `efb63805`): el importador
+conserva `RoadVehicle::x_pos/y_pos/z_pos` y el writer usa esas coordenadas
+cuando son válidas; el controlador replica `RoadVehGetSlidingDirection`
+(`roadveh_cmd.cpp:751-775`) con un cambio de rumbo de 45 grados por intento y
+un early return que conserva frame/posición durante el deslizamiento
+(`roadveh_cmd.cpp:1447-1491`). La actualización cubre además el Z incremental
+de `GroundVehicle::UpdateZPosition` y `RoadZPosAffectSpeed` a partir de los
+bits de subida/bajada.
+
+El caso diferencial usa `mvp_openttd_rich.sav`: el vehículo empieza con
+`(x_pos,y_pos)=(208,264)`, posición local `(0,8)`, `state=8`, `frame=6` y
+`overtaking=16`. La orden
+`python3 scripts/compare_pbs_traces.py /tmp/openttd-mvp-rich-40.jsonl /tmp/openttdrs-mvp-rich-40-roadpos-final.jsonl --scope road`
+devuelve `OK: dinámica vial externa sin divergencias (41 ticks)` y la suite
+core pasa 2736 tests, con 1 ignorado. El bloque no cierra #330: siguen
+pendientes las rutas multi-tick, tráfico complejo, presignals y aire/mar.

@@ -889,6 +889,9 @@ fn wire_position(v: &Vehicle) -> (i32, i32) {
     {
         return (v.road_x, v.road_y);
     }
+    if v.kind == VehicleKind::Ship && v.ship_pos_valid {
+        return (v.ship_x, v.ship_y);
+    }
     (
         v.pos.x * TILE_SIZE + i32::from(v.rail_pixel.min(15)),
         v.pos.y * TILE_SIZE + TILE_SIZE / 2,
@@ -1732,6 +1735,45 @@ mod tests {
         assert_eq!(
             record_get(&path[1], "trackdir").and_then(SlValue::as_u64),
             Some(12)
+        );
+    }
+
+    #[test]
+    fn vehs_preserves_ship_subtile_position() {
+        use crate::sav::chunks::{find_chunk, parse_chunks};
+        use crate::sav::table::{SlValue, parse_table_chunk, record_get};
+
+        let mut state = GameState::new(64, 64);
+        let ship_pos = TileCoord::new(30, 30);
+        ensure_sea_tile(&mut state, ship_pos);
+        let mut ship = Vehicle::new(0, VehicleKind::Ship, ship_pos, ship_pos);
+        ship.ship_pos_valid = true;
+        ship.ship_x = ship_pos.x * 16 + 13;
+        ship.ship_y = ship_pos.y * 16 + 6;
+        ship.ship_state = 16;
+        ship.ship_track = crate::ship_movement::TRACK_LEFT;
+        state.vehicles = vec![ship];
+
+        let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
+        let chunk = vehs_chunk(&vehs).unwrap();
+        let chunks = parse_chunks(&chunk).unwrap();
+        let raw = find_chunk(&chunks, "VEHS").expect("VEHS");
+        let rows = parse_table_chunk(&raw.body, true).expect("parse VEHS");
+        let ship = match record_get(&rows[0].1, "ship") {
+            Some(SlValue::Structs(items)) => items.first().expect("ship"),
+            other => panic!("ship ausente: {other:?}"),
+        };
+        let common = match record_get(ship, "common") {
+            Some(SlValue::Structs(items)) => items.first().expect("common"),
+            other => panic!("common ausente: {other:?}"),
+        };
+        assert_eq!(
+            record_get(common, "x_pos").and_then(SlValue::as_u64),
+            Some((ship_pos.x * 16 + 13) as u64)
+        );
+        assert_eq!(
+            record_get(common, "y_pos").and_then(SlValue::as_u64),
+            Some((ship_pos.y * 16 + 6) as u64)
         );
     }
 

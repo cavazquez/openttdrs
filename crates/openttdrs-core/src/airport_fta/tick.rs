@@ -133,6 +133,10 @@ pub fn tick_airport_fta_with_catalog_and_plane_speed(
             return None;
         }
     }
+    // `Aircraft::Tick` ya actualizó velocidad/posición dentro de FTA. Si el
+    // handler termina el despegue en este mismo tick, `Vehicle::step` no debe
+    // volver a ejecutar el movimiento genérico.
+    v.airport_fta_tick_consumed = true;
     update_heading_for_orders(v, &stations[st_idx], profile.kind, engine_catalog);
     if v.airport_loading_stand_reached && (v.awaiting_load_window || v.cargo_transfer_active()) {
         v.cur_speed = 0;
@@ -1073,6 +1077,9 @@ fn finish_takeoff(
     v.aircraft_phase_ticks = 0;
     v.airport_waypoint_reached = false;
     v.airport_loading_stand_reached = false;
+    // La salida FTA actual todavía entrega el movimiento de ruta al
+    // controlador genérico; su posición continua se rehidrata al entrar de
+    // nuevo en un tramo FTA.
     v.airport_subpos_valid = false;
     v.path = straight_line_path(v.pos, v.dest).into();
     let is_helicopter = vehicle_is_helicopter(v, engine_catalog);

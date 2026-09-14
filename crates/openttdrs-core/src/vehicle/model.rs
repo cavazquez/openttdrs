@@ -693,6 +693,11 @@ pub struct Vehicle {
     /// `true` mientras el avión está bajo control FTA de un aeropuerto Country.
     #[serde(default)]
     pub airport_fta_active: bool,
+    /// El controlador FTA ya consumió este tick; evita una segunda pasada por
+    /// el movimiento genérico cuando el handler acaba de liberar el avión.
+    /// Es deliberadamente efímero: nunca forma parte del save.
+    #[serde(skip, default)]
+    pub(crate) airport_fta_tick_consumed: bool,
     /// Ancla de la estación que controla el circuito FTA actual.
     #[serde(default)]
     pub airport_fta_station: Option<TileCoord>,
@@ -969,6 +974,7 @@ impl Vehicle {
             aircraft_flags: 0,
             aircraft_rotor_speed: 0,
             airport_fta_active: false,
+            airport_fta_tick_consumed: false,
             airport_fta_station: None,
             airport_blocks_held: 0,
             next_unit: None,

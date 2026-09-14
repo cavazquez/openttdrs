@@ -310,6 +310,24 @@ impl super::model::Vehicle {
                 | super::model::VehicleKind::Truck
                 | super::model::VehicleKind::Tram
         ) {
+            // Las pruebas y consumidores que usan `Vehicle::step()` sin mapa
+            // pueden entregar un vehículo vial ya colocado sobre su parada.
+            // En el loop completo, `VehicleEnter_Station` abre la ventana de
+            // carga antes del movimiento; conservar ese contrato aquí evita
+            // que el controlador acelere desde la coordenada de la estación.
+            let standalone_station_arrival = map.is_none()
+                && self.progress == u8::MAX
+                && self.pos == self.dest
+                && !self.awaiting_load_window
+                && !self.holding_for_timetable()
+                && self
+                    .current_order_ref()
+                    .is_some_and(|order| order.is_station_like());
+            if standalone_station_arrival {
+                self.finish_arrival_processing_with_catalog(engine_catalog);
+                self.cur_speed = 0;
+                return;
+            }
             // Sin vecinos: el tick de simulación usa `road_vehicle_tick` con la flota.
             crate::road_movement::road_vehicle_step_solo_with_catalog(self, map, engine_catalog);
             return;

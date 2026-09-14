@@ -989,6 +989,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Dejará de producir y desaparecerá el mes que viene." => {
             "It will stop producing and disappear next month."
         }
+        "Una industria nueva está disponible para ser atendida." => {
+            "A new industry is available to be serviced."
+        }
         "¡Tu primer autobús está en marcha!" => "Your first bus is running!",
         "¡Tu primer camión está en marcha!" => "Your first truck is running!",
         "¡Tu primer tranvía está en marcha!" => "Your first tram is running!",
@@ -1252,6 +1255,59 @@ pub(crate) fn localized_text(locale: Locale, source: &str) -> String {
 /// valores dinámicos son identificables sin interpretar texto arbitrario.
 /// Nombres de cargo, importes e IDs se conservan byte a byte.
 fn translate_dynamic_news_text(source: &str) -> Option<String> {
+    if let Some(rest) = source.strip_prefix("Nuevo ")
+        && let Some((kind, name)) = rest.split_once(": ")
+        && let Some(kind) = english_vehicle_kind(kind)
+        && is_news_fragment(name)
+    {
+        return Some(format!("New {kind}: {name}"));
+    }
+    if let Some(rest) = source.strip_prefix("El modelo ")
+        && let Some((name, rest)) = rest.split_once(" (motor ")
+        && let Some(engine_id) = rest.strip_suffix(") ya está disponible para construir.")
+        && is_news_fragment(name)
+        && is_ascii_digits(engine_id)
+    {
+        return Some(format!(
+            "Model {name} (engine {engine_id}) is now available to build."
+        ));
+    }
+    if let Some(rest) = source.strip_prefix("Preview exclusiva: ") {
+        for (spanish_kind, english_kind) in [
+            ("autobús", "bus"),
+            ("camión", "truck"),
+            ("tranvía", "tram"),
+            ("tren", "train"),
+            ("barco", "ship"),
+            ("avión", "aircraft"),
+        ] {
+            if let Some(name) = rest
+                .strip_prefix(spanish_kind)
+                .and_then(|value| value.strip_prefix(' '))
+                && is_news_fragment(name)
+            {
+                return Some(format!("Exclusive preview: {english_kind} {name}"));
+            }
+        }
+    }
+    if let Some((company, rest)) = source.split_once(" puede probar el modelo ")
+        && let Some((name, rest)) = rest.split_once(" (motor ")
+        && let Some(engine_id) = rest.strip_suffix(") durante la preview.")
+        && is_news_fragment(company)
+        && is_news_fragment(name)
+        && is_ascii_digits(engine_id)
+    {
+        return Some(format!(
+            "Company {company} can test model {name} (engine {engine_id}) during the preview."
+        ));
+    }
+    if let Some(coordinates) = source
+        .strip_prefix("Nueva industria inaugurada en (")
+        .and_then(|value| value.strip_suffix(')'))
+        && is_coordinate_pair(coordinates)
+    {
+        return Some(format!("New industry opened at ({coordinates})"));
+    }
     if let Some(rest) = source.strip_prefix("Entrega de ")
         && let Some((units, cargo)) = rest.split_once(" u. de ")
         && is_ascii_digits(units)
@@ -1514,6 +1570,18 @@ fn translate_dynamic_news_text(source: &str) -> Option<String> {
         return Some(format!("{name} flooded"));
     }
     None
+}
+
+fn english_vehicle_kind(kind: &str) -> Option<&'static str> {
+    match kind {
+        "autobús" => Some("bus"),
+        "camión" => Some("truck"),
+        "tranvía" => Some("tram"),
+        "tren" => Some("train"),
+        "barco" => Some("ship"),
+        "avión" => Some("aircraft"),
+        _ => None,
+    }
 }
 
 fn is_ascii_digits(value: &str) -> bool {
@@ -3164,6 +3232,95 @@ mod tests {
         assert_eq!(
             app.world().get::<Text>(headline).unwrap().as_str(),
             "¡Tu primer avión está en marcha!"
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_vehicle_availability_and_industry_opening() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let available = app
+            .world_mut()
+            .spawn(Text::new("Nuevo avión: Zephyr 2000"))
+            .id();
+        let available_body = app
+            .world_mut()
+            .spawn(Text::new(
+                "El modelo Zephyr 2000 (motor 42) ya está disponible para construir.",
+            ))
+            .id();
+        let preview = app
+            .world_mut()
+            .spawn(Text::new("Preview exclusiva: tren Comet X"))
+            .id();
+        let preview_body = app
+            .world_mut()
+            .spawn(Text::new(
+                "Transportes Sur puede probar el modelo Comet X (motor 43) durante la preview.",
+            ))
+            .id();
+        let industry = app
+            .world_mut()
+            .spawn(Text::new("Nueva industria inaugurada en (-4, 12)"))
+            .id();
+        let industry_body = app
+            .world_mut()
+            .spawn(Text::new(
+                "Una industria nueva está disponible para ser atendida.",
+            ))
+            .id();
+        let malformed = app
+            .world_mut()
+            .spawn(Text::new("Nuevo avión: Prototipo (GS)"))
+            .id();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(available).unwrap().as_str(),
+            "New aircraft: Zephyr 2000"
+        );
+        assert_eq!(
+            app.world().get::<Text>(available_body).unwrap().as_str(),
+            "Model Zephyr 2000 (engine 42) is now available to build."
+        );
+        assert_eq!(
+            app.world().get::<Text>(preview).unwrap().as_str(),
+            "Exclusive preview: train Comet X"
+        );
+        assert_eq!(
+            app.world().get::<Text>(preview_body).unwrap().as_str(),
+            "Company Transportes Sur can test model Comet X (engine 43) during the preview."
+        );
+        assert_eq!(
+            app.world().get::<Text>(industry).unwrap().as_str(),
+            "New industry opened at (-4, 12)"
+        );
+        assert_eq!(
+            app.world().get::<Text>(industry_body).unwrap().as_str(),
+            "A new industry is available to be serviced."
+        );
+        assert_eq!(
+            app.world().get::<Text>(malformed).unwrap().as_str(),
+            "Nuevo avión: Prototipo (GS)"
+        );
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(available).unwrap().as_str(),
+            "Nuevo avión: Zephyr 2000"
+        );
+        assert_eq!(
+            app.world().get::<Text>(preview_body).unwrap().as_str(),
+            "Transportes Sur puede probar el modelo Comet X (motor 43) durante la preview."
+        );
+        assert_eq!(
+            app.world().get::<Text>(industry).unwrap().as_str(),
+            "Nueva industria inaugurada en (-4, 12)"
         );
     }
 

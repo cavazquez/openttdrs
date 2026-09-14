@@ -5012,3 +5012,13 @@ focalizados, 2735 tests del core (1 ignorado) y las herramientas externas de
 trazas. Es evidencia de la primera ventana del escenario, no paridad global:
 #330 continúa abierta por rutas ferroviarias multi-tick, tráfico complejo,
 presignals, aire y mar.
+
+Corrección #330-TRAIN-LINE-END-PROGRESS (2026-09-14, `fcecb8fb`): el handler
+ferroviario conserva el `progress` intermedio entre sus dos llamadas por tick y
+reproduce el intento de `TrainController` al alcanzar el borde de una tesela
+sin ruta cacheada. En el fin de vía invierte dirección, detiene la velocidad,
+transforma el `rail_pixel` y deja el remanente; el marcador `progress=255` de
+una llegada a estación queda fuera de esa regla. El replay externo de
+`mvp_openttd_rich.sav` pasa las 41 muestras de PBS, incluida la inversión del
+tick 12374; la suite core pasa 2735 tests (1 ignorado). #330 sigue abierta por
+la resolución de rutas multi-tick y los escenarios complejos restantes.

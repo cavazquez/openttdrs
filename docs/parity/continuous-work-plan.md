@@ -7566,3 +7566,12 @@ ruta en una reserva PBS. Pasaron 31 tests focalizados, 2735 tests del core (1
 ignorado), `test_pbs_trace_tools.py` y la comparación externa. El alcance es
 sólo la ventana inicial del escenario: #330 permanece abierta por rutas de
 tren multi-tick, tráfico complejo, presignals, aire y mar.
+
+Corrección #330-TRAIN-LINE-END-PROGRESS (2026-09-14, `fcecb8fb`): el
+controlador ferroviario conserva el remanente entre los dos
+`TrainLocoHandler`, intenta el borde cuando `j` alcanza
+`GetAdvanceDistance` y replica la inversión de fin de vía sin consumir el
+marcador `progress=255` de una estación. `mvp_openttd_rich.sav` coincide en 41
+muestras PBS, incluyendo el tick 12374, y la suite core pasa 2735 tests (1
+ignorado). La resolución de rutas ferroviarias multi-tick y los escenarios de
+tráfico/presignals continúan pendientes en #330.

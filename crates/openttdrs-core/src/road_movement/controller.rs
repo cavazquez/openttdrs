@@ -117,33 +117,22 @@ pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
     };
     let Some(rd) = rd else {
         // Fin de tabla sin marcador: forzar NEXT_TILE lógico.
-        return enter_next_tile(vehicles, v_idx, map, drive_on_right, engine_catalog);
+        return enter_next_tile(vehicles, v_idx, map, drive_on_right, engine_catalog, None);
     };
 
     if rd.is_next_tile() {
-        return enter_next_tile(vehicles, v_idx, map, drive_on_right, engine_catalog);
+        return enter_next_tile(
+            vehicles,
+            v_idx,
+            map,
+            drive_on_right,
+            engine_catalog,
+            Some(rd.diagdir()),
+        );
     }
 
     if rd.is_turned() {
-        let diag = rd.diagdir();
-        let dir = match diag {
-            0 => crate::vehicle::DIR_NE,
-            1 => crate::vehicle::DIR_SE,
-            2 => crate::vehicle::DIR_SW,
-            _ => crate::vehicle::DIR_NW,
-        };
-        let v = &mut vehicles[v_idx];
-        v.set_direction_with_curve_penalty(
-            dir,
-            map,
-            crate::engine::TrainAccelerationModel::Original,
-        );
-        v.road_state = trackdir_from_direction(dir);
-        v.overtaking = 0;
-        v.overtaking_ctr = 0;
-        v.frame = RVC_DEFAULT_START_FRAME;
-        sync_road_position_from_table(v, drive_on_right);
-        return true;
+        return finish_road_vehicle_turn(vehicles, v_idx, map, drive_on_right, rd.diagdir());
     }
 
     if is_bay_road_state(state) {
@@ -212,15 +201,25 @@ fn enter_next_tile(
     map: Option<&Map>,
     drive_on_right: bool,
     engine_catalog: &[crate::engine::EngineDef],
+    marker_entry_dir: Option<u8>,
 ) -> bool {
-    let fallback_target = vehicles[v_idx]
-        .movement_target()
-        .is_none()
-        .then(|| map.and_then(|map| road_next_tile_without_path(&vehicles[v_idx], map)));
+    let fallback_target = vehicles[v_idx].movement_target().is_none().then(|| {
+        map.and_then(|map| {
+            marker_entry_dir.map_or_else(
+                || road_next_tile_without_path(&vehicles[v_idx], map),
+                |entry_dir| road_next_tile_from_marker(&vehicles[v_idx], map, entry_dir),
+            )
+        })
+    });
     if let Some(Some(target)) = fallback_target {
         vehicles[v_idx].path.push_front(target);
     }
     let Some(target) = vehicles[v_idx].movement_target() else {
+        if let Some(entry_dir) = marker_entry_dir
+            && vehicles[v_idx].pos != vehicles[v_idx].dest
+        {
+            return reverse_road_vehicle_at_marker(vehicles, v_idx, entry_dir, map, drive_on_right);
+        }
         vehicles[v_idx].cur_speed = 0;
         return false;
     };
@@ -427,13 +426,6 @@ fn bay_entrance_busy(
     })
 }
 
-fn road_vehicle_has_motion_target(v: &Vehicle, map: Option<&Map>) -> bool {
-    v.movement_target().is_some()
-        || is_bay_road_state(v.road_state) && v.road_state & RVSB_ENTERED_STOP == 0
-        || is_drive_through_road_state(v.road_state)
-        || map.is_some_and(|map| road_next_tile_without_path(v, map).is_some())
-}
-
 /// `RoadFindPathToDest` mantiene el rumbo cuando en la tesela siguiente sólo
 /// existe una vía, aunque el destino de estación no sea alcanzable. Sin este
 /// fallback un camino que termina en la boca de acceso transforma el acceso en
@@ -469,7 +461,207 @@ fn road_next_tile_without_path(v: &Vehicle, map: &Map) -> Option<crate::map::Til
         .then_some(next)
 }
 
+/// Convierte `GetAnyRoadBits` en los trackdirs que puede tomar un vehículo al
+/// entrar por `entry_dir`. Es la parte estática de `GetTileTrackStatus_Road` y
+/// `DiagdirReachesTrackdirs` que necesita el cierre de un giro.
+fn road_trackdir_for_entry(map: &Map, tile: crate::map::TileCoord, entry_dir: u8) -> Option<u8> {
+    let tile_data = map.get(tile)?;
+    let road_bits = if tile_data.kind == crate::map::TileKind::Station
+        && matches!(crate::station::station_type_from_m6(tile_data.m6), 2 | 3)
+    {
+        crate::station::road_stop_road_bits(&tile_data)
+    } else {
+        crate::map::effective_road_bits(
+            tile_data.mapt,
+            tile_data.m5,
+            tile_data.kind,
+            crate::map::OTTD_MP_ROAD,
+            crate::map::OTTD_MP_TUNNELBRIDGE,
+        )
+        .unwrap_or_else(|| {
+            if tile_data.kind == crate::map::TileKind::Road {
+                let bits = tile_data.m5 & 0x0F;
+                if bits == 0 { 0x0F } else { bits }
+            } else {
+                0
+            }
+        })
+    };
+
+    let tracks = ROAD_TRACKS[usize::from(road_bits & 0x0F)];
+    let reachable = ENTRY_TRACKDIRS[usize::from(entry_dir & 3)];
+    (0..6)
+        .filter(|track| tracks & (1 << track) != 0)
+        .flat_map(|track| {
+            let trackdirs = TRACKDIRS_BY_TRACK[track];
+            (0..16).filter(move |dir| trackdirs & (1 << dir) != 0)
+        })
+        .find(|dir| reachable & (1 << dir) != 0)
+        .map(|dir| u8::try_from(dir).unwrap_or(0))
+}
+
+/// Cierra `RDE_TURNED` como `RoadFindPathToDest` +
+/// `RVC_TURN_AROUND_START_FRAME` del motor nativo.
+fn finish_road_vehicle_turn(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    map: Option<&Map>,
+    drive_on_right: bool,
+    entry_dir: u8,
+) -> bool {
+    const ROAD_REVERSE_STATES: [u8; 4] = [6, 7, 14, 15];
+
+    // Las APIs históricas sin mapa no pueden consultar `GetTileTrackStatus`;
+    // conservar su transición sintética evita cambiar sus callers unitarios.
+    let Some(map) = map else {
+        let dir = match entry_dir & 3 {
+            0 => crate::vehicle::DIR_NE,
+            1 => crate::vehicle::DIR_SE,
+            2 => crate::vehicle::DIR_SW,
+            _ => crate::vehicle::DIR_NW,
+        };
+        let v = &mut vehicles[v_idx];
+        v.set_direction_with_curve_penalty(
+            dir,
+            None,
+            crate::engine::TrainAccelerationModel::Original,
+        );
+        v.road_state = trackdir_from_direction(dir);
+        v.overtaking = 0;
+        v.overtaking_ctr = 0;
+        v.frame = RVC_DEFAULT_START_FRAME;
+        sync_road_position_from_table(v, drive_on_right);
+        return true;
+    };
+
+    let dir = road_trackdir_for_entry(map, vehicles[v_idx].pos, entry_dir)
+        .unwrap_or(ROAD_REVERSE_STATES[usize::from(entry_dir & 3)]);
+    let reversing = matches!(dir, 6 | 7 | 14 | 15);
+    let (old_x, old_y) = (vehicles[v_idx].road_x, vehicles[v_idx].road_y);
+    let v = &mut vehicles[v_idx];
+    if reversing {
+        v.path.clear();
+        v.overtaking = 0;
+    }
+    v.road_state = dir;
+    v.frame = RVC_TURN_AROUND_START_FRAME;
+    sync_road_position_from_table(v, drive_on_right);
+    let new_dir = road_sliding_direction_from_position(v, old_x, old_y, v.road_x, v.road_y);
+    v.set_direction_with_curve_penalty(
+        new_dir,
+        Some(map),
+        crate::engine::TrainAccelerationModel::Original,
+    );
+    update_road_z_position(v);
+    true
+}
+
+/// Próxima tesela indicada por un marcador `RDE_NEXT_TILE`.
+///
+/// El marcador no significa «seguir recto»: su `DiagDirection` es la salida
+/// que debe usar `RoadFindPathToDest`. Cuando la tesela indicada no contiene
+/// una vía compatible, el código nativo elige la reversa en la tesela actual;
+/// por eso esta consulta sólo devuelve el objetivo si existe una conexión
+/// vial efectiva.
+fn road_next_tile_from_marker(
+    v: &Vehicle,
+    map: &Map,
+    entry_dir: u8,
+) -> Option<crate::map::TileCoord> {
+    if v.path.is_empty()
+        && v.pos != v.dest
+        && !is_bay_road_state(v.road_state)
+        && !is_drive_through_road_state(v.road_state)
+    {
+        let (dx, dy) = crate::map::diag_dir_offset(entry_dir);
+        let next = crate::map::TileCoord::new(v.pos.x + dx, v.pos.y + dy);
+        let network = if v.kind == crate::vehicle::VehicleKind::Tram {
+            crate::pathfinder::PathNetwork::Tram
+        } else if matches!(
+            v.kind,
+            crate::vehicle::VehicleKind::Bus | crate::vehicle::VehicleKind::Truck
+        ) {
+            crate::pathfinder::PathNetwork::Road
+        } else {
+            return None;
+        };
+        return crate::pathfinder::find_path(map, v.pos, next, network)
+            .is_some()
+            .then_some(next);
+    }
+    None
+}
+
+/// Comienza el giro de reversa que emite `_road_reverse_table[entry_dir]`.
+///
+/// `RoadVehController` no espera a una ruta nueva en este caso: cambia al
+/// estado 6/7/14/15, conserva la tesela y consume la primera posición de la
+/// tabla de giro en el mismo subpaso.
+fn reverse_road_vehicle_at_marker(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    entry_dir: u8,
+    map: Option<&Map>,
+    drive_on_right: bool,
+) -> bool {
+    const ROAD_REVERSE_STATES: [u8; 4] = [6, 7, 14, 15];
+
+    let (old_x, old_y) = (vehicles[v_idx].road_x, vehicles[v_idx].road_y);
+    let reverse_state = ROAD_REVERSE_STATES[usize::from(entry_dir & 3)];
+    let v = &mut vehicles[v_idx];
+    v.path.clear();
+    v.overtaking = 0;
+    v.road_state = reverse_state;
+    v.frame = RVC_DEFAULT_START_FRAME;
+    sync_road_position_from_table(v, drive_on_right);
+    let new_dir = road_sliding_direction_from_position(v, old_x, old_y, v.road_x, v.road_y);
+    v.set_direction_with_curve_penalty(
+        new_dir,
+        map,
+        crate::engine::TrainAccelerationModel::Original,
+    );
+    update_road_z_position(v);
+    true
+}
+
 const ROAD_TILE_SIZE: i32 = 16;
+
+// Bits de track de `_road_trackbits[16]`, indexados por los roadbits.
+const ROAD_TRACKS: [u8; 16] = [
+    0,
+    0,
+    0,
+    1 << 4,
+    0,
+    1 << 1,
+    1 << 3,
+    (1 << 4) | (1 << 3) | (1 << 1),
+    0,
+    1 << 2,
+    1 << 0,
+    (1 << 4) | (1 << 2) | (1 << 0),
+    1 << 5,
+    (1 << 5) | (1 << 2) | (1 << 1),
+    (1 << 5) | (1 << 3) | (1 << 0),
+    (1 << 6) - 1,
+];
+
+// `_exitdir_reaches_trackdirs[DIAGDIR_END]`.
+const ENTRY_TRACKDIRS: [u16; 4] = [
+    (1 << 0) | (1 << 2) | (1 << 12),
+    (1 << 1) | (1 << 3) | (1 << 4),
+    (1 << 5) | (1 << 8) | (1 << 10),
+    (1 << 9) | (1 << 11) | (1 << 13),
+];
+
+const TRACKDIRS_BY_TRACK: [u16; 6] = [
+    (1 << 0) | (1 << 8),
+    (1 << 1) | (1 << 9),
+    (1 << 2) | (1 << 10),
+    (1 << 3) | (1 << 11),
+    (1 << 4) | (1 << 12),
+    (1 << 5) | (1 << 13),
+];
 
 fn road_table_position(v: &Vehicle, drive_on_right: bool, frame: u8) -> Option<(i32, i32)> {
     let entry = if is_bay_road_state(v.road_state) {
@@ -555,8 +747,18 @@ fn update_road_z_position(v: &mut Vehicle) {
 
 /// Equivalente a `RoadVehGetSlidingDirection` (`roadveh_cmd.cpp:751-775`).
 fn road_sliding_direction(v: &Vehicle, next_x: i32, next_y: i32) -> u8 {
-    let x = next_x - v.road_x + 1;
-    let y = next_y - v.road_y + 1;
+    road_sliding_direction_from_position(v, v.road_x, v.road_y, next_x, next_y)
+}
+
+fn road_sliding_direction_from_position(
+    v: &Vehicle,
+    current_x: i32,
+    current_y: i32,
+    next_x: i32,
+    next_y: i32,
+) -> u8 {
+    let x = next_x - current_x + 1;
+    let y = next_y - current_y + 1;
     let new_dir = match (x, y) {
         (0, 0) | (1, 1) => crate::vehicle::DIR_N,
         (1, 0) => crate::vehicle::DIR_NW,
@@ -804,51 +1006,24 @@ fn road_vehicle_tick_side_with_traffic(
         v.progress = 0;
     }
 
-    let result = if road_vehicle_has_motion_target(v, map) {
-        update_road_vehicle_speed(
-            v.cur_speed,
-            v.subspeed,
-            v.progress,
-            acceleration_model,
-            power,
-            weight,
-            max_te,
-            air_drag,
-            v.kind,
-            max_speed,
-            v.overtaking != 0,
-            false,
-        )
-    } else {
-        let result = update_road_vehicle_speed(
-            v.cur_speed,
-            v.subspeed,
-            0,
-            acceleration_model,
-            power,
-            weight,
-            max_te,
-            air_drag,
-            v.kind,
-            max_speed,
-            false,
-            true,
-        );
-        v.cur_speed = result.cur_speed;
-        v.subspeed = result.subspeed;
-        if v.cur_speed == 0
-            && v.pos == v.dest
-            && !is_bay_road_state(v.road_state)
-            && !is_drive_through_road_state(v.road_state)
-            && !(map.is_some()
-                && v.current_order_ref().is_some_and(|order| {
-                    matches!(order, crate::vehicle::VehicleOrder::Station { .. })
-                }))
-        {
-            v.advance_destination_after_arrival_with_catalog(engine_catalog);
-        }
-        return;
-    };
+    // `RoadVehicle::UpdateSpeed` sólo frena por el estado nativo Stopped;
+    // que `path` aún esté vacío no evita que el controlador consuma el
+    // remanente dentro de la tesela y resuelva la ruta en el marcador
+    // `RDE_NEXT_TILE`.
+    let result = update_road_vehicle_speed(
+        v.cur_speed,
+        v.subspeed,
+        v.progress,
+        acceleration_model,
+        power,
+        weight,
+        max_te,
+        air_drag,
+        v.kind,
+        max_speed,
+        v.overtaking != 0,
+        false,
+    );
     v.cur_speed = result.cur_speed;
     v.subspeed = result.subspeed;
     v.progress = 0;
@@ -873,8 +1048,7 @@ fn road_vehicle_tick_side_with_traffic(
             blocked = true;
             break;
         }
-        if vehicles[v_idx].cur_speed == 0 || !road_vehicle_has_motion_target(&vehicles[v_idx], map)
-        {
+        if vehicles[v_idx].cur_speed == 0 {
             break;
         }
         adv_spd = get_advance_distance(vehicles[v_idx].direction);
@@ -1171,6 +1345,39 @@ mod tests {
     }
 
     #[test]
+    fn road_vehicle_keeps_accelerating_before_path_marker_resolution() {
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(22, 16),
+            TileCoord::new(30, 16),
+        );
+        vehicle.running = true;
+        vehicle.direction = DIR_SW;
+        vehicle.road_state = 8;
+        vehicle.frame = 0;
+        vehicle.progress = 6;
+        vehicle.cur_speed = 112;
+        vehicle.subspeed = 99;
+
+        let mut vehicles = vec![vehicle];
+        road_vehicle_tick_side_with_traffic(
+            &mut vehicles,
+            0,
+            None,
+            false,
+            RoadVehicleAccelerationModel::Original,
+            None,
+            &[],
+            &[],
+        );
+
+        assert_eq!(vehicles[0].cur_speed, 112);
+        assert_eq!(vehicles[0].subspeed, 99);
+        assert_eq!(vehicles[0].progress, 90);
+    }
+
+    #[test]
     fn imported_road_position_slides_direction_before_frame() {
         let start = TileCoord::new(13, 16);
         let end = TileCoord::new(14, 16);
@@ -1265,15 +1472,62 @@ mod tests {
         vehicle.path = VecDeque::from([TileCoord::new(3, 3)]);
         let mut vehicles = vec![vehicle];
 
-        assert!(enter_next_tile(&mut vehicles, 0, Some(&map), false, &[]));
+        assert!(enter_next_tile(
+            &mut vehicles,
+            0,
+            Some(&map),
+            false,
+            &[],
+            None
+        ));
         assert_eq!(vehicles[0].pos, TileCoord::new(3, 3));
         assert_eq!(vehicles[0].road_state, 8);
         assert!(!vehicles[0].awaiting_load_window);
 
-        assert!(enter_next_tile(&mut vehicles, 0, Some(&map), false, &[]));
+        assert!(enter_next_tile(
+            &mut vehicles,
+            0,
+            Some(&map),
+            false,
+            &[],
+            None
+        ));
         assert_eq!(vehicles[0].pos, TileCoord::new(4, 3));
         assert_eq!(vehicles[0].road_state, 8);
         assert!(!vehicles[0].awaiting_load_window);
+    }
+
+    #[test]
+    fn next_tile_marker_reverses_on_missing_road() {
+        let start = TileCoord::new(2, 2);
+        let mut map = Map::new_flat(8, 8, 0);
+        map.set_kind(start, TileKind::Road).unwrap();
+        let mut tile = map.get(start).unwrap();
+        tile.m5 = 0x0A; // ROAD_X: el marcador SW apunta a la tesela vacía.
+        map.set_tile(start, tile).unwrap();
+
+        let mut vehicle = Vehicle::new(1, VehicleKind::Bus, start, TileCoord::new(6, 2));
+        vehicle.set_orders(vec![TileCoord::new(6, 2)]);
+        vehicle.direction = DIR_SW;
+        vehicle.road_state = 8;
+        vehicle.frame = 15;
+        vehicle.cur_speed = 112;
+        vehicle.overtaking_ctr = 35;
+        let mut vehicles = vec![vehicle];
+
+        assert!(individual_road_vehicle_controller(
+            &mut vehicles,
+            0,
+            Some(&map)
+        ));
+
+        assert_eq!(vehicles[0].pos, start);
+        assert_eq!(vehicles[0].road_state, 14);
+        assert_eq!(vehicles[0].frame, RVC_DEFAULT_START_FRAME);
+        assert_eq!(vehicles[0].direction, crate::vehicle::DIR_W);
+        assert_eq!(vehicles[0].cur_speed, 84);
+        assert_eq!(vehicles[0].overtaking, 0);
+        assert_eq!(vehicles[0].overtaking_ctr, 35);
     }
 
     #[test]

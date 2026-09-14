@@ -430,7 +430,7 @@ mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
-    use openttdrs_core::{CargoType, Industry, IndustryKind, Subsidy};
+    use openttdrs_core::{CargoType, Industry, IndustryKind, IndustrySpec, Subsidy};
 
     #[test]
     fn route_opens_subsidy_list() {

@@ -5072,3 +5072,12 @@ señal. El oráculo PBS valida el estado completo y la comparación externa de
 el core pasa `2752` tests, con 1 ignorado. Este bloque no cierra #330: aún
 faltan rutas multi-tick, tráfico complejo, presignals y los oráculos de aire y
 mar.
+
+Corrección #567-SHIP-SUBTILE-POSITION (2026-09-14, `d4443076`):
+`VEHS.common` conserva `Ship::x_pos/y_pos` cuando el barco tiene una posición
+subtesela válida. Así un barco que transita o está en la boca de un depósito no
+se reubica en el centro de la tesela al guardar y volver a abrir la partida;
+los estados antiguos sin posición naval siguen usando el fallback centrado.
+La regresión `vehs_preserves_ship_subtile_position` cubre ambos ejes y el core
+queda en `2753` tests, con 1 ignorado. Esto no cierra #567: faltan el oráculo
+dinámico externo, callbacks y la aceptación visual completa del depósito naval.

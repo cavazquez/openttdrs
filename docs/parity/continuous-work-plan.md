@@ -7716,3 +7716,14 @@ para PBS y dinámica vial; pasan el oráculo focalizado (5 tests), el core
 documentación. #330 sigue abierta: esta evidencia cubre una ventana concreta,
 no la resolución global de rutas multi-tick, tráfico complejo, presignals,
 aire y mar.
+
+Corrección #567-SHIP-SUBTILE-POSITION (2026-09-14, `d4443076`): el writer
+`VEHS.common` conserva `Ship::x_pos/y_pos` cuando el barco tiene una posición
+subtesela válida, del mismo modo que ya hacía para los vehículos de carretera.
+Antes un barco en tránsito o en la boca de un depósito volvía a guardarse en
+la posición derivada del centro de su tesela y podía saltar al reabrir el SAV.
+La regresión `vehs_preserves_ship_subtile_position` verifica ambos ejes y
+mantiene el fallback centrado para saves/vehículos sin posición naval
+materializada. El core pasa `2753` tests, con 1 ignorado. #567 continúa abierta
+por el oráculo dinámico externo, callbacks y la aceptación visual completa del
+depósito naval.

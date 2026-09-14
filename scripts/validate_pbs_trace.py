@@ -103,6 +103,29 @@ def main() -> None:
                 )
             ):
                 fail("vehículo de carretera inválido")
+        for ship in row.get("ships", []):
+            if schema_version < 2:
+                fail("ships requiere schema_version PBS 2")
+            if not all(
+                isinstance(ship.get(field), int)
+                for field in (
+                    "vehicle",
+                    "x",
+                    "y",
+                    "x_pos",
+                    "y_pos",
+                    "z_pos",
+                    "progress",
+                    "speed",
+                    "subspeed",
+                    "direction",
+                    "state",
+                    "rotation",
+                    "path_len",
+                    "tick_counter",
+                )
+            ) or not isinstance(ship.get("running"), bool):
+                fail("barco inválido")
         for reservation in row.get("rail_reservations", []):
             if not all(isinstance(reservation.get(field), int) for field in ("x", "y", "track_bits")):
                 fail("reserva PBS inválida")

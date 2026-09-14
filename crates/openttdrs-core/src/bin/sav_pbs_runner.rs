@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use openttdrs_core::{
-    GameState, SavVehicleKind, TileCoord, TileKind, VehicleKind, consist_unit_ids,
+    DIR_SW, GameState, SavVehicleKind, TileCoord, TileKind, VehicleKind, consist_unit_ids,
     consist_unit_poses, decode_rail_reservation_m2_hi, sav,
 };
 use serde::Serialize;
@@ -14,6 +14,7 @@ struct Args {
     save: PathBuf,
     ticks: u64,
     out: PathBuf,
+    start_ships: bool,
 }
 
 #[derive(Serialize)]
@@ -56,6 +57,25 @@ struct PbsRoadVehicle {
 }
 
 #[derive(Serialize)]
+struct PbsShip {
+    vehicle: u32,
+    x: i32,
+    y: i32,
+    x_pos: i32,
+    y_pos: i32,
+    z_pos: i16,
+    progress: u8,
+    speed: u16,
+    subspeed: u8,
+    direction: u8,
+    state: u8,
+    rotation: u8,
+    running: bool,
+    path_len: usize,
+    tick_counter: u8,
+}
+
+#[derive(Serialize)]
 struct PbsReservation {
     x: i32,
     y: i32,
@@ -68,17 +88,19 @@ struct PbsTraceRow {
     tick: u64,
     trains: Vec<PbsTrain>,
     road_vehicles: Vec<PbsRoadVehicle>,
+    ships: Vec<PbsShip>,
     rail_reservations: Vec<PbsReservation>,
 }
 
 fn print_usage() {
-    eprintln!("uso: sav_pbs_runner <partida.sav> [--ticks N] [--out traza.jsonl]");
+    eprintln!("uso: sav_pbs_runner <partida.sav> [--ticks N] [--out traza.jsonl] [--start-ships]");
 }
 
 fn parse_args() -> Result<Args, String> {
     let mut save = None;
     let mut ticks = 40;
     let mut out = PathBuf::from("/tmp/openttdrs-pbs-from-sav.jsonl");
+    let mut start_ships = false;
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
         let mut value = |name: &str| it.next().ok_or_else(|| format!("falta el valor de {name}"));
@@ -89,6 +111,7 @@ fn parse_args() -> Result<Args, String> {
                     .map_err(|e| format!("--ticks inválido: {e}"))?;
             }
             "--out" => out = PathBuf::from(value("--out")?),
+            "--start-ships" => start_ships = true,
             "--help" | "-h" => {
                 print_usage();
                 std::process::exit(0);
@@ -101,7 +124,12 @@ fn parse_args() -> Result<Args, String> {
     if ticks == 0 {
         return Err("--ticks debe ser positivo".to_string());
     }
-    Ok(Args { save, ticks, out })
+    Ok(Args {
+        save,
+        ticks,
+        out,
+        start_ships,
+    })
 }
 
 fn units_for_head(state: &GameState, head_id: u32) -> Vec<PbsUnit> {
@@ -162,6 +190,28 @@ fn trace_row(state: &GameState, kind: &'static str) -> PbsTraceRow {
             reverse_ctr: vehicle.reverse_ctr,
         })
         .collect();
+    let ships = state
+        .vehicles
+        .iter()
+        .filter(|vehicle| vehicle.kind == VehicleKind::Ship)
+        .map(|vehicle| PbsShip {
+            vehicle: vehicle.id,
+            x: vehicle.pos.x,
+            y: vehicle.pos.y,
+            x_pos: vehicle.ship_x,
+            y_pos: vehicle.ship_y,
+            z_pos: vehicle.z_pos.unwrap_or_default(),
+            progress: vehicle.progress,
+            speed: vehicle.cur_speed,
+            subspeed: vehicle.subspeed,
+            direction: vehicle.direction,
+            state: vehicle.ship_state,
+            rotation: vehicle.ship_rotation,
+            running: vehicle.running,
+            path_len: vehicle.ship_path.len(),
+            tick_counter: vehicle.ship_tick_counter,
+        })
+        .collect();
     let (width, height) = state.map.dimensions();
     let mut rail_reservations = Vec::new();
     for y in 0..height as i32 {
@@ -184,6 +234,7 @@ fn trace_row(state: &GameState, kind: &'static str) -> PbsTraceRow {
         tick: state.tick.get(),
         trains,
         road_vehicles,
+        ships,
         rail_reservations,
     }
 }
@@ -260,14 +311,29 @@ fn run(args: &Args) -> Result<(), String> {
         })
         .collect();
     let mut state = GameState::from_sav_game(sav);
+    if args.start_ships {
+        for vehicle in &mut state.vehicles {
+            if vehicle.kind == VehicleKind::Ship {
+                vehicle.running = true;
+                vehicle.direction = DIR_SW;
+                vehicle.ship_rotation = DIR_SW;
+                vehicle.ship_path.clear();
+            }
+        }
+    }
     let station_count = state.stations.len();
     let train_count = state
         .vehicles
         .iter()
         .filter(|vehicle| matches!(vehicle.kind, openttdrs_core::VehicleKind::Train))
         .count();
-    if train_count == 0 {
-        return Err("el save no contiene trenes importables".to_string());
+    let ship_count = state
+        .vehicles
+        .iter()
+        .filter(|vehicle| vehicle.kind == VehicleKind::Ship)
+        .count();
+    if train_count == 0 && ship_count == 0 {
+        return Err("el save no contiene trenes ni barcos importables".to_string());
     }
     let file = std::fs::File::create(&args.out)
         .map_err(|e| format!("no se pudo crear {}: {e}", args.out.display()))?;
@@ -283,6 +349,8 @@ fn run(args: &Args) -> Result<(), String> {
             "initial_sample_point": "after_sav_import",
             "tick_sample_point": "after_game_state_step",
             "max_ticks": args.ticks,
+            "ship_vehicle_dynamics": true,
+            "fixture_start_ships": args.start_ships,
             "train_acceleration_model": state.train_acceleration_model as u8,
             "roadveh_acceleration_model": state.road_vehicle_acceleration_model as u8,
             "train_diagnostics": train_diagnostics(&state),
@@ -297,7 +365,7 @@ fn run(args: &Args) -> Result<(), String> {
         .flush()
         .map_err(|e| format!("no se pudo volcar {}: {e}", args.out.display()))?;
     println!(
-        "{} — {} ticks, {train_count} tren(es), {station_count} estación(es), {imported_order_count} orden(es) importada(s) → {}",
+        "{} — {} ticks, {train_count} tren(es), {ship_count} barco(s), {station_count} estación(es), {imported_order_count} orden(es) importada(s) → {}",
         args.save.display(),
         args.ticks,
         args.out.display()

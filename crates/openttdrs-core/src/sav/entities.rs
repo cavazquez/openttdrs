@@ -14,6 +14,10 @@ use super::table::{SlRecord, SlValue, record_get};
 /// Flag de waypoint en `BaseStation::facilities` (no es una estación jugable).
 const FACIL_WAYPOINT: u64 = 0x80;
 
+/// `VehState::Stopped` ocupa el bit 1 de `Vehicle::vehstatus`; el bit 0 es
+/// `VehState::Hidden` y no indica que el jugador haya detenido la unidad.
+const VEHSTATUS_STOPPED: u64 = 1 << 1;
+
 /// Instancia persistida del pool `Object` (`OBJS`).
 ///
 /// `OpenTTD` utiliza el índice de la tabla como `ObjectID` y guarda la
@@ -3056,7 +3060,7 @@ pub(crate) fn vehicles_from_chunks(
         let vehstatus = record_get(common, "vehstatus")
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
-        let running = vehstatus & 1 == 0;
+        let running = vehstatus & VEHSTATUS_STOPPED == 0;
         // Campos FTA (`Aircraft::pos/previous_pos/state/targetairport`); viven
         // en `sub` (nivel aeronave), no en `common` (nivel `Vehicle` base).
         let airport_pos = record_get(sub, "pos")

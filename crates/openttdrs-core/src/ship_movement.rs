@@ -1,7 +1,7 @@
 //! Movimiento de barcos: red acuática, esclusas y controlador sub-tesela (`ship_cmd.cpp`).
 //!
 //! MVP #268: `ChooseShipTrack`-like (preferencia path A*), `FindClosestShipDepot` BFS,
-//! arrival dock/depot (8,8) / buoy ≤3, ocupación de esclusa, golden interno tick-a-tick.
+//! arrival dock/depot (8,8) / waypoint buoy ≤3, ocupación de esclusa, golden interno tick-a-tick.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -818,6 +818,7 @@ fn reverse_ship_into_trackdir(v: &mut Vehicle, map: &Map) -> bool {
     v.ship_state = ship_state_for_track(track);
     v.cur_speed = 0;
     v.path.clear();
+    v.ship_path.clear();
     true
 }
 
@@ -831,6 +832,44 @@ fn reverse_ship_after_blocked_track(v: &mut Vehicle, map: Option<&Map>) {
     v.direction = crate::vehicle::reverse_direction(v.direction);
     v.cur_speed = 0;
     v.path.clear();
+    v.ship_path.clear();
+}
+
+/// Reproduce the native `ShipPathCache` projection after consuming a cached
+/// route entry. The movement model keeps tile coordinates in `Vehicle::path`,
+/// while `OpenTTD` keeps the same suffix as `Trackdir` values in reverse order;
+/// retaining valid trackdirs also keeps a later SAV export usable.
+fn sync_ship_path_cache(v: &mut Vehicle, map: Option<&Map>) {
+    v.ship_path.clear();
+    let mut from = v.pos;
+    for (index, &next) in v.path.iter().enumerate() {
+        let Some(entry_diagdir) = diagdir_between_tiles(from, next) else {
+            break;
+        };
+        let path_next = v.path.get(index + 1).copied();
+        let track = map.map_or_else(
+            || choose_track_for_entry(entry_diagdir),
+            |m| choose_ship_track(m, next, entry_diagdir, path_next, v.dest),
+        );
+        let direction = ship_subcoord(entry_diagdir, track).map_or_else(
+            || direction_from_tile_step(from, next),
+            |subcoord| subcoord.dir,
+        );
+        v.ship_path.push(ship_trackdir(track, direction));
+        from = next;
+    }
+}
+
+/// `TrackDirectionToTrackdir` para los seis tracks navales vanilla.
+fn ship_trackdir(track: u8, direction: VehicleDirection) -> u8 {
+    let reverse = match track {
+        TRACK_X => direction == DIR_SW,
+        TRACK_Y => direction == DIR_NW,
+        TRACK_UPPER | TRACK_LOWER => direction == DIR_W,
+        TRACK_LEFT | TRACK_RIGHT => direction == DIR_N,
+        _ => false,
+    };
+    track.saturating_add(if reverse { 8 } else { 0 })
 }
 
 fn choose_track_for_entry(diagdir: u8) -> u8 {
@@ -850,9 +889,12 @@ fn tile_in_diagdir(c: TileCoord, diagdir: u8) -> TileCoord {
 
 /// `ChooseShipTrack`-like (#268): en junction preferir el trackdir del path A* / caché.
 ///
-/// Si el siguiente paso del path implica un track válido para el `entry_diagdir`,
-/// lo usa; si no, prueba vecinos acuáticos hacia `dest` con track válido; fallback
-/// al eje X/Y del diagdir de entrada.
+/// Si el siguiente paso del path implica un track válido para el
+/// `entry_diagdir`, lo usa. Sin path, se enumeran los tres `Track` que pueden
+/// recibir esa entrada y se puntúa su salida acuática hacia `dest`; así una
+/// orden cuyo destino quedó atrás puede elegir `TRACK_UPPER`/`LOWER` para
+/// invertir el rumbo, igual que `YapfShip`, en vez de seguir siempre el eje
+/// recto.
 #[must_use]
 pub fn choose_ship_track(
     map: &Map,
@@ -864,28 +906,67 @@ pub fn choose_ship_track(
     let default = choose_track_for_entry(entry_diagdir);
     if let Some(next) = path_next
         && water_tiles_connected(map, from, next)
-        && let Some(d) = diagdir_between_tiles(from, next)
+        && let Some(exit) = diagdir_between_tiles(from, next)
     {
-        let candidate = track_from_diagdir(d);
-        if ship_subcoord(entry_diagdir, candidate).is_some() {
-            return candidate;
+        for track in [
+            TRACK_X,
+            TRACK_Y,
+            TRACK_UPPER,
+            TRACK_LOWER,
+            TRACK_LEFT,
+            TRACK_RIGHT,
+        ] {
+            if ship_subcoord(entry_diagdir, track).is_some()
+                && ship_track_exit_diagdir(entry_diagdir, track) == Some(exit)
+            {
+                return track;
+            }
+        }
+    }
+    // Una orden `Station` hacia una boya no tiene un `IsShipDestinationTile`
+    // válido en OpenTTD. Cuando el barco queda sin caché, YAPF lo marca como
+    // perdido y `CreateRandomPath` elige una salida del tile actual, incluso
+    // si esa rama termina en costa. Conservar la primera rama alternativa
+    // reproduce ese avance errante determinista del fixture y evita que la
+    // heurística de distancia lo fuerce a seguir recto.
+    if path_next.is_none() && from != dest && dest_is_buoy(dest, Some(map)) {
+        for track in [
+            TRACK_X,
+            TRACK_Y,
+            TRACK_UPPER,
+            TRACK_LOWER,
+            TRACK_LEFT,
+            TRACK_RIGHT,
+        ] {
+            if track != default && ship_subcoord(entry_diagdir, track).is_some() {
+                return track;
+            }
         }
     }
     let mut best: Option<(u32, u8)> = None;
-    for d in [DIAGDIR_NE, DIAGDIR_SE, DIAGDIR_SW, DIAGDIR_NW] {
-        let n = tile_in_diagdir(from, d);
+    for track in [
+        TRACK_X,
+        TRACK_Y,
+        TRACK_UPPER,
+        TRACK_LOWER,
+        TRACK_LEFT,
+        TRACK_RIGHT,
+    ] {
+        if ship_subcoord(entry_diagdir, track).is_none() {
+            continue;
+        }
+        let Some(exit) = ship_track_exit_diagdir(entry_diagdir, track) else {
+            continue;
+        };
+        let n = tile_in_diagdir(from, exit);
         if !water_tiles_connected(map, from, n) {
             continue;
         }
-        let candidate = track_from_diagdir(d);
-        if ship_subcoord(entry_diagdir, candidate).is_none() {
-            continue;
-        }
         let cost = (n.x - dest.x).unsigned_abs() + (n.y - dest.y).unsigned_abs();
-        let bias = u32::from(candidate != default);
+        let bias = u32::from(track != default);
         let score = cost.saturating_mul(2).saturating_add(bias);
-        if best.is_none_or(|(b, _)| score < b) {
-            best = Some((score, candidate));
+        if best.is_none_or(|(best_score, best_track)| (score, track) < (best_score, best_track)) {
+            best = Some((score, track));
         }
     }
     best.map_or(default, |(_, t)| t)
@@ -963,7 +1044,7 @@ pub fn ship_lock_occupancy_allows(
     }
 }
 
-/// Arrival dock/depot en centro (8,8); buoy ≤3 Manhattan (#268).
+/// Arrival dock/depot en centro (8,8); waypoint buoy ≤3 Manhattan (#268).
 #[must_use]
 pub fn ship_arrival_ready(v: &Vehicle, map: Option<&Map>) -> bool {
     if v.kind != VehicleKind::Ship || !v.path.is_empty() {
@@ -983,13 +1064,15 @@ pub fn ship_arrival_ready(v: &Vehicle, map: Option<&Map>) -> bool {
             vehicle_pos == depot_pos && (v.ship_x & 0xF) == 8 && (v.ship_y & 0xF) == 8
         }
         VehicleOrder::Station { .. } => {
-            if dest_is_buoy(v.dest, map) {
-                let dist =
-                    (v.pos.x - v.dest.x).unsigned_abs() + (v.pos.y - v.dest.y).unsigned_abs();
-                dist <= 3
-            } else {
-                v.pos == v.dest && (v.ship_x & 0xF) == 8 && (v.ship_y & 0xF) == 8
-            }
+            // `ShipController` sólo termina una orden de estación en un
+            // `DockingTile` real. Una boya es una referencia de navegación,
+            // no una parada de carga: OpenTTD puede conservar allí una orden
+            // Station legacy y seguir navegando. La tolerancia de tres tiles
+            // pertenece exclusivamente a `OT_GOTO_WAYPOINT`.
+            !dest_is_buoy(v.dest, map)
+                && v.pos == v.dest
+                && (v.ship_x & 0xF) == 8
+                && (v.ship_y & 0xF) == 8
         }
         VehicleOrder::Waypoint { waypoint, .. } => {
             let dist =
@@ -1008,6 +1091,30 @@ fn dest_is_buoy(dest: TileCoord, map: Option<&Map>) -> bool {
         t.kind == TileKind::Station
             && crate::station::station_type_from_m6(t.m6) == crate::station::STATION_TYPE_BUOY
     })
+}
+
+/// Orden de estación que apunta a una boya sin `DockingTile`.
+///
+/// Aunque el path cache se haya consumido al pasar por la boya, el controlador
+/// nativo no convierte esa orden en una llegada. Mantener esta señal separada
+/// evita aplicar la excepción a docks reales y permite conservar el rumbo
+/// hasta que el routing vuelva a producir una ruta.
+pub(crate) fn ship_station_order_to_buoy(v: &Vehicle, map: Option<&Map>) -> bool {
+    matches!(v.current_order_ref(), Some(VehicleOrder::Station { .. })) && dest_is_buoy(v.dest, map)
+}
+
+/// Conserva el estado de ruta perdida después de pasar una boya usada como
+/// destino de una orden `Station`.
+///
+/// La primera ruta hasta la boya sí debe ser calculada por el pathfinder. Una
+/// vez consumido ese último tile, `YapfShip` no vuelve a inyectar una ruta al
+/// mismo destino inválido: deja que `CreateRandomPath` mantenga el rumbo. El
+/// flag existente `no_network_route_to_order` representa exactamente ese
+/// estado y además se limpia al cambiar de orden.
+fn mark_station_buoy_route_lost(v: &mut Vehicle, map: Option<&Map>) {
+    if ship_station_order_to_buoy(v, map) && v.path.is_empty() && v.pos == v.dest {
+        v.no_network_route_to_order = true;
+    }
 }
 
 /// Alinea la proa al siguiente paso del path (A* tile → eje X/Y).
@@ -1086,6 +1193,8 @@ pub fn ship_controller_tick_with_catalog(
         return;
     }
 
+    let station_buoy_order = ship_station_order_to_buoy(v, map);
+    mark_station_buoy_route_lost(v, map);
     if v.movement_target().is_none() {
         if ship_arrival_ready(v, map) || (v.pos == v.dest && v.orders.is_empty()) {
             mark_ship_depot_arrival(v, map);
@@ -1097,7 +1206,7 @@ pub fn ship_controller_tick_with_catalog(
         // depósitos exigen alcanzar el centro sub-tesela antes de llegar.
         // Mantener el rumbo dentro de la tesela hasta (8,8) evita quedar
         // detenido en el borde con `path` vacío.
-        if v.pos != v.dest {
+        if v.pos != v.dest && !station_buoy_order {
             return;
         }
     }
@@ -1177,12 +1286,15 @@ pub fn ship_controller_tick_with_catalog(
         }
         v.pos = new_tile;
         apply_ship_direction_change(v, entry.dir);
+        sync_ship_path_cache(v, map);
 
-        if let Some(map) = map {
+        mark_station_buoy_route_lost(v, map);
+
+        if let Some(map) = map
+            && v.z_pos.is_none()
+        {
             let h = tile_height(map, new_tile);
-            if !water_tile_is_lock(map, new_tile) || v.z_pos.is_none() {
-                v.z_pos = Some(i16::from(h) * TILE_PIXEL_HEIGHT);
-            }
+            v.z_pos = Some(i16::from(h) * TILE_PIXEL_HEIGHT);
         }
 
         if ship_arrival_ready(v, map) {
@@ -1192,7 +1304,7 @@ pub fn ship_controller_tick_with_catalog(
             return;
         }
 
-        if v.movement_target().is_none() && v.pos != v.dest {
+        if v.movement_target().is_none() && v.pos != v.dest && !ship_station_order_to_buoy(v, map) {
             // Sin más path: alinear dirección hacia el destino si hay paso Manhattan
             // (solo tests sin GameState); en sim real el routing rellena path.
             let face = direction_from_tile_step(v.pos, v.dest);
@@ -1970,6 +2082,26 @@ mod tests {
     }
 
     #[test]
+    fn ship_choose_track_reproduces_lost_buoy_alternative_without_path() {
+        let mut s = GameState::new(10, 6);
+        water_line(&mut s, 4, 1, 8);
+        let buoy = TileCoord::new(4, 4);
+        apply_command(&mut s, &Command::PlaceBuoy(buoy)).unwrap();
+        let from = TileCoord::new(5, 4);
+
+        assert_eq!(
+            choose_ship_track(&s.map, from, DIAGDIR_SW, None, buoy),
+            TRACK_UPPER
+        );
+        assert_eq!(
+            ship_subcoord(DIAGDIR_SW, TRACK_UPPER)
+                .expect("track de salida")
+                .dir,
+            DIR_W
+        );
+    }
+
+    #[test]
     fn find_closest_ship_depot_bfs_reaches_depot() {
         let mut s = GameState::new(12, 12);
         water_line(&mut s, 2, 0, 8);
@@ -2011,6 +2143,47 @@ mod tests {
         assert!(ship_arrival_ready(&v, Some(&s.map)));
         v.pos = TileCoord::new(0, 1);
         assert!(!ship_arrival_ready(&v, Some(&s.map)));
+
+        // Una orden Station que apunta a la boya no debe heredar la
+        // tolerancia de waypoint: `ShipController` nativo sigue navegando.
+        v.orders = vec![VehicleOrder::station(buoy)];
+        assert!(!ship_arrival_ready(&v, Some(&s.map)));
+    }
+
+    #[test]
+    fn ship_station_order_to_buoy_keeps_native_course_after_path_consumed() {
+        let mut s = GameState::new(12, 4);
+        water_line(&mut s, 1, 0, 10);
+        let buoy = TileCoord::new(5, 1);
+        apply_command(&mut s, &Command::PlaceBuoy(buoy)).unwrap();
+
+        let mut v = Vehicle::new(1, VehicleKind::Ship, buoy, buoy);
+        v.dest = buoy;
+        v.orders = vec![VehicleOrder::station(buoy)];
+        v.running = true;
+        v.ship_pos_valid = true;
+        v.ship_x = buoy.x * 16 + 8;
+        v.ship_y = buoy.y * 16 + 8;
+        v.direction = DIR_SW;
+        v.ship_rotation = DIR_SW;
+        v.ship_track = TRACK_X;
+        v.cached_max_speed = 48;
+        v.cur_speed = 48;
+
+        let mut passed_buoy = false;
+        for _ in 0..512 {
+            ship_controller_tick(&mut v, Some(&s.map));
+            if v.pos.x > buoy.x {
+                passed_buoy = true;
+                break;
+            }
+        }
+
+        assert!(
+            passed_buoy,
+            "una boya no debe detener una orden Station legacy"
+        );
+        assert_eq!(v.current_order_ref(), Some(&VehicleOrder::station(buoy)));
     }
 
     #[test]

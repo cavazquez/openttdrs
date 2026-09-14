@@ -246,6 +246,15 @@ impl super::model::Vehicle {
         engine_catalog: &[crate::engine::EngineDef],
         plane_speed: u8,
     ) {
+        // `ShipController` incrementa `Vehicle::tick_counter` incluso cuando
+        // el barco está detenido. Debe ejecutarse antes de la salida rápida
+        // común: OpenTTD observa ese contador en callbacks y esclusas aun sin
+        // movimiento físico.
+        if self.kind == super::model::VehicleKind::Ship {
+            crate::ship_movement::ship_controller_tick_with_catalog(self, map, engine_catalog);
+            return;
+        }
+
         if !self.running {
             self.update_movement_speed_with_catalog(map, train_accel, engine_catalog);
             if self.kind != super::model::VehicleKind::Train {
@@ -330,11 +339,6 @@ impl super::model::Vehicle {
             }
             // Sin vecinos: el tick de simulación usa `road_vehicle_tick` con la flota.
             crate::road_movement::road_vehicle_step_solo_with_catalog(self, map, engine_catalog);
-            return;
-        }
-
-        if self.kind == super::model::VehicleKind::Ship {
-            crate::ship_movement::ship_controller_tick_with_catalog(self, map, engine_catalog);
             return;
         }
 
@@ -1946,6 +1950,22 @@ mod tests {
         assert_eq!(train_breakdown_speed_cap(26), Some(15));
         assert_eq!(train_breakdown_speed_cap(72), Some(60));
         assert_eq!(train_breakdown_speed_cap(1), None);
+    }
+
+    #[test]
+    fn stopped_ship_step_advances_native_tick_counter() {
+        let mut ship = Vehicle::new(
+            1,
+            VehicleKind::Ship,
+            TileCoord::new(3, 3),
+            TileCoord::new(3, 3),
+        );
+        ship.running = false;
+
+        ship.step();
+
+        assert_eq!(ship.ship_tick_counter, 1);
+        assert_eq!(ship.cur_speed, 0);
     }
 
     #[test]

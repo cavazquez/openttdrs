@@ -1601,6 +1601,7 @@ impl GameState {
         // Rehidratarlo después del pool de compañías mantiene las excepciones
         // de preview disponibles para la UI y para el siguiente tick.
         rehydrate_sav_engine_pool(&mut state);
+        let engine_mappings = engine::mappings_from_opaque(&state.sav_opaque_chunks);
         let station_positions: HashMap<u32, TileCoord> = sav
             .station_index
             .iter()
@@ -2118,6 +2119,22 @@ impl GameState {
                     }
                 }));
                 vehicle.ship_tick_counter = v.tick_counter;
+                // `VEHS` sólo conserva el EngineID nativo. Resolverlo antes
+                // del primer tick selecciona el catálogo correcto para
+                // callbacks/carga; reconstruir la caché de velocidad replica
+                // `Ship::UpdateCache`, que no tiene una columna propia en SAV.
+                if let Some(candidate) = engine::catalog_engine_id_for_native_in(
+                    v.engine_type,
+                    &engine_mappings,
+                    &state.engine_catalog,
+                ) && crate::engine::engine_by_id(candidate)
+                    .is_some_and(|engine| engine.kind == VehicleKind::Ship)
+                {
+                    vehicle.engine_id = Some(candidate);
+                }
+                if let Some(max_speed) = engine::vanilla_ship_cached_max_speed(v.engine_type) {
+                    vehicle.cached_max_speed = max_speed;
+                }
             }
             vehicle.cargo_type =
                 import::cargo_from_sav_slot(v.cargo_type, sav.climate, &[], sav.version);

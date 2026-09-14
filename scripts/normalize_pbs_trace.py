@@ -32,7 +32,12 @@ def main() -> None:
         for record in records
         for vehicle in record.get("vehicles", [])
     )
-    schema_version = 2 if has_road else 1
+    has_ship = any(
+        isinstance(vehicle, dict) and isinstance(vehicle.get("ship"), dict)
+        for record in records
+        for vehicle in record.get("vehicles", [])
+    )
+    schema_version = 2 if has_road or has_ship else 1
 
     rows: list[dict[str, object]] = [
         {
@@ -46,6 +51,7 @@ def main() -> None:
     for record in records:
         trains = []
         road_vehicles = []
+        ships = []
         for vehicle in record.get("vehicles", []):
             rail = vehicle.get("rail")
             tile = vehicle["tile"]
@@ -81,10 +87,32 @@ def main() -> None:
                         "reverse_ctr": road["reverse_ctr"],
                     }
                 )
+            ship = vehicle.get("ship")
+            if ship is not None:
+                ships.append(
+                    {
+                        "vehicle": vehicle["id"],
+                        "x": tile["x"],
+                        "y": tile["y"],
+                        "x_pos": ship["x_pos"],
+                        "y_pos": ship["y_pos"],
+                        "z_pos": ship["z_pos"],
+                        "progress": vehicle["progress"],
+                        "speed": vehicle["speed"],
+                        "subspeed": vehicle["subspeed"],
+                        "direction": vehicle["dir"],
+                        "state": ship["state"],
+                        "rotation": ship["rotation"],
+                        "running": ship["running"],
+                        "path_len": ship["path_len"],
+                        "tick_counter": ship["tick_counter"],
+                    }
+                )
         trains.sort(key=lambda train: (train["x"], train["y"], train["vehicle"]))
         road_vehicles.sort(
             key=lambda vehicle: (vehicle["x"], vehicle["y"], vehicle["vehicle"])
         )
+        ships.sort(key=lambda ship: (ship["x"], ship["y"], ship["vehicle"]))
         reservations = [
             {
                 "x": reservation["tile"]["x"],
@@ -100,6 +128,7 @@ def main() -> None:
                 "tick": record["tick"],
                 "trains": trains,
                 "road_vehicles": road_vehicles,
+                "ships": ships,
                 "rail_reservations": reservations,
             }
         )

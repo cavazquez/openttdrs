@@ -25,8 +25,9 @@ mod tracer;
 pub use diff::{DiffFilter, DiffReport, Divergence, Subsystem, compare_traces, render_report};
 pub use junction_hash::{JunctionBounds, count_signal_tiles, hash_junction_tiles};
 pub use record::{
-    ParityEvent, RailPartRecord, RailRecord, RailReservationRecord, RoadVehicleRecord, SpeedTrend,
-    TickRecord, TraceVehicleState, VehicleRecord, derive_vehicle_state, order_kind_name,
+    ParityEvent, RailPartRecord, RailRecord, RailReservationRecord, RoadVehicleRecord,
+    ShipVehicleRecord, SpeedTrend, TickRecord, TraceVehicleState, VehicleRecord,
+    derive_vehicle_state, order_kind_name,
 };
 pub use report::{KnownDivergence, detect_known_divergences, divergences_markdown};
 pub use scenario::{

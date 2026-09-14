@@ -157,6 +157,86 @@ def main() -> None:
             "road",
         )
 
+        ship_raw = work / "ship-candidate.raw.jsonl"
+        ship_candidate = work / "ship-candidate.jsonl"
+        ship_oracle = work / "ship-oracle.jsonl"
+        ship_state = {
+            "x_pos": 73,
+            "y_pos": 86,
+            "z_pos": 0,
+            "state": 16,
+            "rotation": 7,
+            "running": True,
+            "path_len": 3,
+            "tick_counter": 9,
+        }
+        write_jsonl(
+            ship_raw,
+            [
+                {
+                    "tick": 9,
+                    "vehicles": [
+                        {
+                            "id": 101,
+                            "tile": {"x": 4, "y": 5},
+                            "progress": 12,
+                            "speed": 8,
+                            "subspeed": 2,
+                            "dir": 1,
+                            "ship": ship_state,
+                        }
+                    ],
+                    "rail_reservations": [],
+                }
+            ],
+        )
+        write_jsonl(
+            ship_oracle,
+            [
+                {
+                    "kind": "metadata",
+                    "schema_version": 2,
+                    "producer": "openttd",
+                    "sample_point": "after_state_game_loop",
+                },
+                {
+                    "kind": "tick",
+                    "tick": 9,
+                    "trains": [],
+                    "road_vehicles": [],
+                    "ships": [
+                        {
+                            "vehicle": 17,
+                            "x": 4,
+                            "y": 5,
+                            "progress": 12,
+                            "speed": 8,
+                            "subspeed": 2,
+                            "direction": 1,
+                            **ship_state,
+                        }
+                    ],
+                    "rail_reservations": [],
+                },
+            ],
+        )
+        run(
+            sys.executable,
+            "scripts/normalize_pbs_trace.py",
+            str(ship_raw),
+            str(ship_candidate),
+        )
+        run(sys.executable, "scripts/validate_pbs_trace.py", str(ship_candidate), "1", "openttdrs")
+        run(sys.executable, "scripts/validate_pbs_trace.py", str(ship_oracle), "1", "openttd")
+        run(
+            sys.executable,
+            "scripts/compare_pbs_traces.py",
+            str(ship_oracle),
+            str(ship_candidate),
+            "--scope",
+            "ship",
+        )
+
         html = work / "trace.html"
         fixture = (
             ROOT

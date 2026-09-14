@@ -232,9 +232,10 @@ fn openttd_ship_engine_type(v: &Vehicle) -> u16 {
         return native;
     }
     match v.engine_id {
-        Some(0) => 204, // MPS Oil Tanker
-        Some(2) => 206, // MPS Passenger Ferry
-        Some(7) => 211, // Yate Cargo ship
+        Some(crate::engine::ENGINE_SHIP_OIL) => 204, // MPS Oil Tanker
+        Some(crate::engine::ENGINE_SHIP_MPS) => 206, // MPS Passenger Ferry
+        Some(crate::engine::ENGINE_SHIP_FERRY) => 207, // FFP Passenger Ferry
+        Some(crate::engine::ENGINE_SHIP_COAL) => 211, // Yate Cargo ship
         _ => DEFAULT_OPENTTD_SHIP_ENGINE,
     }
 }
@@ -1713,7 +1714,7 @@ mod tests {
         };
         assert_eq!(
             record_get(common, "engine_type").and_then(SlValue::as_u64),
-            Some(u64::from(DEFAULT_OPENTTD_SHIP_ENGINE))
+            Some(206), // MPS Passenger Ferry: slot naval 2 (base 204 + local id).
         );
         assert_eq!(
             record_get(ship, "state").and_then(SlValue::as_u64),

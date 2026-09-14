@@ -3381,6 +3381,7 @@ mod tests {
             .iter()
             .find(|v| v.kind == sav::SavVehicleKind::Ship)
             .expect("ship importado");
+        assert!(!imported_ship.running, "VehState::Stopped debe conservarse");
         assert_eq!(imported_ship.ship_state, 16);
         assert_eq!(imported_ship.ship_rotation, 7);
         assert_eq!(imported_ship.ship_path, vec![3, 11, 27]);

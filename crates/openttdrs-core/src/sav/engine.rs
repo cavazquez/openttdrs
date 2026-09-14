@@ -144,10 +144,34 @@ pub(crate) fn catalog_engine_id_for_native(native_id: u16) -> Option<u16> {
         204 => crate::engine::ENGINE_SHIP_OIL,
         206 => crate::engine::ENGINE_SHIP_MPS,
         207 => crate::engine::ENGINE_SHIP_FERRY,
+        211 => crate::engine::ENGINE_SHIP_COAL,
         253 => crate::engine::ENGINE_AIRCRAFT_TRICARIO,
         _ => return None,
     };
     Some(id)
+}
+
+/// Velocidad máxima persistida en `ShipVehicleInfo` para los barcos vanilla.
+///
+/// `Ship::UpdateCache` vuelve a calcular `vcache.cached_max_speed` al cargar,
+/// pero el formato SAV no guarda esa caché. El runtime propio necesita
+/// reconstruirla para que un barco importado no use la velocidad del catálogo
+/// abstracto cuando ésta todavía no coincide con la tabla nativa. Los IDs son
+/// los diez slots navales globales `204..213` de `engines.h`.
+pub(crate) fn vanilla_ship_cached_max_speed(native_id: u16) -> Option<u16> {
+    match native_id {
+        // 0 MPS Oil Tanker, 7 Yate Cargo ship, 9 Mightymover Cargo ship.
+        204 | 211 | 213 => Some(48),
+        // 1 CS-Inc. Oil Tanker, 8 Bakewell Cargo ship, 10 Powernaut Cargo ship.
+        205 | 212 | 214 => Some(80),
+        // 2 MPS Passenger Ferry, 5 Chugger-Chug Passenger Ferry.
+        206 | 209 => Some(64),
+        // 3 FFP Passenger Ferry, 6 Shivershake Passenger Ferry.
+        207 | 210 => Some(128),
+        // 4 Bakewell 300 Hovercraft.
+        208 => Some(224),
+        _ => None,
+    }
 }
 
 fn vehicle_kind_matches_native_type(kind: crate::vehicle::VehicleKind, native_type: u8) -> bool {

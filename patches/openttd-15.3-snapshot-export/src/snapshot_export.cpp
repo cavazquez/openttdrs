@@ -21,6 +21,7 @@
 #include "roadveh.h"
 #include "saveload/saveload.h"
 #include "settings_type.h"
+#include "ship.h"
 #include "station_base.h"
 #include "table/sprites.h"
 #include "tile_map.h"
@@ -346,6 +347,32 @@ void MaybeAttachWagonsForFixture()
 	}
 }
 
+/**
+ * Inicia los barcos de un save detenido para obtener una traza dinámica sin
+ * mutar el fixture versionado.
+ *
+ * Activación:
+ *   OPENTTDRS_FIXTURE_START_SHIPS=1
+ */
+void MaybeStartShipsForFixture()
+{
+	const char *raw = std::getenv("OPENTTDRS_FIXTURE_START_SHIPS");
+	if (raw == nullptr || raw[0] == '\0') return;
+
+	int count = 0;
+	for (Vehicle *v : Vehicle::Iterate()) {
+		if (v->type != VEH_SHIP || !v->IsPrimaryVehicle()) continue;
+		Ship *ship = Ship::From(v);
+		v->vehstatus.Reset(VehState::Stopped);
+		v->cur_speed = 0;
+		v->direction = DIR_SW;
+		ship->rotation = DIR_SW;
+		ship->path.clear();
+		count++;
+	}
+	std::fprintf(stderr, "openttdrs fixture: iniciados %d barco(s)\n", count);
+}
+
 void WritePbsTraceRow(const char *kind)
 {
 	nlohmann::json row;
@@ -353,6 +380,7 @@ void WritePbsTraceRow(const char *kind)
 	row["tick"] = TimerGameTick::counter;
 	row["trains"] = nlohmann::json::array();
 	row["road_vehicles"] = nlohmann::json::array();
+	row["ships"] = nlohmann::json::array();
 	row["rail_reservations"] = nlohmann::json::array();
 
 	for (const Vehicle *v : Vehicle::Iterate()) {
@@ -402,6 +430,37 @@ void WritePbsTraceRow(const char *kind)
 		road["cached_air_drag"] = road_v->gcache.cached_air_drag;
 		road["cached_slope_resistance"] = road_v->gcache.cached_slope_resistance;
 		row["road_vehicles"].push_back(road);
+	}
+
+	for (const Vehicle *v : Vehicle::Iterate()) {
+		if (v->type != VEH_SHIP || v->tile == INVALID_TILE) continue;
+		const Ship *ship_v = Ship::From(v);
+		nlohmann::json ship;
+		ship["vehicle"] = v->index.base();
+		ship["x"] = TileX(v->tile);
+		ship["y"] = TileY(v->tile);
+		ship["x_pos"] = v->x_pos;
+		ship["y_pos"] = v->y_pos;
+		ship["z_pos"] = v->z_pos;
+		ship["dest_x"] = TileX(v->dest_tile);
+		ship["dest_y"] = TileY(v->dest_tile);
+		ship["current_order_type"] = static_cast<uint8_t>(v->current_order.GetType());
+		ship["current_order_dest"] = v->current_order.GetDestination().base();
+		ship["in_depot"] = ship_v->IsInDepot();
+		ship["acceleration"] = v->acceleration;
+		ship["cached_max_speed"] = ship_v->vcache.cached_max_speed;
+		ship["order_max_speed"] = v->current_order.GetMaxSpeed();
+		ship["engine_type"] = ship_v->engine_type.base();
+		ship["progress"] = v->progress;
+		ship["speed"] = v->cur_speed;
+		ship["subspeed"] = v->subspeed;
+		ship["direction"] = static_cast<uint8_t>(v->direction);
+		ship["state"] = static_cast<uint8_t>(ship_v->state);
+		ship["rotation"] = static_cast<uint8_t>(ship_v->rotation);
+		ship["running"] = !v->vehstatus.Test(VehState::Stopped);
+		ship["path_len"] = ship_v->path.size();
+		ship["tick_counter"] = v->tick_counter;
+		row["ships"].push_back(ship);
 	}
 
 	for (uint y = 0; y < Map::SizeY(); y++) {
@@ -891,7 +950,9 @@ void OpenttdrsMaybeStartPbsTrace(const std::string &source_path)
 {
 	const char *out_path = std::getenv("OPENTTDRS_PBS_TRACE_OUT");
 	const char *fixture_wagons = std::getenv("OPENTTDRS_FIXTURE_ATTACH_WAGONS");
-	const bool want_fixture = fixture_wagons != nullptr && fixture_wagons[0] != '\0';
+	const char *fixture_ships = std::getenv("OPENTTDRS_FIXTURE_START_SHIPS");
+	const bool want_fixture = (fixture_wagons != nullptr && fixture_wagons[0] != '\0')
+		|| (fixture_ships != nullptr && fixture_ships[0] != '\0');
 	if ((out_path == nullptr || out_path[0] == '\0') && !want_fixture) return;
 
 	/* Dedicated + -g loads a new game before the requested save. Match the
@@ -903,6 +964,7 @@ void OpenttdrsMaybeStartPbsTrace(const std::string &source_path)
 	if (call_count < min_call || _openttdrs_pbs_trace.armed) return;
 
 	MaybeAttachWagonsForFixture();
+	MaybeStartShipsForFixture();
 
 	/* Solo generar el .sav del fixture, sin traza. */
 	if (out_path == nullptr || out_path[0] == '\0') {
@@ -927,6 +989,8 @@ void OpenttdrsMaybeStartPbsTrace(const std::string &source_path)
 	metadata["schema_version"] = 2;
 	metadata["producer"] = "openttd";
 	metadata["trace"] = "pbs_and_road_vehicle_dynamics";
+	metadata["ship_vehicle_dynamics"] = true;
+	metadata["fixture_start_ships"] = fixture_ships != nullptr && fixture_ships[0] != '\0';
 	metadata["train_acceleration_model"] = _settings_game.vehicle.train_acceleration_model;
 	metadata["roadveh_acceleration_model"] = _settings_game.vehicle.roadveh_acceleration_model;
 	const char *commit = std::getenv("OPENTTDRS_OPENTTD_COMMIT");

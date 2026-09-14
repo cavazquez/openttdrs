@@ -104,16 +104,43 @@ def comparable_road_vehicles(
     )
 
 
+def comparable_ships(
+    row: dict[str, object],
+) -> list[tuple[int, int, int, int, int, int, int, int, int, int, int, int, bool, int]]:
+    """Estado persistible del controlador naval, sin ID de pool."""
+    ships = row.get("ships", [])
+    assert isinstance(ships, list)
+    return sorted(
+        (
+            ship["x"],
+            ship["y"],
+            ship["x_pos"],
+            ship["y_pos"],
+            ship["z_pos"],
+            ship["progress"],
+            ship["speed"],
+            ship["subspeed"],
+            ship["direction"],
+            ship["state"],
+            ship["rotation"],
+            ship["path_len"],
+            ship["running"],
+            ship["tick_counter"],
+        )
+        for ship in ships
+    )
+
+
 def main() -> None:
     args = sys.argv[1:]
     scope = "pbs"
     if len(args) == 4 and args[2] == "--scope":
         scope = args[3]
         args = args[:2]
-    if len(args) != 2 or scope not in {"pbs", "road", "all"}:
+    if len(args) != 2 or scope not in {"pbs", "road", "ship", "all"}:
         fail(
             "uso: compare_pbs_traces.py <openttd.jsonl> <openttdrs.jsonl> "
-            "[--scope pbs|road|all]"
+            "[--scope pbs|road|ship|all]"
         )
     expected_path, actual_path = map(Path, args)
     expected_meta, expected = read_trace(expected_path)
@@ -164,8 +191,21 @@ def main() -> None:
                     f"{frame_label}: road vehicles OpenTTD={expected_road} "
                     f"openttdrs={actual_road}"
                 )
+        if scope in {"ship", "all"}:
+            expected_ships = comparable_ships(expected_row)
+            actual_ships = comparable_ships(actual_row)
+            if expected_ships != actual_ships:
+                fail(
+                    f"{frame_label}: barcos OpenTTD={expected_ships} "
+                    f"openttdrs={actual_ships}"
+                )
 
-    label = {"pbs": "PBS", "road": "dinámica vial", "all": "PBS y dinámica vial"}[scope]
+    label = {
+        "pbs": "PBS",
+        "road": "dinámica vial",
+        "ship": "dinámica naval",
+        "all": "PBS, dinámica vial y naval",
+    }[scope]
     print(f"OK: {label} externa sin divergencias ({len(expected)} ticks)")
 
 

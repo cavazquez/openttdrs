@@ -482,6 +482,22 @@ fn road_snapshot(v: &crate::Vehicle) -> Option<RoadVehicleRecord> {
     })
 }
 
+fn ship_snapshot(v: &crate::Vehicle) -> Option<crate::parity::ShipVehicleRecord> {
+    if v.kind != crate::vehicle::VehicleKind::Ship {
+        return None;
+    }
+    Some(crate::parity::ShipVehicleRecord {
+        x_pos: v.ship_x,
+        y_pos: v.ship_y,
+        z_pos: v.z_pos.unwrap_or_default(),
+        state: v.ship_state,
+        rotation: v.ship_rotation,
+        running: v.running,
+        path_len: v.ship_path.len(),
+        tick_counter: v.ship_tick_counter,
+    })
+}
+
 fn vehicle_record(v: &crate::Vehicle, rail: Option<RailRecord>) -> VehicleRecord {
     VehicleRecord {
         id: v.id,
@@ -503,6 +519,7 @@ fn vehicle_record(v: &crate::Vehicle, rail: Option<RailRecord>) -> VehicleRecord
         depart_turn: v.depart_turn,
         rail,
         road: road_snapshot(v),
+        ship: ship_snapshot(v),
     }
 }
 

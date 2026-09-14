@@ -99,6 +99,22 @@ pub struct RoadVehicleRecord {
     pub reverse_ctr: u8,
 }
 
+/// Estado persistible de un barco para el contrato de movimiento naval.
+///
+/// La posición continua y la pareja `state`/`rotation` permiten distinguir
+/// una nave navegando de una nave detenida en la huella de un depósito.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ShipVehicleRecord {
+    pub x_pos: i32,
+    pub y_pos: i32,
+    pub z_pos: i16,
+    pub state: u8,
+    pub rotation: u8,
+    pub running: bool,
+    pub path_len: usize,
+    pub tick_counter: u8,
+}
+
 /// Reserva PBS observada directamente en una tesela del mapa.
 ///
 /// Es independiente del ID de vehículo para que una traza emitida por `OpenTTD`
@@ -139,6 +155,9 @@ pub struct VehicleRecord {
     /// trenes, barcos, aeronaves y unidades articuladas secundarias.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub road: Option<RoadVehicleRecord>,
+    /// Estado naval de un barco. Ausente para trenes, carretera y aeronaves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ship: Option<ShipVehicleRecord>,
 }
 
 /// Tendencia de velocidad (para detectar inicio de aceleración/frenado).

@@ -753,6 +753,7 @@ mod tests {
                 depart_turn: 0,
                 rail: None,
                 road: None,
+                ship: None,
             }],
             events: Vec::new(),
             rail_reservations: Vec::new(),

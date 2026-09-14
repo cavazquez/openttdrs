@@ -47,6 +47,7 @@ pub use train_reservation::{
     update_train_reservations_incremental_with_wormholes,
     update_train_reservations_incremental_with_wormholes_and_acceleration,
     update_train_reservations_with_settings, update_train_reservations_with_wormholes,
+    vehicle_segment_requires_path_reserve,
 };
 
 pub(crate) use train_reservation::update_train_reservations_incremental_with_wormholes_and_acceleration_phase;

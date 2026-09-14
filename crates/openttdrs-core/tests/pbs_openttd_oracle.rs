@@ -37,12 +37,36 @@ struct OracleRow {
     rail_reservations: Option<Vec<OracleReservation>>,
 }
 
-fn load_oracle() -> Vec<OracleRow> {
-    let raw = std::fs::read_to_string(fixture_path("parity/train_pbs_15_3_openttd.jsonl"))
-        .expect("traza oráculo PBS");
+fn load_oracle_named(name: &str) -> Vec<OracleRow> {
+    let raw = std::fs::read_to_string(fixture_path(name)).expect("traza oráculo PBS");
     raw.lines()
         .map(|line| serde_json::from_str(line).expect("JSONL oráculo"))
         .collect()
+}
+
+fn load_oracle() -> Vec<OracleRow> {
+    load_oracle_named("parity/train_pbs_15_3_openttd.jsonl")
+}
+
+fn runtime_reservations(state: &GameState) -> Vec<(i32, i32, u8)> {
+    let (w, h) = state.map.dimensions();
+    let mut out = Vec::new();
+    for y in 0..h as i32 {
+        for x in 0..w as i32 {
+            let tile = TileCoord::new(x, y);
+            let Some(data) = state.map.get(tile) else {
+                continue;
+            };
+            if data.kind != openttdrs_core::TileKind::Rail {
+                continue;
+            }
+            let bits = openttdrs_core::decode_rail_reservation_m2_hi(data.m2_hi);
+            if bits != 0 {
+                out.push((x, y, bits));
+            }
+        }
+    }
+    out
 }
 
 #[test]
@@ -199,6 +223,84 @@ fn rust_matches_openttd_oracle_for_forty_ticks() {
             .map(|r| (r.x, r.y, r.track_bits))
             .collect();
         assert_eq!(got, want, "reservas PBS en muestra oracle índice {i}");
+    }
+}
+
+#[test]
+fn rust_matches_openttd_oracle_for_four_hundred_ticks() {
+    let oracle = load_oracle_named("parity/train_pbs_15_3_400_openttd.jsonl");
+    assert_eq!(oracle.len(), 402, "metadata + initial + 400 ticks");
+    assert_eq!(oracle[0].kind, "metadata");
+    assert_eq!(oracle[1].kind, "initial");
+
+    let raw = std::fs::read(fixture_path("train_pbs_15_3.sav")).expect("fixture PBS");
+    let mut state = GameState::from_sav_game(sav::load(&raw).expect("load"));
+    let initial = oracle[1].trains.as_ref().expect("trains")[0];
+    let train = state
+        .vehicles
+        .iter()
+        .find(|v| v.kind == VehicleKind::Train)
+        .expect("tren");
+    assert_eq!(
+        (
+            train.progress,
+            train.cur_speed,
+            train.subspeed,
+            train.direction,
+            train.pos.x,
+            train.pos.y
+        ),
+        (
+            initial.progress,
+            initial.speed,
+            initial.subspeed,
+            initial.direction,
+            initial.x,
+            initial.y
+        ),
+        "cinemática inicial"
+    );
+
+    for (i, row) in oracle.iter().enumerate().skip(2) {
+        state.step();
+        let expected = row.trains.as_ref().expect("trains")[0];
+        let train = state
+            .vehicles
+            .iter()
+            .find(|v| v.kind == VehicleKind::Train)
+            .expect("tren");
+        assert_eq!(
+            (
+                train.progress,
+                train.cur_speed,
+                train.subspeed,
+                train.direction,
+                train.pos.x,
+                train.pos.y
+            ),
+            (
+                expected.progress,
+                expected.speed,
+                expected.subspeed,
+                expected.direction,
+                expected.x,
+                expected.y
+            ),
+            "cinemática diverge en muestra oracle índice {i}"
+        );
+
+        let want: Vec<_> = row
+            .rail_reservations
+            .as_ref()
+            .expect("reservas")
+            .iter()
+            .map(|reservation| (reservation.x, reservation.y, reservation.track_bits))
+            .collect();
+        assert_eq!(
+            runtime_reservations(&state),
+            want,
+            "reservas PBS divergen en muestra oracle índice {i}"
+        );
     }
 }
 

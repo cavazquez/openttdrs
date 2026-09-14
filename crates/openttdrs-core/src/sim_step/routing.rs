@@ -611,6 +611,19 @@ fn nanos(start: Instant) -> u64 {
     u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
+fn station_departure_path_is_connected(
+    state: &GameState,
+    vehicle_idx: usize,
+    from: TileCoord,
+) -> bool {
+    let vehicle = &state.vehicles[vehicle_idx];
+    vehicle.train_station_departure_hold
+        && vehicle.path.front().is_some_and(|next| {
+            crate::rail_pbs::track_on_departure_tile(&state.map, from, *next).is_some()
+                && crate::rail_pbs::track_for_rail_step(&state.map, from, *next).is_some()
+        })
+}
+
 /// Asigna un andén libre de forma independiente. Devuelve `true` cuando la
 /// orden de estación quedó resuelta (con ruta o esperando un andén), para que
 /// el fallback genérico no vuelva a elegir la primera plataforma ocupada.
@@ -661,6 +674,19 @@ fn route_train_to_available_platform(
     // actual vaya primero y eso disparaba YAPF hacia plataformas remotas en
     // cada tick aunque el tren ya hubiera llegado.
     if candidates.contains(&from) {
+        // `LoadUnloadStation` avanza una orden de estación de un solo andén
+        // hacia sí misma antes de que `Train::Tick` pueda salir. En esa
+        // transición la ruta que quedó en la cabeza ya es la continuación
+        // física del andén (y contiene la señal PBS de salida); tratar el
+        // andén como una llegada nueva la reemplaza por una cola vacía y
+        // elimina la reserva antes de que el tren cruce el primer píxel.
+        // Conservarla aquí sólo está permitido durante la ventana explícita
+        // de salida y cuando el primer paso sigue conectado a la plataforma.
+        if station_departure_path_is_connected(state, vehicle_idx, from) {
+            state.vehicles[vehicle_idx].train_station_arrival_target = None;
+            state.vehicles[vehicle_idx].no_network_route_to_order = false;
+            return true;
+        }
         assign_train_station_route(state, vehicle_idx, station, stop_location, from, Vec::new());
         return true;
     }

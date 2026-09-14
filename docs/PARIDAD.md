@@ -3136,7 +3136,7 @@ python3 scripts/view_pbs_trace.py \
   crates/openttdrs-core/tests/fixtures/parity/train_pbs_15_3_openttd.jsonl \
   /tmp/pbs_trace.html
 
-## Recorrido completo del mismo save (400 ticks → estación destino)
+## Recorrido completo del mismo save (oráculo PBS, 400 ticks)
 python3 scripts/view_pbs_trace.py \
   crates/openttdrs-core/tests/fixtures/parity/train_pbs_15_3_400_openttd.jsonl \
   /tmp/pbs_trace_400.html
@@ -3147,18 +3147,21 @@ Abre el HTML en el navegador: scrubber de muestras, mapa del corredor,
 lista de tiles visitados y anotación de señal (`--signal X,Y,label`; el
 fixture `train_pbs_15_3` usa por defecto la path signal en `(46,37)`).
 
-La traza de **400 ticks** es solo para inspección visual (path
-`47,37 → … → 42,37`). El golden de paridad sigue siendo la de **40 ticks**.
+La traza de **400 ticks** cubre el recorrido completo (`47,37 → … → 42,37`),
+la reversa en el extremo de línea, la salida de la estación y la reserva PBS
+frente a la `PathOneWay` en `(46,37)`. También se conserva el oráculo corto de
+40 ticks como smoke test histórico.
 
 ### Estado
 
 El exportador, normalizador, validador y comparador están implementados y el
-exportador fue compilado contra el commit OpenTTD 15.3 fijado. El fixture y su
-oráculo de 40 ticks están versionados.
+exportador fue compilado contra el commit OpenTTD 15.3 fijado. El fixture y sus
+oráculos de 40 y 400 ticks están versionados.
 
 **Paridad cerrada** para este escenario (un tren, path signal, `AM_REALISTIC`):
-`initial` y los 40 ticks coinciden en tesela, `progress` físico, `cur_speed`,
-`subspeed`, dirección y reservas PBS (`tests/pbs_openttd_oracle.rs`).
+`initial` y los 400 ticks coinciden en tesela, `progress` físico, `cur_speed`,
+`subspeed`, dirección y reservas PBS (`tests/pbs_openttd_oracle.rs`). El test
+largo cubre además la transición de carga a salida sin perder la ruta física.
 
 #### Fixture dual (curva + PBS + plataformas)
 

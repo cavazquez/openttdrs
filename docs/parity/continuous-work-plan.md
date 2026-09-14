@@ -46,6 +46,14 @@ las `501` muestras comparables. Esto reduce el residual temporal de #330, pero
 no cubre todavía redes grandes, cruces/merge adicionales ni todos los
 desempates de YAPF.
 
+La fixture simple `train_pbs_15_3` también quedó promovida de inspección visual
+a evidencia diferencial: `initial` más 400 ticks coinciden en cinemática y
+reservas PBS. La regresión cubre la reversa de un tren unitario en una estación,
+la reconstrucción de su salida y la conservación de la reserva hasta la
+`PathOneWay`; el oráculo corto de 40 ticks se mantiene como smoke test. #330
+sigue abierto para cruces grandes, presignals completas, tráfico complejo y
+redes aire/mar.
+
 El ajuste también conserva la cardinalidad nativa de movimiento: una entrada
 cardinal consume ocho posiciones de `rail_pixel`, mientras una entrada
 diagonal consume dieciséis. #330 sigue abierto para los escenarios no cubiertos

@@ -500,6 +500,14 @@ impl super::model::Vehicle {
                         // aun cuando `TrainApproachingLineEnd` invierte, y el
                         // remanente guardado es `j - adv_spd`.
                         self.reverse_at_line_end(j.saturating_sub(adv_spd));
+                        // Tras invertir en un extremo sin salida, el
+                        // `TrainController` nativo todavía intenta el
+                        // píxel siguiente dentro de la misma tesela. La
+                        // reserva/ruta reconstruida después se ocupa de
+                        // los extremos que sí tienen una salida válida.
+                        if map.is_some_and(|map| self.train_next_tile_without_path(map).is_none()) {
+                            self.rail_pixel = self.rail_pixel.saturating_add(1).min(15);
+                        }
                         return;
                     }
                     self.slow_train_at_line_end();
@@ -1561,9 +1569,8 @@ impl super::model::Vehicle {
         let (dx, dy) = crate::map::diag_dir_offset(exit);
         let next = TileCoord::new(self.pos.x + dx, self.pos.y + dy);
         let entry = crate::map::opposite_diag_dir(exit);
-        (crate::map::rail_traversal_bits(map, next) & crate::map::rail_bits_touching_side(entry)
-            != 0)
-            .then_some(next)
+        let next_bits = crate::map::rail_traversal_bits(map, next);
+        (next_bits & crate::map::rail_bits_touching_side(entry) != 0).then_some(next)
     }
 
     /// `TrainCheckIfLineEnds` puede ver una señal `PathOneWay` en contra en la
@@ -1603,18 +1610,32 @@ impl super::model::Vehicle {
         )
     }
 
-    fn rebuild_line_end_reverse_path(&mut self, map: Option<&Map>) {
+    pub(crate) fn rebuild_line_end_reverse_path(&mut self, map: Option<&Map>) {
         self.path.clear();
         let Some(map) = map else {
             return;
         };
         let mut probe = self.clone();
+        // Mantener la ventana histórica de cuatro teselas evita desplazar la
+        // animación de trenes unitarios sin señales. Si la cuarta tesela es
+        // una señal, agregar una tesela posterior permite que
+        // `vehicle_segment_requires_path_reserve` observe una PathOneWay que
+        // queda al final del tramo reconstruido tras la reversa.
         for _ in 0..4 {
             let Some(next) = probe.train_next_tile_without_path(map) else {
                 break;
             };
             self.path.push_back(next);
             probe.pos = next;
+        }
+        let needs_signal_lookahead = self.path.back().is_some_and(|&tile| {
+            map.get(tile).is_some_and(|tile| {
+                tile.kind == super::super::map::TileKind::Rail
+                    && crate::rail_signals::rail_tile_is_signals(tile.m5)
+            })
+        });
+        if needs_signal_lookahead && let Some(next) = probe.train_next_tile_without_path(map) {
+            self.path.push_back(next);
         }
     }
 

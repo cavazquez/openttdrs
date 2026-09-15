@@ -43,8 +43,8 @@ use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{
     AirportStationAnim, CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, RenderGrid,
     TileRenderContext, ViewportSortableChild, ViewportSortableChildDepthWindows,
-    ViewportSortableParent, WaterTile, sort_viewport_sortable_parents,
-    sync_viewport_sortable_children, viewport_insertion_key,
+    ViewportSortableParent, ViewportSortableSegmentedChild, WaterTile,
+    sort_viewport_sortable_parents, sync_viewport_sortable_children, viewport_insertion_key,
 };
 use crate::sprites::{
     RAIL_TB_X, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, WATER_CANAL_DIKE_SPRITE_META,
@@ -6956,6 +6956,14 @@ fn forest_combined_layers_attach_to_the_global_sort_parent() {
     assert!(
         children.iter().all(|child| child.parent == parent_entity),
         "ninguna copa combinada puede quedar con profundidad independiente"
+    );
+    let segmented_layers = world
+        .query_filtered::<Entity, With<ViewportSortableSegmentedChild>>()
+        .iter(&world)
+        .count();
+    assert_eq!(
+        segmented_layers, 2,
+        "las capas combinadas del árbol publican el contrato de clipping por banda"
     );
 }
 

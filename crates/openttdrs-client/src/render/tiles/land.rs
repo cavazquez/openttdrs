@@ -31,8 +31,9 @@ use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, TileRenderContext,
-    ViewportSortableChild, ViewportSortableParent, ViewportSortablePromotableChild, WaterTile,
-    WorldAssets, sprite_from_atlas_or_company_colour, sprite_from_atlas_or_company_white_colour,
+    ViewportSortableChild, ViewportSortableParent, ViewportSortablePromotableChild,
+    ViewportSortableSegmentedChild, ViewportSortableSegmentedSource, WaterTile, WorldAssets,
+    sprite_from_atlas_or_company_colour, sprite_from_atlas_or_company_white_colour,
     sprite_from_atlas_or_industry_palette, viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
@@ -3747,7 +3748,7 @@ pub(crate) fn push_forest_tree(
             let mut entity = commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                sprite,
+                sprite.clone(),
                 Transform::from_translation(pos3),
             ));
             if let Some(parent) = parent_entity {
@@ -3761,6 +3762,11 @@ pub(crate) fn push_forest_tree(
                         bounds: tree_parent_bounds(ctx, slope_z_offset),
                         insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 1),
                         combine_ordinal: draw_order as u8,
+                    },
+                    ViewportSortableSegmentedChild,
+                    ViewportSortableSegmentedSource {
+                        sprite: sprite.clone(),
+                        transform: Transform::from_translation(pos3),
                     },
                 ));
             }

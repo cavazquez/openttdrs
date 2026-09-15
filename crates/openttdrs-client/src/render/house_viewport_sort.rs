@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use bevy::asset::{AssetEvent, AssetId};
-use bevy::ecs::change_detection::DetectChanges;
+use bevy::ecs::change_detection::{DetectChanges, Mut};
 use bevy::ecs::message::{MessageCursor, Messages};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -92,6 +92,32 @@ pub(crate) struct ViewportSortablePromotableChild {
 /// de render global.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ViewportSortableSegmentedChild;
+
+/// Estado completo de un child segmentado antes de aplicar el clipping local.
+///
+/// El `Sprite` y la posición X/Y/escala no se pueden recuperar desde el
+/// rectángulo ya recortado en el siguiente paneo. Guardarlos junto al
+/// producer permite volver a la imagen original y calcular de nuevo la
+/// intersección con las bandas de la nueva cámara; el Z se toma siempre del
+/// transform vivo porque el sorter lo reasigna en cada pasada.
+#[derive(Component, Clone, Debug)]
+pub(crate) struct ViewportSortableSegmentedSource {
+    pub(crate) sprite: Sprite,
+    pub(crate) transform: Transform,
+}
+
+/// Copia recortada de un child que OpenTTD promueve sólo dentro de una banda.
+///
+/// La fuente original conserva el PNG completo y la entidad child se recorta
+/// al tramo que sí cubre su parent. Esta copia aporta únicamente el tramo que
+/// la llamada local de `ViewportDoDraw` habría convertido en parent; mantenerla
+/// como una entidad efímera evita mover globalmente la parte del sprite que
+/// pertenece a otra banda.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ViewportSortableSegmentProxy {
+    source_child: Entity,
+    band: i64,
+}
 
 /// Límite superior de la secuencia de children de cada parent ordenado.
 ///
@@ -598,6 +624,12 @@ impl DiagonalViewportSortScope {
             })
             .collect()
     }
+
+    #[must_use]
+    fn band_screen_bounds(self, band: i64) -> (f32, f32) {
+        let top = self.screen_top as f32 - band as f32 * self.band_height as f32;
+        (top - self.band_height as f32, top)
+    }
 }
 
 /// Productores que OpenTTD puede entregar al sorter para la vista actual.
@@ -759,6 +791,112 @@ struct ViewportPromotionCandidate {
     current_depth: f32,
 }
 
+struct ViewportSegmentProxyCandidate {
+    candidate: ViewportPromotionCandidate,
+    band: i64,
+    sprite: Sprite,
+    anchor: Anchor,
+    transform: Transform,
+    chunk: Option<crate::render::MapTileChunk>,
+}
+
+const VIEWPORT_SEGMENT_PROXY_EDGE_STEP: f32 = 0.000_001;
+
+fn assign_segment_proxy_depths(
+    pending: &[usize],
+    lower: Option<f32>,
+    upper: Option<f32>,
+    depths: &mut [f32],
+) {
+    if pending.is_empty() {
+        return;
+    }
+    let count = pending.len() as f32;
+    for (index, &proxy_index) in pending.iter().enumerate() {
+        let offset = index as f32 + 1.0;
+        depths[proxy_index] = match (lower, upper) {
+            (Some(lower), Some(upper)) if (upper - lower).abs() > f32::EPSILON => {
+                lower + (upper - lower) * offset / (count + 1.0)
+            }
+            (Some(lower), Some(_)) => lower + VIEWPORT_SEGMENT_PROXY_EDGE_STEP * offset,
+            (Some(lower), None) => lower + VIEWPORT_SEGMENT_PROXY_EDGE_STEP * offset,
+            (None, Some(upper)) => {
+                upper - VIEWPORT_SEGMENT_PROXY_EDGE_STEP * (count - index as f32)
+            }
+            (None, None) => VIEWPORT_SEGMENT_PROXY_EDGE_STEP * offset,
+        };
+    }
+}
+
+/// Asigna a los proxies de una banda entre los slots de sus parents normales.
+///
+/// El sorter nativo se ejecuta una vez por banda. Los parents normales ya
+/// tienen un orden global que no presenta inversiones entre bandas, así que
+/// basta con mantener sus slots y ordenar cada conjunto local junto con sus
+/// proxies. No incluir los proxies en la lista global evita que siete copias
+/// efímeras consuman slots y desplacen a todo el mapa.
+fn segment_proxy_depths_for_band(
+    band: i64,
+    candidates: &[ViewportSegmentProxyCandidate],
+    global_sorted_parents: &[(Entity, ViewportSortableParent, f32)],
+    parent_states: &HashMap<Entity, ViewportParentSortState>,
+) -> Vec<f32> {
+    let mut entries: Vec<(Option<usize>, ParentSprite, Option<f32>)> = Vec::new();
+    for &(entity, parent, depth) in global_sorted_parents {
+        let reaches_band = parent_states
+            .get(&entity)
+            .map(|state| {
+                state.included
+                    && (state
+                        .screen_band_range
+                        .is_some_and(|(start, end)| start <= band && band < end)
+                        || parent.sprite_id == EMPTY_BOUNDING_BOX_SPRITE_ID)
+            })
+            .unwrap_or(true);
+        if !reaches_band {
+            continue;
+        }
+        let sprite = if parent.sprite_id == EMPTY_BOUNDING_BOX_SPRITE_ID {
+            ParentSprite::empty_bounding_box(entity.to_bits(), parent.bounds)
+        } else {
+            ParentSprite::sprite(entity.to_bits(), parent.sprite_id, parent.bounds)
+        };
+        entries.push((None, sprite, Some(depth)));
+    }
+    for (index, candidate) in candidates.iter().enumerate() {
+        entries.push((
+            Some(index),
+            ParentSprite::sprite(
+                candidate.candidate.child_entity.to_bits(),
+                candidate.candidate.promoted_parent.sprite_id,
+                candidate.candidate.promoted_parent.bounds,
+            ),
+            None,
+        ));
+    }
+
+    let parents: Vec<_> = entries
+        .iter()
+        .map(|(_, parent, _)| parent.clone())
+        .collect();
+    let order = viewport_sort_parent_sprites(&parents);
+    let mut depths = vec![0.0; candidates.len()];
+    let mut pending = Vec::new();
+    let mut lower = None;
+    for index in order {
+        if let Some(proxy_index) = entries[index].0 {
+            pending.push(proxy_index);
+            continue;
+        }
+        let upper = entries[index].2;
+        assign_segment_proxy_depths(&pending, lower, upper, &mut depths);
+        pending.clear();
+        lower = upper;
+    }
+    assign_segment_proxy_depths(&pending, lower, None, &mut depths);
+    depths
+}
+
 /// IDs de assets cuyo tamaño o contenido cambió desde el último pase.
 ///
 /// `Assets<T>` se marca como cambiado también cuando otro sistema toma un
@@ -881,22 +1019,41 @@ fn export_viewport_sort_trace(
 /// por frame estable.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn sort_viewport_sortable_parents(
-    mut parents: Query<(
-        Entity,
-        Ref<ViewportSortableParent>,
-        Option<Ref<Visibility>>,
-        &mut Transform,
-        Option<(Ref<Sprite>, Ref<Anchor>)>,
-    )>,
+    mut commands: Commands,
+    mut parents: Query<
+        (
+            Entity,
+            Ref<ViewportSortableParent>,
+            Option<Ref<Visibility>>,
+            &mut Transform,
+            Option<(Ref<Sprite>, Ref<Anchor>)>,
+        ),
+        Without<ViewportSortableSegmentProxy>,
+    >,
+    mut segment_proxies: Query<
+        (
+            Entity,
+            Mut<ViewportSortableSegmentProxy>,
+            Mut<ViewportSortableParent>,
+            Mut<Visibility>,
+            Mut<Transform>,
+            Mut<Sprite>,
+            Mut<Anchor>,
+            Option<&crate::render::MapTileChunk>,
+        ),
+        With<ViewportSortableSegmentProxy>,
+    >,
     mut promotable_children: Query<
         (
             Entity,
             Ref<ViewportSortableChild>,
             Ref<ViewportSortablePromotableChild>,
             Option<Ref<ViewportSortableSegmentedChild>>,
-            Option<Ref<Visibility>>,
+            Option<Mut<Visibility>>,
             &mut Transform,
-            Option<(Ref<Sprite>, Ref<Anchor>)>,
+            Option<(Mut<Sprite>, Mut<Anchor>)>,
+            Option<&crate::render::MapTileChunk>,
+            Option<&ViewportSortableSegmentedSource>,
         ),
         (
             With<ViewportSortablePromotableChild>,
@@ -960,19 +1117,66 @@ pub(crate) fn sort_viewport_sortable_parents(
                 .as_ref()
                 .is_some_and(|(sprite, anchor)| sprite.is_changed() || anchor.is_changed());
     }
-    for (_, child, promotable, segmented, visibility, _, sprite) in &mut promotable_children {
+    for (_, child, promotable, segmented, visibility, _, sprite, _, segmented_source) in
+        &mut promotable_children
+    {
         needs_sort |= child.is_added()
             || child.is_changed()
             || promotable.is_added()
             || promotable.is_changed()
             || segmented.as_ref().is_some_and(DetectChanges::is_added)
             || visibility.as_ref().is_some_and(DetectChanges::is_changed)
-            || sprite
-                .as_ref()
-                .is_some_and(|(sprite, anchor)| sprite.is_changed() || anchor.is_changed());
+            || (segmented_source.is_none()
+                && sprite
+                    .as_ref()
+                    .is_some_and(|(sprite, anchor)| sprite.is_changed() || anchor.is_changed()));
+    }
+    // Los proxies se crean con Commands al final de una pasada. Su primer
+    // tick debe disparar una segunda pasada para recibir el slot final, pero
+    // sus cambios de sprite/depth posteriores los produce este mismo sistema
+    // y no deben convertir el fast path estable en un bucle infinito.
+    for (_, proxy, _, _, _, _, _, _) in &mut segment_proxies {
+        needs_sort |= proxy.is_added();
     }
     if !needs_sort {
         return;
+    }
+
+    let mut existing_segment_proxies = HashMap::new();
+    for (entity, proxy, _, mut visibility, _, _, _, _) in &mut segment_proxies {
+        existing_segment_proxies.insert((proxy.source_child, proxy.band), entity);
+        if *visibility != Visibility::Hidden {
+            *visibility = Visibility::Hidden;
+        }
+    }
+
+    // Una fuente segmentada puede haber quedado recortada por la pasada
+    // anterior. Restaurarla antes de calcular bounds hace que el siguiente
+    // paneo o cambio de escala vuelva a partir siempre del PNG completo; el Z
+    // vivo se conserva porque el sorter y la animación lo actualizan fuera de
+    // esta caché.
+    if precise_scope.is_none() {
+        for (_, _, _, segmented, mut visibility, mut transform, sprite, _, segmented_source) in
+            &mut promotable_children
+        {
+            if segmented.is_none() {
+                continue;
+            }
+            let Some(source) = segmented_source else {
+                continue;
+            };
+            let Some((mut sprite, _)) = sprite else {
+                continue;
+            };
+            let live_z = transform.translation.z;
+            let mut source_transform = source.transform;
+            source_transform.translation.z = live_z;
+            *sprite = source.sprite.clone();
+            *transform = source_transform;
+            if let Some(mut visibility) = visibility.take() {
+                *visibility = Visibility::Inherited;
+            }
+        }
     }
 
     // `ViewportDoDraw` omite los vehículos antes de ordenar los parents cuando
@@ -1036,24 +1240,51 @@ pub(crate) fn sort_viewport_sortable_parents(
     // fueron promovidos.
     child_depth_windows.independent_children.clear();
     let mut promotion_by_parent: HashMap<Entity, ViewportPromotionCandidate> = HashMap::new();
-    let mut promotion_by_parent_band: HashMap<(Entity, i64), ViewportPromotionCandidate> =
+    let mut promotion_by_parent_band: HashMap<(Entity, i64), ViewportSegmentProxyCandidate> =
         HashMap::new();
     if let Some(precise_scope) = precise_scope {
-        for (entity, child, promotable, segmented, visibility, transform, sprite) in
-            &mut promotable_children
+        for (
+            entity,
+            child,
+            promotable,
+            segmented,
+            mut visibility,
+            mut transform,
+            sprite,
+            chunk,
+            segmented_source,
+        ) in &mut promotable_children
         {
             let Some(parent_state) = parent_states.get(&child.parent).copied() else {
                 continue;
             };
-            let Some(child_sprite_bounds) = sprite.and_then(|(sprite, anchor)| {
-                sprite_screen_bounds(
-                    &sprite,
-                    &anchor,
-                    &transform,
-                    images.as_deref(),
-                    texture_atlases.as_deref(),
-                )
-            }) else {
+            let Some((mut child_sprite, child_anchor)) = sprite else {
+                continue;
+            };
+            let child_transform = *transform;
+            let source = match (segmented.as_ref(), segmented_source) {
+                (Some(_), Some(source)) => Some(source),
+                _ => None,
+            };
+            let source_backed_segment = source.is_some();
+            let (full_sprite, full_transform) = if let Some(source) = source {
+                let mut source_transform = source.transform;
+                source_transform.translation.z = child_transform.translation.z;
+                (source.sprite.clone(), source_transform)
+            } else {
+                ((*child_sprite).clone(), child_transform)
+            };
+            if source_backed_segment {
+                *child_sprite = full_sprite.clone();
+                *transform = full_transform;
+            }
+            let Some(child_sprite_bounds) = sprite_screen_bounds(
+                &full_sprite,
+                &child_anchor,
+                &full_transform,
+                images.as_deref(),
+                texture_atlases.as_deref(),
+            ) else {
                 continue;
             };
             let child_only_bands = if segmented.is_some() {
@@ -1062,16 +1293,23 @@ pub(crate) fn sort_viewport_sortable_parents(
             } else {
                 Vec::new()
             };
-            if (parent_state.included && (segmented.is_none() || child_only_bands.is_empty()))
+            let hidden = visibility
+                .as_ref()
+                .is_some_and(|visibility| **visibility == Visibility::Hidden);
+            if (parent_state.included && segmented.is_none())
                 || (!parent_state.included && !parent_state.can_promote_child())
-                || visibility
-                    .as_ref()
-                    .is_some_and(|visibility| **visibility == Visibility::Hidden)
+                || (hidden && !source_backed_segment)
             {
                 continue;
             }
+            if hidden
+                && source_backed_segment
+                && let Some(mut visibility) = visibility.take()
+            {
+                *visibility = Visibility::Inherited;
+            }
             if !parent_is_in_viewport_sort_scope(
-                &child_promotion_parent(&promotable, transform.translation.z),
+                &child_promotion_parent(&promotable, full_transform.translation.z),
                 Some(child_sprite_bounds),
                 scope,
                 Some(precise_scope),
@@ -1084,25 +1322,110 @@ pub(crate) fn sort_viewport_sortable_parents(
                 child_entity: entity,
                 combine_ordinal: candidate_rank.0,
                 entity_bits: candidate_rank.1,
-                promoted_parent: child_promotion_parent(&promotable, transform.translation.z),
-                current_depth: transform.translation.z,
+                promoted_parent: child_promotion_parent(&promotable, full_transform.translation.z),
+                current_depth: full_transform.translation.z,
             };
-            if parent_state.included && segmented.is_some() {
-                for band in child_only_bands {
-                    let replace = promotion_by_parent_band
-                        .get(&(child.parent, band))
-                        .is_none_or(|current| {
-                            child_promotion_is_before(
-                                &promotable,
-                                entity,
-                                &(current.combine_ordinal, current.entity_bits),
+            let source_segment_clips: Option<(
+                Option<(Sprite, Transform)>,
+                Vec<(Sprite, Transform)>,
+            )> = if parent_state.included && source_backed_segment {
+                parent_state
+                    .screen_band_range
+                    .and_then(|(parent_start, parent_end)| {
+                        let band_height = precise_scope.band_height as f32;
+                        let parent_top =
+                            precise_scope.screen_top as f32 - parent_start as f32 * band_height;
+                        let parent_bottom =
+                            precise_scope.screen_top as f32 - parent_end as f32 * band_height;
+                        let base_clip = if child_sprite_bounds.bottom < parent_top
+                            && child_sprite_bounds.top > parent_bottom
+                        {
+                            clip_sprite_to_band(
+                                &full_sprite,
+                                &child_anchor,
+                                &full_transform,
+                                parent_bottom,
+                                parent_top,
+                                images.as_deref(),
+                                texture_atlases.as_deref(),
                             )
-                        });
-                    if replace {
-                        promotion_by_parent_band.insert((child.parent, band), candidate);
-                    }
-                }
+                            .map(Some)
+                        } else {
+                            Some(None)
+                        };
+                        let band_clips = child_only_bands
+                            .iter()
+                            .copied()
+                            .map(|band| {
+                                let (band_bottom, band_top) =
+                                    precise_scope.band_screen_bounds(band);
+                                clip_sprite_to_band(
+                                    &full_sprite,
+                                    &child_anchor,
+                                    &full_transform,
+                                    band_bottom,
+                                    band_top,
+                                    images.as_deref(),
+                                    texture_atlases.as_deref(),
+                                )
+                            })
+                            .collect::<Option<Vec<_>>>();
+                        base_clip.zip(band_clips)
+                    })
             } else {
+                None
+            };
+            let used_segmented_clipping =
+                if let Some((base_clip, band_clips)) = source_segment_clips {
+                    if let Some((base_sprite, base_transform)) = base_clip {
+                        *child_sprite = base_sprite;
+                        *transform = base_transform;
+                        if let Some(visibility) = visibility.as_mut() {
+                            **visibility = Visibility::Inherited;
+                        }
+                    } else {
+                        *child_sprite = full_sprite.clone();
+                        *transform = full_transform;
+                        if let Some(visibility) = visibility.as_mut() {
+                            **visibility = Visibility::Hidden;
+                        }
+                    }
+                    for (band, (clipped_sprite, clipped_transform)) in
+                        child_only_bands.iter().copied().zip(band_clips)
+                    {
+                        let replace = promotion_by_parent_band
+                            .get(&(child.parent, band))
+                            .is_none_or(|current| {
+                                child_promotion_is_before(
+                                    &promotable,
+                                    entity,
+                                    &(
+                                        current.candidate.combine_ordinal,
+                                        current.candidate.entity_bits,
+                                    ),
+                                )
+                            });
+                        if replace {
+                            promotion_by_parent_band.insert(
+                                (child.parent, band),
+                                ViewportSegmentProxyCandidate {
+                                    candidate,
+                                    band,
+                                    sprite: clipped_sprite,
+                                    anchor: *child_anchor,
+                                    transform: clipped_transform,
+                                    chunk: chunk.copied(),
+                                },
+                            );
+                        }
+                    }
+                    true
+                } else {
+                    false
+                };
+            if !used_segmented_clipping
+                && (!parent_state.included || segmented.is_none() || !child_only_bands.is_empty())
+            {
                 let replace = promotion_by_parent
                     .get(&child.parent)
                     .is_none_or(|current| {
@@ -1118,15 +1441,10 @@ pub(crate) fn sort_viewport_sortable_parents(
             }
         }
     }
-    let mut promoted_candidates: HashMap<Entity, ViewportPromotionCandidate> = promotion_by_parent
+    let promoted_candidates: HashMap<Entity, ViewportPromotionCandidate> = promotion_by_parent
         .into_values()
         .map(|candidate| (candidate.child_entity, candidate))
         .collect();
-    for candidate in promotion_by_parent_band.into_values() {
-        promoted_candidates
-            .entry(candidate.child_entity)
-            .or_insert(candidate);
-    }
     let mut promoted_candidates: Vec<_> = promoted_candidates.into_values().collect();
     promoted_candidates.sort_unstable_by(|left, right| {
         left.promoted_parent
@@ -1148,6 +1466,27 @@ pub(crate) fn sort_viewport_sortable_parents(
         ));
     }
 
+    // Una promoción segmentada necesita conservar el child completo para las
+    // demás bandas. Reutilizar su entidad y cambiarle el Z movería también
+    // esos píxeles; en su lugar se mantiene el child original y se materializa
+    // una copia recortada por banda. Las copias existentes se actualizan en el
+    // mismo pase, mientras que las nuevas entran al sorter en el tick
+    // siguiente cuando Bevy aplica el `CommandQueue`.
+    let mut segment_proxy_candidates: Vec<_> = promotion_by_parent_band.into_values().collect();
+    segment_proxy_candidates.sort_unstable_by(|left, right| {
+        left.candidate
+            .promoted_parent
+            .insertion_key
+            .cmp(&right.candidate.promoted_parent.insertion_key)
+            .then_with(|| left.band.cmp(&right.band))
+            .then_with(|| {
+                left.candidate
+                    .combine_ordinal
+                    .cmp(&right.candidate.combine_ordinal)
+            })
+            .then_with(|| left.candidate.entity_bits.cmp(&right.candidate.entity_bits))
+    });
+
     #[cfg(test)]
     {
         child_depth_windows.sort_runs += 1;
@@ -1158,6 +1497,9 @@ pub(crate) fn sort_viewport_sortable_parents(
     // descargado conserve el límite de una escena anterior.
     child_depth_windows.next_parent_depth.clear();
     if input.is_empty() {
+        for proxy_entity in existing_segment_proxies.into_values() {
+            commands.entity(proxy_entity).despawn();
+        }
         return;
     }
 
@@ -1181,6 +1523,10 @@ pub(crate) fn sort_viewport_sortable_parents(
         .collect();
     let order = viewport_sort_parent_sprites(&sprite_parents);
     let sorted_depths = depths_in_viewport_sort_order_from_order(&order, &source_depths);
+    let global_sorted_parents: Vec<_> = order
+        .iter()
+        .map(|&index| (input[index].0, input[index].1, sorted_depths[index]))
+        .collect();
     export_viewport_sort_trace(&input, &order, &sorted_depths, scope, precise_scope);
 
     // En el stream final, cada parent reserva el espacio hasta el siguiente.
@@ -1219,16 +1565,88 @@ pub(crate) fn sort_viewport_sortable_parents(
         }
     }
 
-    for ((entity, _, current_depth), sorted_depth) in input.into_iter().zip(sorted_depths) {
+    for ((entity, _, current_depth), &sorted_depth) in input.iter().zip(&sorted_depths) {
         if (current_depth - sorted_depth).abs() > f32::EPSILON {
-            if let Ok((_, _, _, mut transform, _)) = parents.get_mut(entity) {
+            if let Ok((_, _, _, mut transform, _)) = parents.get_mut(*entity) {
                 transform.translation.z = sorted_depth;
-            } else if let Ok((_, _, _, _, _, mut transform, _)) =
-                promotable_children.get_mut(entity)
+            } else if let Ok((_, _, _, _, _, mut transform, _, _, _)) =
+                promotable_children.get_mut(*entity)
             {
                 transform.translation.z = sorted_depth;
             }
         }
+    }
+
+    // Los proxies no entran en el sort global: cada copia sólo existe en una
+    // banda y debe ocupar un hueco entre los parents que esa banda realmente
+    // recibe. Reusar los slots globales aquí desplazaría el Z de todo el mapa
+    // cada vez que aparece un combine segmentado.
+    let mut candidates_by_band: HashMap<i64, Vec<ViewportSegmentProxyCandidate>> = HashMap::new();
+    for candidate in segment_proxy_candidates {
+        candidates_by_band
+            .entry(candidate.band)
+            .or_default()
+            .push(candidate);
+    }
+    let mut bands: Vec<_> = candidates_by_band.keys().copied().collect();
+    bands.sort_unstable();
+    for band in bands {
+        let Some(candidates) = candidates_by_band.remove(&band) else {
+            continue;
+        };
+        let proxy_depths = segment_proxy_depths_for_band(
+            band,
+            &candidates,
+            &global_sorted_parents,
+            &parent_states,
+        );
+        for (index, proxy_candidate) in candidates.into_iter().enumerate() {
+            let candidate = proxy_candidate.candidate;
+            let key = (candidate.child_entity, proxy_candidate.band);
+            let mut proxy_transform = proxy_candidate.transform;
+            proxy_transform.translation.z = proxy_depths[index];
+            if let Some(proxy_entity) = existing_segment_proxies.remove(&key)
+                && let Ok((
+                    _,
+                    mut proxy,
+                    mut parent,
+                    mut visibility,
+                    mut transform,
+                    mut sprite,
+                    mut anchor,
+                    _,
+                )) = segment_proxies.get_mut(proxy_entity)
+            {
+                proxy.set_if_neq(ViewportSortableSegmentProxy {
+                    source_child: candidate.child_entity,
+                    band: proxy_candidate.band,
+                });
+                parent.set_if_neq(candidate.promoted_parent);
+                *visibility = Visibility::Inherited;
+                *transform = proxy_transform;
+                *sprite = proxy_candidate.sprite;
+                *anchor = proxy_candidate.anchor;
+            } else {
+                let mut entity = commands.spawn((
+                    crate::render::MapVisualLayer,
+                    proxy_candidate.sprite,
+                    proxy_candidate.anchor,
+                    proxy_transform,
+                    candidate.promoted_parent,
+                    ViewportSortableSegmentProxy {
+                        source_child: candidate.child_entity,
+                        band: proxy_candidate.band,
+                    },
+                    Visibility::Inherited,
+                ));
+                if let Some(chunk) = proxy_candidate.chunk {
+                    entity.insert(chunk);
+                }
+            }
+        }
+    }
+    for proxy_entity in existing_segment_proxies.into_values() {
+        commands.entity(proxy_entity).despawn();
     }
 }
 
@@ -1785,6 +2203,16 @@ mod tests {
             )
             .is_none()
         );
+    }
+
+    #[test]
+    fn segment_proxy_depths_are_interpolated_between_existing_slots() {
+        let mut depths = [0.0; 2];
+        assign_segment_proxy_depths(&[0, 1], Some(3.0), Some(4.0), &mut depths);
+        assert!(3.0 < depths[0] && depths[0] < depths[1] && depths[1] < 4.0);
+
+        assign_segment_proxy_depths(&[0], Some(4.0), None, &mut depths);
+        assert_eq!(depths[0], 4.0 + VIEWPORT_SEGMENT_PROXY_EDGE_STEP);
     }
 
     #[test]

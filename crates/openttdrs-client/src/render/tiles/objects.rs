@@ -59,7 +59,7 @@ use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     AirportStationAnim, AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext,
     ViewportSortableChild, ViewportSortableParent, ViewportSortablePromotableChild,
-    ViewportSortableSegmentedChild, WaterTile, WorldAssets,
+    ViewportSortableSegmentedChild, ViewportSortableSegmentedSource, WaterTile, WorldAssets,
     sprite_from_atlas_or_company_white_colour, viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
@@ -5673,11 +5673,13 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
             if front_has_sortable_parent || tunnel_catenary_parent.is_some() {
                 front_translation.z = front_source_depth;
             }
+            let front_sprite = front_image.sprite();
+            let front_transform = Transform::from_translation(front_translation);
             let mut front_entity = commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                front_image.sprite(),
-                Transform::from_translation(front_translation),
+                front_sprite.clone(),
+                front_transform,
             ));
             if let Some(parent) = front_sortable_parent {
                 front_entity.insert(parent);
@@ -5704,6 +5706,10 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                         combine_ordinal: 1,
                     },
                     ViewportSortableSegmentedChild,
+                    ViewportSortableSegmentedSource {
+                        sprite: front_sprite,
+                        transform: front_transform,
+                    },
                 ));
             }
             let front_parent_entity = front_entity.id();

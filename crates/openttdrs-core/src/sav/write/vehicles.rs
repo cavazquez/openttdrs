@@ -775,6 +775,7 @@ fn common_wire_for(
     dest_tile_idx: u32,
     direction: u8,
     engine_type: u16,
+    cargo_capacity: u32,
     order_list_ref: u32,
     subtype: u8,
     next_ref: u32,
@@ -834,7 +835,7 @@ fn common_wire_for(
         vehstatus,
         cargo,
         cargo_subtype: v.cargo_subtype,
-        cargo_capacity: u16::try_from(v.capacity).unwrap_or(u16::MAX),
+        cargo_capacity: u16::try_from(cargo_capacity).unwrap_or(u16::MAX),
         refit_capacity: v.refit_capacity,
         cargo_count: u16::try_from(cargo_count).unwrap_or(u16::MAX),
         cargo_packet_refs: cargo_packet_refs.to_vec(),
@@ -880,6 +881,21 @@ fn common_wire_for(
         tick_counter: v.newgrf_tick_counter,
         running_ticks: v.running_ticks,
     }
+}
+
+/// `VEHS.common.cargo_cap` es local a la unidad. La cabeza de un consist
+/// conserva en el runtime la suma agregada, por lo que el writer debe volver
+/// a proyectarla contra su motor/refit antes de serializarla.
+fn cargo_capacity_for_wire(state: &GameState, vehicle: &Vehicle) -> u32 {
+    if vehicle.kind != VehicleKind::Train {
+        return vehicle.capacity;
+    }
+    let mut unit = vehicle.clone();
+    crate::train_consist::unit_capacity_for_vehicle(
+        &mut unit,
+        &state.engine_catalog,
+        &state.cargo_spec_catalog,
+    )
 }
 
 fn wire_position(v: &Vehicle) -> (i32, i32) {
@@ -1101,6 +1117,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     dest_tile_idx,
                     direction,
                     engine_type,
+                    v.capacity,
                     order_list_ref,
                     if is_helicopter {
                         AIR_HELICOPTER
@@ -1330,6 +1347,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     dest_tile_idx,
                     direction,
                     engine_type,
+                    cargo_capacity_for_wire(state, v),
                     order_list_ref,
                     subtype,
                     next_ref,
@@ -1357,6 +1375,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     dest_tile_idx,
                     direction,
                     engine_type,
+                    v.capacity,
                     order_list_ref,
                     TRAIN_SUBTYPE_FRONT_ENGINE,
                     0,
@@ -1385,6 +1404,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     dest_tile_idx,
                     direction,
                     engine_type,
+                    v.capacity,
                     order_list_ref,
                     TRAIN_SUBTYPE_FRONT_ENGINE,
                     0,

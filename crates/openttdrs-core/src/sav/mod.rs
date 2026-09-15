@@ -2278,6 +2278,12 @@ impl GameState {
                 vehicle.capacity = u32::from(v.cargo_capacity);
             }
             if kind == VehicleKind::Train {
+                // `cargo_cap` es la capacidad efectiva de esta unidad, no la
+                // suma del consist. La cabeza se agregará después, al
+                // reconstruir `next_unit`; conservar aquí el valor permite
+                // que los vagones importados mantengan refits/capacidades
+                // custom aunque su EngineID se resuelva al fallback goods.
+                vehicle.capacity = u32::from(v.cargo_capacity);
                 vehicle.train_crash_anim_pos = v.train_crash_anim_pos;
                 vehicle.force_proceed = v.train_force_proceed != 0;
                 vehicle.train_track = v.train_track;
@@ -2293,8 +2299,6 @@ impl GameState {
             }
             if v.is_wagon && kind == VehicleKind::Train {
                 vehicle.engine_id = Some(crate::engine::ENGINE_WAGON_GOODS);
-                vehicle.capacity = crate::engine::engine_by_id(crate::engine::ENGINE_WAGON_GOODS)
-                    .map_or(25, |e| e.capacity);
                 vehicle.running = false;
                 state.vehicles.push(vehicle);
                 continue;

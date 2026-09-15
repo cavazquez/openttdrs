@@ -84,6 +84,74 @@ pub fn consist_changed(vehicles: &mut [Vehicle], head_id: u32) {
     consist_changed_with_map(vehicles, head_id, None);
 }
 
+/// Devuelve la capacidad local de una unidad ferroviaria.
+///
+/// `Vehicle::capacity` es la suma del consist cuando la unidad es la cabeza
+/// de una formación; `LoadUnloadVehicle`, `cargo_cap` de SAV y los writers,
+/// en cambio, trabajan con la capacidad de la unidad concreta. Los followers
+/// ya almacenan ese valor local, mientras que una cabeza encadenada debe
+/// resolver su motor/refit sin leer accidentalmente la suma agregada.
+pub(crate) fn unit_capacity_for_vehicle(
+    vehicle: &mut Vehicle,
+    engine_catalog: &[EngineDef],
+    cargo_spec_catalog: &[crate::cargo_spec::CargoSpecDef],
+) -> u32 {
+    if vehicle.kind != VehicleKind::Train
+        || vehicle.prev_unit.is_some()
+        || vehicle.next_unit.is_none()
+    {
+        return vehicle.capacity;
+    }
+    let Some(engine_id) = vehicle.engine_id else {
+        // Escenarios legacy con una cabeza sintética sin EngineID conservan
+        // una capacidad local genérica, no la suma de sus vagones.
+        return crate::vehicle::VEHICLE_CAPACITY;
+    };
+    let Some(engine) = engine_for_id(engine_catalog, engine_id).cloned() else {
+        // Un EngineID custom no cargado no permite reconstruir su propiedad
+        // nativa. El fallback genérico evita publicar/consumir la capacidad
+        // agregada como si perteneciera a la locomotora.
+        return crate::vehicle::VEHICLE_CAPACITY;
+    };
+    if vehicle.refit_capacity > 0 {
+        return u32::from(vehicle.refit_capacity);
+    }
+    if let Some(capacity) =
+        crate::newgrf_callback::resolve_vehicle_current_refit_capacity(&engine, vehicle)
+    {
+        return capacity;
+    }
+    if let Some(capacity) =
+        crate::newgrf_callback::resolve_vehicle_capacity_property_callback(&engine, vehicle)
+    {
+        let cargo = vehicle
+            .cargo_type
+            .or(engine.cargo)
+            .unwrap_or(crate::cargo::CargoType::Passengers);
+        return crate::cargo_spec::apply_cargo_capacity_multiplier(
+            capacity,
+            cargo_spec_catalog,
+            cargo,
+        );
+    }
+    if engine.capacity > 0 {
+        let cargo = vehicle
+            .cargo_type
+            .or(engine.cargo)
+            .unwrap_or(crate::cargo::CargoType::Passengers);
+        return crate::cargo_spec::apply_cargo_capacity_multiplier(
+            engine.capacity,
+            cargo_spec_catalog,
+            cargo,
+        );
+    }
+    if engine.is_train_engine() {
+        0
+    } else {
+        vehicle.capacity
+    }
+}
+
 /// Como [`consist_changed`], con mapa para retener followers en `Track::Depot`.
 pub fn consist_changed_with_map(
     vehicles: &mut [Vehicle],
@@ -253,8 +321,16 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
         // CB15 devuelve la capacidad final y por eso tiene prioridad sobre
         // la propiedad modificada por CB36. Si falla, DetermineCapacity cae
         // a la propiedad Action0/CB36 y recién después al valor catalogado.
+        // Un follower importado desde SAV conserva su `cargo_cap` local en
+        // `Vehicle::capacity`; no se debe reemplazar por la capacidad
+        // genérica del motor al reconstruir la suma de la cabeza. Las
+        // callbacks dinámicas siguen teniendo prioridad.
+        let persisted_unit_capacity =
+            (id != head_id && v.native_engine_type.is_some() && v.capacity > 0)
+                .then_some(v.capacity);
         let capacity = refit_callback_capacity
             .or(property_callback_capacity)
+            .or(persisted_unit_capacity)
             .unwrap_or(eng.capacity);
         // La cabeza guarda la suma del consist más abajo; cada follower sí
         // conserva su capacidad local para que LoadUnloadStation no vuelva a

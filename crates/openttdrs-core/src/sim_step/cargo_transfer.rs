@@ -228,72 +228,19 @@ fn vehicle_load_unload_speed(state: &mut GameState, vehicle_idx: usize, cargo: C
 /// cabeza con unidades enganchadas hay que reconstruir ese valor local desde
 /// el motor/refit; los followers ya conservan su capacidad individual.
 fn vehicle_unit_capacity(state: &mut GameState, vehicle_idx: usize) -> u32 {
-    let Some(vehicle) = state.vehicles.get(vehicle_idx) else {
+    if vehicle_idx >= state.vehicles.len() {
         return 0;
-    };
-    if vehicle.kind != VehicleKind::Train
-        || vehicle.prev_unit.is_some()
-        || vehicle.next_unit.is_none()
-    {
-        return vehicle.capacity;
     }
-    let Some(engine_id) = vehicle.engine_id else {
-        // Los escenarios legacy pueden usar una cabeza ferroviaria sintética
-        // sin `EngineID`; `ConsistChanged` conserva en `capacity` sólo la suma
-        // agregada de los vagones en ese caso. Su capacidad local histórica
-        // es la del vehículo genérico, no esa suma.
-        return crate::vehicle::VEHICLE_CAPACITY;
-    };
-    let Some(engine) = crate::engine::engine_in_catalog(&state.engine_catalog, engine_id)
-        .or_else(|| crate::engine::engine_by_id(engine_id))
-        .cloned()
-    else {
-        // Un motor no catalogado sigue el mismo contrato de compatibilidad:
-        // el `cargo_cap` local no puede ser la capacidad agregada de la
-        // cabeza después de reconstruir el consist.
-        return vehicle.capacity;
-    };
-    if vehicle.refit_capacity > 0 {
-        return u32::from(vehicle.refit_capacity);
-    }
-    let refit_capacity = crate::newgrf_callback::resolve_vehicle_current_refit_capacity(
-        &engine,
-        &mut state.vehicles[vehicle_idx],
+    let (vehicles, engine_catalog, cargo_spec_catalog) = (
+        &mut state.vehicles,
+        &state.engine_catalog,
+        &state.cargo_spec_catalog,
     );
-    if let Some(capacity) = refit_capacity {
-        return capacity;
-    }
-    let property_capacity = crate::newgrf_callback::resolve_vehicle_capacity_property_callback(
-        &engine,
-        &mut state.vehicles[vehicle_idx],
-    );
-    if let Some(capacity) = property_capacity {
-        let cargo = state.vehicles[vehicle_idx]
-            .cargo_type
-            .or(engine.cargo)
-            .unwrap_or(CargoType::Passengers);
-        return crate::cargo_spec::apply_cargo_capacity_multiplier(
-            capacity,
-            &state.cargo_spec_catalog,
-            cargo,
-        );
-    }
-    if engine.capacity > 0 {
-        let cargo = state.vehicles[vehicle_idx]
-            .cargo_type
-            .or(engine.cargo)
-            .unwrap_or(CargoType::Passengers);
-        return crate::cargo_spec::apply_cargo_capacity_multiplier(
-            engine.capacity,
-            &state.cargo_spec_catalog,
-            cargo,
-        );
-    }
-    if engine.is_train_engine() {
-        0
-    } else {
-        state.vehicles[vehicle_idx].capacity
-    }
+    crate::train_consist::unit_capacity_for_vehicle(
+        &mut vehicles[vehicle_idx],
+        engine_catalog,
+        cargo_spec_catalog,
+    )
 }
 
 /// Refresca las capacidades que pueden cambiar mediante CB36 antes de

@@ -112,6 +112,121 @@ fn imports_consist_2wagon_with_three_chained_units() {
 }
 
 #[test]
+fn sav_roundtrip_preserves_local_capacity_for_heterogeneous_consist() {
+    let raw = std::fs::read(fixture_path("train_consist_2wagon_pbs_15_3.sav"))
+        .expect("fixture multi-vagón");
+    let mut sav_game = sav::load(&raw).expect("cargar fixture multi-vagón");
+    sav_game
+        .vehicles
+        .iter_mut()
+        .filter(|vehicle| vehicle.is_wagon)
+        .enumerate()
+        .for_each(|(index, vehicle)| {
+            vehicle.cargo_capacity = match index {
+                0 => 40,
+                1 => 60,
+                _ => unreachable!("fixture de dos vagones"),
+            };
+        });
+
+    let imported = GameState::from_sav_game(sav_game);
+    let imported_head = imported
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.kind == VehicleKind::Train && vehicle.is_consist_head())
+        .expect("cabeza");
+    let imported_ids = consist_unit_ids(&imported.vehicles, imported_head.id);
+    let imported_capacities: Vec<u32> = imported_ids
+        .iter()
+        .map(|id| {
+            imported
+                .vehicles
+                .iter()
+                .find(|vehicle| vehicle.id == *id)
+                .expect("unidad")
+                .capacity
+        })
+        .collect();
+    assert_eq!(
+        imported_capacities,
+        vec![100, 40, 60],
+        "cabeza agregada + units locales"
+    );
+
+    // Se cambia el estado después de importar para invalidar el passthrough
+    // de VEHS y forzar al writer a emitir las capacidades locales nuevas.
+    let mut state = GameState::from_sav_game(sav::load(&raw).expect("recargar fixture"));
+    let head = state
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.kind == VehicleKind::Train && vehicle.is_consist_head())
+        .expect("cabeza para exportar")
+        .clone();
+    let ids = consist_unit_ids(&state.vehicles, head.id);
+    for (id, capacity) in ids.iter().skip(1).zip([40, 60]) {
+        state
+            .vehicles
+            .iter_mut()
+            .find(|vehicle| vehicle.id == *id)
+            .expect("vagón para exportar")
+            .capacity = capacity;
+    }
+    openttdrs_core::consist_changed(&mut state.vehicles, head.id);
+    let capacities: Vec<u32> = ids
+        .iter()
+        .map(|id| {
+            state
+                .vehicles
+                .iter()
+                .find(|vehicle| vehicle.id == *id)
+                .expect("unidad")
+                .capacity
+        })
+        .collect();
+    assert_eq!(capacities, vec![100, 40, 60]);
+
+    let bytes = sav::write::save_to_bytes_with(&state, sav::write::SavContainer::Ottn)
+        .expect("reexportar consist heterogéneo");
+    let exported = sav::load(&bytes).expect("leer reexport");
+    let exported_head = exported
+        .vehicles
+        .iter()
+        .find(|vehicle| !vehicle.is_wagon)
+        .expect("cabeza reexportada");
+    assert_eq!(
+        exported_head.cargo_capacity, 0,
+        "cargo_cap local de la locomotora"
+    );
+    let exported_wagons: Vec<u16> = exported
+        .vehicles
+        .iter()
+        .filter(|vehicle| vehicle.is_wagon)
+        .map(|vehicle| vehicle.cargo_capacity)
+        .collect();
+    assert_eq!(exported_wagons, vec![40, 60]);
+
+    let reimported = GameState::from_sav_game(exported);
+    let reimported_head = reimported
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.kind == VehicleKind::Train && vehicle.is_consist_head())
+        .expect("cabeza reimportada");
+    let reimported_ids = consist_unit_ids(&reimported.vehicles, reimported_head.id);
+    let reimported_capacities: Vec<u32> = reimported_ids
+        .iter()
+        .map(|id| {
+            reimported
+                .vehicles
+                .iter()
+                .find(|vehicle| vehicle.id == *id)
+                .expect("unidad reimportada")
+                .capacity
+        })
+        .collect();
+    assert_eq!(reimported_capacities, vec![100, 40, 60]);
+}
+
+#[test]
 fn oracle_trace_declares_schema_v2_with_units() {
     let rows = load_oracle();
     assert_eq!(rows.len(), 502, "metadata + initial + 500 ticks");

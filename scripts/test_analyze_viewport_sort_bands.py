@@ -104,6 +104,7 @@ def main() -> int:
         report = analyze(trace, load_candidate(candidate_path))
         summary = report["summary"]
         candidate_summary = report["candidate"]
+        segment_coverage = report["segment_coverage"]
         if (
             summary["segments"] != 2
             or summary["parents"] != 4
@@ -113,6 +114,10 @@ def main() -> int:
             or candidate_summary["reference_bounds_not_in_candidate"] != 0
             or candidate_summary["local_proxies"] != 1
             or candidate_summary["effective_parents"] != 3
+            or segment_coverage["order_comparison"]["status"] != "not_comparable"
+            or segment_coverage["summary"]["segments"] != 2
+            or segment_coverage["summary"]["segments_with_complete_unique_identity_coverage"] != 1
+            or segment_coverage["segments"][1]["reference_unique_identities_not_in_candidate"] != 1
         ):
             print(json.dumps(report, indent=2), file=sys.stderr)
             return 1

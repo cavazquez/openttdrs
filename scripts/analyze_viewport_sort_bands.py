@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -23,6 +23,7 @@ class TraceError(RuntimeError):
 
 
 Bounds = tuple[int, int, int, int, int, int]
+Identity = tuple[int, Bounds]
 
 
 @dataclass(frozen=True)
@@ -223,8 +224,8 @@ def candidate_sort_entries(
     return entries
 
 
-def candidate_identities(candidate: dict[str, Any]) -> tuple[set[tuple[int, Bounds]], set[Bounds]]:
-    identities: set[tuple[int, Bounds]] = set()
+def candidate_identities(candidate: dict[str, Any]) -> tuple[set[Identity], set[Bounds]]:
+    identities: set[Identity] = set()
     bounds: set[Bounds] = set()
     for field, index, parent in candidate_sort_entries(candidate):
         label = f"candidate.{field}[{index}]"
@@ -233,6 +234,99 @@ def candidate_identities(candidate: dict[str, Any]) -> tuple[set[tuple[int, Boun
         identities.add(identity)
         bounds.add(identity[1])
     return identities, bounds
+
+
+def identity_json(identity: Identity) -> dict[str, Any]:
+    sprite, bounds = identity
+    return {
+        "sprite_id": sprite,
+        "world_bounds": dict(
+            zip(("xmin", "ymin", "zmin", "xmax", "ymax", "zmax"), bounds)
+        ),
+    }
+
+
+def segment_identity_coverage(
+    trace: ScreenshotSortTrace,
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
+    """Resume cobertura sin aplanar los vectores independientes del native.
+
+    El sorter nativo se invoca una vez por segmento y reinicia
+    ``final_ordinal`` en cada llamada. La traza candidata actual expone un
+    vector global, por lo que sus identidades pueden contrastarse por
+    segmento, pero no se puede derivar un orden global legítimo concatenando
+    los segmentos. Las cuentas de esta función son deliberadamente de
+    conjuntos: un parent global candidato puede representar la misma caja en
+    más de una banda nativa; las repeticiones se informan aparte.
+    """
+    candidate_identities_set, candidate_bounds = candidate_identities(candidate)
+    segments: list[dict[str, Any]] = []
+    complete_segments = 0
+    reference_unique_identities: set[Identity] = set()
+    reference_bounds: set[Bounds] = set()
+    repeated_parent_occurrences = 0
+    missing_identity_total = 0
+    missing_bounds_total = 0
+
+    for segment in trace.segments:
+        reference_counts: Counter[Identity] = Counter(
+            (parent.sprite, parent.bounds) for parent in segment.parents
+        )
+        segment_identities = set(reference_counts)
+        segment_bounds = {identity[1] for identity in segment_identities}
+        missing_identities = segment_identities - candidate_identities_set
+        missing_segment_bounds = segment_bounds - candidate_bounds
+        same_bounds_different_sprite = sorted(
+            identity
+            for identity in missing_identities
+            if identity[1] in candidate_bounds
+        )
+        repeated = sum(count - 1 for count in reference_counts.values() if count > 1)
+        reference_unique_identities.update(segment_identities)
+        reference_bounds.update(segment_bounds)
+        repeated_parent_occurrences += repeated
+        missing_identity_total += len(missing_identities)
+        missing_bounds_total += len(missing_segment_bounds)
+        if not missing_identities:
+            complete_segments += 1
+        segments.append(
+            {
+                "segment": segment.ordinal,
+                "reference_parents": len(segment.parents),
+                "reference_unique_identities": len(segment_identities),
+                "reference_unique_bounds": len(segment_bounds),
+                "reference_unique_identities_not_in_candidate": len(missing_identities),
+                "reference_bounds_not_in_candidate": len(missing_segment_bounds),
+                "same_bounds_different_sprite": len(same_bounds_different_sprite),
+                "repeated_parent_occurrences": repeated,
+                "missing_identity_examples": [
+                    identity_json(identity) for identity in sorted(missing_identities)[:8]
+                ],
+            }
+        )
+
+    return {
+        "order_comparison": {
+            "status": "not_comparable",
+            "reference_segments": len(trace.segments),
+            "candidate_scope": "global",
+            "reason": (
+                "el sorter de referencia reinicia final_ordinal en cada segmento; "
+                "no se concatenan segmentos para inferir un orden global"
+            ),
+        },
+        "summary": {
+            "segments": len(trace.segments),
+            "segments_with_complete_unique_identity_coverage": complete_segments,
+            "reference_unique_identities": len(reference_unique_identities),
+            "reference_unique_bounds": len(reference_bounds),
+            "reference_unique_identities_not_in_candidate": missing_identity_total,
+            "reference_bounds_not_in_candidate": missing_bounds_total,
+            "reference_repeated_parent_occurrences": repeated_parent_occurrences,
+        },
+        "segments": segments,
+    }
 
 
 def analyze(
@@ -311,6 +405,7 @@ def analyze(
             "candidate_bounds_not_in_reference": len(candidate_bounds - reference_bounds),
             "same_bounds_different_sprite": len(same_bounds_different_sprite),
         }
+        report["segment_coverage"] = segment_identity_coverage(trace, candidate)
     return report
 
 
@@ -356,6 +451,20 @@ def main(argv: list[str] | None = None) -> int:
             f"{candidate_summary['same_bounds_different_sprite']} con misma caja y sprite distinto, "
             f"{candidate_summary['reference_bounds_not_in_candidate']} cajas de referencia ausentes"
         )
+        segment_coverage = report.get("segment_coverage")
+        if segment_coverage:
+            order = segment_coverage["order_comparison"]
+            segment_summary = segment_coverage["summary"]
+            print(
+                "orden entre segmentos: "
+                f"{order['status']} ({order['reference_segments']} segmentos independientes)"
+            )
+            print(
+                "cobertura de identidades por segmento: "
+                f"{segment_summary['segments_with_complete_unique_identity_coverage']}/"
+                f"{segment_summary['segments']} completos; "
+                f"{segment_summary['reference_repeated_parent_occurrences']} repeticiones"
+            )
     return 0
 
 

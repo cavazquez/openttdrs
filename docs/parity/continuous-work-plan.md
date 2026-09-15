@@ -8435,3 +8435,16 @@ depósito use una fracción incorrecta. Las regresiones
 la representación raw y el consumidor físico. La biblioteca core queda en
 `2788 passed; 0 failed; 1 ignored`; #329/#567 siguen abiertos por
 YAPF/costes navales, callbacks y cachés visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-YAPF-WATER-COST (2026-09-15, `4469a5cf`): se añadió
+un coste naval ponderado por tile alineado con la penalización de velocidad de
+`YapfShip`; mar usa `ocean_speed_frac` y canal/río usa `canal_speed_frac`, ambos
+como reducciones nativas. El routing de barcos y la selección entre varios
+`DockingTile` usan el coste acumulado, y la caché separa estos perfiles de las
+rutas genéricas y de otros motores. La regresión
+`ship_yapf_cost_prefers_sea_detour_over_slow_canal` prueba el desvío por mar
+ante un canal corto con reducción 128. Validación: `2789` tests de core
+pasados, `0` fallidos y `1` ignorado, Clippy estricto de core/binario cliente,
+`cargo check` del cliente y formato verdes. #329/#567 permanecen abiertos por
+curvas/trackdirs navales, ocupación de muelles, locks, callbacks y cachés
+visuales NewGRF restantes.

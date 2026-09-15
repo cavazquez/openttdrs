@@ -5635,3 +5635,16 @@ rehidratar un SAV, y queda cubierta por
 `ship_max_speed_uses_canal_fraction_for_river_and_water_tunnelbridge`. Core
 queda en `2788 passed; 0 failed; 1 ignored`; #329/#567 permanecen abiertos por
 YAPF/costes navales, callbacks y cachés visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-YAPF-WATER-COST (2026-09-15, `4469a5cf`): la ruta
+naval runtime pondera cada tile con la reducción `ocean_speed_frac` /
+`canal_speed_frac` de `YapfShip`, usando la clase efectiva (mar frente a
+canal-río) y comparando el coste acumulado al elegir entre varios muelles. La
+caché de rutas incluye ambas propiedades y separa explícitamente las rutas
+navales de las genéricas, evitando reutilizar el camino de otro motor. La
+regresión `ship_yapf_cost_prefers_sea_detour_over_slow_canal` fuerza un desvío
+por mar cuando el canal corto tiene reducción 128. Validación: `2789 passed; 0
+failed; 1 ignored` en la biblioteca core, Clippy estricto de core y del binario
+cliente, `cargo check` del cliente y formato verdes. #329/#567 siguen abiertos
+por curvas/trackdirs navales, ocupación de muelles, locks, callbacks y cachés
+visuales NewGRF restantes.

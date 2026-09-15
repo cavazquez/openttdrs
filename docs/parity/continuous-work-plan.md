@@ -7903,3 +7903,22 @@ la orientación; esto valida el camino integrado toolbar → preview → raster,
 no sólo el parser del selector. No hay todavía un oráculo nativo equivalente
 para el ghost de UI ni cobertura de callbacks NewGRF, por lo que #326/#567
 siguen abiertas y esta evidencia no declara paridad completa.
+
+Corrección #326-MAP-SHOT-FIRST-CAMERA (2026-09-15, `51b337e4`): el driver de
+captura fija centro y escala en el primer frame disponible, mientras conserva
+la apertura del tool en el frame 30. Así `RenderRefresh` no ordena primero el
+mapa grande con la pose panorámica inicial (`35.507` parents) antes de aplicar
+el scope de la captura. En Kale, Normal `1280×720`, el PNG comparable queda en
+`70.673/921.600` píxeles distintos (`7,6685 %`), sin traslación, frente a
+`72.513/921.600` (`7,8682 %`) de la etapa anterior. La corrección pasa `1538`
+tests del cliente, Clippy estricto y formato. #326 continúa abierta: esta
+mejora estabiliza el arnés y no demuestra paridad global.
+
+Validación #326-SORT-LOCAL-PROXY-TRACE-REAL (2026-09-15): con el primer frame
+ya centrado, la traza real de Kale registra `precise_scope`, `1.572` parents
+globales y `9` proxies locales; el analizador queda en `0` cajas de referencia
+ausentes y `0` sprites distintos para las identidades observadas. La misma
+ejecución con traza agotó el timeout antes de emitir PNG porque serializa el
+stream diagnóstico repetidamente; su JSON sí es válido y no se usa para la
+métrica raster anterior. #326 permanece abierta por las familias y escalas
+restantes.

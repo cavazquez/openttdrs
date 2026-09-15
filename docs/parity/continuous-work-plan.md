@@ -8038,3 +8038,19 @@ los `1540` tests del cliente (2 ignorados), formato, `git diff --check` y
 Clippy estricto del binario. La corrección reduce trabajo en `Out2x`, pero aún
 quedan la matriz raster amplia, `Out4x`/`Out8x`, otras familias visuales y el
 framebuffer global.
+
+Extensión #326-SORT-PRECISE-OUT4X (2026-09-15, `5d62bfe5`): la misma banda
+diagonal se habilita ahora hasta `Out4x`; `Out8x` conserva el AABB histórico.
+En `Kale_TitleGame.sav`, a 1280×720 y centro `189,126`, el stream baja de
+`28.757` parents AABB a `14.894` parents más `130` proxies locales (`15.024`
+efectivos), frente a `14.470` parents del sorter nativo en 15 segmentos. La
+comparación raster mejora levemente: `770.716`→`770.683` píxeles brutos y
+`750.111`→`750.098` alineados.
+
+La A/B adicional conserva exactamente el PNG del depósito naval de
+`mvp_openttd_ship.sav` (8 parents) y de la fixture rica con estación, tren, bus
+e industria (11 parents); no desaparecen ghost, boyas ni capas. Esto es una
+reducción de trabajo validada en `Out4x`, no paridad visual completa: el trace
+todavía deja 28 identidades nativas fuera y miles de bounds conservadores
+adicionales, por lo que #326/#567 siguen abiertas para la matriz raster, otras
+familias y `Out8x`.

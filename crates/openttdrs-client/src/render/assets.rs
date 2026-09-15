@@ -144,6 +144,8 @@ pub(crate) struct WorldAssets {
     pub(crate) dock_flat: [AtlasSprite; 2],
     /// Boya (`buoy.png`).
     pub(crate) buoy: AtlasSprite,
+    /// Cuatro fases del parpadeo de radio (`palette.cpp`, índices 239/240).
+    pub(crate) buoy_radio_anim_frames: Vec<AtlasSprite>,
     /// Helipuerto / hangar 1×1.
     pub(crate) airport_heliport: AtlasSprite,
     pub(crate) airport_hangar: AtlasSprite,
@@ -504,6 +506,9 @@ impl WorldAssets {
         ];
         let dock_flat = [atlas.get("dock_flat_x.png"), atlas.get("dock_flat_y.png")];
         let buoy = atlas.get("buoy.png");
+        let buoy_radio_anim_frames = (0..crate::render::RADIO_BLINK_FRAME_COUNT)
+            .filter_map(|frame| atlas.try_get(&format!("buoy_radio_anim_{frame:02}.png")))
+            .collect();
         let airport_heliport = atlas.get("airport_heliport.png");
         let airport_hangar = atlas.get("airport_hangar_front.png");
         let airport_apron = atlas.get("airport_apron.png");
@@ -883,6 +888,7 @@ impl WorldAssets {
             dock_slope,
             dock_flat,
             buoy,
+            buoy_radio_anim_frames,
             airport_heliport,
             airport_hangar,
             airport_apron,

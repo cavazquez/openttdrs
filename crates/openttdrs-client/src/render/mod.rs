@@ -24,6 +24,7 @@ mod label_spatial_index;
 mod lighthouse_anim;
 pub(crate) mod newgrf_cache;
 pub(crate) mod object_newgrf;
+mod radio_blink;
 mod refinery_fire;
 mod road_newgrf;
 mod shore_newgrf;
@@ -59,7 +60,8 @@ pub(crate) use company_recolor::{
 pub(crate) use components::{
     FizzyDrinkAnimFrames, IndustryPreviewCamera, LighthouseAnimFrames, MapLabelLod, MapLabelText,
     MapPreviewCamera, MapSpriteBatches, MapTileChunk, MapVisualLayer, PrimaryGameCamera,
-    RefineryFireAnimFrames, ShoreTile, WaterAnimFrames, WaterAtlasAnimation, WaterTile,
+    RadioBlinkAnimFrames, RefineryFireAnimFrames, ShoreTile, WaterAnimFrames, WaterAtlasAnimation,
+    WaterTile,
 };
 pub(crate) use disaster_craft::DisasterCraftPlugin;
 pub(crate) use effect_fx::EffectVehiclePlugin;
@@ -83,6 +85,7 @@ pub(crate) use industry_anim::{
 pub(crate) use industry_draw_proc::{IndustryDrawProcPlugin, spawn_industry_draw_proc_overlays};
 pub(crate) use label_spatial_index::{MapLabelCandidates, MapLabelSpatialIndex};
 pub(crate) use lighthouse_anim::{LighthouseAnim, LighthouseAnimPlugin};
+pub(crate) use radio_blink::{RADIO_BLINK_FRAME_COUNT, RadioBlinkAnim, RadioBlinkAnimPlugin};
 pub(crate) use refinery_fire::{RefineryFireAnim, RefineryFireAnimPlugin};
 pub(crate) use sign_labels::SignLabel;
 pub(crate) use smoke::{

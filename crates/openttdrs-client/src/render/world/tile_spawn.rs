@@ -885,6 +885,9 @@ pub(crate) fn setup(
     commands.insert_resource(crate::render::LighthouseAnimFrames {
         by_sprite: assets.lighthouse_anim_frames.clone(),
     });
+    commands.insert_resource(crate::render::RadioBlinkAnimFrames(
+        assets.buoy_radio_anim_frames.clone(),
+    ));
     commands.insert_resource(crate::render::ChimneySmokeFrames(
         assets.chimney_smoke.clone(),
     ));
@@ -995,6 +998,9 @@ pub(crate) fn spawn_intro_map_render(
     commands.insert_resource(crate::render::LighthouseAnimFrames {
         by_sprite: assets.lighthouse_anim_frames.clone(),
     });
+    commands.insert_resource(crate::render::RadioBlinkAnimFrames(
+        assets.buoy_radio_anim_frames.clone(),
+    ));
     commands.insert_resource(crate::render::ChimneySmokeFrames(
         assets.chimney_smoke.clone(),
     ));

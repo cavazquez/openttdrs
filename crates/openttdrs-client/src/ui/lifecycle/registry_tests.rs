@@ -124,6 +124,7 @@ const REQUIRED_SESSION_POLICIES: &[&str] = &[
     "RefineryFireAnimFrames",
     "FizzyDrinkAnimFrames",
     "LighthouseAnimFrames",
+    "RadioBlinkAnimFrames",
     "ChimneySmokeFrames",
     "CopperMineSmokeFrames",
     "EffectVehicleFrames",

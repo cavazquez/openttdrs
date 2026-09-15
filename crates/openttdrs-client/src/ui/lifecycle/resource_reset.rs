@@ -10,7 +10,7 @@ use crate::render::{
     FizzyDrinkAnimFrames, LighthouseAnimFrames, LoadedMapTileChunks, MapTileSpawnViewport,
     NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache, NewGrfHouseSpriteCache,
     NewGrfObjectSpriteCache, NewGrfRoadSpriteCache, NewGrfShoreSpriteCache,
-    NewGrfStationSpriteCache, NewGrfTrainSpriteCache, RefineryFireAnimFrames,
+    NewGrfStationSpriteCache, NewGrfTrainSpriteCache, RadioBlinkAnimFrames, RefineryFireAnimFrames,
     RemapMapVisualsPending, TileAtlas, TruckHandles, VehicleIndex, WaterAnimFrames, WorldAssets,
 };
 use crate::simulation::SimClock;
@@ -517,6 +517,10 @@ pub(super) static RESOURCE_REMOVES: &[ResourceTeardown] = &[
     ResourceTeardown {
         name: "LighthouseAnimFrames",
         apply: remove_res::<LighthouseAnimFrames>,
+    },
+    ResourceTeardown {
+        name: "RadioBlinkAnimFrames",
+        apply: remove_res::<RadioBlinkAnimFrames>,
     },
     ResourceTeardown {
         name: "ChimneySmokeFrames",

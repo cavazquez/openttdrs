@@ -34,8 +34,8 @@ use crate::persistence::PersistencePlugin;
 use crate::render::{
     AirportStationAnimPlugin, BubbleEffectPlugin, DisasterCraftPlugin, EffectVehiclePlugin,
     FizzyDrinkAnimPlugin, HouseLiftAnimPlugin, IndustryBuildingAnimPlugin, IndustryDrawProcPlugin,
-    IndustrySmokePlugin, LighthouseAnimPlugin, RefineryFireAnimPlugin, TileAnimPlugin,
-    TrainSmokePlugin, WaterAnimationPlugin,
+    IndustrySmokePlugin, LighthouseAnimPlugin, RadioBlinkAnimPlugin, RefineryFireAnimPlugin,
+    TileAnimPlugin, TrainSmokePlugin, WaterAnimationPlugin,
 };
 use crate::render::{VehicleRenderPlugin, WorldRenderPlugin};
 use crate::render_trace::RenderTracePlugin;
@@ -259,6 +259,7 @@ pub(crate) fn build_client_app(
             RefineryFireAnimPlugin,
             FizzyDrinkAnimPlugin,
             LighthouseAnimPlugin,
+            RadioBlinkAnimPlugin,
             HouseLiftAnimPlugin,
             IndustrySmokePlugin,
             IndustryBuildingAnimPlugin,

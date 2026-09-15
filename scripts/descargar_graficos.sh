@@ -678,14 +678,17 @@ for offset in range(19):
     crop_by_id(4061 + offset, f"terrain_water_{offset:02d}.png")
 # Costas: el set completo (SPR_SHORE_BASE + 0..17) vive en el GRF *extra*
 # (Action5 0x0D) y lo extrae scripts/gen_shore_full_set.py, no este NFO base.
-# Ship depot
+# Ship depot. The vanilla station layout uses SPR_IMG_BUOY (693) for the
+# visible fallback buoy. SPR_BUOY (4076) is an intentionally empty OpenGFX
+# base-set slot; extracting it here silently turns every in-game buoy into a
+# transparent 1x1 sprite even though the renderer reaches the correct branch.
 crop_by_id(4070, "ship_depot_se_front.png")
 crop_by_id(4071, "ship_depot_sw_front.png")
 crop_by_id(4072, "ship_depot_nw.png")
 crop_by_id(4073, "ship_depot_ne.png")
 crop_by_id(4074, "ship_depot_se_rear.png")
 crop_by_id(4075, "ship_depot_sw_rear.png")
-crop_by_id(4076, "buoy.png")
+crop_by_id(693, "buoy.png")  # SPR_IMG_BUOY; 4076 is the empty base slot
 
 # =============================================================================
 # CARRETERAS (MP_ROAD) - alineado con src/sprites/road.rs
@@ -1524,6 +1527,8 @@ python3 "$(dirname "$0")/gen_road_depot_gfx_data.py"
 # una descarga incompleta no puede considerarse válida.
 python3 "$(dirname "$0")/extract_aircraft_vehicle_sprites.py"
 python3 "$(dirname "$0")/gen_oil_refinery_anim_frames.py"
+# Parpadeo de radio de la boya: índices 239/240 de la paleta global.
+python3 "$(dirname "$0")/gen_radio_blink_anim_frames.py"
 
 # Los recortes 8bpp de scripts auxiliares pueden recuperar el colorkey magenta
 # como RGB opaco. Normalizar el catálogo completo antes de deduplicar y atlas.

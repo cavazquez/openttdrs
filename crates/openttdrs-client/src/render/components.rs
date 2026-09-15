@@ -68,6 +68,10 @@ pub(crate) struct LighthouseAnimFrames {
     pub(crate) by_sprite: HashMap<u32, Vec<AtlasSprite>>,
 }
 
+/// Cuatro fases RGBA del parpadeo de radio de la boya vanilla.
+#[derive(Resource)]
+pub(crate) struct RadioBlinkAnimFrames(pub(crate) Vec<AtlasSprite>);
+
 /// Teselas de suelo, vías, vehículos, etc.: se despawnan al recargar JSON (F9).
 #[derive(Component)]
 pub(crate) struct MapVisualLayer;

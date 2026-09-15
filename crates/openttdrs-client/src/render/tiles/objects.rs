@@ -366,6 +366,16 @@ const SPR_SHORE_BASE: u32 = 5936;
 /// compara el ID global que entrega OpenTTD después de resolver el baseset.
 const SPR_BUOY: u32 = 9282;
 
+/// Desplazamiento vertical del sprite vanilla `SPR_IMG_BUOY`.
+///
+/// `tile_pos_half` centra la entrada del atlas sobre la tesela. La entrada
+/// OpenGFX 693 declara `yrel=2`; con el ancla de `TILE_SEQ_LINE` de la boya,
+/// el raster nativo queda 2,5 píxeles por encima de ese centro. En las
+/// coordenadas Y-up de Bevy eso se expresa sumando 2,5. El medio píxel evita
+/// duplicar una scanline en el borde inferior del recorte de 16 píxeles. Las
+/// boyas NewGRF siguen usando `overlay_pos` y sus offsets decodificados.
+const VANILLA_BUOY_Y_OFFSET: f32 = 2.5;
+
 /// Caja `TILE_SEQ_LINE(4, -1, 0, 0, 0, 0, SPR_IMG_BUOY)` de
 /// `station_land.h`. Las boyas no usan una caja de volumen: deben poder
 /// quedar visualmente por debajo de los barcos.
@@ -2783,30 +2793,34 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 action5_sprites.as_deref_mut(),
                 images.as_deref_mut(),
             );
-            let (sprite, sprite_id, mut position) =
-                if let Some((sprite, decoded, selected_slot)) = custom_buoy {
-                    (
-                        tint_building_sprite(sprite),
-                        canal_feature_trace_sprite_id(openttdrs_core::CF_BUOY, selected_slot),
-                        overlay_pos(
-                            ctx.iso_pos,
-                            f32::from(decoded.x_offs),
-                            f32::from(decoded.y_offs),
-                            f32::from(decoded.width),
-                            f32::from(decoded.height),
-                            base_z,
-                            0.04,
-                            ctx.tx_i32(),
-                            ctx.ty_i32(),
-                        ),
-                    )
-                } else {
-                    (
-                        tint_building_sprite(assets.buoy.sprite()),
-                        SPR_BUOY,
-                        tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.04, half_h),
-                    )
-                };
+            let vanilla_buoy = custom_buoy.is_none();
+            let (sprite, sprite_id, mut position) = if let Some((sprite, decoded, selected_slot)) =
+                custom_buoy
+            {
+                (
+                    tint_building_sprite(sprite),
+                    canal_feature_trace_sprite_id(openttdrs_core::CF_BUOY, selected_slot),
+                    overlay_pos(
+                        ctx.iso_pos,
+                        f32::from(decoded.x_offs),
+                        f32::from(decoded.y_offs),
+                        f32::from(decoded.width),
+                        f32::from(decoded.height),
+                        base_z,
+                        0.04,
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                    ),
+                )
+            } else {
+                let mut position = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.04, half_h);
+                position.y += VANILLA_BUOY_Y_OFFSET;
+                (
+                    tint_building_sprite(assets.buoy.sprite()),
+                    SPR_BUOY,
+                    position,
+                )
+            };
             WorldDrawTrace::record_sprite_with_geometry(
                 "station-buoy",
                 "sortable",
@@ -2818,7 +2832,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             );
             let source_depth = viewport_source_depth(position.z, ctx.tx, dims.0);
             position.z = source_depth;
-            commands.spawn((
+            let mut buoy_entity = commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 sprite,
@@ -2830,6 +2844,11 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     source_depth,
                 },
             ));
+            if vanilla_buoy
+                && assets.buoy_radio_anim_frames.len() == crate::render::RADIO_BLINK_FRAME_COUNT
+            {
+                buoy_entity.insert(crate::render::RadioBlinkAnim);
+            }
         }
         StationTileClass::Airport => {
             if buildings_hidden() {

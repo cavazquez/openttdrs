@@ -975,6 +975,21 @@ fn buoy_station_water_keeps_openttd_ground_xrel_center() {
         buoy_parent.source_depth, buoy_transform.translation.z,
         "el sprite de boya debe conservar el slot de profundidad del compositor"
     );
+    let (tileh, base_z) = crate::iso::tile_slope_and_min_z(
+        &world.resource::<TsMap>().0,
+        buoy.x as u32,
+        buoy.y as u32,
+    );
+    let half_h = if tileh == 0 {
+        crate::iso::TILE_HALF_H
+    } else {
+        crate::iso::slope_half_h(tileh)
+    };
+    assert_eq!(
+        buoy_transform.translation.y,
+        crate::iso::tile_pos_half(buoy.x, buoy.y, base_z, 0.04, half_h).y + 2.5,
+        "SPR_IMG_BUOY declara yrel=2 y debe quedar dos píxeles sobre el centro de la tesela"
+    );
 }
 
 #[test]

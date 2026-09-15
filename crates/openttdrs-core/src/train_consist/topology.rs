@@ -104,14 +104,21 @@ pub(crate) fn unit_capacity_for_vehicle(
     }
     let Some(engine_id) = vehicle.engine_id else {
         // Escenarios legacy con una cabeza sintética sin EngineID conservan
-        // una capacidad local genérica, no la suma de sus vagones.
-        return crate::vehicle::VEHICLE_CAPACITY;
+        // una capacidad local genérica, no la suma de sus vagones. Los SAV
+        // modernos pueden conservar además el `cargo_cap` nativo aunque el
+        // motor custom no se haya podido resolver.
+        return vehicle
+            .native_cargo_capacity
+            .unwrap_or(crate::vehicle::VEHICLE_CAPACITY);
     };
     let Some(engine) = engine_for_id(engine_catalog, engine_id).cloned() else {
         // Un EngineID custom no cargado no permite reconstruir su propiedad
-        // nativa. El fallback genérico evita publicar/consumir la capacidad
-        // agregada como si perteneciera a la locomotora.
-        return crate::vehicle::VEHICLE_CAPACITY;
+        // nativa. Usar el `cargo_cap` persistido evita publicar/consumir la
+        // capacidad agregada como si perteneciera a la locomotora; si el save
+        // es legacy y no lo conserva, se mantiene el fallback genérico.
+        return vehicle
+            .native_cargo_capacity
+            .unwrap_or(crate::vehicle::VEHICLE_CAPACITY);
     };
     if vehicle.refit_capacity > 0 {
         return u32::from(vehicle.refit_capacity);
@@ -284,10 +291,8 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
         let Some(v) = vehicles.iter_mut().find(|v| v.id == id) else {
             continue;
         };
-        let eng = v
-            .engine_id
-            .and_then(|id| engine_for_id(engine_catalog, id))
-            .unwrap_or_else(|| crate::engine::engine_for_vehicle(v.kind, 0));
+        let configured_engine = v.engine_id.and_then(|id| engine_for_id(engine_catalog, id));
+        let eng = configured_engine.unwrap_or_else(|| crate::engine::engine_for_vehicle(v.kind, 0));
         let visual_spec = crate::newgrf_callback::vehicle_visual_effect_spec(eng, v);
         // OpenTTD: powered wagon si la cabeza aporta `pow_wag_power`, la
         // unidad usa un override de vagón real y CB10/Action0 no fija
@@ -308,10 +313,8 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
             continue;
         };
         total_len = total_len.saturating_add(u16::from(v.unit_length.max(1)));
-        let eng = v
-            .engine_id
-            .and_then(|id| engine_for_id(engine_catalog, id))
-            .unwrap_or_else(|| crate::engine::engine_for_vehicle(v.kind, 0));
+        let configured_engine = v.engine_id.and_then(|id| engine_for_id(engine_catalog, id));
+        let eng = configured_engine.unwrap_or_else(|| crate::engine::engine_for_vehicle(v.kind, 0));
         let refit_callback_capacity = (eng.capacity > 0 || eng.cargo.is_some())
             .then(|| crate::newgrf_callback::resolve_vehicle_current_refit_capacity(eng, v))
             .flatten();
@@ -325,9 +328,15 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
         // `Vehicle::capacity`; no se debe reemplazar por la capacidad
         // genérica del motor al reconstruir la suma de la cabeza. Las
         // callbacks dinámicas siguen teniendo prioridad.
-        let persisted_unit_capacity =
+        let persisted_unit_capacity = if id == head_id && configured_engine.is_none() {
+            // `Vehicle::capacity` ya puede ser la suma de una ejecución
+            // anterior de `ConsistChanged`; sólo la copia nativa separada es
+            // segura para recuperar la capacidad local de una cabeza custom.
+            v.native_cargo_capacity
+        } else {
             (id != head_id && v.native_engine_type.is_some() && v.capacity > 0)
-                .then_some(v.capacity);
+                .then_some(v.capacity)
+        };
         let capacity = refit_callback_capacity
             .or(property_callback_capacity)
             .or(persisted_unit_capacity)

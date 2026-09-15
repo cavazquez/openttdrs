@@ -287,6 +287,55 @@ fn sav_roundtrip_preserves_dual_headed_consist_identity() {
 }
 
 #[test]
+fn sav_roundtrip_preserves_unknown_train_head_local_capacity() {
+    let mut state = GameState::new(64, 64);
+    let pos = TileCoord::new(20, 40);
+
+    let mut head = Vehicle::new(10, VehicleKind::Train, pos, pos);
+    head.engine_id = None;
+    head.native_engine_type = Some(511);
+    head.native_cargo_capacity = Some(7);
+    head.next_unit = Some(20);
+    let mut wagon = Vehicle::new(20, VehicleKind::Train, pos, pos);
+    wagon.engine_id = Some(openttdrs_core::engine::ENGINE_WAGON_COAL);
+    wagon.capacity = 30;
+    wagon.prev_unit = Some(10);
+    state.vehicles = vec![head, wagon];
+    let engine_catalog = state.engine_catalog.clone();
+    openttdrs_core::consist_changed_with_map_and_catalog(
+        &mut state.vehicles,
+        10,
+        Some(&state.map),
+        &engine_catalog,
+    );
+    assert_eq!(state.vehicles[0].capacity, 37);
+
+    let bytes = sav::write::save_to_bytes_with(&state, sav::write::SavContainer::Ottn)
+        .expect("exportar cabeza custom");
+    let exported = sav::load(&bytes).expect("leer cabeza custom exportada");
+    assert_eq!(exported.vehicles.len(), 2);
+    assert_eq!(exported.vehicles[0].engine_type, 511);
+    assert_eq!(exported.vehicles[0].cargo_capacity, 7);
+    assert_eq!(exported.vehicles[1].cargo_capacity, 30);
+
+    let reimported = GameState::from_sav_game(exported);
+    let imported_head = reimported
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.kind == VehicleKind::Train && vehicle.is_consist_head())
+        .expect("cabeza custom reimportada");
+    let imported_wagon = reimported
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.prev_unit == Some(imported_head.id))
+        .expect("vagón custom reimportado");
+    assert_eq!(imported_head.native_engine_type, Some(511));
+    assert_eq!(imported_head.native_cargo_capacity, Some(7));
+    assert_eq!(imported_head.capacity, 37);
+    assert_eq!(imported_wagon.capacity, 30);
+}
+
+#[test]
 fn oracle_trace_declares_schema_v2_with_units() {
     let rows = load_oracle();
     assert_eq!(rows.len(), 502, "metadata + initial + 500 ticks");

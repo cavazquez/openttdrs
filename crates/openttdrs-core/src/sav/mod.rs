@@ -2133,6 +2133,8 @@ impl GameState {
             vehicle.unit_number = v.unit_number;
             vehicle.name.clone_from(&v.name);
             vehicle.native_engine_type = Some(v.engine_type);
+            vehicle.native_cargo_capacity =
+                (kind == VehicleKind::Train).then_some(u32::from(v.cargo_capacity));
             vehicle.native_sprite_num = v.sprite_num;
             vehicle.acceleration = v.acceleration;
             vehicle.refit_capacity = v.refit_capacity;
@@ -2291,6 +2293,11 @@ impl GameState {
                 vehicle.train_gv_flags = v.train_gv_flags;
                 vehicle.wait_counter = u32::from(v.train_wait_counter);
                 vehicle.rail_pixel = rail_pixel_from_openttd_pos(v.x_pos, v.y_pos, v.direction);
+                // `Vehicle::new` instala un motor vanilla por defecto. No
+                // conservarlo cuando el EngineID nativo es custom: de lo
+                // contrario un NewGRF ausente se convertiría silenciosamente
+                // en Kirby y perdería su capacidad local persistida.
+                vehicle.engine_id = None;
                 if let Some(candidate) = vanilla_train_engine_id(v.engine_type)
                     && crate::engine::engine_by_id(candidate).is_some()
                 {

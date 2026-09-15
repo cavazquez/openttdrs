@@ -334,6 +334,13 @@ pub struct Vehicle {
     /// primero del catálogo vanilla.
     #[serde(default)]
     pub native_engine_type: Option<u16>,
+    /// Capacidad local `VEHS.common.cargo_cap` de una unidad importada.
+    ///
+    /// La cabeza de un consist usa `capacity` como suma agregada después de
+    /// `ConsistChanged`; conservar la capacidad nativa separada permite
+    /// reconstruir una cabeza cuyo `EngineID` `NewGRF` no está en el catálogo.
+    #[serde(default)]
+    pub native_cargo_capacity: Option<u32>,
     /// Sprite base nativo (`Vehicle::spritenum`) conservado para round-trip SAV.
     #[serde(default)]
     pub native_sprite_num: u8,
@@ -856,6 +863,7 @@ impl Vehicle {
             direction: DIR_NE,
             engine_id: Some(engine_id),
             native_engine_type: None,
+            native_cargo_capacity: None,
             native_sprite_num: if kind == VehicleKind::Ship {
                 engine.ship_image_index
             } else {

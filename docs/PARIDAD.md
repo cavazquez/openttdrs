@@ -5248,3 +5248,20 @@ ignorado), formato, `git diff --check` y Clippy de la librería con
 `-D warnings`. Esta frontera queda validada, pero no cierra #329/#567: aún
 faltan YAPF/wormholes navales amplios, callbacks/runtime NewGRF y la aceptación
 visual/framebuffer completa.
+
+Corrección #326-SORT-PRECISE-OUT2X (2026-09-15, `05ff7b1a`): el sorter de
+viewport extiende el culling diagonal preciso hasta `Out2x` (`ortho_scale=2`) y
+conserva el conjunto AABB desde `Out4x`, donde todavía no hay una matriz raster
+equivalente validada. En `Kale_TitleGame.sav`, centrado en `189,126`, a 1280×720
+y escala 2, la captura nativa reduce los parents considerados de `13.353` a
+`4.695` y materializa `42` proxies locales; la divergencia bruta baja de
+`759.517` a `759.439` píxeles y la alineada de `578.845` a `578.601`. La
+regresión de límites verifica `Out2x` habilitado y `Out4x` conservador.
+
+La comprobación naval en `mvp_openttd_ship.sav`, centrada en `32,32` a 512² y
+escala 2, conserva el ghost y las capas visibles del depósito; su residuo sigue
+dominado por la diferencia de fondo 8bpp y no justifica cerrar #326/#567. Pasan
+los `1540` tests del cliente (2 ignorados), formato, `git diff --check` y
+Clippy estricto del binario. La corrección reduce trabajo en `Out2x`, pero aún
+quedan la matriz raster amplia, `Out4x`/`Out8x`, otras familias visuales y el
+framebuffer global.

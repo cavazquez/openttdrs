@@ -91,6 +91,8 @@ use crate::ui::vehicle_list::VehicleListState;
 use crate::ui::vehicle_window::VehicleWindowState;
 
 const OPEN_FRAME: u32 = 30;
+/// Evita que `RenderRefresh` ordene el mapa con la pose panorámica inicial.
+const MAP_SHOT_CAMERA_FRAME: u32 = 1;
 const SHOT_FRAME: u32 = 60;
 const EXIT_FRAME: u32 = 120;
 /// Un `.sav` grande puede necesitar varios frames para materializar todos los
@@ -1590,7 +1592,7 @@ fn map_shot_driver(
 ) {
     progress.frame += 1;
     let shot_frame = map_shot_capture_frame();
-    if progress.frame == OPEN_FRAME
+    if progress.frame == MAP_SHOT_CAMERA_FRAME
         && let Some(center) = map_shot_center_from_env()
         && let Ok((mut transform, mut projection)) = camera_q.single_mut()
     {

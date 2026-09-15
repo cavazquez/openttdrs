@@ -2115,6 +2115,7 @@ pub enum SavVehicleKind {
 
 /// Vehículo decodificado del chunk `VEHS`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct SavVehicle {
     /// ID de la fila `VEHS` (referenciado por `Vehicle::next`).
     pub sav_id: u32,
@@ -2332,6 +2333,10 @@ pub struct SavVehicle {
     pub running: bool,
     /// Tren: unidad sin `GVSF_FRONT` (vagón del consist anterior).
     pub is_wagon: bool,
+    /// Tren: la unidad conserva `GVSF_MULTIHEADED` en el subtipo nativo.
+    pub is_multiheaded: bool,
+    /// Tren: cabina trasera (`MULTIHEADED` sin `FRONT` ni `ENGINE`).
+    pub is_rear_dualheaded: bool,
     /// Avión: `subtype == AIR_HELICOPTER` (0) del save (heli vs. ala fija).
     pub is_helicopter: bool,
     /// Avión: waypoint FTA actual (`Aircraft::pos`).
@@ -2359,6 +2364,10 @@ pub struct SavVehicle {
 
 /// Bit `GVSF_FRONT` de `Vehicle::subtype` (cabeza de convoy en tren/camión).
 const GVSF_FRONT: u64 = 0x01;
+/// Bit `GVSF_ENGINE` de `Vehicle::subtype` (unidad que aporta motor).
+const GVSF_ENGINE: u64 = 1 << 3;
+/// Bit `GVSF_MULTIHEADED` de `Vehicle::subtype` (cabinas duales).
+const GVSF_MULTIHEADED: u64 = 1 << 5;
 
 /// Proyecta `Ship::state` (`TrackBits`) al índice de track que usa el
 /// controlador Rust. Los valores restantes son estados especiales de
@@ -2655,11 +2664,13 @@ pub(crate) fn vehicles_from_chunks(
             continue;
         }
         let is_front = subtype & GVSF_FRONT != 0;
+        let is_multiheaded = kind == SavVehicleKind::Train && subtype & GVSF_MULTIHEADED != 0;
+        let is_rear_dualheaded = is_multiheaded && !is_front && subtype & GVSF_ENGINE == 0;
         // Carretera: solo cabezas. Tren: cabeza y vagones.
         if kind == SavVehicleKind::RoadVehicle && !is_front {
             continue;
         }
-        let is_wagon = kind == SavVehicleKind::Train && !is_front;
+        let is_wagon = kind == SavVehicleKind::Train && !is_front && !is_rear_dualheaded;
         // `AIR_HELICOPTER = 0` en `AirVehicleSubType`.
         let is_helicopter = kind == SavVehicleKind::Aircraft && subtype == 0;
         let Some(tile) = record_get(common, "tile").and_then(SlValue::as_u64) else {
@@ -3261,6 +3272,8 @@ pub(crate) fn vehicles_from_chunks(
             running_ticks,
             running,
             is_wagon,
+            is_multiheaded,
+            is_rear_dualheaded,
             is_helicopter,
             airport_pos,
             airport_previous_pos,

@@ -2375,6 +2375,42 @@ impl GameState {
             state.vehicles[to].prev_unit = Some(from_id);
         }
 
+        // `GVSF_MULTIHEADED` no crea por sí solo una unidad extra en el
+        // runtime: el par se representa con `other_multiheaded_part`, además
+        // de la cadena `next`/`prev`. Rehidratar ambos enlaces después de
+        // reconstruir la cadena permite conservar potencia, costes y las
+        // restricciones de acoplamiento de las cabinas duales.
+        for front in sav.vehicles.iter().filter(|vehicle| {
+            vehicle.kind == SavVehicleKind::Train
+                && vehicle.is_multiheaded
+                && !vehicle.is_rear_dualheaded
+        }) {
+            let Some(rear_sav_id) = front.next_sav_id else {
+                continue;
+            };
+            let Some(rear) = sav
+                .vehicles
+                .iter()
+                .find(|vehicle| vehicle.sav_id == rear_sav_id && vehicle.is_rear_dualheaded)
+            else {
+                continue;
+            };
+            let (Some(&front_slot), Some(&rear_slot)) = (
+                slots_by_sav_id.get(&front.sav_id),
+                slots_by_sav_id.get(&rear.sav_id),
+            ) else {
+                continue;
+            };
+            let (front_id, rear_id) = (state.vehicles[front_slot].id, state.vehicles[rear_slot].id);
+            if state.vehicles[front_slot].next_unit != Some(rear_id)
+                || state.vehicles[rear_slot].prev_unit != Some(front_id)
+            {
+                continue;
+            }
+            state.vehicles[front_slot].other_multiheaded_part = Some(rear_id);
+            state.vehicles[rear_slot].other_multiheaded_part = Some(front_id);
+        }
+
         // Fallback para saves antiguos que no traen la referencia `next`.
         // Solo enlaza el bloque contiguo de trenes, sin inventar conexiones a
         // través de una fila de otro vehículo.
@@ -3984,6 +4020,8 @@ mod tests {
                     running_ticks: 0,
                     running: true,
                     is_wagon: false,
+                    is_multiheaded: false,
+                    is_rear_dualheaded: false,
                     is_helicopter: false,
                     airport_pos: 0,
                     airport_previous_pos: 0,
@@ -4097,6 +4135,8 @@ mod tests {
                     running_ticks: 0,
                     running: true,
                     is_wagon: false,
+                    is_multiheaded: false,
+                    is_rear_dualheaded: false,
                     is_helicopter: false,
                     airport_pos: 0,
                     airport_previous_pos: 0,
@@ -4210,6 +4250,8 @@ mod tests {
                     running_ticks: 0,
                     running: true,
                     is_wagon: false,
+                    is_multiheaded: false,
+                    is_rear_dualheaded: false,
                     is_helicopter: false,
                     airport_pos: 0,
                     airport_previous_pos: 0,
@@ -4323,6 +4365,8 @@ mod tests {
                     running_ticks: 0,
                     running: true,
                     is_wagon: true,
+                    is_multiheaded: false,
+                    is_rear_dualheaded: false,
                     is_helicopter: false,
                     airport_pos: 0,
                     airport_previous_pos: 0,

@@ -35,6 +35,15 @@ const TRAIN_SUBTYPE_FRONT_ENGINE: u8 = 0x01 | 0x08;
 /// `GroundVehicleSubtypeFlags::GVSF_WAGON` (unidad remolcada del consist).
 const TRAIN_SUBTYPE_WAGON: u8 = 1 << 2;
 
+/// `GroundVehicleSubtypeFlags::GVSF_MULTIHEADED` (cabina dual).
+const TRAIN_SUBTYPE_MULTIHEADED: u8 = 1 << 5;
+
+/// Cabina frontal de una unidad dual (`FRONT | ENGINE | MULTIHEADED`).
+const TRAIN_SUBTYPE_FRONT_MULTIHEADED: u8 = TRAIN_SUBTYPE_FRONT_ENGINE | TRAIN_SUBTYPE_MULTIHEADED;
+
+/// Cabina trasera de una unidad dual (`MULTIHEADED`, sin `FRONT`/`ENGINE`).
+const TRAIN_SUBTYPE_REAR_MULTIHEADED: u8 = TRAIN_SUBTYPE_MULTIHEADED;
+
 /// `AirVehicleSubType::AIR_AIRCRAFT` (ala fija; no requiere rotor).
 const AIR_AIRCRAFT: u8 = 2;
 /// `AirVehicleSubType::AIR_HELICOPTER`.
@@ -133,6 +142,27 @@ fn cargo_ottd_byte(v: &Vehicle) -> u8 {
         VehicleKind::Truck => 2,                                           // correo
         VehicleKind::Ship => 3,                                            // petróleo
         VehicleKind::Train => 1,                                           // carbón
+    }
+}
+
+/// Subtipo nativo de una unidad ferroviaria, incluyendo la pareja dual.
+fn train_subtype_for(v: &Vehicle) -> u8 {
+    let Some(other_id) = v.other_multiheaded_part else {
+        return if v.prev_unit.is_none() {
+            TRAIN_SUBTYPE_FRONT_ENGINE
+        } else {
+            TRAIN_SUBTYPE_WAGON
+        };
+    };
+
+    // En una formación válida la cabina frontal apunta a su pareja mediante
+    // `next_unit`, mientras que la trasera la referencia con `prev_unit`.
+    // Usar esos enlaces conserva la identidad aun si el par lleva vagones
+    // adicionales detrás.
+    if v.next_unit == Some(other_id) || v.prev_unit.is_none() {
+        TRAIN_SUBTYPE_FRONT_MULTIHEADED
+    } else {
+        TRAIN_SUBTYPE_REAR_MULTIHEADED
     }
 }
 
@@ -1326,11 +1356,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
         if is_train {
             let train_runtime = train_wire_for(state, v);
             let engine_type = openttd_train_engine_type(v);
-            let subtype = if v.prev_unit.is_none() {
-                TRAIN_SUBTYPE_FRONT_ENGINE
-            } else {
-                TRAIN_SUBTYPE_WAGON
-            };
+            let subtype = train_subtype_for(v);
             let next_ref = v
                 .next_unit
                 .and_then(|next_id| sparse_by_vehicle_id.get(&next_id).copied())
@@ -2238,6 +2264,64 @@ mod tests {
             record_get(middle_common, "subtype").and_then(SlValue::as_u64),
             Some(u64::from(TRAIN_SUBTYPE_WAGON))
         );
+    }
+
+    #[test]
+    fn vehs_preserves_train_dual_head_subtypes() {
+        use crate::sav::chunks::{find_chunk, parse_chunks};
+        use crate::sav::table::{SlValue, parse_table_chunk, record_get};
+
+        let mut state = GameState::new(64, 64);
+        let pos = TileCoord::new(20, 40);
+        let mut front = Vehicle::new(10, VehicleKind::Train, pos, pos);
+        front.engine_id = Some(crate::engine::ENGINE_TRAIN_MANLEY_MOREL);
+        front.next_unit = Some(20);
+        front.other_multiheaded_part = Some(20);
+        let mut rear = Vehicle::new(20, VehicleKind::Train, pos, pos);
+        rear.engine_id = Some(crate::engine::ENGINE_TRAIN_MANLEY_MOREL);
+        rear.prev_unit = Some(10);
+        rear.other_multiheaded_part = Some(10);
+        state.vehicles = vec![front, rear];
+
+        let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
+        let chunk = vehs_chunk(&vehs).unwrap();
+        let chunks = parse_chunks(&chunk).unwrap();
+        let raw = find_chunk(&chunks, "VEHS").expect("VEHS");
+        let rows = parse_table_chunk(&raw.body, true).expect("parse VEHS");
+        assert_eq!(rows.len(), 2);
+
+        fn train_common(row: &crate::sav::table::SlRecord) -> &crate::sav::table::SlRecord {
+            let train = match record_get(row, "train") {
+                Some(SlValue::Structs(items)) => items.first().expect("train"),
+                other => panic!("train ausente: {other:?}"),
+            };
+            match record_get(train, "common") {
+                Some(SlValue::Structs(items)) => items.first().expect("common"),
+                other => panic!("common ausente: {other:?}"),
+            }
+        }
+
+        assert_eq!(
+            record_get(train_common(&rows[0].1), "subtype").and_then(SlValue::as_u64),
+            Some(u64::from(TRAIN_SUBTYPE_FRONT_MULTIHEADED))
+        );
+        assert_eq!(
+            record_get(train_common(&rows[1].1), "subtype").and_then(SlValue::as_u64),
+            Some(u64::from(TRAIN_SUBTYPE_REAR_MULTIHEADED))
+        );
+
+        let parsed = crate::sav::entities::vehicles_from_chunks(
+            &chunks,
+            64,
+            &crate::sav::orders::SavOrderImport::from_chunks(&chunks, 360),
+            360,
+        );
+        assert_eq!(parsed.len(), 2);
+        assert!(parsed.iter().all(|vehicle| vehicle.is_multiheaded));
+        assert!(!parsed[0].is_rear_dualheaded);
+        assert!(parsed[1].is_rear_dualheaded);
+        assert!(!parsed[0].is_wagon);
+        assert!(!parsed[1].is_wagon);
     }
 
     #[test]

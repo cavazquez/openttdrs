@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use openttdrs_core::{
-    GameState, TileCoord, VehicleKind, consist_unit_ids, consist_unit_poses, sav,
+    GameState, TileCoord, Vehicle, VehicleKind, consist_unit_ids, consist_unit_poses, sav,
 };
 use serde::Deserialize;
 
@@ -224,6 +224,66 @@ fn sav_roundtrip_preserves_local_capacity_for_heterogeneous_consist() {
         })
         .collect();
     assert_eq!(reimported_capacities, vec![100, 40, 60]);
+}
+
+#[test]
+fn sav_roundtrip_preserves_dual_headed_consist_identity() {
+    let mut state = GameState::new(64, 64);
+    let pos = TileCoord::new(20, 40);
+    let engine_id = openttdrs_core::engine::ENGINE_TRAIN_MANLEY_MOREL;
+
+    let mut front = Vehicle::new(10, VehicleKind::Train, pos, pos);
+    front.engine_id = Some(engine_id);
+    front.next_unit = Some(20);
+    front.other_multiheaded_part = Some(20);
+    front.capacity = 38;
+    let mut rear = Vehicle::new(20, VehicleKind::Train, pos, pos);
+    rear.engine_id = Some(engine_id);
+    rear.prev_unit = Some(10);
+    rear.other_multiheaded_part = Some(10);
+    rear.capacity = 38;
+    state.vehicles = vec![front, rear];
+
+    let bytes = sav::write::save_to_bytes_with(&state, sav::write::SavContainer::Ottn)
+        .expect("exportar dual-head");
+    let exported = sav::load(&bytes).expect("leer dual-head exportado");
+    assert_eq!(exported.vehicles.len(), 2);
+    assert!(
+        exported
+            .vehicles
+            .iter()
+            .all(|vehicle| vehicle.is_multiheaded)
+    );
+    assert!(!exported.vehicles[0].is_rear_dualheaded);
+    assert!(exported.vehicles[1].is_rear_dualheaded);
+    assert!(!exported.vehicles[0].is_wagon);
+    assert!(!exported.vehicles[1].is_wagon);
+
+    let reimported = GameState::from_sav_game(exported);
+    let imported_front = reimported
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.kind == VehicleKind::Train && vehicle.is_consist_head())
+        .expect("cabina frontal");
+    let imported_rear = reimported
+        .vehicles
+        .iter()
+        .find(|vehicle| {
+            vehicle.kind == VehicleKind::Train
+                && vehicle.prev_unit.is_some()
+                && vehicle.other_multiheaded_part.is_some()
+        })
+        .expect("cabina trasera");
+    let front_id = imported_front.id;
+    let rear_id = imported_rear.id;
+    assert_eq!(imported_front.next_unit, Some(rear_id));
+    assert_eq!(imported_rear.prev_unit, Some(front_id));
+    assert_eq!(imported_front.other_multiheaded_part, Some(rear_id));
+    assert_eq!(imported_rear.other_multiheaded_part, Some(front_id));
+    assert_eq!(imported_front.engine_id, Some(engine_id));
+    assert_eq!(imported_rear.engine_id, Some(engine_id));
+    assert_eq!(imported_front.capacity, 76);
+    assert_eq!(imported_rear.capacity, 38);
 }
 
 #[test]

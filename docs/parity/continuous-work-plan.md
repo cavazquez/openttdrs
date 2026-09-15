@@ -8421,3 +8421,17 @@ queda en 75/50 según la clase de agua. La biblioteca core completa queda en
 `2786 passed; 0 failed; 1 ignored`; #329/#567 permanecen abiertos por agua
 efectiva en túneles/puentes, YAPF/costes navales y las propiedades/cachés
 NewGRF restantes.
+
+Corrección #329/#567-SHIP-EFFECTIVE-WATER-CLASS (2026-09-15, `6b2bf6ea`): la
+consulta de velocidad naval usa ahora la contraparte de
+`GetEffectiveWaterClass`. Un tunnel/bridge de transporte acuático fuerza
+`Canal`, aunque sus bits persistidos indiquen otra clase, y un rail con
+`RailGroundType::HalfTileWater` fuerza `Sea`; `River` comparte correctamente
+la fracción canal. La misma resolución se aplica al refresco de cachés durante
+la rehidratación SAV por `EIDS`, evitando que el primer tick o la salida de un
+depósito use una fracción incorrecta. Las regresiones
+`effective_ship_water_class_matches_tunnelbridge_and_half_tile_rail` y
+`ship_max_speed_uses_canal_fraction_for_river_and_water_tunnelbridge` cubren
+la representación raw y el consumidor físico. La biblioteca core queda en
+`2788 passed; 0 failed; 1 ignored`; #329/#567 siguen abiertos por
+YAPF/costes navales, callbacks y cachés visuales NewGRF restantes.

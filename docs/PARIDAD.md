@@ -5625,3 +5625,13 @@ resultados 75/50 para una velocidad base 100 y reducciones 64/128. La
 validación publicada queda en `e2f8a232`, con `2786 passed; 0 failed; 1
 ignored` en la biblioteca core. #329/#567 siguen abiertos por agua efectiva en
 túneles/puentes, YAPF/costes y propiedades/cachés NewGRF aún parciales.
+
+Corrección #329/#567-SHIP-EFFECTIVE-WATER-CLASS (2026-09-15, `6b2bf6ea`): el
+runtime naval replica `GetEffectiveWaterClass`: los tunnel/bridge de agua usan
+`Canal`, los rail con `HalfTileWater` usan `Sea` y los ríos usan la fracción de
+canal. La decisión se comparte entre movimiento y refresco de cachés al
+rehidratar un SAV, y queda cubierta por
+`effective_ship_water_class_matches_tunnelbridge_and_half_tile_rail` y
+`ship_max_speed_uses_canal_fraction_for_river_and_water_tunnelbridge`. Core
+queda en `2788 passed; 0 failed; 1 ignored`; #329/#567 permanecen abiertos por
+YAPF/costes navales, callbacks y cachés visuales NewGRF restantes.

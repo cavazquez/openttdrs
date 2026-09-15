@@ -1932,16 +1932,19 @@ fn try_load_aircraft_mail_from_station_waiting_cargo(
         return false;
     }
 
-    let _ = state.stations[station_idx].cargo_packets.reserve(load);
+    let reserved = state.stations[station_idx].cargo_packets.reserve(load);
+    if reserved == 0 {
+        return false;
+    }
     let mut taken = state.stations[station_idx].take_waiting_cargo_for_next_stations(
         CargoType::Mail,
-        load,
+        reserved,
         &next_stations,
     );
     if taken.is_empty() {
         state.stations[station_idx]
             .cargo_packets
-            .consume_reserved(load);
+            .consume_reserved(reserved);
         return false;
     }
 
@@ -1970,7 +1973,7 @@ fn try_load_aircraft_mail_from_station_waiting_cargo(
     let loaded_units: u32 = taken.iter().map(|packet| u32::from(packet.count)).sum();
     state.stations[station_idx]
         .cargo_packets
-        .consume_reserved(loaded_units);
+        .consume_reserved(reserved);
 
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0
         && state.vehicles[vehicle_idx].aircraft_mail_packets.is_empty();
@@ -2240,16 +2243,19 @@ fn try_load_from_station_waiting_cargo(
         return false;
     }
 
-    let _ = state.stations[station_idx].cargo_packets.reserve(load);
+    let reserved = state.stations[station_idx].cargo_packets.reserve(load);
+    if reserved == 0 {
+        return false;
+    }
     let mut taken = state.stations[station_idx].take_waiting_cargo_for_next_stations(
         cargo,
-        load,
+        reserved,
         &next_stations,
     );
     if taken.is_empty() {
         state.stations[station_idx]
             .cargo_packets
-            .consume_reserved(load);
+            .consume_reserved(reserved);
         return false;
     }
     // Feeder + next_hop: Manual = órdenes; Asymmetric/Symmetric = FlowStat.
@@ -2279,7 +2285,7 @@ fn try_load_from_station_waiting_cargo(
     // P2.20: consumir reserva de la cola indexada por hop.
     state.stations[station_idx]
         .cargo_packets
-        .consume_reserved(loaded_units);
+        .consume_reserved(reserved);
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0
         && state.vehicles[vehicle_idx].aircraft_mail_packets.is_empty();
     if first_pickup {
@@ -3105,6 +3111,53 @@ mod tests {
                 .any(|packet| { packet.next_hop == Some(second_next) && packet.count > 0 })
         );
         assert!(state.vehicles[0].cargo_packets.total() > 1);
+    }
+
+    #[test]
+    fn station_loading_consumes_only_its_new_reservation() {
+        let pos = TileCoord::new(1, 1);
+        let first_next = TileCoord::new(2, 2);
+        let second_next = TileCoord::new(3, 3);
+        let mut state = GameState::new(5, 5);
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 2 << 3;
+        tile.m3 = 1;
+        state.map.set_tile(pos, tile).unwrap();
+
+        let mut station = crate::Station::new_with_kind(pos, crate::StopKind::TruckStop);
+        station.rating = 100;
+        station.cargo_packets.push(
+            crate::CargoPacket::new(CargoType::Goods, 7, pos).with_next_hop(Some(second_next)),
+        );
+        station.sync_stock_from_packets();
+        // Simula seis unidades reservadas por otra visita: la carga actual
+        // sólo puede tomar la unidad que reserve en este call site.
+        station.cargo_packets.reserved = 6;
+        state.stations.push(station);
+
+        let mut truck = crate::Vehicle::new(37, VehicleKind::Truck, pos, pos);
+        truck.orders = vec![
+            crate::VehicleOrder::station(pos),
+            crate::VehicleOrder::conditional(crate::OrderConditionKind::CargoLoadAbove, 50, 3),
+            crate::VehicleOrder::station(first_next),
+            crate::VehicleOrder::station(second_next),
+        ];
+        state.vehicles.push(truck);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+        let mut loaded = vec![false];
+
+        load_vehicles(&mut state, &mut loaded, &[false]);
+
+        assert!(loaded[0]);
+        assert_eq!(state.vehicles[0].cargo_packets.total(), 1);
+        assert_eq!(state.stations[0].cargo_packets.reserved, 6);
+        assert_eq!(
+            state.vehicles[0].cargo_packets.packets[0].next_hop,
+            Some(second_next)
+        );
     }
 
     #[test]

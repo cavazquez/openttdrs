@@ -45,11 +45,12 @@ struct GenericRouteJob {
     from: TileCoord,
     to: TileCoord,
     network: pathfinder::PathNetwork,
+    ship_path_cost: Option<pathfinder::ShipPathCost>,
 }
 
 #[derive(Debug)]
 struct ShipDockRouteCandidate {
-    key: (usize, u32, i32, i32),
+    key: (u32, usize, u32, i32, i32),
     dest: TileCoord,
     path: Vec<TileCoord>,
 }
@@ -246,59 +247,81 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
         if net == pathfinder::PathNetwork::Rail {
             rail_jobs.push(i);
         } else {
+            let ship_path_cost = (state.vehicles[i].kind == VehicleKind::Ship).then(|| {
+                let engine = crate::newgrf_callback::engine_for_vehicle_catalog(
+                    &state.engine_catalog,
+                    &state.vehicles[i],
+                );
+                pathfinder::ShipPathCost::from_engine(engine)
+            });
             nonrail_jobs.push(GenericRouteJob {
                 vehicle_idx: i,
                 from: state.vehicles[i].pos,
                 to: state.vehicles[i].dest,
                 network: net,
+                ship_path_cost,
             });
         }
     }
 
-    let nonrail_paths: Vec<(usize, Option<Vec<TileCoord>>)> =
-        if nonrail_jobs.len() >= PARALLEL_GENERIC_ROUTE_THRESHOLD {
-            nonrail_jobs
-                .par_iter()
-                .map(|job| {
-                    (
-                        job.vehicle_idx,
+    let nonrail_paths: Vec<(
+        usize,
+        Option<Vec<TileCoord>>,
+        Option<pathfinder::ShipPathCost>,
+    )> = if nonrail_jobs.len() >= PARALLEL_GENERIC_ROUTE_THRESHOLD {
+        nonrail_jobs
+            .par_iter()
+            .map(|job| {
+                let path = job.ship_path_cost.map_or_else(
+                    || {
                         pathfinder::find_path_with_wormholes(
                             &state.map,
                             job.from,
                             job.to,
                             job.network,
                             wh,
-                        ),
-                    )
-                })
-                .collect()
-        } else {
-            nonrail_jobs
-                .iter()
-                .map(|job| {
-                    (
-                        job.vehicle_idx,
-                        pathfinder::find_path_cached(
-                            &state.map,
-                            &mut state.runtime.path_cache,
-                            job.from,
-                            job.to,
-                            job.network,
-                            wh,
-                        ),
-                    )
-                })
-                .collect()
-        };
-    for (i, path) in nonrail_paths {
+                        )
+                    },
+                    |cost| pathfinder::find_ship_path_with_cost(&state.map, job.from, job.to, cost),
+                );
+                (job.vehicle_idx, path, job.ship_path_cost)
+            })
+            .collect()
+    } else {
+        nonrail_jobs
+            .iter()
+            .map(|job| {
+                let path = match job.ship_path_cost {
+                    Some(cost) => pathfinder::find_ship_path_cached(
+                        &state.map,
+                        &mut state.runtime.path_cache,
+                        job.from,
+                        job.to,
+                        cost,
+                    ),
+                    None => pathfinder::find_path_cached(
+                        &state.map,
+                        &mut state.runtime.path_cache,
+                        job.from,
+                        job.to,
+                        job.network,
+                        wh,
+                    ),
+                };
+                (job.vehicle_idx, path, job.ship_path_cost)
+            })
+            .collect()
+    };
+    for (i, path, ship_path_cost) in nonrail_paths {
         // `UpdateOrderDest` conserva el amarre geométricamente más cercano como
-        // fast path. Para una estación con varios `DockingTile`, `YapfShip`
+        // fast path. Para estaciones con varios `DockingTile`, `YapfShip`
         // compara la ruta real a cada pieza: el más cercano en coordenadas no
         // necesariamente es el de menor coste náutico cuando hay canales,
         // costas u obstáculos intermedios.
         if state.vehicles[i].kind == VehicleKind::Ship
             && ship_has_multiple_docking_candidates(state, i)
-            && let Some((dest, dock_path)) = route_ship_to_available_dock(state, i, wh)
+            && let Some(ship_path_cost) = ship_path_cost
+            && let Some((dest, dock_path)) = route_ship_to_available_dock(state, i, ship_path_cost)
         {
             state.vehicles[i].dest = dest;
             state.vehicles[i].path = dock_path.into_iter().collect();
@@ -374,7 +397,7 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
 fn route_ship_to_available_dock(
     state: &mut GameState,
     vehicle_idx: usize,
-    wormholes: Option<&pathfinder::TunnelWormholes>,
+    ship_path_cost: pathfinder::ShipPathCost,
 ) -> Option<(TileCoord, Vec<TileCoord>)> {
     let vehicle = &state.vehicles[vehicle_idx];
     let Some(crate::vehicle::VehicleOrder::Station { station, .. }) =
@@ -390,19 +413,19 @@ fn route_ship_to_available_dock(
         let path = if from == candidate {
             Some(Vec::new())
         } else {
-            pathfinder::find_path_cached(
+            pathfinder::find_ship_path_cached(
                 &state.map,
                 &mut state.runtime.path_cache,
                 from,
                 candidate,
-                pathfinder::PathNetwork::Water,
-                wormholes,
+                ship_path_cost,
             )
         };
         let Some(path) = path else {
             continue;
         };
         let key = (
+            pathfinder::ship_path_cost_for_path(&state.map, from, &path, ship_path_cost),
             path.len(),
             candidate.x.abs_diff(from.x) + candidate.y.abs_diff(from.y),
             candidate.x,

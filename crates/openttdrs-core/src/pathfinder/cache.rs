@@ -2,13 +2,15 @@ use std::collections::HashMap;
 
 use crate::map::TileCoord;
 
-use super::PathNetwork;
+use super::{PathNetwork, water::ShipPathCost};
+
+type PathCacheKey = (i32, i32, i32, i32, u8, u8, u8, u8);
 
 /// Caché de rutas por tick (no se serializa; se invalida al avanzar la simulación).
 #[derive(Debug, Default, Clone)]
 pub struct PathCache {
     tick: u64,
-    entries: HashMap<(i32, i32, i32, i32, u8), Vec<TileCoord>>,
+    entries: HashMap<PathCacheKey, Vec<TileCoord>>,
 }
 
 impl PathCache {
@@ -28,7 +30,18 @@ impl PathCache {
         to: TileCoord,
         network: PathNetwork,
     ) -> Option<&Vec<TileCoord>> {
-        let key = cache_key(from, to, network);
+        let key = cache_key(from, to, network, None);
+        self.entries.get(&key)
+    }
+
+    #[must_use]
+    pub fn get_ship(
+        &self,
+        from: TileCoord,
+        to: TileCoord,
+        cost: ShipPathCost,
+    ) -> Option<&Vec<TileCoord>> {
+        let key = cache_key(from, to, PathNetwork::Water, Some(cost));
         self.entries.get(&key)
     }
 
@@ -42,12 +55,36 @@ impl PathCache {
         if self.entries.len() >= Self::MAX_ENTRIES {
             self.entries.clear();
         }
-        self.entries.insert(cache_key(from, to, network), path);
+        self.entries
+            .insert(cache_key(from, to, network, None), path);
+    }
+
+    pub fn insert_ship(
+        &mut self,
+        from: TileCoord,
+        to: TileCoord,
+        cost: ShipPathCost,
+        path: Vec<TileCoord>,
+    ) {
+        if self.entries.len() >= Self::MAX_ENTRIES {
+            self.entries.clear();
+        }
+        self.entries
+            .insert(cache_key(from, to, PathNetwork::Water, Some(cost)), path);
     }
 }
 
 #[must_use]
-fn cache_key(from: TileCoord, to: TileCoord, network: PathNetwork) -> (i32, i32, i32, i32, u8) {
+fn cache_key(
+    from: TileCoord,
+    to: TileCoord,
+    network: PathNetwork,
+    ship_cost: Option<ShipPathCost>,
+) -> PathCacheKey {
+    let (ship_cost_present, ocean_speed_frac, canal_speed_frac) = ship_cost
+        .map_or((0, 0, 0), |cost| {
+            (1, cost.ocean_speed_frac, cost.canal_speed_frac)
+        });
     (
         from.x,
         from.y,
@@ -60,5 +97,8 @@ fn cache_key(from: TileCoord, to: TileCoord, network: PathNetwork) -> (i32, i32,
             PathNetwork::Air => 3,
             PathNetwork::Tram => 4,
         },
+        ship_cost_present,
+        ocean_speed_frac,
+        canal_speed_frac,
     )
 }

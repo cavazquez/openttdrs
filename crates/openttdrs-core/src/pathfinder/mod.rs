@@ -32,6 +32,7 @@ pub use station_sites::{
     station_site_adjacent_to_transport, station_site_tile_allows_build,
     station_site_tile_needs_clear,
 };
+pub use water::ShipPathCost;
 
 /// Encuentra el camino más corto entre `from` y `to` (A* con conectividad por
 /// road/track bits); ver [`find_path_with_wormholes`].
@@ -78,6 +79,40 @@ pub fn find_path_with_wormholes(
         return water::find_water_path(map, from, to);
     }
     astar::find_road_or_tram_path_with_wormholes(map, from, to, network, wormholes)
+}
+
+/// Encuentra una ruta naval ponderando las reducciones de velocidad de
+/// `YapfShip` para mar/canal-río.
+#[must_use]
+pub fn find_ship_path_with_cost(
+    map: &Map,
+    from: TileCoord,
+    to: TileCoord,
+    cost: ShipPathCost,
+) -> Option<Vec<TileCoord>> {
+    water::find_ship_path(map, from, to, cost)
+}
+
+/// Coste acumulado de una ruta naval según las propiedades de `YapfShip`.
+#[must_use]
+pub fn ship_path_cost_for_path(
+    map: &Map,
+    from: TileCoord,
+    path: &[TileCoord],
+    cost: ShipPathCost,
+) -> u32 {
+    cost.path_cost(map, from, path)
+}
+
+/// Variante naval que extrae las propiedades de velocidad del motor.
+#[must_use]
+pub fn find_ship_path_for_engine(
+    map: &Map,
+    from: TileCoord,
+    to: TileCoord,
+    engine: &crate::engine::EngineDef,
+) -> Option<Vec<TileCoord>> {
+    find_ship_path_with_cost(map, from, to, ShipPathCost::from_engine(engine))
 }
 
 /// A* direccional para vía vía YAPF.
@@ -150,12 +185,30 @@ pub fn find_path_cached(
     Some(path)
 }
 
+/// Variante con caché de [`find_ship_path_with_cost`]. La clave incluye las
+/// dos propiedades de velocidad para no reutilizar una ruta de otro motor.
+#[must_use]
+pub fn find_ship_path_cached(
+    map: &Map,
+    cache: &mut PathCache,
+    from: TileCoord,
+    to: TileCoord,
+    cost: ShipPathCost,
+) -> Option<Vec<TileCoord>> {
+    if let Some(path) = cache.get_ship(from, to, cost) {
+        return Some(path.clone());
+    }
+    let path = find_ship_path_with_cost(map, from, to, cost)?;
+    cache.insert_ship(from, to, cost, path.clone());
+    Some(path)
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::engine::{ENGINE_TRAIN_KIRBY, NEWGRF_ENGINE_ID_BASE, engine_by_id};
-    use crate::map::{RAIL_TB_X, RAIL_TB_Y, TileKind};
+    use crate::map::{RAIL_TB_X, RAIL_TB_Y, TileKind, WaterClass, make_water_tile};
     use crate::rail_type::{RailType, set_rail_type_on_tile};
     use crate::tnbp_decode::JgrTunnelRecord;
 
@@ -601,6 +654,53 @@ mod tests {
                     PathNetwork::Road
                 )
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn ship_yapf_cost_prefers_sea_detour_over_slow_canal() {
+        let mut map = Map::new_flat(7, 5, 0);
+        for y in [1_i32, 2, 3] {
+            for x in 0..=6_i32 {
+                make_water_tile(&mut map, TileCoord::new(x, y), WaterClass::Sea).expect("agua");
+            }
+        }
+        for x in 1..=5_i32 {
+            make_water_tile(&mut map, TileCoord::new(x, 2), WaterClass::Canal).expect("canal");
+        }
+
+        let cost = ShipPathCost {
+            ocean_speed_frac: 0,
+            canal_speed_frac: 128,
+        };
+        assert_eq!(cost.tile_cost(Some(WaterClass::Sea)), 100);
+        assert_eq!(cost.tile_cost(Some(WaterClass::Canal)), 200);
+
+        let mut cache = PathCache::default();
+        cache.begin_tick(1);
+        let direct = find_ship_path_cached(
+            &map,
+            &mut cache,
+            TileCoord::new(0, 2),
+            TileCoord::new(6, 2),
+            ShipPathCost::default(),
+        )
+        .expect("ruta directa");
+        assert_eq!(direct.len(), 6);
+
+        let weighted = find_ship_path_cached(
+            &map,
+            &mut cache,
+            TileCoord::new(0, 2),
+            TileCoord::new(6, 2),
+            cost,
+        )
+        .expect("desvío por mar");
+        assert_eq!(weighted.len(), 8);
+        assert!(
+            weighted
+                .iter()
+                .all(|tile| tile.y != 2 || tile.x == 0 || tile.x == 6)
         );
     }
 

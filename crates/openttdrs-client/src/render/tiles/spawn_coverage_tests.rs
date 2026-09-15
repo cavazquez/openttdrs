@@ -9375,6 +9375,162 @@ fn sloped_airports_level_ground_for_station_and_imported_object_paths() {
 }
 
 #[test]
+fn sloped_airport_foundation_matrix_keeps_blocks_and_surface_children() {
+    let assets = boot_assets_app();
+    let expected_apron = assets
+        .airport_station_sprite(2634)
+        .expect("apron airport")
+        .clone();
+    let coord = TileCoord::new(1, 1);
+    let corners = [
+        (coord.x, coord.y),
+        (coord.x + 1, coord.y),
+        (coord.x, coord.y + 1),
+        (coord.x + 1, coord.y + 1),
+    ];
+
+    // Una vuelta cubre las cuatro esquinas altas en pendientes simples y la
+    // otra reproduce las cuatro variantes empinadas (opuesta baja, dos
+    // laterales intermedias y una esquina alta), que son las que hacen que
+    // `DrawFoundation` emita el bloque inferior y el superior.
+    for steep in [false, true] {
+        for high_corner in 0..4 {
+            let mut map = Map::new_flat(3, 3, 4);
+            if steep {
+                map.set_height(
+                    TileCoord::new(corners[high_corner].0, corners[high_corner].1),
+                    6,
+                )
+                .expect("esquina alta airport steep");
+                for (corner_index, &(x, y)) in corners.iter().enumerate() {
+                    let dx = (corner_index % 2) as i32;
+                    let dy = (corner_index / 2) as i32;
+                    let high_dx = (high_corner % 2) as i32;
+                    let high_dy = (high_corner / 2) as i32;
+                    if corner_index != high_corner
+                        && (dx - high_dx).abs() + (dy - high_dy).abs() == 1
+                    {
+                        map.set_height(TileCoord::new(x, y), 5)
+                            .expect("esquina intermedia airport steep");
+                    }
+                }
+            } else {
+                let (x, y) = corners[high_corner];
+                map.set_height(TileCoord::new(x, y), 5)
+                    .expect("esquina alta airport");
+            }
+            map.set_tile(
+                coord,
+                Tile {
+                    kind: TileKind::Station,
+                    mapt: 0x50,
+                    m5: 27,     // APT_PIER_NW_NE
+                    m6: 1 << 3, // StationType::Airport
+                    ..tile_template()
+                },
+            )
+            .expect("airport matrix tile");
+
+            let grid = RenderGrid::from_map(&map, 3, 3);
+            let ctx = TileRenderContext::new(&map, &grid, 1, 1);
+            assert_ne!(
+                ctx.info.tileh, 0,
+                "la variante airport debe estar inclinada"
+            );
+            let plan = openttdrs_core::foundation_draw_plan(
+                ctx.info.tileh,
+                openttdrs_core::FOUNDATION_LEVELED,
+                0,
+            );
+            let expected_surface = ctx.info.base_z.saturating_add(plan.surface_z_delta);
+
+            let mut world = World::new();
+            world.insert_resource(TsMap(map));
+            world.insert_resource(TsGrid(grid));
+            world.insert_resource(TsAssets(assets.clone()));
+            world
+                .run_system_once(
+                    move |mut commands: Commands,
+                          m: Res<TsMap>,
+                          g: Res<TsGrid>,
+                          a: Res<TsAssets>| {
+                        spawn_station_tile(
+                            &mut commands,
+                            &m.0,
+                            m.0.dimensions(),
+                            &a.0,
+                            None,
+                            None,
+                            &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                            &[],
+                            4.0,
+                            true,
+                            &[],
+                            &[],
+                            None,
+                            None,
+                            &[],
+                            None,
+                            &[],
+                            None,
+                            &[],
+                            TEST_CLIMATE,
+                            &[],
+                        );
+                    },
+                )
+                .expect("airport foundation matrix spawn");
+
+            let foundation_parents: std::collections::HashSet<_> = world
+                .query::<(Entity, &ViewportSortableParent)>()
+                .iter(&world)
+                .filter_map(|(entity, parent)| {
+                    (FOUNDATION_ORIGINAL_SPRITE_BASE
+                        ..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                        .contains(&parent.sprite_id)
+                        .then_some(entity)
+                })
+                .collect();
+            assert_eq!(
+                foundation_parents.len(),
+                plan.sprites.iter().flatten().count(),
+                "la variante steep={steep} high_corner={high_corner} debe conservar todos los bloques"
+            );
+            assert!(
+                world.query::<&Sprite>().iter(&world).all(|sprite| {
+                    !world
+                        .resource::<TsAssets>()
+                        .0
+                        .grass_slopes
+                        .iter()
+                        .any(|grass| grass.matches(sprite))
+                }),
+                "airport steep={steep} high_corner={high_corner} no debe conservar césped inclinado"
+            );
+            assert!(
+                world
+                    .query::<(&ViewportSortableChild, &Sprite)>()
+                    .iter(&world)
+                    .any(|(child, sprite)| {
+                        foundation_parents.contains(&child.parent) && expected_apron.matches(sprite)
+                    }),
+                "el apron debe seguir a la foundation steep={steep} high_corner={high_corner}"
+            );
+            assert!(
+                world
+                    .query::<&ViewportSortableParent>()
+                    .iter(&world)
+                    .any(|parent| {
+                        parent.sprite_id == 2661
+                            && parent.bounds.zmin == i32::from(expected_surface) * 8
+                    }),
+                "el BUILD debe usar la superficie airport steep={steep} high_corner={high_corner}"
+            );
+        }
+    }
+}
+
+#[test]
 fn imported_airport_radar_keeps_its_rotating_parent_and_frame_anchor() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();

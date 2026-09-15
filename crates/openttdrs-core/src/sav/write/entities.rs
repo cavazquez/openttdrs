@@ -192,6 +192,61 @@ fn push_cargo_packet(
     Some(packet_id)
 }
 
+fn station_cargo_group_total(groups: &[StationCargoGroupWire], export: &CargoPacketExport) -> u32 {
+    groups
+        .iter()
+        .flat_map(|group| group.packet_ids.iter())
+        .filter_map(|id| export.packets.get(*id as usize))
+        .map(|packet| u32::from(packet.count))
+        .fold(0, u32::saturating_add)
+}
+
+/// Asigna primero las reservas tipadas y después el remanente legacy a los
+/// slots exportados. El remanente se distribuye de forma determinista porque
+/// el formato nativo sólo guarda un contador por entrada de cargo.
+fn station_cargo_wires(
+    cargo_packets: &crate::cargo_packet::StationCargoList,
+    by_slot: BTreeMap<u8, Vec<StationCargoGroupWire>>,
+    export: &CargoPacketExport,
+) -> Vec<StationCargoWire> {
+    let mut typed_remaining = cargo_packets
+        .reserved_by_cargo
+        .values()
+        .copied()
+        .fold(0, u32::saturating_add)
+        .min(cargo_packets.reserved);
+    let mut typed_by_slot = BTreeMap::new();
+    for (&cargo_slot, groups) in &by_slot {
+        let Some(cargo) = CargoType::from_cargo_id(cargo_slot) else {
+            continue;
+        };
+        let typed = cargo_packets
+            .reserved_by_cargo
+            .get(&cargo)
+            .copied()
+            .unwrap_or(0)
+            .min(station_cargo_group_total(groups, export))
+            .min(typed_remaining);
+        typed_remaining = typed_remaining.saturating_sub(typed);
+        typed_by_slot.insert(cargo_slot, typed);
+    }
+    let typed_assigned = typed_by_slot.values().copied().fold(0, u32::saturating_add);
+    let mut remaining_legacy = cargo_packets.reserved.saturating_sub(typed_assigned);
+    let mut refs = Vec::with_capacity(by_slot.len());
+    for (cargo_slot, groups) in by_slot {
+        let total = station_cargo_group_total(&groups, export);
+        let typed = typed_by_slot.get(&cargo_slot).copied().unwrap_or(0);
+        let legacy = remaining_legacy.min(total.saturating_sub(typed));
+        remaining_legacy = remaining_legacy.saturating_sub(legacy);
+        refs.push(StationCargoWire {
+            cargo_slot,
+            groups,
+            reserved: typed.saturating_add(legacy),
+        });
+    }
+    refs
+}
+
 /// Reúne una sola numeración CAPA para packets en estaciones y vehículos.
 ///
 /// El orden es estable (estaciones, luego vehículos, y FIFO dentro de cada
@@ -235,23 +290,7 @@ pub(crate) fn cargo_packet_export(state: &GameState, map_w: u32) -> CargoPacketE
                     packet_ids,
                 });
         }
-        let mut remaining_reserved = station.cargo_packets.reserved;
-        let mut refs = Vec::with_capacity(by_slot.len());
-        for (cargo_slot, groups) in by_slot {
-            let total = groups
-                .iter()
-                .flat_map(|group| group.packet_ids.iter())
-                .filter_map(|id| export.packets.get(*id as usize))
-                .map(|packet| u32::from(packet.count))
-                .fold(0, u32::saturating_add);
-            let reserved = remaining_reserved.min(total);
-            remaining_reserved = remaining_reserved.saturating_sub(reserved);
-            refs.push(StationCargoWire {
-                cargo_slot,
-                groups,
-                reserved,
-            });
-        }
+        let refs = station_cargo_wires(&station.cargo_packets, by_slot, &export);
         if !refs.is_empty() {
             export.station_refs.insert(station_id, refs);
         }

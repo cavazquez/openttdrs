@@ -3947,6 +3947,15 @@ mod tests {
                 .with_first_station(source)
                 .with_next_hop(Some(destination)),
         );
+        source_station.cargo_packets.push(
+            CargoPacket::new(CargoType::Mail, 5, source)
+                .with_first_station(source)
+                .with_next_hop(Some(destination)),
+        );
+        assert_eq!(
+            source_station.cargo_packets.reserve_for(CargoType::Coal, 3),
+            3
+        );
         let destination_station = Station::new_with_kind(destination, StopKind::RailStation);
         state.stations = vec![source_station, destination_station];
 
@@ -3968,14 +3977,36 @@ mod tests {
             .body
             .clone();
         let sav_game = sav::load(&bytes).expect("load");
-        assert_eq!(sav_game.cargo_packets.len(), 2);
+        assert_eq!(sav_game.cargo_packets.len(), 3);
         assert_eq!(sav_game.stations[0].cargo[0].packet_ids.len(), 1);
+        assert_eq!(sav_game.stations[0].cargo[0].reserved, 3);
+        assert_eq!(sav_game.stations[0].cargo[1].packet_ids.len(), 1);
+        assert_eq!(sav_game.stations[0].cargo[1].reserved, 0);
         assert_eq!(sav_game.vehicles[0].cargo_packet_ids.len(), 1);
 
         let loaded = GameState::from_sav_game(sav_game);
         assert_eq!(
             loaded.stations[0].cargo_packets.total_of(CargoType::Coal),
             7
+        );
+        assert_eq!(
+            loaded.stations[0].cargo_packets.total_of(CargoType::Mail),
+            5
+        );
+        assert_eq!(loaded.stations[0].cargo_packets.reserved, 3);
+        assert_eq!(
+            loaded.stations[0]
+                .cargo_packets
+                .reserved_by_cargo
+                .get(&CargoType::Coal),
+            Some(&3)
+        );
+        assert_eq!(
+            loaded.stations[0]
+                .cargo_packets
+                .reserved_by_cargo
+                .get(&CargoType::Mail),
+            None
         );
         assert_eq!(loaded.vehicles[0].cargo_packets.total(), 9);
         assert_eq!(loaded.vehicles[0].cargo_source, Some(source));

@@ -1060,9 +1060,9 @@ fn vanilla_road_engine_id(openttd_id: u16, kind: VehicleKind) -> Option<u16> {
 
 /// Convierte las referencias `STNN.goods` + `CAPA` a la cola de packets core.
 ///
-/// La reserva se conserva como total de estación porque el modelo actual de
-/// `StationCargoList` todavía no la separa por cargo. Los packets sí mantienen
-/// cargo, origen, edad y próximo hop individualmente.
+/// La reserva conserva el total legacy y, cuando el slot es conocido, también
+/// se hidrata por `CargoType`. Los packets mantienen cargo, origen, edad y
+/// próximo hop individualmente.
 fn hydrate_sav_station_cargo(
     station: &mut Station,
     saved_cargo: &[entities::SavStationCargo],
@@ -1073,12 +1073,17 @@ fn hydrate_sav_station_cargo(
 ) {
     let mut imported = Vec::new();
     let mut reserved = 0_u32;
+    let mut reserved_by_cargo = BTreeMap::<crate::CargoType, u32>::new();
     for entry in saved_cargo {
         reserved = reserved.saturating_add(entry.reserved);
         let Some(cargo) = import::cargo_from_sav_slot(entry.cargo_slot, climate, &[], save_version)
         else {
             continue;
         };
+        if entry.reserved > 0 {
+            let known = reserved_by_cargo.entry(cargo).or_default();
+            *known = known.saturating_add(entry.reserved);
+        }
         for packet_id in &entry.packet_ids {
             let Some(saved) = packets_by_id.get(packet_id) else {
                 continue;
@@ -1098,7 +1103,24 @@ fn hydrate_sav_station_cargo(
         }
     }
     station.push_waiting_packets(imported);
-    station.cargo_packets.reserved = reserved.min(station.cargo_packets.total_count());
+    let capped_reserved = reserved.min(station.cargo_packets.total_count());
+    let mut remaining_known = capped_reserved;
+    let cargo_keys: Vec<_> = reserved_by_cargo.keys().copied().collect();
+    for cargo in cargo_keys {
+        let amount = reserved_by_cargo
+            .get(&cargo)
+            .copied()
+            .unwrap_or(0)
+            .min(remaining_known);
+        if amount == 0 {
+            reserved_by_cargo.remove(&cargo);
+        } else if let Some(entry) = reserved_by_cargo.get_mut(&cargo) {
+            *entry = amount;
+            remaining_known = remaining_known.saturating_sub(amount);
+        }
+    }
+    station.cargo_packets.reserved = capped_reserved;
+    station.cargo_packets.reserved_by_cargo = reserved_by_cargo;
 }
 
 fn hydrate_sav_packet_list(
@@ -3499,6 +3521,13 @@ mod tests {
         let station = &state.stations[0];
         assert_eq!(station.cargo_stock.coal, 9);
         assert_eq!(station.cargo_packets.reserved, 2);
+        assert_eq!(
+            station
+                .cargo_packets
+                .reserved_by_cargo
+                .get(&crate::CargoType::Coal),
+            Some(&2)
+        );
         let packet = station
             .cargo_packets
             .packets()

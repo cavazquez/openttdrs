@@ -872,15 +872,32 @@ fn reverse_ship_after_blocked_track(
     v.ship_path.clear();
 }
 
-/// Reproduce the native `ShipPathCache` projection after consuming a cached
-/// route entry. The movement model keeps tile coordinates in `Vehicle::path`,
-/// while `OpenTTD` keeps the same suffix as `Trackdir` values in reverse order;
-/// retaining valid trackdirs also keeps a later SAV export usable.
+/// Dirección del paso que sigue a una tesela del path naval.
+///
+/// El pathfinder local representa un acueducto como un salto entre sus dos
+/// rampas. Para ese caso no existe una diferencia de coordenadas adyacente,
+/// pero el `Trackdir` que entra en la rampa todavía debe conservar la
+/// dirección interior codificada en `m5`.
+#[must_use]
+fn ship_path_step_diagdir(map: Option<&Map>, from: TileCoord, next: TileCoord) -> Option<u8> {
+    if let Some(map) = map
+        && crate::water_aqueduct_other_end(map, from) == Some(next)
+    {
+        return map.get(from).map(|tile| tile.m5 & 0x03);
+    }
+    diagdir_between_tiles(from, next)
+}
+
+/// Reproduce la proyección nativa de `ShipPathCache` después de recalcular una
+/// ruta. El modelo de movimiento conserva teselas en `Vehicle::path`, mientras
+/// que `OpenTTD` conserva el mismo sufijo como `Trackdir` en orden inverso:
+/// `path.back()` es siempre la próxima entrada que se consume.
 fn sync_ship_path_cache(v: &mut Vehicle, map: Option<&Map>) {
     v.ship_path.clear();
+    let mut projected = Vec::with_capacity(v.path.len());
     let mut from = v.pos;
     for (index, &next) in v.path.iter().enumerate() {
-        let Some(entry_diagdir) = diagdir_between_tiles(from, next) else {
+        let Some(entry_diagdir) = ship_path_step_diagdir(map, from, next) else {
             break;
         };
         let path_next = v.path.get(index + 1).copied();
@@ -892,9 +909,49 @@ fn sync_ship_path_cache(v: &mut Vehicle, map: Option<&Map>) {
             || direction_from_tile_step(from, next),
             |subcoord| subcoord.dir,
         );
-        v.ship_path.push(ship_trackdir(track, direction));
+        projected.push(ship_trackdir(track, direction));
         from = next;
     }
+    // El vector nativo se consume desde atrás. Invertir una vez deja `last()`
+    // apuntando al primer paso del path local sin hacer inserts O(n²).
+    v.ship_path.extend(projected.into_iter().rev());
+}
+
+/// Consume el `Trackdir` nativo si todavía corresponde a la entrada actual.
+///
+/// Un SAV puede traer una caché vieja o el mapa puede haber cambiado desde su
+/// creación. En ambos casos se invalida la caché completa y el llamador vuelve
+/// a la selección normal de `ChooseShipTrack`.
+#[must_use]
+fn consume_cached_ship_track(
+    v: &mut Vehicle,
+    map: &Map,
+    tile: TileCoord,
+    entry_diagdir: u8,
+    path_next: Option<TileCoord>,
+) -> Option<u8> {
+    let cached = *v.ship_path.last()?;
+    let track = cached & 0x07;
+    let Some(subcoord) = ship_subcoord(entry_diagdir, track) else {
+        v.ship_path.clear();
+        return None;
+    };
+    if ship_trackdir(track, subcoord.dir) != cached {
+        v.ship_path.clear();
+        return None;
+    }
+    if let Some(path_next) = path_next {
+        let Some(exit_diagdir) = ship_path_step_diagdir(Some(map), tile, path_next) else {
+            v.ship_path.clear();
+            return None;
+        };
+        if ship_track_exit_diagdir(entry_diagdir, track) != Some(exit_diagdir) {
+            v.ship_path.clear();
+            return None;
+        }
+    }
+    v.ship_path.pop();
+    Some(track)
 }
 
 /// Salta el vano de un acueducto cuando el barco deja una rampa por su lado
@@ -924,7 +981,8 @@ fn ship_enter_aqueduct(
     }
     let path_next = v.path.front().copied();
     let entry_diagdir = tile.m5 & 0x03;
-    let track = choose_ship_track(map, other, entry_diagdir, path_next, v.dest);
+    let track = consume_cached_ship_track(v, map, other, entry_diagdir, path_next)
+        .unwrap_or_else(|| choose_ship_track(map, other, entry_diagdir, path_next, v.dest));
     let Some(entry) = ship_subcoord(entry_diagdir, track) else {
         reverse_ship_after_blocked_track(v, Some(map), None);
         return Some(false);
@@ -985,8 +1043,9 @@ pub fn choose_ship_track(
 ) -> u8 {
     let default = choose_track_for_entry(entry_diagdir);
     if let Some(next) = path_next
-        && water_tiles_connected(map, from, next)
-        && let Some(exit) = diagdir_between_tiles(from, next)
+        && let Some(exit) = ship_path_step_diagdir(Some(map), from, next)
+        && (crate::water_aqueduct_other_end(map, from) == Some(next)
+            || water_tiles_connected(map, from, next))
     {
         for track in [
             TRACK_X,
@@ -1402,10 +1461,14 @@ fn ship_controller_tick_inner(
         {
             consume_lost_ship_path_rng(path_len_before_entry, rng);
         }
-        let track = map.map_or_else(
-            || choose_track_for_entry(diagdir),
-            |m| choose_ship_track(m, new_tile, diagdir, path_next, v.dest),
-        );
+        let cached_track =
+            map.and_then(|m| consume_cached_ship_track(v, m, new_tile, diagdir, path_next));
+        let track = cached_track.unwrap_or_else(|| {
+            map.map_or_else(
+                || choose_track_for_entry(diagdir),
+                |m| choose_ship_track(m, new_tile, diagdir, path_next, v.dest),
+            )
+        });
         let Some(entry) = ship_subcoord(diagdir, track) else {
             reverse_ship_after_blocked_track(v, map, random.as_deref_mut());
             return;
@@ -2280,6 +2343,104 @@ mod tests {
         let track = choose_ship_track(&s.map, from, DIAGDIR_SW, Some(path_next), path_next);
         assert_eq!(track, TRACK_X);
         assert!(ship_subcoord(DIAGDIR_SW, track).is_some());
+    }
+
+    #[test]
+    fn ship_path_cache_uses_native_back_as_next_trackdir() {
+        let mut s = GameState::new(8, 8);
+        let pos = TileCoord::new(0, 3);
+        let corner = TileCoord::new(1, 3);
+        let dest = TileCoord::new(1, 4);
+        for tile in [pos, corner, dest] {
+            s.map.set_kind(tile, TileKind::Water).unwrap();
+        }
+
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, pos, dest);
+        ship.path = VecDeque::from([corner, dest]);
+        sync_ship_path_cache(&mut ship, Some(&s.map));
+
+        let first_entry = diagdir_between_tiles(pos, corner).expect("entrada inicial");
+        let first_track = choose_ship_track(&s.map, corner, first_entry, Some(dest), dest);
+        let first_td = ship_trackdir(
+            first_track,
+            ship_subcoord(first_entry, first_track)
+                .expect("track inicial")
+                .dir,
+        );
+        let last_entry = diagdir_between_tiles(corner, dest).expect("entrada final");
+        let last_track = choose_ship_track(&s.map, dest, last_entry, None, dest);
+        let last_td = ship_trackdir(
+            last_track,
+            ship_subcoord(last_entry, last_track)
+                .expect("track final")
+                .dir,
+        );
+
+        assert_eq!(ship.ship_path.as_slice(), &[last_td, first_td]);
+        assert_eq!(ship.ship_path.last(), Some(&first_td));
+        assert_eq!(
+            consume_cached_ship_track(&mut ship, &s.map, corner, first_entry, Some(dest),),
+            Some(first_track)
+        );
+        assert_eq!(ship.ship_path.as_slice(), &[last_td]);
+    }
+
+    #[test]
+    fn ship_path_cache_invalidates_trackdir_with_wrong_exit() {
+        let mut s = GameState::new(8, 8);
+        let pos = TileCoord::new(0, 3);
+        let corner = TileCoord::new(1, 3);
+        let dest = TileCoord::new(1, 4);
+        for tile in [pos, corner, dest] {
+            s.map.set_kind(tile, TileKind::Water).unwrap();
+        }
+
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, pos, dest);
+        let entry = diagdir_between_tiles(pos, corner).expect("entrada");
+        // TRACK_X es válido para entrar desde el oeste, pero continúa recto;
+        // el path exige el giro hacia el sur.
+        ship.ship_path = vec![ship_trackdir(TRACK_X, DIR_SW)];
+
+        assert_eq!(
+            consume_cached_ship_track(&mut ship, &s.map, corner, entry, Some(dest)),
+            None
+        );
+        assert!(ship.ship_path.is_empty());
+    }
+
+    #[test]
+    fn ship_path_cache_preserves_aqueduct_jump_entries() {
+        let mut map = crate::Map::new_flat(8, 3, 0);
+        let west_water = TileCoord::new(0, 1);
+        let west_ramp = TileCoord::new(1, 1);
+        let east_ramp = TileCoord::new(5, 1);
+        let east_water = TileCoord::new(6, 1);
+        for tile in [west_water, east_water] {
+            map.set_kind(tile, TileKind::Water).unwrap();
+        }
+        for (tile, direction) in [(west_ramp, DIAGDIR_SW), (east_ramp, DIAGDIR_NE)] {
+            map.set_kind(tile, TileKind::Water).unwrap();
+            map.set_mapt_m5(tile, 0x90, 0x80 | (2 << 2) | direction)
+                .unwrap();
+        }
+
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, west_water, east_water);
+        ship.path = VecDeque::from([west_ramp, east_ramp, east_water]);
+        sync_ship_path_cache(&mut ship, Some(&map));
+        assert_eq!(ship.ship_path.len(), 3);
+
+        let entry = diagdir_between_tiles(west_water, west_ramp).expect("entrada rampa");
+        let first = consume_cached_ship_track(&mut ship, &map, west_ramp, entry, Some(east_ramp));
+        assert!(first.is_some(), "la entrada a la rampa debe ser cacheable");
+        assert_eq!(ship.ship_path.len(), 2);
+
+        let second =
+            consume_cached_ship_track(&mut ship, &map, east_ramp, DIAGDIR_SW, Some(east_water));
+        assert!(
+            second.is_some(),
+            "la salida del acueducto debe consumir el siguiente Trackdir"
+        );
+        assert_eq!(ship.ship_path.len(), 1);
     }
 
     #[test]

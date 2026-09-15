@@ -7893,3 +7893,13 @@ y el cliente mantiene `1538` tests exitosos, Clippy, formato y documentación en
 verde. La captura de comprobación quedó limitada por un timeout en el primer
 pase sin `precise_scope` (`35.507` parents); no se usa como métrica raster ni
 como motivo para cerrar #326.
+
+Validación #326/#567-SHIP-DEPOT-ORIENTATION-MATRIX (2026-09-15): con un
+socket Weston nuevo y la fixture real `mvp_openttd_ship.sav`,
+`MAP_SHOT_TOOL=ship_depot` produjo correctamente las cuatro capturas de
+orientación `0,1,2,3` a `512×512`, escala Normal, con el ghost naval visible.
+Cada PNG es RGB no vacío y las cuatro huellas cambian de forma/posición según
+la orientación; esto valida el camino integrado toolbar → preview → raster,
+no sólo el parser del selector. No hay todavía un oráculo nativo equivalente
+para el ghost de UI ni cobertura de callbacks NewGRF, por lo que #326/#567
+siguen abiertas y esta evidencia no declara paridad completa.

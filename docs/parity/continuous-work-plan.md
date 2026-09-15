@@ -8054,3 +8054,18 @@ reducción de trabajo validada en `Out4x`, no paridad visual completa: el trace
 todavía deja 28 identidades nativas fuera y miles de bounds conservadores
 adicionales, por lo que #326/#567 siguen abiertas para la matriz raster, otras
 familias y `Out8x`.
+
+Extensión #326-SORT-PRECISE-OUT8X (2026-09-15, `44e4f49d`): la banda diagonal
+precisa cubre también el máximo `Out8x`. En `Kale_TitleGame.sav`, a 1280×720 y
+centro `189,126`, el stream baja de `54.601` parents AABB a `36.968` parents
+más `308` proxies locales (`37.276` efectivos), frente a `35.840` parents del
+sorter nativo en 15 segmentos. El raster mejora levemente: `688.811`→`688.799`
+píxeles brutos y `692.600`→`692.595` alineados.
+
+La A/B de `Out8x` conserva exactamente el PNG y los diffs del depósito naval
+(`8` parents) y de la fixture rica con estación, tren, bus e industria (`11`
+parents), incluidos ghost, boyas y capas. Pasan los `1540` tests del cliente
+(2 ignorados), formato, `git diff --check` y Clippy estricto del binario. Esto
+cierra la subetapa de culling multizoom; #326/#567 permanecen abiertas por los
+residuos de raster, las identidades nativas aún no cubiertas y otras familias
+gráficas.

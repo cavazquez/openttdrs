@@ -7933,3 +7933,13 @@ trazada produjo un JSON estable de `463.933` bytes con `1.572` parents y `9`
 proxies, pero todavía no emitió PNG dentro del timeout por el costo del sorter
 repetido durante el settle. La optimización queda publicada como mejora del
 instrumento, no como cierre de #326.
+
+Corrección #326-SORT-ACTIVE-SET (2026-09-15): el sorter de viewport conserva
+el mismo orden `(min_sum, índice)` usando un `BTreeSet` y recorre sólo el rango
+activo hasta `max_sum`, en lugar de desplazar linealmente un `Vec` al retirar
+cada parent. La regresión específica mantiene `40` tests de `viewport_sort`
+exitosos e incluye un flujo grande con bounds iguales para fijar la estabilidad
+del desempate. La captura Kale Out2x trazada se volvió a intentar con esta
+variante y todavía agotó el timeout antes de emitir PNG; por tanto el cambio
+reduce un coste puntual del mantenimiento del conjunto, pero no resuelve aún el
+settle completo ni cierra #326.

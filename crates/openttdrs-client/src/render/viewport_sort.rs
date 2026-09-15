@@ -8,6 +8,7 @@
 //! de render y mantener juntos cada padre y sus children.
 
 use std::cmp::Reverse;
+use std::collections::BTreeSet;
 
 /// Prisma de mundo inclusivo asociado a un padre sortable.
 ///
@@ -172,11 +173,15 @@ pub(crate) fn viewport_sort_parent_sprites(parents: &[ParentSprite]) -> Vec<usiz
         return (0..parents.len()).collect();
     }
 
-    let mut active: Vec<usize> = (0..parents.len()).collect();
     // C++ ordena `pair<min_sum, ParentSpriteToDraw *>`: a suma igual la
     // dirección del vector de padres conserva el orden de inserción. El índice
-    // reproduce ese segundo componente explícitamente.
-    active.sort_by_key(|&index| (parents[index].bounds.min_sum(), index));
+    // reproduce ese segundo componente explícitamente. Un conjunto ordenado
+    // mantiene la misma secuencia, pero evita desplazar todo el vector cada vez
+    // que el algoritmo retira un parent del rango activo; en escalas alejadas
+    // ese coste lineal por retiro domina antes de llegar al raster.
+    let mut active: BTreeSet<(i64, usize)> = (0..parents.len())
+        .map(|index| (parents[index].bounds.min_sum(), index))
+        .collect();
 
     // El C++ inicializa recorriendo `rbegin()` y apila cada elemento. El pop
     // inicial por tanto visita el orden de inserción (0, 1, ...).
@@ -199,18 +204,11 @@ pub(crate) fn viewport_sort_parent_sprites(parents: &[ParentSprite]) -> Vec<usiz
         }
 
         let current_bounds = parents[current].bounds;
-        let mut preceding = Vec::new();
+        active.remove(&(current_bounds.min_sum(), current));
         let scan_limit = current_bounds.max_sum();
-        let mut position = 0;
-        while position < active.len() && parents[active[position]].bounds.min_sum() <= scan_limit {
-            let candidate = active[position];
-            if candidate == current {
-                active.remove(position);
-                continue;
-            }
-
+        let mut preceding = Vec::new();
+        for &(_, candidate) in active.range(..=(scan_limit, usize::MAX)) {
             let candidate_bounds = parents[candidate].bounds;
-            position += 1;
 
             if current_bounds.xmax < candidate_bounds.xmin
                 || current_bounds.ymax < candidate_bounds.ymin
@@ -246,7 +244,7 @@ pub(crate) fn viewport_sort_parent_sprites(parents: &[ParentSprite]) -> Vec<usiz
             {
                 states[candidate] = SortState::Returned;
                 states[current] = SortState::Returned;
-                active.retain(|&index| index != candidate);
+                active.remove(&(candidate_bounds.min_sum(), candidate));
                 output.push(candidate);
                 output.push(current);
                 continue;
@@ -486,5 +484,17 @@ mod tests {
             ParentSprite::empty_bounding_box(10, bounds(0, 0, 0, 2, 2, 2)),
         ];
         assert_matches_wrapper(&with_empty_bounding_box, &[4.000_05, 4.000_06]);
+    }
+
+    #[test]
+    fn large_equal_bounds_keep_a_deterministic_order() {
+        let parents: Vec<_> = (0..8_192)
+            .map(|id| ParentSprite::sprite(id, 100, bounds(0, 0, 0, 2, 2, 2)))
+            .collect();
+
+        assert_eq!(
+            viewport_sort_parent_sprites(&parents),
+            (0..parents.len()).collect::<Vec<_>>()
+        );
     }
 }

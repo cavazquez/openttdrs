@@ -8482,3 +8482,15 @@ movimiento. Validación: `2792` tests de core pasados, `0` fallidos y `1`
 ignorado, Clippy de producción, formato y `git diff --check` verdes. #329/#567
 siguen abiertos por curvas/trackdirs, dirección preferida, callbacks y cachés
 visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-YAPF-CURVE-TRACKDIR (2026-09-15, `98636d13`): la
+búsqueda naval conserva el estado `(tile, trackdir)` para no ocultar curvas al
+fusionar rutas. El coste replica `CurveCost` con `1 * YAPF_TILE_LENGTH` para
+45°, `6 * YAPF_TILE_LENGTH` para 90° y `YAPF_TILE_CORNER_LENGTH` para tracks de
+esquina; los saltos de acueducto mantienen sus teselas omitidas. La prueba
+`ship_yapf_cost_keeps_curve_trackdir_state` cubre la transición curva y el
+tramo recto, además de las regresiones navales previas. Validación: `2793`
+tests de core pasados, `0` fallidos y `1` ignorado, Clippy de producción,
+check del cliente, formato y `git diff --check` verdes. #329/#567 siguen
+abiertos por dirección preferida, trackdirs físicos completos en el
+controlador, callbacks y cachés visuales NewGRF restantes.

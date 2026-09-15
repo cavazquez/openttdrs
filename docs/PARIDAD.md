@@ -5683,3 +5683,16 @@ movimiento. Validación: `2792 passed; 0 failed; 1 ignored` en la biblioteca
 core, Clippy estricto de producción, formato y `git diff --check` verdes. #329
 /#567 siguen abiertos por curvas/trackdirs, dirección preferida, callbacks y
 cachés visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-YAPF-CURVE-TRACKDIR (2026-09-15, `98636d13`): el
+pathfinder naval conserva estados `(tile, trackdir)` en lugar de fusionar
+llegadas sólo por coordenada. Así `YapfShip::CurveCost` aplica las penalizaciones
+vanilla de 45° (`1 * YAPF_TILE_LENGTH`) y 90° (`6 * YAPF_TILE_LENGTH`), usa la
+base de esquina `YAPF_TILE_CORNER_LENGTH` y mantiene el coste de vano omitido
+por un acueducto. La regresión `ship_yapf_cost_keeps_curve_trackdir_state`
+verifica una curva y un tramo recto, junto con las regresiones de acueducto y
+desvío de canal existentes. Validación: `2793 passed; 0 failed; 1 ignored` en
+core, Clippy estricto de producción, check del cliente, formato y
+`git diff --check` verdes. #329/#567 siguen abiertos por dirección preferida,
+trackdirs físicos completos en el controlador, callbacks y cachés visuales
+NewGRF restantes.

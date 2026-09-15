@@ -188,9 +188,10 @@ const VIEWPORT_SORT_EDGE_TILES: i64 = 2;
 /// el rectángulo de prefetch de 18 teselas usado sólo para materializar chunks.
 const VIEWPORT_SORT_BUILDING_MARGIN_TILES: u32 = 11;
 
-/// El culling preciso se validó contra el raster nativo hasta `Normal`; al
-/// alejar la cámara se conserva el conjunto AABB ya existente.
-const VIEWPORT_SORT_PRECISE_MAX_ORTHO_SCALE: f32 = 1.0;
+/// El culling preciso se validó contra el raster nativo hasta `Out2x`; en
+/// escalas más alejadas se conserva el conjunto AABB ya existente hasta contar
+/// con una matriz raster equivalente.
+const VIEWPORT_SORT_PRECISE_MAX_ORTHO_SCALE: f32 = 2.0;
 
 /// `LargeWorldCallback` usa bloques de 51 píxeles de salida a escala Normal
 /// (204 unidades virtuales / 4 de `ZOOM_BASE`). En el mundo Bevy la escala
@@ -1971,10 +1972,8 @@ mod tests {
     fn viewport_scope_follows_the_native_diagonal_draw_band() {
         assert!(precise_sort_scope_enabled(0.25));
         assert!(precise_sort_scope_enabled(1.0));
-        assert!(
-            !precise_sort_scope_enabled(2.0),
-            "Out2x conserva el conjunto AABB validado"
-        );
+        assert!(precise_sort_scope_enabled(2.0));
+        assert!(!precise_sort_scope_enabled(4.0));
 
         // Centro de la captura Kale (189,126) sobre terreno plano, a 384×320
         // y escala 1. El alcance no es el cuadrado x=181..197,

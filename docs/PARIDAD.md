@@ -5648,3 +5648,15 @@ failed; 1 ignored` en la biblioteca core, Clippy estricto de core y del binario
 cliente, `cargo check` del cliente y formato verdes. #329/#567 siguen abiertos
 por curvas/trackdirs navales, ocupación de muelles, locks, callbacks y cachés
 visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-YAPF-LOCK-COST (2026-09-15, `ac786ee0`): el coste
+naval suma la penalización nativa del centro de una esclusa
+(`TILE_HEIGHT * YAPF_TILE_LENGTH * canal_speed / 128`), usando la velocidad
+estática del motor y reconociendo sólo `LockPart::Middle`. La clave de caché
+incluye también esa velocidad para no cruzar perfiles incompatibles. La
+regresión `ship_yapf_cost_prefers_sea_detour_over_slow_canal` verifica que el
+barco rodee una esclusa cuando el coste de detenerse supera el desvío. La
+validación queda en `2789 passed; 0 failed; 1 ignored` en core, Clippy estricto
+de core/binario cliente, `cargo check` del cliente y formato verdes. #329/#567
+siguen abiertos por curvas/trackdirs, ocupación dinámica de muelles, aqueductos,
+callbacks y cachés visuales NewGRF.

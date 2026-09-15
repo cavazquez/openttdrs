@@ -5566,3 +5566,18 @@ round-trip y capacidades agregada/local `76/38`. Core queda en `2782 passed; 0
 failed; 1 ignored`, con Clippy de producción, formato y check del cliente en
 verde. La carga/reserva dual durante la simulación y los EngineID custom sin
 catálogo siguen pendientes; #329 permanece abierta.
+
+Corrección #329-VEHICLE-CONSIST-UNKNOWN-CAPACITY-SAV (2026-09-15, `b7d54e09`):
+cada vehículo ferroviario importado conserva su `VEHS.common.cargo_cap` local
+en `native_cargo_capacity`, separado de `Vehicle::capacity`, que en la cabeza
+puede ser la suma del consist. La importación ya no deja el Kirby vanilla que
+instala `Vehicle::new` cuando el `EngineID` nativo es custom y no está
+catalogado; la resolución de capacidad usa el valor persistido como fallback
+exacto sólo para esa cabeza no resuelta. El writer vuelve a emitir la
+capacidad local y la regresión
+`sav_roundtrip_preserves_unknown_train_head_local_capacity` cubre `EngineID`
+511, capacidades locales 7/30 y suma rehidratada 37. Core queda en `2782`
+passed; `0` failed; `1` ignored, con Clippy, formato, documentación y check
+del cliente en verde. #329 sigue abierta por la identidad/propiedades
+completas, carga y reservas de formaciones duales, y comportamiento de
+`EngineID` custom cuando el catálogo NewGRF sí está disponible.

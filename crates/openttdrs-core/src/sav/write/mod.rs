@@ -4038,6 +4038,74 @@ mod tests {
     }
 
     #[test]
+    fn export_roundtrip_preserves_physical_vehicle_reservation() {
+        use crate::cargo::CargoType;
+        use crate::cargo_packet::CargoPacket;
+
+        let mut state = tiny_state();
+        let source = TileCoord::new(28, 39);
+        let destination = TileCoord::new(40, 40);
+        let mut source_station = Station::new_with_kind(source, StopKind::RailStation);
+        source_station.cargo_packets.push(
+            CargoPacket::new(CargoType::Coal, 7, source)
+                .with_first_station(source)
+                .with_next_hop(Some(destination)),
+        );
+        source_station.cargo_packets.push(
+            CargoPacket::new(CargoType::Mail, 5, source)
+                .with_first_station(source)
+                .with_next_hop(Some(destination)),
+        );
+        let mut train = Vehicle::new(0, VehicleKind::Train, TileCoord::new(10, 20), source);
+        train.cargo_type = Some(CargoType::Coal);
+        train.last_pickup_station = Some(source);
+        train.cargo_packets.push(
+            CargoPacket::new(CargoType::Coal, 9, source)
+                .with_first_station(source)
+                .with_next_hop(Some(destination)),
+        );
+        train.cargo_packets.action_counts[2] = 9;
+        assert_eq!(
+            source_station.cargo_packets.reserve_for_vehicle(
+                source,
+                CargoType::Coal,
+                3,
+                &[destination],
+                source,
+                &mut train.cargo_packets,
+            ),
+            3
+        );
+        let destination_station = Station::new_with_kind(destination, StopKind::RailStation);
+        state.stations = vec![source_station, destination_station];
+        state.vehicles = vec![train];
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.stations[0].cargo[0].reserved, 3);
+        assert_eq!(sav_game.vehicles[0].cargo_action_counts, [0, 0, 9, 3]);
+
+        let loaded = GameState::from_sav_game(sav_game);
+        let station = &loaded.stations[0].cargo_packets;
+        assert_eq!(station.total_of(CargoType::Coal), 4);
+        assert_eq!(station.total_of(CargoType::Mail), 5);
+        assert_eq!(station.reserved, 3);
+        assert_eq!(
+            station.reserved_physically_by_cargo.get(&CargoType::Coal),
+            Some(&3)
+        );
+        let loaded_train = &loaded.vehicles[0];
+        assert_eq!(loaded_train.cargo_packets.total(), 12);
+        assert_eq!(loaded_train.cargo_packets.stored_count(), 9);
+        assert_eq!(loaded_train.cargo_packets.reserved_count(), 3);
+        assert_eq!(loaded_train.cargo_packets.reservation_station, Some(source));
+        assert_eq!(
+            loaded_train.cargo_packets.reservation_cargo,
+            Some(CargoType::Coal)
+        );
+    }
+
+    #[test]
     fn export_roundtrip_preserves_custom_vehicle_cargo_id() {
         use crate::cargo::CargoType;
         use crate::cargo_packet::CargoPacket;

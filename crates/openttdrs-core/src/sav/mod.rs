@@ -1103,24 +1103,94 @@ fn hydrate_sav_station_cargo(
         }
     }
     station.push_waiting_packets(imported);
-    let capped_reserved = reserved.min(station.cargo_packets.total_count());
-    let mut remaining_known = capped_reserved;
-    let cargo_keys: Vec<_> = reserved_by_cargo.keys().copied().collect();
-    for cargo in cargo_keys {
-        let amount = reserved_by_cargo
-            .get(&cargo)
-            .copied()
-            .unwrap_or(0)
-            .min(remaining_known);
-        if amount == 0 {
-            reserved_by_cargo.remove(&cargo);
-        } else if let Some(entry) = reserved_by_cargo.get_mut(&cargo) {
-            *entry = amount;
-            remaining_known = remaining_known.saturating_sub(amount);
+    // `reserved_count` puede superar el stock que queda en STNN cuando una
+    // parte ya fue transferida a un vehículo como `MTA_LOAD`. La reconciliación
+    // posterior a la hidratación de VEHS conserva ese caso y limita sólo los
+    // saves que no tienen ningún vehículo que respalde la reserva.
+    station.cargo_packets.reserved = reserved;
+    station.cargo_packets.reserved_by_cargo = reserved_by_cargo;
+}
+
+/// Reasocia las reservas `MTA_LOAD` importadas con su estación de origen.
+///
+/// En el wire nativo la estación ya no contiene los packets reservados: éstos
+/// viven en `CAPA` referenciados por `VEHS`, mientras `STNN.goods[].reserved`
+/// conserva el contador. El port guarda la estación en el runtime para poder
+/// ejecutar el retorno; aquí se reconstruye también la parte física del
+/// contador y se recortan únicamente reservas sin respaldo.
+fn reconcile_sav_vehicle_cargo_reservations(state: &mut GameState) {
+    let mut pending: HashMap<(TileCoord, crate::CargoType), u32> = HashMap::new();
+    for vehicle in &state.vehicles {
+        let Some(station) = vehicle.cargo_packets.reservation_station else {
+            continue;
+        };
+        let Some(cargo) = vehicle.cargo_packets.reservation_cargo else {
+            continue;
+        };
+        let amount = vehicle.cargo_packets.reserved_count();
+        if amount > 0 {
+            let entry = pending.entry((station, cargo)).or_default();
+            *entry = entry.saturating_add(amount);
         }
     }
-    station.cargo_packets.reserved = capped_reserved;
-    station.cargo_packets.reserved_by_cargo = reserved_by_cargo;
+
+    for station in &mut state.stations {
+        let station_pos = station.pos;
+        let pending_for_station: Vec<_> = pending
+            .iter()
+            .filter(|((pos, _), _)| *pos == station_pos)
+            .map(|((_, cargo), amount)| (*cargo, *amount))
+            .collect();
+        let pending_total = pending_for_station
+            .iter()
+            .map(|(_, amount)| *amount)
+            .fold(0, u32::saturating_add);
+        let max_reserved = station
+            .cargo_packets
+            .total_count()
+            .saturating_add(pending_total);
+        let capped_reserved = station.cargo_packets.reserved.min(max_reserved);
+        let mut remaining_known = capped_reserved;
+        let cargo_keys: Vec<_> = station
+            .cargo_packets
+            .reserved_by_cargo
+            .keys()
+            .copied()
+            .collect();
+        for cargo in cargo_keys {
+            let amount = station
+                .cargo_packets
+                .reserved_by_cargo
+                .get(&cargo)
+                .copied()
+                .unwrap_or(0)
+                .min(remaining_known);
+            if amount == 0 {
+                station.cargo_packets.reserved_by_cargo.remove(&cargo);
+            } else if let Some(entry) = station.cargo_packets.reserved_by_cargo.get_mut(&cargo) {
+                *entry = amount;
+                remaining_known = remaining_known.saturating_sub(amount);
+            }
+        }
+        station.cargo_packets.reserved = capped_reserved;
+        station.cargo_packets.reserved_physically_by_cargo.clear();
+        for (cargo, amount) in pending_for_station {
+            let physical = amount.min(
+                station
+                    .cargo_packets
+                    .reserved_by_cargo
+                    .get(&cargo)
+                    .copied()
+                    .unwrap_or(0),
+            );
+            if physical > 0 {
+                station
+                    .cargo_packets
+                    .reserved_physically_by_cargo
+                    .insert(cargo, physical);
+            }
+        }
+    }
 }
 
 fn hydrate_sav_packet_list(
@@ -1188,6 +1258,14 @@ fn hydrate_sav_vehicle_cargo(
     // sintético; restaurar después los contadores nativos evita perderlos en
     // saves sin referencias `CAPA`.
     vehicle.cargo_packets.action_counts = saved.cargo_action_counts;
+    if vehicle.cargo_packets.reserved_count() > 0
+        && let Some(station_id) = saved.last_loading_station
+        && let Some(station) = station_positions.get(&station_id)
+        && let Some(cargo) = cargo
+    {
+        vehicle.cargo_packets.reservation_station = Some(*station);
+        vehicle.cargo_packets.reservation_cargo = Some(cargo);
+    }
 }
 
 /// Conserva el mapeo nativo por tesela de road stops hasta que el catálogo
@@ -2254,6 +2332,8 @@ impl GameState {
             }
             state.vehicles.push(vehicle);
         }
+
+        reconcile_sav_vehicle_cargo_reservations(&mut state);
 
         // La tabla sparse `VEHS` puede intercalar unidades de distintos
         // vehículos. Reconstruir el consist por `Vehicle::next`, no por el

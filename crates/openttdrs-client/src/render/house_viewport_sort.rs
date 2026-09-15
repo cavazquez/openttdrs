@@ -316,6 +316,114 @@ fn sprite_screen_bounds(
     })
 }
 
+/// Recorta un sprite eje-alineado al tramo vertical de una banda nativa.
+///
+/// `ViewportDoDraw` recorta cada llamada contra su propio `dpi` antes de
+/// ordenar parents. Un `Sprite` Bevy no tiene una tijera por entidad, pero un
+/// rectángulo de textura y un desplazamiento de `Transform` representan el
+/// mismo resultado para los sprites del atlas del mapa: la parte superior e
+/// inferior conservan exactamente la posición del PNG original. El helper no
+/// intenta aproximar rotaciones, flips ni geometrías sin tamaño de textura;
+/// esos casos quedan en el camino histórico hasta que tengan un contrato de
+/// clipping propio.
+fn clip_sprite_to_band(
+    sprite: &Sprite,
+    anchor: &Anchor,
+    transform: &Transform,
+    band_bottom: f32,
+    band_top: f32,
+    images: Option<&Assets<Image>>,
+    texture_atlases: Option<&Assets<TextureAtlasLayout>>,
+) -> Option<(Sprite, Transform)> {
+    if transform.rotation != Quat::IDENTITY
+        || transform.scale.x <= 0.0
+        || transform.scale.y <= 0.0
+        || !transform.scale.is_finite()
+        || sprite.flip_x
+        || sprite.flip_y
+    {
+        return None;
+    }
+
+    let render_size = sprite_render_size(sprite, images, texture_atlases)?;
+    if !render_size.is_finite() || render_size.x <= 0.0 || render_size.y <= 0.0 {
+        return None;
+    }
+
+    let source_rect = if let Some(rect) = sprite.rect {
+        rect
+    } else if let Some(atlas) = sprite.texture_atlas.as_ref() {
+        let rect = texture_atlases
+            .and_then(|layouts| atlas.texture_rect(layouts))?
+            .as_rect();
+        Rect::from_corners(Vec2::ZERO, rect.size())
+    } else {
+        let size = images
+            .and_then(|images| images.get(&sprite.image))
+            .map(Image::size_f32)?;
+        Rect::from_corners(Vec2::ZERO, size)
+    };
+    let source_size = source_rect.size();
+    if !source_size.is_finite() || source_size.x <= 0.0 || source_size.y <= 0.0 {
+        return None;
+    }
+
+    let full = sprite_screen_bounds(sprite, anchor, transform, images, texture_atlases)?;
+    let clipped_bottom = full.bottom.max(band_bottom);
+    let clipped_top = full.top.min(band_top);
+    if clipped_top <= clipped_bottom {
+        return None;
+    }
+
+    // With no rotation, local Y grows upward while the texture rect grows
+    // downward. Convert the world-space band intersection back to the local
+    // sprite and then to the source rectangle's top-down coordinates.
+    let anchor_y = anchor.as_vec().y;
+    let local_top = -anchor_y * render_size.y + render_size.y * 0.5;
+    let local_bottom = -anchor_y * render_size.y - render_size.y * 0.5;
+    let crop_local_top = ((clipped_top - transform.translation.y) / transform.scale.y)
+        .clamp(local_bottom, local_top);
+    let crop_local_bottom = ((clipped_bottom - transform.translation.y) / transform.scale.y)
+        .clamp(local_bottom, local_top);
+    if crop_local_top <= crop_local_bottom {
+        return None;
+    }
+
+    let source_y_min =
+        source_rect.min.y + (local_top - crop_local_top) / render_size.y * source_size.y;
+    let source_y_max =
+        source_rect.min.y + (local_top - crop_local_bottom) / render_size.y * source_size.y;
+    let source_y_min = source_y_min.clamp(source_rect.min.y, source_rect.max.y);
+    let source_y_max = source_y_max.clamp(source_rect.min.y, source_rect.max.y);
+    if source_y_max <= source_y_min {
+        return None;
+    }
+
+    let crop_render_height = (crop_local_top - crop_local_bottom).abs();
+    let crop_source = Rect::new(
+        source_rect.min.x,
+        source_y_min,
+        source_rect.max.x,
+        source_y_max,
+    );
+    let mut clipped_sprite = sprite.clone();
+    clipped_sprite.rect = Some(crop_source);
+    // A custom size is a render-space size, while `rect` is in texture
+    // pixels. Preserve the original scale ratio when the producer supplied
+    // one; atlas sprites without custom size naturally use the crop size.
+    if sprite.custom_size.is_some() {
+        clipped_sprite.custom_size = Some(Vec2::new(render_size.x, crop_render_height));
+    } else {
+        clipped_sprite.custom_size = None;
+    }
+
+    let crop_local_center = (crop_local_top + crop_local_bottom) * 0.5;
+    let clipped_center = -anchor_y * crop_render_height;
+    let mut clipped_transform = *transform;
+    clipped_transform.translation.y += (crop_local_center - clipped_center) * transform.scale.y;
+    Some((clipped_sprite, clipped_transform))
+}
+
 impl DiagonalViewportSortScope {
     fn from_camera(
         camera_world: Vec2,
@@ -1597,6 +1705,85 @@ mod tests {
                 bottom: 16.0,
                 top: 24.0,
             })
+        );
+    }
+
+    #[test]
+    fn clip_sprite_to_band_keeps_the_original_screen_footprint() {
+        let sprite = Sprite {
+            rect: Some(Rect::new(0.0, 0.0, 32.0, 64.0)),
+            ..default()
+        };
+        let transform = Transform::from_xyz(100.0, 100.0, 2.0);
+        let (clipped, clipped_transform) = clip_sprite_to_band(
+            &sprite,
+            &Anchor::CENTER,
+            &transform,
+            80.0,
+            120.0,
+            None,
+            None,
+        )
+        .expect("la banda cruza el sprite");
+
+        assert_eq!(clipped.rect, Some(Rect::new(0.0, 12.0, 32.0, 52.0)));
+        assert_eq!(clipped_transform.translation, Vec3::new(100.0, 100.0, 2.0));
+        assert_eq!(
+            sprite_screen_bounds(&clipped, &Anchor::CENTER, &clipped_transform, None, None,),
+            Some(SpriteScreenBounds {
+                left: 84.0,
+                right: 116.0,
+                bottom: 80.0,
+                top: 120.0,
+            })
+        );
+    }
+
+    #[test]
+    fn clip_sprite_to_band_respects_non_center_anchor() {
+        let sprite = Sprite {
+            rect: Some(Rect::new(0.0, 0.0, 16.0, 32.0)),
+            ..default()
+        };
+        let transform = Transform::from_xyz(20.0, 30.0, 0.0);
+        let (clipped, clipped_transform) = clip_sprite_to_band(
+            &sprite,
+            &Anchor::TOP_LEFT,
+            &transform,
+            6.0,
+            22.0,
+            None,
+            None,
+        )
+        .expect("la banda cruza el sprite anclado arriba");
+
+        assert_eq!(clipped.rect, Some(Rect::new(0.0, 8.0, 16.0, 24.0)));
+        assert_eq!(clipped_transform.translation, Vec3::new(20.0, 22.0, 0.0));
+        assert_eq!(
+            sprite_screen_bounds(&clipped, &Anchor::TOP_LEFT, &clipped_transform, None, None,)
+                .map(|bounds| (bounds.bottom, bounds.top)),
+            Some((6.0, 22.0))
+        );
+    }
+
+    #[test]
+    fn clip_sprite_to_band_defers_unsupported_transform_modes() {
+        let sprite = Sprite {
+            rect: Some(Rect::new(0.0, 0.0, 8.0, 8.0)),
+            flip_x: true,
+            ..default()
+        };
+        assert!(
+            clip_sprite_to_band(
+                &sprite,
+                &Anchor::CENTER,
+                &Transform::default(),
+                -2.0,
+                2.0,
+                None,
+                None,
+            )
+            .is_none()
         );
     }
 

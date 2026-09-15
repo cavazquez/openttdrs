@@ -8210,3 +8210,15 @@ reserva de correo al guardar/cargar; la suite focalizada de SAV y clippy de
 producción pasan. La asociación nativa por vehículo, el retorno de packets
 reservados y la carga parcial entre ticks siguen pendientes; #329 permanece
 abierta.
+
+Corrección #329-VEHICLE-RESERVATION-LIFECYCLE (2026-09-15, `ff12ef9d`):
+`VehicleCargoList` expone ahora el ciclo mínimo de `MTA_LOAD`: diferencia
+`stored_count` de `reserved_count`, permite promover una carga parcial con
+`load_reserved` y extrae desde el extremo sólo los packets reservados para su
+devolución FIFO. La regresión
+`vehicle_reserved_packets_promote_and_return_fifo` cubre promoción parcial,
+split de packet y saturación al devolver más unidades de las reservadas; la
+suite core queda en `2771` tests exitosos y `1` ignorado, con clippy estricto
+verde. Es el primitive de la propiedad por vehículo; la reserva todavía no
+está conectada al barrido de estaciones ni guarda la estación propietaria, por
+lo que #329 permanece abierta.

@@ -5429,3 +5429,12 @@ correo comprueba que guardar/cargar no reasigne una reserva al cargo vecino.
 La prueba focalizada de SAV, clippy, formato y check del cliente pasan. La
 asociación nativa por vehículo, el retorno de packets reservados y la carga
 parcial entre ticks siguen pendientes; #329 permanece abierta.
+
+Corrección #329-VEHICLE-RESERVATION-LIFECYCLE (2026-09-15, `ff12ef9d`):
+`VehicleCargoList` modela ahora el ciclo mínimo `MTA_LOAD`: separa carga
+almacenada de reserva pendiente, promueve parcialmente la reserva y devuelve
+los packets desde el extremo en orden FIFO, incluyendo splits. El test
+`vehicle_reserved_packets_promote_and_return_fifo` cubre el ciclo y la
+saturación. Core queda en `2771 passed; 0 failed; 1 ignored`, con clippy
+estricto en verde. Este primitive aún no está conectado al barrido estación→
+vehículo ni conserva la estación propietaria; #329 permanece abierta.

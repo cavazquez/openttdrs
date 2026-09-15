@@ -7825,3 +7825,26 @@ real de 1280×720, la comparación pasa de `77.258` a `72.446` píxeles distinto
 (−4.812; −6,23 % del residuo), sin traslación global. Pasan `1534` tests del
 cliente, Clippy del binario, formato y el check del atlas. #326/#567 quedan
 abiertos por la composición raster global y las demás familias/semánticas.
+
+Corrección #326-SEGMENTED-BAND-PROXY (2026-09-15, `cdde6082`): los hijos
+combinados de árboles y frentes de túnel conservan ahora una instantánea de su
+sprite y transform originales. El hijo original se recorta al tramo de bandas
+que realmente alcanza a su parent; cada tramo adicional se publica como proxy
+local y se ordena junto con los parents normales de esa banda. Los proxies ya no
+consumen posiciones del ordenamiento global, evitando desplazar el resto del
+mapa cuando una familia combinada necesita clipping preciso. La cobertura de
+tests incluye la interpolación de profundidad entre slots vecinos y el contrato
+de spawn de las copas de árbol.
+
+En el Kale real (`Kale_TitleGame.sav`, centro `189,126`, `1280×720`, escala
+Normal, perfil `clean-static`), la captura fresca del commit publicado cambia
+`77.396/921.600` píxeles (`8,3980 %`) frente a `72.513/921.600`
+(`7,8682 %`) con esta corrección; el delta medio baja de `2,8565` a `2,5157`.
+Las trazas JSON siguen contando sólo los `1.572` parents del orden global: los
+`7` proxies de banda se ordenan deliberadamente en sus listas locales y se
+validan principalmente por la evidencia raster. Las capturas `In2x` y `Out2x`
+no terminaron dentro de 120 s bajo este workload ampliado, así que no se
+presentan como paridad de escala. Pasan `1538` tests del cliente (2 ignorados),
+Clippy con `-D warnings`, formato, documentación de paridad y check de atlas.
+#326 y #567 siguen abiertos por las demás familias de composición, escalas y
+la aceptación naval completa.

@@ -5407,3 +5407,16 @@ los segmentos produciría inversiones falsas. La traza real de Kale queda en
 las identidades únicas observadas, `10` identidades de referencia ausentes y
 `0` repeticiones dentro de segmento. Esto mejora el diagnóstico y no certifica
 paridad de compositor ni cierra #326.
+
+Corrección #329-STATION-RESERVATION-BY-CARGO (2026-09-15, `f109c9b4`):
+`StationCargoList` conserva ahora una tabla de reservas por `CargoType` además
+del contador total legacy. La carga normal y el correo usan esa tabla para
+reservar y consumir sólo su tipo de carga, evitando que una reserva de carbón
+bloquee artificialmente el correo de la misma estación. Las reservas antiguas
+sin tipo se mantienen como remanente conservador para no permitir doble
+consumo al hidratar JSON/SAV. El test
+`station_reservations_are_scoped_to_cargo_type` verifica ambos tipos en
+paralelo; core queda en `2770 passed; 0 failed; 1 ignored`, con clippy, formato
+y check del cliente en verde. La asociación nativa por vehículo, la carga
+parcial entre ticks y el retorno de reservas siguen pendientes; #329 permanece
+abierta.

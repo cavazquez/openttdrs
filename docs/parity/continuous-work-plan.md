@@ -8186,3 +8186,17 @@ con cobertura completa de identidades únicas, `10` identidades ausentes y `0`
 repeticiones dentro de segmento. Es una mejora del diagnóstico, no el cierre de
 #326: siguen pendientes las identidades no cubiertas, clipping/composición y la
 aceptación raster de las familias restantes.
+
+Corrección #329-STATION-RESERVATION-BY-CARGO (2026-09-15, `f109c9b4`):
+`StationCargoList` mantiene ahora, además del contador total legacy, una tabla
+de reservas por `CargoType`. Las rutas de carga normal y de correo reservan y
+liberan por tipo, de modo que una reserva de carbón no bloquea artificialmente
+el correo disponible en la misma estación. El remanente de reservas cargado
+desde JSON/SAV antiguos, que no identifica el tipo, continúa aplicándose de
+forma conservadora para no permitir doble consumo. La regresión
+`station_reservations_are_scoped_to_cargo_type` cubre reservas y consumos
+independientes de carbón y correo; la suite core queda en `2770` tests
+exitosos, `1` ignorado, con clippy, formato y check del cliente en verde.
+Esto corrige el ámbito local de la reserva, pero todavía no asocia packets a
+un vehículo concreto ni modela su devolución/carga parcial entre ticks; #329
+permanece abierta.

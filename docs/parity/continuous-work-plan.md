@@ -8343,3 +8343,17 @@ Core queda en `2781` tests exitosos y `1` ignorado, con Clippy de producción y
 check del cliente en verde. La capacidad exacta de una cabeza cuyo EngineID
 custom no está catalogado y las formaciones duales todavía requieren una
 fuente local persistente propia; #329 permanece abierta.
+
+Corrección #329-VEHICLE-CONSIST-DUAL-SAV (2026-09-15, `18aba8bc`): el parser
+conserva `GVSF_MULTIHEADED` y distingue la cabina trasera por la combinación
+`MULTIHEADED` sin `FRONT` ni `ENGINE`; el writer reemite la pareja como
+`0x29` (`FRONT|ENGINE|MULTIHEADED`) y `0x20` (`MULTIHEADED`), en lugar de
+convertir la trasera en vagón. Al hidratar un SAV, `next/prev` y los flags
+coincidentes reconstruyen `other_multiheaded_part`, conservando el motor, la
+restricción de acoplamiento y la capacidad local de cada cabina. Las
+regresiones `vehs_preserves_train_dual_head_subtypes` y
+`sav_roundtrip_preserves_dual_headed_consist_identity` cubren subtipo nativo,
+round-trip y capacidades agregada/local `76/38`. Core queda en `2782` tests
+exitosos y `1` ignorado, con Clippy de producción, formato y check del cliente
+en verde. La carga/reserva dual durante la simulación y los EngineID custom sin
+catálogo siguen pendientes; #329 permanece abierta.

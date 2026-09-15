@@ -3247,12 +3247,13 @@ aeropuerto destino.
 La evidencia extendida reconstruida con el mismo save y el exportador nativo
 recompilado cubre `initial` más 300 ticks. En esa ventana coinciden los campos
 FTA vivos `pos`, `previous_pos`, `state`, `targetairport`, `speed`, `progress`,
-`subspeed`, `direction` y `running`; la inspección de la traza confirma además
-`x_pos`, `y_pos` y `z_pos` en cada muestra. El comparador JSONL automatiza los
-campos FTA vivos y la regresión unitaria fija la acumulación fraccional de
-velocidad. Esto cierra el tramo de vuelo libre de esta fixture, no la paridad
-global de aeronaves: #330/#329 mantienen pendientes otros perfiles, cinemática
-aire/mar, callbacks/runtime NewGRF y redes amplias.
+`subspeed`, `direction`, `running`, `x_pos`, `y_pos` y `z_pos` en cada muestra.
+El comparador JSONL automatiza ahora también las tres coordenadas físicas; sólo
+deja fuera `x`/`y`, que OpenTTD congela como campos vestigiales durante FTA. La
+regresión unitaria fija la acumulación fraccional de velocidad. Esto cierra el
+tramo de vuelo libre de esta fixture, no la paridad global de aeronaves:
+#330/#329 mantienen pendientes otros perfiles, cinemática aire/mar,
+callbacks/runtime NewGRF y redes amplias.
 
 ### Regenerar
 

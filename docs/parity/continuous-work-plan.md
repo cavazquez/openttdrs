@@ -7943,3 +7943,13 @@ del desempate. La captura Kale Out2x trazada se volvió a intentar con esta
 variante y todavía agotó el timeout antes de emitir PNG; por tanto el cambio
 reduce un coste puntual del mantenimiento del conjunto, pero no resuelve aún el
 settle completo ni cierra #326.
+
+Corrección #330-AIRPORT-FTA-PHYSICAL-CONTRACT (2026-09-15): el comparador
+`compare_airport_fta_traces.py` incorpora `x_pos`, `y_pos` y `z_pos` al contrato
+estricto de la traza viva. La medición de `helidepot_fta_cycle_15_3` coincide en
+`initial` más `300` ticks también para esas tres coordenadas; una regresión
+sintética confirma que un cambio subtesela o de altura ya no puede producir un
+falso verde. `x`/`y` siguen excluidos porque OpenTTD los congela como campos
+vestigiales bajo FTA. Esto endurece la evidencia de una fixture y no cierra
+#330/#329: faltan perfiles aeroportuarios amplios, tráfico aire/mar y
+callbacks/runtime NewGRF.

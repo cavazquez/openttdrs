@@ -2,10 +2,11 @@
 //! comparación con oráculo (issue #198).
 //!
 //! El estado *inicial* y la secuencia dinámica de `pos`/`state`/`z_pos` se
-//! comparan contra el oráculo. El vuelo libre posterior al despegue conserva
-//! todavía un contrato separado para velocidad/progreso y no se usa para
-//! declarar cerrada la paridad completa de aeronaves. Ver
-//! `scripts/compare_airport_fta_traces.py` para el mismo contrato en Python.
+//! comparan contra el oráculo. El comparador Python también exige `x_pos`/`y_pos`
+//! físicos cuando ambas trazas los publican. El vuelo libre posterior al
+//! despegue conserva todavía un contrato separado y no se usa para declarar
+//! cerrada la paridad completa de aeronaves. Ver
+//! `scripts/compare_airport_fta_traces.py` para el contrato Python.
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 

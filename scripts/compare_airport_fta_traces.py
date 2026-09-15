@@ -4,17 +4,18 @@
 Esquema por fila (tras metadata): `{kind, tick, aircraft:[...], airports:[...]}`.
 
 El estado *inicial* (import del `.sav`) se compara de forma estricta sobre los
-campos comparables entre ambos motores. Dos campos del esquema aircraft NO se
-comparan porque representan modelos distintos por diseño, no divergencias:
+campos comparables entre ambos motores. Un campo del esquema `aircraft` NO se
+compara porque representa modelos distintos por diseño, no una divergencia:
 
 - `x`/`y`: en OpenTTD viene de `TileX/TileY(v->tile)`, un campo vestigial que
   un avión bajo control FTA nunca actualiza (se congela en el valor de
   importación). `openttdrs` reporta el mismo valor crudo congelado, así que
   en la práctica coincide siempre que el importador lo preserve correctamente
   — pero no es una posición «viva» en ningún motor.
-- `x_pos`/`y_pos`/`z_pos`: OpenTTD interpola sub-tesela vía `AirportMovingData`;
-  `openttdrs` solo trackea tesela + nodo FTA (sin sub-tesela), así que estos
-  campos son aproximados y no comparables 1:1.
+- `x_pos`/`y_pos`/`z_pos` sí forman parte del contrato estricto: el runner de
+  `openttdrs` conserva la posición sub-tesela y la altura viva de
+  `AirportMovingData`. Las trazas antiguas que no publiquen estos campos deben
+  regenerarse antes de usarse como evidencia de paridad.
 
 Para los ticks, dado que el motor FTA de `openttdrs` es una reimplementación
 simplificada (sin el contador de espera exacto por nodo de OpenTTD), se
@@ -30,7 +31,8 @@ import sys
 from pathlib import Path
 
 # Campos del esquema aircraft que representan estado FTA vivo comparable
-# entre ambos motores (excluye x/y/x_pos/y_pos/z_pos; ver docstring).
+# entre ambos motores. `x`/`y` quedan fuera porque son coordenadas vestigiales
+# congeladas por OpenTTD bajo control FTA; las coordenadas físicas sí se exigen.
 AIRCRAFT_FIELDS = (
     "pos",
     "previous_pos",
@@ -40,6 +42,9 @@ AIRCRAFT_FIELDS = (
     "progress",
     "subspeed",
     "direction",
+    "x_pos",
+    "y_pos",
+    "z_pos",
     "running",
 )
 AIRPORT_FIELDS = ("station", "x", "y", "w", "h", "type", "layout", "blocks")

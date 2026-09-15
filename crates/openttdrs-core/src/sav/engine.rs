@@ -233,6 +233,107 @@ pub(crate) fn catalog_engine_id_for_native_in(
     catalog_engine_id_for_native(native_id)
 }
 
+fn engine_kind_matches_vehicle(
+    engine_kind: crate::vehicle::VehicleKind,
+    vehicle_kind: crate::vehicle::VehicleKind,
+) -> bool {
+    matches!(
+        (engine_kind, vehicle_kind),
+        (
+            crate::vehicle::VehicleKind::Bus,
+            crate::vehicle::VehicleKind::Bus
+        ) | (
+            crate::vehicle::VehicleKind::Truck,
+            crate::vehicle::VehicleKind::Truck
+        ) | (
+            crate::vehicle::VehicleKind::Tram,
+            crate::vehicle::VehicleKind::Tram
+        ) | (
+            crate::vehicle::VehicleKind::Train,
+            crate::vehicle::VehicleKind::Train
+        ) | (
+            crate::vehicle::VehicleKind::Ship,
+            crate::vehicle::VehicleKind::Ship
+        ) | (
+            crate::vehicle::VehicleKind::Aircraft,
+            crate::vehicle::VehicleKind::Aircraft
+        )
+    )
+}
+
+/// Vuelve a enlazar vehículos importados con el catálogo después de aplicar
+/// el stack `NewGRF`.
+///
+/// `from_sav_game` sólo puede usar el catálogo vanilla en su primera pasada.
+/// Cuando el cliente carga después los GRF del `NGRF`/`EIDS`, el `EngineID`
+/// nativo es la única clave estable para recuperar el `EngineDef` runtime.
+/// Las unidades sin correspondencia custom conservan `None` en vez de quedar
+/// silenciosamente ligadas al motor vanilla que instala `Vehicle::new`.
+pub(crate) fn rehydrate_sav_vehicle_engines(state: &mut crate::GameState) -> usize {
+    let mappings = mappings_from_opaque(&state.sav_opaque_chunks);
+    let mut changed = 0;
+    let mut train_changed = false;
+
+    for vehicle in &mut state.vehicles {
+        let Some(native_id) = vehicle.native_engine_type else {
+            continue;
+        };
+        let mapping_is_custom = mappings
+            .iter()
+            .find(|mapping| mapping.engine_id == native_id)
+            .is_some_and(|mapping| mapping.grfid != INVALID_GRFID);
+        let catalog_id = catalog_engine_id_for_native_in(
+            native_id,
+            &mappings,
+            &state.engine_catalog,
+        )
+        .filter(|catalog_id| {
+            state
+                .engine_catalog
+                .iter()
+                .find(|engine| engine.id == *catalog_id)
+                .is_some_and(|engine| engine_kind_matches_vehicle(engine.kind, vehicle.kind))
+        });
+
+        if let Some(catalog_id) = catalog_id {
+            if vehicle.engine_id != Some(catalog_id) {
+                vehicle.engine_id = Some(catalog_id);
+                changed += 1;
+                train_changed |= vehicle.kind == crate::vehicle::VehicleKind::Train;
+            }
+        } else if mapping_is_custom && vehicle.engine_id.take().is_some() {
+            // Un GRF que falta o cuyo tipo no coincide no debe heredar el
+            // primer motor vanilla de la clase como si fuera el original.
+            changed += 1;
+            train_changed |= vehicle.kind == crate::vehicle::VehicleKind::Train;
+        }
+    }
+
+    if train_changed {
+        let train_heads: Vec<u32> = state
+            .vehicles
+            .iter()
+            .filter(|vehicle| {
+                vehicle.kind == crate::vehicle::VehicleKind::Train && vehicle.is_consist_head()
+            })
+            .map(|vehicle| vehicle.id)
+            .collect();
+        for head in train_heads {
+            crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits(
+                &mut state.vehicles,
+                head,
+                Some(&state.map),
+                &state.engine_catalog,
+                &state.cargo_spec_catalog,
+                state.freight_trains,
+                state.construction.wagon_speed_limits,
+            );
+        }
+    }
+
+    changed
+}
+
 /// Rehidrata las excepciones de disponibilidad y las previews activas del
 /// pool nativo en las estructuras que consume el runtime propio.
 pub(crate) fn hydrate_state_from_pool(
@@ -322,6 +423,60 @@ mod tests {
             catalog_engine_id_for_native_in(0, &mappings, &[custom]),
             Some(60_000)
         );
+    }
+
+    #[test]
+    fn rehydrates_imported_train_engine_and_recomputes_consist_capacity() {
+        let mut custom = crate::engine::engine_for_vehicle(
+            crate::vehicle::VehicleKind::Train,
+            crate::engine::ENGINE_TRAIN_KIRBY,
+        )
+        .clone();
+        custom.id = 60_001;
+        custom.newgrf_grfid = 0x4355_5302;
+        custom.newgrf_local_id = 42;
+        custom.from_newgrf = true;
+        custom.capacity = 55;
+
+        let mut state = crate::GameState::new(16, 16);
+        state.engine_catalog.push(custom.clone());
+        let mut record = Vec::new();
+        record.extend_from_slice(&custom.newgrf_grfid.to_be_bytes());
+        record.extend_from_slice(&custom.newgrf_local_id.to_be_bytes());
+        record.push(0); // VEH_TRAIN
+        record.push(0); // substitute_id
+        state.sav_opaque_chunks = vec![SavOpaqueChunk {
+            name: *b"EIDS",
+            ch_type: CH_TABLE,
+            body: build_table_body(
+                &[
+                    (6, "grfid"),
+                    (4, "internal_id"),
+                    (2, "type"),
+                    (2, "substitute_id"),
+                ],
+                &[record],
+            ),
+        }];
+
+        let pos = crate::TileCoord::new(4, 4);
+        let mut head =
+            crate::vehicle::Vehicle::new(10, crate::vehicle::VehicleKind::Train, pos, pos);
+        head.engine_id = None;
+        head.native_engine_type = Some(0);
+        head.native_cargo_capacity = Some(7);
+        head.next_unit = Some(20);
+        let mut wagon =
+            crate::vehicle::Vehicle::new(20, crate::vehicle::VehicleKind::Train, pos, pos);
+        wagon.engine_id = Some(crate::engine::ENGINE_WAGON_COAL);
+        wagon.capacity = 30;
+        wagon.prev_unit = Some(10);
+        state.vehicles = vec![head, wagon];
+
+        assert_eq!(rehydrate_sav_vehicle_engines(&mut state), 1);
+        assert_eq!(state.vehicles[0].engine_id, Some(custom.id));
+        assert_eq!(state.vehicles[0].capacity, 37);
+        assert_eq!(state.vehicles[1].capacity, 30);
     }
 
     #[test]

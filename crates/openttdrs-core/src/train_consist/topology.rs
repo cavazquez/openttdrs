@@ -328,14 +328,14 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
         // `Vehicle::capacity`; no se debe reemplazar por la capacidad
         // genérica del motor al reconstruir la suma de la cabeza. Las
         // callbacks dinámicas siguen teniendo prioridad.
-        let persisted_unit_capacity = if id == head_id && configured_engine.is_none() {
+        let persisted_unit_capacity = if id == head_id {
             // `Vehicle::capacity` ya puede ser la suma de una ejecución
             // anterior de `ConsistChanged`; sólo la copia nativa separada es
-            // segura para recuperar la capacidad local de una cabeza custom.
+            // segura para recuperar la capacidad local de una cabeza SAV,
+            // incluso después de resolver su EngineID custom.
             v.native_cargo_capacity
         } else {
-            (id != head_id && v.native_engine_type.is_some() && v.capacity > 0)
-                .then_some(v.capacity)
+            (v.native_engine_type.is_some() && v.capacity > 0).then_some(v.capacity)
         };
         let capacity = refit_callback_capacity
             .or(property_callback_capacity)

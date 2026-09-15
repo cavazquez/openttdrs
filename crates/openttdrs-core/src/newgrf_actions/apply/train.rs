@@ -585,6 +585,7 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
     resolve_variant_parent_links(&mut catalog);
     apply_purchase_list_order_changes(&mut catalog);
     state.engine_catalog = catalog;
+    crate::sav::rehydrate_sav_vehicle_engines(state);
 }
 
 /// Aplica trains con directorios de búsqueda por defecto.

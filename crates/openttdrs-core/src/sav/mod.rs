@@ -2591,6 +2591,12 @@ pub(crate) fn rehydrate_sav_engine_pool(state: &mut GameState) {
     engine::hydrate_state_from_pool(state, &engine_states, &engine_mappings);
 }
 
+/// Reenlaza los vehículos importados después de que el catálogo `NewGRF` ya
+/// fue reconstruido desde el stack activo.
+pub(crate) fn rehydrate_sav_vehicle_engines(state: &mut GameState) -> usize {
+    engine::rehydrate_sav_vehicle_engines(state)
+}
+
 /// Rehidrata los jobs que `OpenTTD` dejó entre `SpawnNext` y `JoinNext`.
 ///
 /// `LGRS.running` es autoritativo para el orden de integración. Si el chunk

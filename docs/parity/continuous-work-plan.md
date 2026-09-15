@@ -8271,3 +8271,16 @@ carga parcial y comprueba conservación de unidades y contadores. Core queda en
 cliente en verde. Aún falta devolver la sección `MTA_LOAD` al cambiar la orden,
 además de la integración completa de consistes articulados; #329 permanece
 abierta.
+
+Corrección #329-VEHICLE-RESERVATION-RUNTIME-CANCEL (2026-09-15, `da85635c`):
+`load_vehicles` devuelve al andén original sólo la sección `MTA_LOAD` cuando la
+orden de su estación ya no forma parte de la ruta. Los packets promovidos no se
+tocan; se reconstruyen `cargo_stock` y los contadores físicos, y el guard de
+descarga evita que `Stage` destruya una reserva entre fases. La resolución del
+siguiente salto se hace al crear la reserva, conservando el destino de los
+packets aunque la promoción se reparta en varios ticks. La regresión
+`full_load_reservation_returns_when_source_order_is_removed` comprueba
+conservación de unidades al eliminar la orden. Core queda en `2777` tests
+exitosos y `1` ignorado, con Clippy de producción y check del cliente en verde.
+La coordinación de reservas con toda la formación articulada y otras
+cancelaciones siguen pendientes; #329 permanece abierta.

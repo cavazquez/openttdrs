@@ -7797,3 +7797,20 @@ mantiene el fallback centrado para saves/vehículos sin posición naval
 materializada. El core pasa `2753` tests, con 1 ignorado. #567 continúa abierta
 por el oráculo dinámico externo, callbacks y la aceptación visual completa del
 depósito naval.
+
+Corrección #326/#567-SHIP-DEPOT-BUOY-VISUAL (2026-09-14, `bdeefc14`): el
+extractor de OpenGFX ya toma `SPR_IMG_BUOY` (693), que es el sprite visible de
+la boya, en vez del slot base 4076, que es intencionalmente vacío de 1×1. El
+renderer conserva la caja `TILE_SEQ_LINE` de la boya, aplica el ancla NFO
+`yrel=2` con el offset raster `+2,5` y separa las boyas vanilla de las
+reemplazadas por Canal Feature. Los índices globales 239/240 se hornean en
+cuatro frames RGBA y un sistema reproduce su ciclo de paleta con el contador
+`+8` cada 30 ms; el recurso también participa del teardown de sesión. En el
+save real `mvp_openttd_ship.sav`, centrado en `32,32` a 512², la geometría del
+depósito y la boya queda alineada sin traslación y la captura pasa de 127
+divergencias a un único píxel (`3,814697265625e-6`), que corresponde al estado
+temporal rojo 20/128 de la referencia congelada frente al perfil `CLEAN` que
+desactiva animaciones. Pasan los `1534` tests del cliente (2 ignorados), el
+formato y Clippy del binario. Esta evidencia no cierra #326/#567: quedan la
+aceptación raster en las demás orientaciones/escenarios, callbacks y el resto
+de la semántica naval.

@@ -5143,3 +5143,16 @@ genérico. La tabla de motores navales vanilla también se rehidrata y reemite
 con sus slots globales y velocidades máximas. Esto cubre la ventana dinámica
 de la fixture, no la semántica YAPF/wormhole completa, callbacks NewGRF ni la
 aceptación raster amplia; #328/#330/#567 permanecen abiertas.
+
+Corrección #326/#567-SHIP-DEPOT-BUOY-VISUAL (2026-09-14, `bdeefc14`): el
+extractor de OpenGFX toma `SPR_IMG_BUOY` (693), el sprite visible de la boya,
+en vez del slot base 4076, intencionalmente vacío de 1×1. El renderer conserva
+la caja `TILE_SEQ_LINE`, aplica el `yrel=2` NFO con offset raster `+2,5`, y sólo
+las boyas vanilla reciben los cuatro frames RGBA derivados de los índices de
+paleta 239/240. En `mvp_openttd_ship.sav`, centrado en `32,32` a 512², la
+geometría del depósito y la boya queda alineada sin traslación y la comparación
+reduce la divergencia de 127 a un píxel (`3,814697265625e-6`), un estado
+temporal rojo 20/128 de la referencia frente al perfil `CLEAN` congelado.
+Pasaron `1534` tests del cliente (2 ignorados), formato y Clippy del binario.
+#326/#567 permanecen abiertas por aceptación visual amplia, callbacks y el
+resto de la semántica naval.

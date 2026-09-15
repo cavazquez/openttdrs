@@ -7860,3 +7860,15 @@ terminó dentro de 180 s. La diferencia deja acotada la siguiente subetapa:
 preservar el primer remap de la cámara de captura y reducir el conjunto
 diagonal antes de habilitar precisión en `Out2x`; no se declara paridad de
 escala ni se cierra #326.
+
+Validación #326-ROADSTOP-FOCUS (2026-09-15): la región Kale
+`(225,2)..(226,2)` contiene una pareja de paradas viales vanilla. El
+comparador `world-draw` encuentra `2` teselas y `6/6` draws candidatos
+contenidos: los cuatro layers `5978..5983` conservan ID, caja explícita,
+paleta y orden relativo, y los dos grounds quedan en su pase correspondiente.
+Una captura raster más amplia, centrada en `(120,9)` a `800×600` Normal,
+queda en `8.987/480.000` píxeles distintos (`1,8723 %`) sin traslación; el
+residuo se reparte entre edificios, árboles y bordes de la ciudad, por lo que
+no se atribuye a la parada sin una captura aislada. No aparece una sub-brecha
+semántica de road-stop en Kale; #326 continúa abierta por composición raster,
+familias restantes, escalas y aceptación naval.

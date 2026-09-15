@@ -8139,3 +8139,16 @@ estructural de la zona y el foco anterior de road-stop siguen coincidiendo,
 por lo que no se cambia el compositor ni se cierra #326: el próximo paso es
 hacer la comparación consciente de segmentos o conseguir un foco que no mezcle
 familias antes de atribuir una inversión al renderer.
+
+Corrección #329-STATION-AUTO-REFIT-CONSIST-BALANCE (2026-09-15, `09a48750`):
+el autorefit automático deja de imponer un único cargo a todo el consist.
+Cada unidad se evalúa con sus opciones y capacidad efectiva de refit, se retira
+la capacidad del cargo anterior y se elige primero el cargo con menor capacidad
+restante en el consist; los empates usan el stock disponible de la estación.
+La selección conserva el filtro de `next_hop` introducido en `a1eb0246` y no
+ejecuta callbacks sobre el vehículo real durante la consulta de capacidad. La
+regresión `station_auto_refit_balances_distinct_consist_cargo_types` ejecuta el
+refit sobre una cabeza y un remolque con cargos distintos y comprueba ambos
+resultados. Core queda en `2766` tests exitosos y `1` ignorado; #329 sigue
+abierta por reservas, carga parcial, cadenas articuladas completas y demás
+contratos de `HandleStationRefit`.

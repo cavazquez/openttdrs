@@ -5360,3 +5360,15 @@ compatibilidad con saves antiguos. La regresión
 el stock mayor está destinado a otra estación; la suite core termina en
 `2765 passed; 0 failed; 1 ignored`. El balanceo de capacidad, las reservas y
 los consist articulados heterogéneos siguen pendientes; #329 no se cierra.
+
+Corrección #329-STATION-AUTO-REFIT-CONSIST-BALANCE (2026-09-15, `09a48750`):
+el autorefit automático selecciona el cargo por unidad del consist usando la
+capacidad efectiva de cada refit y el balance de capacidad restante, con el
+stock de estación como desempate. La consulta de capacidad trabaja sobre una
+copia para no ejecutar callbacks que alteren el vehículo antes de aceptar la
+operación. El test
+`station_auto_refit_balances_distinct_consist_cargo_types` cubre una cabeza y
+un remolque con cargos iniciales diferentes, ejecuta el autorefit y verifica la
+mutación de ambos. La suite core queda en `2766 passed; 0 failed; 1 ignored` y
+clippy de la biblioteca en verde. Reservas, carga parcial y consist articulado
+completo siguen pendientes; #329 permanece abierta.

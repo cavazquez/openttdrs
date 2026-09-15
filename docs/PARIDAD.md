@@ -5581,3 +5581,17 @@ passed; `0` failed; `1` ignored, con Clippy, formato, documentación y check
 del cliente en verde. #329 sigue abierta por la identidad/propiedades
 completas, carga y reservas de formaciones duales, y comportamiento de
 `EngineID` custom cuando el catálogo NewGRF sí está disponible.
+
+Corrección #329-VEHICLE-CONSIST-ENGINE-REHYDRATE (2026-09-15, `0e59f3a9`):
+después de reconstruir el catálogo Action0, los vehículos importados vuelven
+a enlazar su `engine_type` nativo mediante `EIDS` (`GRFID` + ID local), con
+validación de la clase de vehículo. Las formaciones ferroviarias afectadas
+recalculan sus métricas contra el catálogo activo; la cabeza conserva su
+`cargo_cap` local aunque el motor custom ya esté resuelto, y un GRF ausente no
+se sustituye silenciosamente por el motor vanilla por defecto. La regresión
+`rehydrates_imported_train_engine_and_recomputes_consist_capacity` cubre un
+motor custom de capacidad de catálogo 55, capacidad SAV local 7 y vagón 30,
+rehidratando la suma 37. Core queda en `2783 passed; 0 failed; 1 ignored`,
+con Clippy de core, formato, documentación y check/Clippy del binario cliente
+en verde. #329 sigue abierta por callbacks y propiedades de vehículo aún no
+modelados, carga/reservas duales y otras rutas NewGRF sin correspondencia.

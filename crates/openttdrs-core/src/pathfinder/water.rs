@@ -179,6 +179,7 @@ impl ShipPathCost {
         };
         self.track_tile_cost(base, ship_water_class(map, previous, current), skipped)
             .saturating_add(Self::curve_penalty(previous_trackdir, trackdir))
+            .saturating_add(preferred_direction_penalty(current, trackdir))
             .saturating_add(self.lock_penalty(map, current))
     }
 
@@ -503,6 +504,28 @@ fn trackdir_crosses_trackdir(previous: u8, current: u8) -> bool {
     mask & (1_u16 << current) != 0
 }
 
+/// Replica `IsPreferredShipDirection`: alterna los trackdirs por coordenada
+/// para separar barcos que recorren la misma red en sentidos opuestos.
+#[must_use]
+fn is_preferred_ship_direction(tile: TileCoord, trackdir: u8) -> bool {
+    let odd_x = (tile.x & 1) != 0;
+    let odd_y = (tile.y & 1) != 0;
+    match trackdir {
+        0 => odd_y,  // TRACKDIR_X_NE
+        8 => !odd_y, // TRACKDIR_X_SW
+        9 => odd_x,  // TRACKDIR_Y_NW
+        1 => !odd_x, // TRACKDIR_Y_SE
+        2 | 5 | 11 | 12 => odd_x ^ odd_y,
+        3 | 4 | 10 | 13 => !(odd_x ^ odd_y),
+        _ => false,
+    }
+}
+
+#[must_use]
+fn preferred_direction_penalty(tile: TileCoord, trackdir: u8) -> u32 {
+    u32::from(!is_preferred_ship_direction(tile, trackdir)) * YAPF_TILE_LENGTH
+}
+
 #[must_use]
 fn trackdir_for_entry_exit(entry: u8, exit: u8) -> Option<u8> {
     (0..6_u8).find_map(|track| {
@@ -595,4 +618,30 @@ fn heuristic(from: TileCoord, to: TileCoord, ship_cost: Option<ShipPathCost>) ->
     ship_cost.map_or(distance, |cost| {
         distance.saturating_mul(cost.minimum_tile_cost())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preferred_ship_direction_matches_native_parity_table() {
+        let even = TileCoord::new(0, 0);
+        assert!(!is_preferred_ship_direction(even, 0));
+        assert!(is_preferred_ship_direction(even, 8));
+        assert!(!is_preferred_ship_direction(even, 9));
+        assert!(is_preferred_ship_direction(even, 1));
+        assert!(!is_preferred_ship_direction(even, 2));
+        assert!(is_preferred_ship_direction(even, 3));
+        assert!(is_preferred_ship_direction(even, 4));
+        assert!(!is_preferred_ship_direction(even, 5));
+        assert!(is_preferred_ship_direction(even, 10));
+        assert!(!is_preferred_ship_direction(even, 11));
+        assert!(!is_preferred_ship_direction(even, 12));
+        assert!(is_preferred_ship_direction(even, 13));
+
+        let odd_y = TileCoord::new(0, 1);
+        assert!(is_preferred_ship_direction(odd_y, 0));
+        assert!(!is_preferred_ship_direction(odd_y, 8));
+    }
 }

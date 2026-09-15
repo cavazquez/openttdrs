@@ -70,6 +70,12 @@ OPENTTDRS_VIEWPORT_SORT_TRACE_OUT=/tmp/candidate-sort.json \
 La traza nativa JSONL registra el vector de parents después de
 `_vp_sprite_sorter` para los segmentos de la captura. La candidata registra el
 scope seleccionado, los parents de entrada, su orden resultante y profundidad.
+Cuando un `SpriteCombine` atraviesa más de una banda, `local_proxies` enumera
+las copias recortadas que se ordenan dentro de cada banda sin entrar al sorter
+global. Cada proxy conserva `band`, `source_child`, `original_parent`,
+`sprite_id`, `world_bounds` y las profundidades de origen/final; por eso el
+conteo efectivo para investigar una promoción es `parents + local_proxies`.
+El campo es opcional para mantener compatibilidad con trazas anteriores.
 Son instrumentos de diagnóstico: no sustituyen `report.json`, no se publican
 como baseline y no permiten declarar paridad por una sola región.
 

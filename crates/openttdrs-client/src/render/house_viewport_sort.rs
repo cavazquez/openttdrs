@@ -800,6 +800,24 @@ struct ViewportSegmentProxyCandidate {
     chunk: Option<crate::render::MapTileChunk>,
 }
 
+/// Fila de diagnóstico para una copia que se ordena dentro de una banda
+/// nativa, pero que no participa del sorter global.
+///
+/// El proxy conserva el parent lógico de `SpriteCombine` y el mismo bounds del
+/// sprite promovido; sólo cambia el contexto de orden (`band` y la profundidad
+/// local). Esta separación permite comparar la composición efectiva con el
+/// stream de OpenTTD sin hacer pasar la copia efímera por un parent global.
+#[derive(Clone, Copy, Debug)]
+struct ViewportSegmentProxyTrace {
+    band: i64,
+    band_ordinal: usize,
+    source_child: Entity,
+    original_parent: Entity,
+    parent: ViewportSortableParent,
+    source_depth: f32,
+    sorted_depth: f32,
+}
+
 const VIEWPORT_SEGMENT_PROXY_EDGE_STEP: f32 = 0.000_001;
 
 fn assign_segment_proxy_depths(
@@ -950,6 +968,7 @@ fn export_viewport_sort_trace(
     sorted_depths: &[f32],
     scope: Option<TileViewportBounds>,
     precise_scope: Option<DiagonalViewportSortScope>,
+    local_proxies: &[ViewportSegmentProxyTrace],
 ) {
     let Some(path) = std::env::var_os("OPENTTDRS_VIEWPORT_SORT_TRACE_OUT") else {
         return;
@@ -980,6 +999,30 @@ fn export_viewport_sort_trace(
             })
         })
         .collect();
+    let local_proxies: Vec<_> = local_proxies
+        .iter()
+        .map(|proxy| {
+            let parent = proxy.parent;
+            json!({
+                "band": proxy.band,
+                "band_ordinal": proxy.band_ordinal,
+                "source_child": proxy.source_child.to_bits(),
+                "original_parent": proxy.original_parent.to_bits(),
+                "sprite_id": parent.sprite_id,
+                "insertion_key": parent.insertion_key,
+                "source_depth": proxy.source_depth,
+                "sorted_depth": proxy.sorted_depth,
+                "world_bounds": {
+                    "xmin": parent.bounds.xmin,
+                    "ymin": parent.bounds.ymin,
+                    "zmin": parent.bounds.zmin,
+                    "xmax": parent.bounds.xmax,
+                    "ymax": parent.bounds.ymax,
+                    "zmax": parent.bounds.zmax,
+                },
+            })
+        })
+        .collect();
     let document = json!({
         "contract": "openttdrs-viewport-sort",
         "schema_version": 1,
@@ -998,6 +1041,7 @@ fn export_viewport_sort_trace(
         })),
         "parents_before_sort": input.len(),
         "parents": parents,
+        "local_proxies": local_proxies,
     });
     match serde_json::to_vec(&document)
         .and_then(|bytes| std::fs::write(path, bytes).map_err(serde_json::Error::io))
@@ -1527,7 +1571,6 @@ pub(crate) fn sort_viewport_sortable_parents(
         .iter()
         .map(|&index| (input[index].0, input[index].1, sorted_depths[index]))
         .collect();
-    export_viewport_sort_trace(&input, &order, &sorted_depths, scope, precise_scope);
 
     // En el stream final, cada parent reserva el espacio hasta el siguiente.
     // El último no tiene techo y conserva el delta histórico de sus children.
@@ -1590,6 +1633,7 @@ pub(crate) fn sort_viewport_sortable_parents(
     }
     let mut bands: Vec<_> = candidates_by_band.keys().copied().collect();
     bands.sort_unstable();
+    let mut local_proxy_trace = Vec::new();
     for band in bands {
         let Some(candidates) = candidates_by_band.remove(&band) else {
             continue;
@@ -1601,6 +1645,15 @@ pub(crate) fn sort_viewport_sortable_parents(
             &parent_states,
         );
         for (index, proxy_candidate) in candidates.into_iter().enumerate() {
+            local_proxy_trace.push(ViewportSegmentProxyTrace {
+                band,
+                band_ordinal: index,
+                source_child: proxy_candidate.candidate.child_entity,
+                original_parent: proxy_candidate.candidate.original_parent,
+                parent: proxy_candidate.candidate.promoted_parent,
+                source_depth: proxy_candidate.candidate.current_depth,
+                sorted_depth: proxy_depths[index],
+            });
             let candidate = proxy_candidate.candidate;
             let key = (candidate.child_entity, proxy_candidate.band);
             let mut proxy_transform = proxy_candidate.transform;
@@ -1645,6 +1698,14 @@ pub(crate) fn sort_viewport_sortable_parents(
             }
         }
     }
+    export_viewport_sort_trace(
+        &input,
+        &order,
+        &sorted_depths,
+        scope,
+        precise_scope,
+        &local_proxy_trace,
+    );
     for proxy_entity in existing_segment_proxies.into_values() {
         commands.entity(proxy_entity).despawn();
     }

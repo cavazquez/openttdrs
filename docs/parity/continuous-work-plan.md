@@ -7882,3 +7882,14 @@ el comportamiento anterior de las capturas ferroviarias. Las regresiones
 cubren nombres case-insensitive, orientación fuera de rango y herramientas
 desconocidas. Esta unidad sólo hace reproducible la aceptación visual; no
 declara paridad raster ni cierra #326/#567.
+
+Validación #326-SORT-LOCAL-PROXY-TRACE (2026-09-15): la traza opcional
+`OPENTTDRS_VIEWPORT_SORT_TRACE_OUT` conserva ahora, además de los parents del
+sorter global, el campo `local_proxies` con banda, child fuente, parent lógico,
+sprite, bounds y profundidad final de cada copia segmentada. El analizador
+cuenta `parents + local_proxies` como conjunto efectivo y mantiene compatibles
+las trazas históricas que no tenían el campo. La regresión del analizador pasa
+y el cliente mantiene `1538` tests exitosos, Clippy, formato y documentación en
+verde. La captura de comprobación quedó limitada por un timeout en el primer
+pase sin `precise_scope` (`35.507` parents); no se usa como métrica raster ni
+como motivo para cerrar #326.

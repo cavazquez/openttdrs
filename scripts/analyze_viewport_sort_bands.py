@@ -207,16 +207,29 @@ def load_candidate(path: Path) -> dict[str, Any]:
     parents = candidate.get("parents")
     if not isinstance(parents, list):
         raise TraceError(f"{path}: parents debe ser una lista")
+    local_proxies = candidate.get("local_proxies", [])
+    if not isinstance(local_proxies, list):
+        raise TraceError(f"{path}: local_proxies debe ser una lista cuando está presente")
     return candidate
+
+
+def candidate_sort_entries(
+    candidate: dict[str, Any],
+) -> list[tuple[str, int, dict[str, Any]]]:
+    entries: list[tuple[str, int, dict[str, Any]]] = []
+    for field in ("parents", "local_proxies"):
+        for index, raw in enumerate(candidate.get(field, [])):
+            entries.append((field, index, require_object(raw, f"candidate.{field}[{index}]")))
+    return entries
 
 
 def candidate_identities(candidate: dict[str, Any]) -> tuple[set[tuple[int, Bounds]], set[Bounds]]:
     identities: set[tuple[int, Bounds]] = set()
     bounds: set[Bounds] = set()
-    for index, raw in enumerate(candidate["parents"]):
-        parent = require_object(raw, f"candidate.parents[{index}]")
-        sprite = require_int(parent.get("sprite_id"), f"candidate.parents[{index}].sprite_id")
-        identity = (sprite, bounds_from_parent(parent, f"candidate.parents[{index}]"))
+    for field, index, parent in candidate_sort_entries(candidate):
+        label = f"candidate.{field}[{index}]"
+        sprite = require_int(parent.get("sprite_id"), f"{label}.sprite_id")
+        identity = (sprite, bounds_from_parent(parent, label))
         identities.add(identity)
         bounds.add(identity[1])
     return identities, bounds
@@ -288,6 +301,9 @@ def analyze(
         )
         report["candidate"] = {
             "parents": len(candidate["parents"]),
+            "local_proxies": len(candidate.get("local_proxies", [])),
+            "effective_parents": len(candidate["parents"])
+            + len(candidate.get("local_proxies", [])),
             "unique_parent_identities": len(candidate_identities_set),
             "unique_world_bounds": len(candidate_bounds),
             "reference_identities_not_in_candidate": len(reference_identities - candidate_identities_set),
@@ -334,7 +350,9 @@ def main(argv: list[str] | None = None) -> int:
     if candidate_summary:
         print(
             "candidata: "
-            f"{candidate_summary['parents']} parents, "
+            f"{candidate_summary['parents']} parents + "
+            f"{candidate_summary['local_proxies']} proxies locales "
+            f"({candidate_summary['effective_parents']} efectivos), "
             f"{candidate_summary['same_bounds_different_sprite']} con misma caja y sprite distinto, "
             f"{candidate_summary['reference_bounds_not_in_candidate']} cajas de referencia ausentes"
         )

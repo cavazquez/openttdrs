@@ -79,6 +79,16 @@ def main() -> int:
                 "world_bounds": rows[3]["world_bounds"],
             },
         ],
+        "local_proxies": [
+            {
+                "band": 1,
+                "band_ordinal": 0,
+                "source_child": 42,
+                "original_parent": 7,
+                "sprite_id": 300,
+                "world_bounds": rows[6]["world_bounds"],
+            }
+        ],
     }
 
     with tempfile.TemporaryDirectory() as raw:
@@ -100,7 +110,9 @@ def main() -> int:
             or summary["promoted_world_bounds"] != 1
             or summary["extra_sprite_variants"] != 1
             or candidate_summary["same_bounds_different_sprite"] != 1
-            or candidate_summary["reference_bounds_not_in_candidate"] != 1
+            or candidate_summary["reference_bounds_not_in_candidate"] != 0
+            or candidate_summary["local_proxies"] != 1
+            or candidate_summary["effective_parents"] != 3
         ):
             print(json.dumps(report, indent=2), file=sys.stderr)
             return 1

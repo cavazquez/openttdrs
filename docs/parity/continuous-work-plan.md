@@ -8494,3 +8494,14 @@ tests de core pasados, `0` fallidos y `1` ignorado, Clippy de producción,
 check del cliente, formato y `git diff --check` verdes. #329/#567 siguen
 abiertos por dirección preferida, trackdirs físicos completos en el
 controlador, callbacks y cachés visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-YAPF-PREFERRED-DIRECTION (2026-09-15, `d950cb3e`):
+los nodos navales aplican `IsPreferredShipDirection` con la tabla de paridad
+vanilla para trackdirs diagonales y de esquina, sumando `YAPF_TILE_LENGTH` a
+los sentidos no preferidos. La prueba
+`preferred_ship_direction_matches_native_parity_table` cubre la tabla completa
+y la de costes curvos comprueba la composición del sesgo. Validación: `2794`
+tests de core pasados, `0` fallidos y `1` ignorado, Clippy de producción,
+check del cliente, formato y `git diff --check` verdes. #329/#567 siguen
+abiertos por trackdirs y cache de ruta completos en el controlador, settings
+configurables, callbacks y cachés visuales NewGRF restantes.

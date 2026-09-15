@@ -5670,3 +5670,16 @@ sin alterar el coste de barcos que no están resolviendo una estación. La
 validación queda en `2790 passed; 0 failed; 1 ignored` en core, con Clippy
 estricto, check del cliente y formato verdes. #329/#567 siguen abiertos por
 curvas/trackdirs, aqueductos, callbacks y cachés visuales NewGRF.
+
+Corrección #329/#567-SHIP-YAPF-AQUEDUCT (2026-09-15, `2a98ae86`): las rampas
+navales de `MP_TUNNELBRIDGE` se resuelven como un wormhole entre extremos del
+acueducto, respetando dirección y bits de transporte. El pathfinder ya no
+recorre el terreno subyacente: cobra el coste de las teselas del vano y
+rechaza la entrada lateral; el controlador salta físicamente a la rampa
+opuesta y conserva el siguiente muelle de la ruta. Las regresiones
+`ship_path_jumps_aqueduct_and_rejects_inner_ramp_side` y
+`ship_controller_jumps_aqueduct_span_at_inner_ramp` cubren topología, coste y
+movimiento. Validación: `2792 passed; 0 failed; 1 ignored` en la biblioteca
+core, Clippy estricto de producción, formato y `git diff --check` verdes. #329
+/#567 siguen abiertos por curvas/trackdirs, dirección preferida, callbacks y
+cachés visuales NewGRF restantes.

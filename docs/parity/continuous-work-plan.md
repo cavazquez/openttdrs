@@ -8469,3 +8469,16 @@ penalización de 300 sin modificar la topología ni las rutas sin estación.
 Validación: `2790` tests de core pasados, `0` fallidos y `1` ignorado, Clippy
 estricto, check del cliente y formato verdes. #329/#567 permanecen abiertos
 por curvas/trackdirs, aqueductos, callbacks y cachés visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-YAPF-AQUEDUCT (2026-09-15, `2a98ae86`): las rampas
+de transporte acuático codificadas como `MP_TUNNELBRIDGE` se enlazan con la
+rampa opuesta como wormhole naval; la entrada lateral queda bloqueada y el
+pathfinder cobra el vano omitido con la misma escala de `YapfShip`. El
+controlador aplica el salto físico al extremo opuesto y mantiene la ruta
+posterior hacia el muelle. Las pruebas
+`ship_path_jumps_aqueduct_and_rejects_inner_ramp_side` y
+`ship_controller_jumps_aqueduct_span_at_inner_ramp` cubren navegación y
+movimiento. Validación: `2792` tests de core pasados, `0` fallidos y `1`
+ignorado, Clippy de producción, formato y `git diff --check` verdes. #329/#567
+siguen abiertos por curvas/trackdirs, dirección preferida, callbacks y cachés
+visuales NewGRF restantes.

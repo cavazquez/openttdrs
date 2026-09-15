@@ -7972,3 +7972,16 @@ los targets todavía encuentra advertencias históricas en fixtures de tests y
 módulos ajenos; no se atribuyen a esta corrección ni se mezclan en el alcance.
 #330 permanece abierta por rutas multi-tick, tráfico complejo, presignals y
 los oráculos completos de aire y mar.
+
+Corrección #329/#567-SHIP-DEPOT-PARTIAL-ANCHOR (2026-09-15):
+`ship_depot_north_tile` replica ahora la parte relevante de
+`GetShipDepotNorthTile`: calcula `GetOtherShipDepotTile` y toma la menor
+coordenada aun cuando la sección opuesta no esté materializada en un save
+legacy/parcial. Antes el helper reutilizaba `ship_depot_other_tile`, que valida
+la pareja completa y devolvía la sección consultada en ese caso. La regresión
+`ship_depot_north_tile_matches_native_partial_section_geometry` fija la
+diferencia y mantiene la validación estricta para demolición, consultas del
+pool e índice espacial. Pasan los 19 tests del módulo de depósitos, los 101
+tests acuáticos, formato, `git diff --check` y Clippy estricto de la librería;
+#329/#567 permanecen abiertas por callbacks, pathfinding naval amplio y
+aceptación visual/framebuffer.

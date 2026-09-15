@@ -5188,3 +5188,15 @@ librería/binario, `git diff --check` y la compilación CMake del oráculo nativ
 Esto cubre una frontera de RNG/importación; #330 sigue abierta por rutas
 multi-tick, tráfico complejo, presignals y los oráculos completos de aire y
 mar.
+
+Corrección #329/#567-SHIP-DEPOT-PARTIAL-ANCHOR (2026-09-15):
+`ship_depot_north_tile` separa ahora la geometría de `GetShipDepotNorthTile`
+de la validación de la segunda sección. OpenTTD calcula el índice opuesto y
+toma el menor aunque un save legacy o parcial ya no conserve esa segunda
+tesela; Rust reproducía antes la sección consultada porque exigía encontrar
+también el vecino como depósito válido. La regresión
+`ship_depot_north_tile_matches_native_partial_section_geometry` cubre una
+sección `part=South` aislada y conserva `ship_depot_other_tile` estricto para
+operaciones que necesitan la huella completa. Esto mejora la normalización de
+órdenes/vehículos importados sin cerrar #329/#567: siguen pendientes
+callbacks, pathfinding naval amplio y aceptación visual/framebuffer.

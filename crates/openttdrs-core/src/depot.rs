@@ -107,17 +107,8 @@ fn ship_depot_is_section(tile: crate::map::Tile) -> bool {
 #[must_use]
 pub fn ship_depot_other_tile(map: &Map, pos: TileCoord) -> Option<TileCoord> {
     let tile = map.get(pos).filter(|tile| ship_depot_is_section(*tile))?;
-    let delta = if ship_depot_axis(tile) == 0 {
-        (1, 0)
-    } else {
-        (0, 1)
-    };
+    let other = ship_depot_other_position(tile, pos);
     let part = ship_depot_part(tile);
-    let other = if part == 0 {
-        TileCoord::new(pos.x + delta.0, pos.y + delta.1)
-    } else {
-        TileCoord::new(pos.x - delta.0, pos.y - delta.1)
-    };
     map.get(other)
         .is_some_and(|other_tile| {
             ship_depot_is_section(other_tile)
@@ -127,19 +118,45 @@ pub fn ship_depot_other_tile(map: &Map, pos: TileCoord) -> Option<TileCoord> {
         .then_some(other)
 }
 
+/// Calcula la posición geométrica que `GetOtherShipDepotTile` devuelve sin
+/// comprobar que la sección vecina siga materializada.
+#[must_use]
+fn ship_depot_other_position(tile: crate::map::Tile, pos: TileCoord) -> TileCoord {
+    let delta = if ship_depot_axis(tile) == 0 {
+        (1, 0)
+    } else {
+        (0, 1)
+    };
+    if ship_depot_part(tile) == 0 {
+        TileCoord::new(pos.x + delta.0, pos.y + delta.1)
+    } else {
+        TileCoord::new(pos.x - delta.0, pos.y - delta.1)
+    }
+}
+
 /// Devuelve la sección norte que identifica al depósito completo.
 ///
-/// Una sección aislada (por ejemplo, un save antiguo o un mapa sintético de
-/// prueba) se devuelve a sí misma para no desaparecer de las consultas.
+/// La coordenada vecina se calcula aunque la otra sección no esté disponible,
+/// como en el helper nativo; sólo se conserva la propia si ese índice cae
+/// fuera del mapa local.
 #[must_use]
 pub fn ship_depot_north_tile(map: &Map, pos: TileCoord) -> Option<TileCoord> {
+    // Keep accepting the semantic `TileKind` used by synthetic/runtime
+    // fixtures; imported binary maps classify real sections through m5 and
+    // the strict pool/footprint helpers still require `WaterTileType::Depot`.
     let tile = map
         .get(pos)
         .filter(|tile| tile.kind == TileKind::ShipDepot)?;
-    if ship_depot_part(tile) == 0 {
-        return Some(pos);
-    }
-    Some(ship_depot_other_tile(map, pos).unwrap_or(pos))
+    let other = ship_depot_other_position(tile, pos);
+    // `GetShipDepotNorthTile` compara el índice calculado sin inspeccionar el
+    // tipo de la segunda sección. Sólo se conserva el fallback local si el
+    // save apunta fuera del mapa, porque no existe una coordenada utilizable
+    // para representar ese índice inválido en `TileCoord`.
+    Some(if map.get(other).is_some() && other < pos {
+        other
+    } else {
+        pos
+    })
 }
 
 /// Normaliza la coordenada de un depósito al ancla que usa el vehículo.
@@ -649,6 +666,25 @@ mod tests {
             nearest_depot_tile_indexed(&s.map, TileCoord::new(0, 5), VehicleKind::Ship, &mut index,),
             Some(north)
         );
+    }
+
+    #[test]
+    fn ship_depot_north_tile_matches_native_partial_section_geometry() {
+        let mut s = GameState::new(8, 8);
+        let partial = TileCoord::new(3, 3);
+        let expected_north = TileCoord::new(2, 3);
+
+        // `GetShipDepotNorthTile` only has `IsShipDepot(t)` as a precondition:
+        // it computes the other index and takes the minimum even if a legacy
+        // or partially imported save no longer contains that second section.
+        s.map.set_kind(partial, TileKind::ShipDepot).unwrap();
+        s.map
+            .set_mapt_m5(partial, 0x60, 0x31)
+            .expect("sección naval parcial");
+        s.map.set_m2_u16(partial, 17).unwrap();
+
+        assert_eq!(ship_depot_north_tile(&s.map, partial), Some(expected_north));
+        assert_eq!(ship_depot_other_tile(&s.map, partial), None);
     }
 
     #[test]

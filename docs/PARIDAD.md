@@ -5614,3 +5614,14 @@ cliente verdes. El clippy global `--all-targets` aún contiene lints históricos
 de tests/fixtures. #329/#567 continúan abiertos por callbacks/propiedades aún
 no modelados, agua efectiva de túneles/puentes, cachés visuales y la paridad
 completa del depósito naval.
+
+Corrección #329/#567-SHIP-SPEED-FRACTION-SEMANTICS (2026-09-15, `e2f8a232`):
+las propiedades Action0 `ocean_speed_frac` y `canal_speed_frac` se interpretan
+como reducción nativa, no como multiplicador: el factor aplicado es
+`256 - frac`, con `0` como “sin reducción”. La regresión
+`ship_speed_properties_are_native_reductions` cubre los valores asimétricos
+que el caso 128 no podía distinguir y el parser naval conserva ahora los
+resultados 75/50 para una velocidad base 100 y reducciones 64/128. La
+validación publicada queda en `e2f8a232`, con `2786 passed; 0 failed; 1
+ignored` en la biblioteca core. #329/#567 siguen abiertos por agua efectiva en
+túneles/puentes, YAPF/costes y propiedades/cachés NewGRF aún parciales.

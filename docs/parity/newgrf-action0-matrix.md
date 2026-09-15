@@ -127,8 +127,8 @@ Fuente: `newgrf_act0_ships.cpp`.
 | `0F` running cost factor | **runtime** |
 | `10` sound effect BYTE | **runtime** (`sound_effect`) |
 | `12` callback mask BYTE / `22` additional mask BYTE | **runtime** (`EngineDef.vehicle_callback_mask`; bit 7 habilita CB33) |
-| `14` ocean speed fraction | **runtime** (`ocean_speed_frac` → `ship_speed_for_tile`) |
-| `15` canal speed fraction | **runtime** (`canal_speed_frac` → `ship_speed_for_tile`) |
+| `14` ocean speed fraction | **runtime** (`ocean_speed_frac` → `ship_speed_for_tile`; valor nativo = reducción, multiplicador `256 - frac`) |
+| `15` canal speed fraction | **runtime** (`canal_speed_frac` → `ship_speed_for_tile`; valor nativo = reducción, multiplicador `256 - frac`) |
 | `17` misc flags (bit1 `Uses2CC`, bit7 `SpriteStack`) | **runtime parcial** (`uses_2cc` y `sprite_stack`; la caché de vehículos aplica ambas rampas y mapas Action5 2CC) |
 | `18`/`19`/`25` cargo classes allowed/disallowed/required WORD | **runtime** (`EngineDef` + refit por `CargoClass`, XOR de `refit_mask`) |
 | `08` sprite index | **runtime** (`ship_image_index` normaliza el valor nativo, `native_sprite_num` lo persiste, el renderer/preview Bevy seleccionan MPS/Oil/Coal/Ferry y `original_image_index` recupera la silueta nativa cuando un custom `0xFD` no produce una vista válida) |

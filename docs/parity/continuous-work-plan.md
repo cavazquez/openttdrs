@@ -8408,3 +8408,16 @@ clippy `--all-targets` global continúa exponiendo lints preexistentes en
 tests/fixtures y no se usa para declarar este bloque verde. #329/#567 siguen
 abiertos por callbacks y propiedades completas de vehículos, agua efectiva en
 túneles/puentes, cachés visuales y la paridad integral del depósito naval.
+
+Corrección #329/#567-SHIP-SPEED-FRACTION-SEMANTICS (2026-09-15, `e2f8a232`):
+`EngineDef::ocean_speed_frac` y `canal_speed_frac` siguen la semántica de
+`Engine::ApplyWaterClassSpeedFrac` de OpenTTD: el byte almacenado es una
+reducción, de modo que `0` no reduce la velocidad y el multiplicador efectivo
+es `256 - frac`. El helper naval ya no interpreta el byte como multiplicador
+directo. El caso anterior con `128` no distinguía ambas fórmulas; la regresión
+`ship_speed_properties_are_native_reductions` cubre `0`, `64` y `128`, y el
+parser de Action0 verifica que un barco de velocidad 100 con reducción 64/128
+queda en 75/50 según la clase de agua. La biblioteca core completa queda en
+`2786 passed; 0 failed; 1 ignored`; #329/#567 permanecen abiertos por agua
+efectiva en túneles/puentes, YAPF/costes navales y las propiedades/cachés
+NewGRF restantes.

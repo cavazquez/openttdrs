@@ -5508,3 +5508,17 @@ accidental en el tick final. Core queda en `2778 passed; 0 failed; 1 ignored`,
 con Clippy de producción y check del cliente en verde. La descarga de
 consistes, las capacidades heterogéneas de tren por unidad y las reservas de
 formaciones duales siguen pendientes; #329 permanece abierta.
+
+Corrección #329-VEHICLE-UNLOAD-CONSIST-ORDER (2026-09-15, `c388cbb4`):
+la descarga de vagones y articulados consulta ahora la orden de la cabeza para
+`NoUnload`, `Unload`, `Transfer`, la estación actual y el siguiente salto. Una
+unidad vacía ya no hace avanzar por sí sola la cabeza: durante una descarga
+gradual la formación conserva la orden y sólo la cierra cuando todas sus
+unidades quedaron vacías; también se conserva el estado de descarga de la
+cabeza para impedir una carga prematura en el tick siguiente. Las regresiones
+`unload_consist_uses_head_order_for_each_cargo_unit` y
+`unload_consist_defers_head_order_until_all_units_are_empty` cubren ambos
+contratos. Core queda en `2780 passed; 0 failed; 1 ignored`, con Clippy de
+producción y check del cliente en verde. La capacidad agregada de la cabeza
+frente a la capacidad local de cada unidad y las reservas de formaciones
+duales siguen pendientes; #329 permanece abierta.

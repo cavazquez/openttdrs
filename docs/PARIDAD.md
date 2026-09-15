@@ -1382,6 +1382,20 @@ contiene un foco vial de waypoint/catenaria para medir raster, así que #326
 permanece abierto por esos productores, clipping, pivotes, children globales y
 framebuffer.
 
+Diagnóstico #326-ROADSTOP-SORT-SCOPE (2026-09-15): la vista de
+`Kale_TitleGame.sav` alrededor de `19,210` (800×600, `Normal`) se exportó en
+ambos motores. La captura nativa registra `8` invocaciones independientes del
+sorter y `1024` parents; la candidata registra `765` parents globales y `30`
+proxies locales. La inversión que el comparador lineal mostró entre la capa de
+parada (`sprite 1302`) y la estación (`5978`) es un falso positivo de alcance:
+se comparó un segmento nativo con un vector global de Bevy. La diferencia
+raster es `21526/480000` píxeles (`4,4846%`, delta medio `1,3792`) y mezcla
+techos de estación, puente, edificios y árboles; no demuestra un defecto de
+road-stop. El stream estructural de esa zona y el foco específico anterior
+siguen coincidiendo. No se modifica el compositor ni se cierra #326; queda
+pendiente un comparador por segmentos o un foco aislado antes de usar el orden
+como evidencia de una regresión.
+
 
 Actualización #326-ROAD-STOP-CATENARY-GLOBAL (2026-09-09): las paradas
 Bus/Truck vanilla sin `TileLayout` custom ya respetan el orden nativo

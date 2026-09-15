@@ -8109,3 +8109,19 @@ techo requieren resultados diferentes porque el blitter 8bpp aplica
 `PALETTE_TO_TRANSPARENT` según el color de destino. Se conserva `0,50` como
 aproximación calibrada previa y no se cierra #326/#561: falta una composición
 dependiente del framebuffer, no otro cambio de parent/child por intuición.
+
+Diagnóstico #326-ROADSTOP-SORT-SCOPE (2026-09-15): se contrastó la vista de
+`Kale_TitleGame.sav` alrededor de `19,210` en `800×600`, `Normal`, contra una
+captura nativa y una exportación Rust con el mismo viewport. El trace nativo de
+`world-screenshot-sort` contiene `8` invocaciones independientes del sorter y
+`1024` parents; Bevy exporta `765` parents globales y `30` proxies locales.
+Por eso el comparador lineal no puede tratar el vector nativo de un bloque como
+si fuera el orden global de la vista: reporta una inversión espuria entre una
+parada (`sprite 1302`) y una estación (`5978`) al mezclar segmentos con
+alcances distintos. La raster A/B queda en `21526/480000` píxeles (`4,4846%`,
+delta medio `1,3792`) y concentra diferencias mixtas en techos de estación,
+puente, edificios y árboles; no aísla una regresión de road-stop. El stream
+estructural de la zona y el foco anterior de road-stop siguen coincidiendo,
+por lo que no se cambia el compositor ni se cierra #326: el próximo paso es
+hacer la comparación consciente de segmentos o conseguir un foco que no mezcle
+familias antes de atribuir una inversión al renderer.

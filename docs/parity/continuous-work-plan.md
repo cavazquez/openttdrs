@@ -7872,3 +7872,13 @@ residuo se reparte entre edificios, árboles y bordes de la ciudad, por lo que
 no se atribuye a la parada sin una captura aislada. No aparece una sub-brecha
 semántica de road-stop en Kale; #326 continúa abierta por composición raster,
 familias restantes, escalas y aceptación naval.
+
+Corrección #326/#567-SHIP-DEPOT-CAPTURE-HARNESS (2026-09-15): el driver de
+capturas de mapa acepta ahora `MAP_SHOT_TOOL=ship_depot` y selecciona el grupo
+Water correcto, además de `MAP_SHOT_ORIENTATION=0..3` para repetir el ghost
+naval en las cuatro huellas. El mismo arnés reconoce también los previews de
+waypoint vial/ferroviario y parada vial, con sus grupos de toolbar, y conserva
+el comportamiento anterior de las capturas ferroviarias. Las regresiones
+cubren nombres case-insensitive, orientación fuera de rango y herramientas
+desconocidas. Esta unidad sólo hace reproducible la aceptación visual; no
+declara paridad raster ni cierra #326/#567.

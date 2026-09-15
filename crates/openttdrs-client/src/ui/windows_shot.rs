@@ -1557,8 +1557,11 @@ fn hide_clean_map_shot_dynamic_layers(world: &mut World) {
 }
 
 /// Con `OPENTTDRS_MAP_SHOT=/ruta.png`: captura el mapa sin abrir ventanas y sale.
-/// Con `OPENTTDRS_MAP_SHOT_TOOL=rail|rail_x|rail_y` activa además esa herramienta
-/// y fija el cursor al centro de la ventana para capturar el fantasma de obra.
+/// Con `OPENTTDRS_MAP_SHOT_TOOL=rail|rail_x|rail_y|rail_station|rail_waypoint|
+/// road_stop|road_waypoint|ship_depot` activa además esa herramienta y fija el
+/// cursor al centro de la ventana para capturar el fantasma de obra.
+/// `OPENTTDRS_MAP_SHOT_ORIENTATION=0..3` fija la orientación del preview; es
+/// especialmente útil para ejercer las cuatro huellas del depósito naval.
 /// `OPENTTDRS_MAP_SHOT_CENTER=x,y` fija una tesela en el centro de la cámara y
 /// `OPENTTDRS_MAP_SHOT_SCALE=N` fija la escala ortográfica directa. Juntas hacen
 /// reproducibles los recortes de paridad con OpenTTD.
@@ -1659,14 +1662,17 @@ fn map_shot_driver(
     if progress.frame >= OPEN_FRAME
         && let Ok(tool) = std::env::var("OPENTTDRS_MAP_SHOT_TOOL")
     {
-        use crate::ui::toolbar::{BuildMenuAction, ToolbarGroup};
-        tool_state.active_tool = match tool.as_str() {
-            "rail" => Some(BuildMenuAction::Rail),
-            "rail_x" => Some(BuildMenuAction::RailX),
-            "rail_y" => Some(BuildMenuAction::RailY),
-            "rail_station" => Some(BuildMenuAction::RailStation),
-            _ => None,
-        };
+        let (active_tool, active_group) = map_shot_tool(&tool);
+        tool_state.active_tool = active_tool;
+        if let Some(group) = active_group {
+            toolbar_state.active_group = Some(group);
+        }
+        if let Some(orientation) = std::env::var("OPENTTDRS_MAP_SHOT_ORIENTATION")
+            .ok()
+            .and_then(|spec| parse_map_shot_orientation(&spec))
+        {
+            station_state.orientation = orientation;
+        }
         // `OPENTTDRS_MAP_SHOT_STATION=AxL` (p. ej. 4x3): andenes × longitud.
         if let Ok(spec) = std::env::var("OPENTTDRS_MAP_SHOT_STATION")
             && let Some((a, l)) = spec.split_once('x')
@@ -1677,7 +1683,6 @@ fn map_shot_driver(
         }
         // El panel del grupo debe estar abierto o `hide_tool_when_panel_closed`
         // limpia la herramienta en el mismo frame.
-        toolbar_state.active_group = Some(ToolbarGroup::Rail);
         if let Ok(mut window) = windows.single_mut() {
             // `OPENTTDRS_MAP_SHOT_CURSOR=fx,fy` (fracciones 0..1) reubica el cursor.
             let (fx, fy) = std::env::var("OPENTTDRS_MAP_SHOT_CURSOR")
@@ -1700,6 +1705,21 @@ fn map_shot_driver(
             window.cursor_position()
         );
     }
+}
+
+fn map_shot_tool(raw: &str) -> (Option<BuildMenuAction>, Option<ToolbarGroup>) {
+    let (action, group) = match raw.trim().to_ascii_lowercase().as_str() {
+        "rail" => (BuildMenuAction::Rail, ToolbarGroup::Rail),
+        "rail_x" => (BuildMenuAction::RailX, ToolbarGroup::Rail),
+        "rail_y" => (BuildMenuAction::RailY, ToolbarGroup::Rail),
+        "rail_station" => (BuildMenuAction::RailStation, ToolbarGroup::Rail),
+        "rail_waypoint" => (BuildMenuAction::RailWaypoint, ToolbarGroup::Rail),
+        "road_stop" => (BuildMenuAction::BusStop, ToolbarGroup::Road),
+        "road_waypoint" => (BuildMenuAction::RoadWaypoint, ToolbarGroup::Road),
+        "ship_depot" => (BuildMenuAction::ShipDepot, ToolbarGroup::Water),
+        _ => return (None, None),
+    };
+    (Some(action), Some(group))
 }
 
 /// Encola el screenshot tras `hide_map_shot_ui`. El driver de mapa queda antes
@@ -1745,6 +1765,13 @@ fn parse_map_shot_scale(spec: &str) -> Option<f32> {
     spec.parse::<f32>()
         .ok()
         .filter(|scale| scale.is_finite() && *scale > 0.0)
+}
+
+fn parse_map_shot_orientation(spec: &str) -> Option<u8> {
+    spec.trim()
+        .parse::<u8>()
+        .ok()
+        .filter(|orientation| *orientation < 4)
 }
 
 fn map_shot_capture_frame() -> u32 {
@@ -2113,6 +2140,22 @@ mod tests {
         assert_eq!(parse_map_shot_scale("0.75"), Some(0.75));
         assert_eq!(parse_map_shot_scale("0"), None);
         assert_eq!(parse_map_shot_scale("nan"), None);
+        assert_eq!(
+            map_shot_tool("ship_depot"),
+            (Some(BuildMenuAction::ShipDepot), Some(ToolbarGroup::Water))
+        );
+        assert_eq!(
+            map_shot_tool("ROAD_WAYPOINT"),
+            (
+                Some(BuildMenuAction::RoadWaypoint),
+                Some(ToolbarGroup::Road)
+            )
+        );
+        assert_eq!(map_shot_tool("unknown"), (None, None));
+        assert_eq!(parse_map_shot_orientation("3"), Some(3));
+        assert_eq!(parse_map_shot_orientation(" 0 "), Some(0));
+        assert_eq!(parse_map_shot_orientation("4"), None);
+        assert_eq!(parse_map_shot_orientation("-1"), None);
         assert_eq!(parse_map_shot_settle_frames("150"), Some(150));
         assert_eq!(parse_map_shot_settle_frames("39"), None);
         assert_eq!(parse_map_shot_settle_frames("901"), None);

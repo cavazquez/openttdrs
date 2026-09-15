@@ -1368,6 +1368,7 @@ pub(super) fn load_vehicles(
     loaded_this_tick: &mut [bool],
     unloaded_this_tick: &[bool],
 ) {
+    release_invalid_vehicle_reservations(state);
     // Si no existe ninguna fuente posible, ningún vehículo puede iniciar una
     // carga este tick. Evitar el barrido de toda la flota es especialmente
     // importante al importar un SAV que todavía no contiene `INDY`/stocks.
@@ -1510,6 +1511,71 @@ pub(super) fn load_vehicles(
             try_load_from_station_waiting_cargo(state, i, station_idx, loaded_flag);
         }
     }
+}
+
+/// Devuelve la sección `MTA_LOAD` cuando la orden que debía recibirla ya no
+/// forma parte de la ruta. `OpenTTD` cancela la carga al borrar la orden; sin
+/// esta frontera, una mutación de órdenes dejaría packets fuera de la estación
+/// y el `reserved_count` del andén retenido indefinidamente.
+fn release_invalid_vehicle_reservations(state: &mut GameState) {
+    let pending = state
+        .vehicles
+        .iter()
+        .enumerate()
+        .filter_map(|(vehicle_idx, vehicle)| {
+            let source = vehicle.cargo_packets.reservation_station?;
+            if vehicle.cargo_packets.reserved_count() == 0
+                || vehicle_route_contains_station(vehicle, source)
+            {
+                return None;
+            }
+            Some((vehicle_idx, source, vehicle.pos))
+        })
+        .collect::<Vec<_>>();
+
+    for (vehicle_idx, source, current_tile) in pending {
+        let Some(station_idx) = state
+            .stations
+            .iter()
+            .position(|station| station.pos == source)
+        else {
+            continue;
+        };
+        let amount = state.vehicles[vehicle_idx].cargo_packets.reserved_count();
+        let returned = state.stations[station_idx]
+            .cargo_packets
+            .return_reserved_from_vehicle(
+                source,
+                &mut state.vehicles[vehicle_idx].cargo_packets,
+                amount,
+                None,
+                current_tile,
+            );
+        if returned == 0 {
+            continue;
+        }
+        state.stations[station_idx].sync_stock_from_packets();
+        state.vehicles[vehicle_idx].sync_cargo_from_packets();
+        if state.vehicles[vehicle_idx].cargo_packets.reserved_count() == 0 {
+            state.vehicles[vehicle_idx].cargo_loading = false;
+        }
+    }
+}
+
+fn vehicle_route_contains_station(vehicle: &crate::Vehicle, station: TileCoord) -> bool {
+    if vehicle.orders.is_empty() {
+        return false;
+    }
+    let start = vehicle.current_order % vehicle.orders.len();
+    (0..vehicle.orders.len()).any(|offset| {
+        matches!(
+            vehicle.orders[(start + offset) % vehicle.orders.len()],
+            crate::VehicleOrder::Station {
+                station: order_station,
+                ..
+            } if order_station == station
+        )
+    })
 }
 
 /// Aplica el refit de una orden de estación al consist completo.
@@ -2146,12 +2212,55 @@ fn reserve_vehicle_cargo_at_station(
         return false;
     }
 
+    resolve_reserved_vehicle_hops(state, vehicle_idx, station_pos, cargo, &next_stations);
+
     // La cola de packets ya no contiene las unidades reservadas, por lo que
     // los agregados legacy deben reflejar sólo el remanente visible.
     state.stations[station_idx].sync_stock_from_packets();
     state.vehicles[vehicle_idx].sync_cargo_from_packets();
     state.vehicles[vehicle_idx].cargo_loading = true;
     true
+}
+
+// La reserva ocurre antes de `Load`; resolver ahora el salto conserva la
+// misma decisión que la carga inmediata aunque la promoción se reparta en
+// varios ticks. Sólo se tocan los packets del extremo `MTA_LOAD`.
+fn resolve_reserved_vehicle_hops(
+    state: &mut GameState,
+    vehicle_idx: usize,
+    station_pos: TileCoord,
+    cargo: CargoType,
+    next_stations: &[TileCoord],
+) {
+    let order_hop = next_stations.first().copied();
+    let distribution = state
+        .cargo_dist
+        .distribution_for(cargo, &state.cargo_spec_catalog);
+    let station_flows = &state.runtime.station_flows;
+    let mut reserved_left = state.vehicles[vehicle_idx].cargo_packets.reserved_count();
+    for packet in state.vehicles[vehicle_idx]
+        .cargo_packets
+        .packets
+        .iter_mut()
+        .rev()
+    {
+        if reserved_left == 0 {
+            break;
+        }
+        if packet.next_hop.is_none() {
+            let origin = packet.first_station.unwrap_or(station_pos);
+            packet.next_hop = crate::flow_stat::resolve_next_hop(
+                distribution,
+                station_flows,
+                station_pos,
+                cargo,
+                origin,
+                order_hop,
+                &mut state.random,
+            );
+        }
+        reserved_left = reserved_left.saturating_sub(u32::from(packet.count));
+    }
 }
 
 /// Consume primero una reserva `MTA_LOAD` rehidratada o creada por el
@@ -3506,6 +3615,62 @@ mod tests {
         assert_eq!(
             state.stations[0].cargo_packets.total_of(CargoType::Goods),
             10
+        );
+    }
+
+    #[test]
+    fn full_load_reservation_returns_when_source_order_is_removed() {
+        let source = TileCoord::new(1, 1);
+        let other = TileCoord::new(3, 3);
+        let mut state = GameState::new(6, 6);
+        let mut tile = state.map.get(source).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 2 << 3;
+        tile.m3 = 1;
+        state.map.set_tile(source, tile).unwrap();
+
+        let mut station = crate::Station::new_with_kind(source, crate::StopKind::TruckStop);
+        station.rating = 255;
+        station.add_waiting_cargo(CargoType::Goods, 20);
+        state.stations.push(station);
+
+        let mut truck = crate::Vehicle::new(40, VehicleKind::Truck, source, source);
+        truck.cargo_type = Some(CargoType::Goods);
+        truck.capacity = 10;
+        truck.orders = vec![crate::VehicleOrder::station_with_flags(source, true, false)];
+        state.vehicles.push(truck);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+
+        let mut loaded = vec![false];
+        let unloaded = vec![false];
+        load_vehicles(&mut state, &mut loaded, &unloaded);
+        let pending = state.vehicles[0].cargo_packets.reserved_count();
+        let stored = state.vehicles[0].cargo_packets.stored_count();
+        assert!(pending > 0);
+        assert_eq!(
+            state.stations[0].cargo_packets.total_of(CargoType::Goods),
+            10
+        );
+
+        state.vehicles[0].orders = vec![crate::VehicleOrder::station(other)];
+        state.vehicles[0].current_order = 0;
+        state.vehicles[0].cur_implicit_order_index = 0;
+        let mut loaded = vec![false];
+        load_vehicles(&mut state, &mut loaded, &unloaded);
+
+        assert_eq!(state.vehicles[0].cargo_packets.reserved_count(), 0);
+        assert_eq!(state.vehicles[0].cargo, stored);
+        assert_eq!(state.vehicles[0].cargo_packets.stored_count(), stored);
+        assert_eq!(state.stations[0].cargo_packets.reserved, 0);
+        assert_eq!(
+            state.stations[0].cargo_packets.total_of(CargoType::Goods),
+            20 - stored
+        );
+        assert_eq!(
+            state.stations[0].cargo_stock.get(CargoType::Goods),
+            20 - stored
         );
     }
 

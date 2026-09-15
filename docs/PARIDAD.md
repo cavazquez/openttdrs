@@ -5708,3 +5708,17 @@ ignored` en core, Clippy de producción, check del cliente, formato y
 `git diff --check` verdes. #329/#567 siguen abiertos por trackdirs físicos y
 cache de ruta completos en el controlador, settings configurables, callbacks y
 cachés visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-PATH-CACHE-TRACKDIR (2026-09-15, `e67fd765`): el
+controlador naval consume el `Trackdir` cacheado desde `path.back()`, igual que
+`ChooseShipTrack` nativo, y comprueba entrada, orientación y salida contra el
+path actual antes de consumirlo. La proyección de teselas se reordena al formato
+inverso persistido por OpenTTD; los saltos de acueducto conservan sus dos
+entradas y una caché obsoleta se invalida completamente antes del fallback. Las
+regresiones `ship_path_cache_uses_native_back_as_next_trackdir`,
+`ship_path_cache_invalidates_trackdir_with_wrong_exit` y
+`ship_path_cache_preserves_aqueduct_jump_entries` cubren esos contratos.
+Validación: `2797` tests de core pasados, `0` fallidos y `1` ignorado, Clippy
+estricto de core, check del cliente y formato verdes. #329/#567 siguen abiertas
+por trackdirs físicos adicionales, settings configurables, callbacks y cachés
+visuales NewGRF restantes.

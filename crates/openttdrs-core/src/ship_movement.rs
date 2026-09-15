@@ -752,7 +752,7 @@ fn ship_exit_diagdir(direction: VehicleDirection, track: u8) -> u8 {
 /// Es la tabla `_trackdir_to_exitdir` nativa reducida a los seis tracks de
 /// barcos; los pares restantes no pueden recibir ese `Trackdir`.
 #[must_use]
-fn ship_track_exit_diagdir(entry: u8, track: u8) -> Option<u8> {
+pub(crate) fn ship_track_exit_diagdir(entry: u8, track: u8) -> Option<u8> {
     const INVALID: u8 = INVALID_DIR;
     const EXITS: [[u8; 6]; 4] = [
         // DIAGDIR_NE: X_NE, LOWER_E, LEFT_N.
@@ -941,7 +941,7 @@ fn ship_enter_aqueduct(
 }
 
 /// `TrackDirectionToTrackdir` para los seis tracks navales vanilla.
-fn ship_trackdir(track: u8, direction: VehicleDirection) -> u8 {
+pub(crate) fn ship_trackdir(track: u8, direction: VehicleDirection) -> u8 {
     let reverse = match track {
         TRACK_X => direction == DIR_SW,
         TRACK_Y => direction == DIR_NW,

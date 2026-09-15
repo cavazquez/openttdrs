@@ -795,6 +795,29 @@ mod tests {
         );
     }
 
+    #[test]
+    fn ship_yapf_cost_keeps_curve_trackdir_state() {
+        let mut map = Map::new_flat(4, 4, 0);
+        for y in 0..4_i32 {
+            for x in 0..4_i32 {
+                make_water_tile(&mut map, TileCoord::new(x, y), WaterClass::Sea).expect("agua");
+            }
+        }
+
+        let from = TileCoord::new(0, 1);
+        let path = [TileCoord::new(1, 1), TileCoord::new(1, 2)];
+        assert_eq!(
+            ShipPathCost::default().path_cost(&map, from, &path),
+            371,
+            "la curva 45 debe cobrar el trackdir de esquina y la llegada"
+        );
+        assert_eq!(
+            ShipPathCost::default().path_cost(&map, from, &[TileCoord::new(1, 1)]),
+            100,
+            "un tramo recto no debe añadir penalización de curva"
+        );
+    }
+
     fn write_tram(map: &mut Map, c: TileCoord, bits: u8) {
         use crate::road_type::{RoadType, set_tram_road_type_on_tile, set_tram_track_bits_on_tile};
         map.set_kind(c, TileKind::Road).unwrap();

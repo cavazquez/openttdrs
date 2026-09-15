@@ -5493,3 +5493,18 @@ conservación de unidades al eliminar la orden. Core queda en `2777 passed; 0
 failed; 1 ignored`, con Clippy de producción y check del cliente en verde. La
 coordinación de reservas con toda la formación articulada y otras cancelaciones
 siguen pendientes; #329 permanece abierta.
+
+Corrección #329-VEHICLE-RESERVATION-CONSIST-ORDER (2026-09-15, `94a6b58e`):
+las unidades articuladas y los vagones de un consist consultan la orden de su
+cabeza para `FullLoad`, `FullLoadAny`, `NoLoad`, siguiente estación y
+cancelación de reservas. Cada unidad conserva sus propios packets `MTA_LOAD`;
+la orden de la cabeza no avanza mientras otra unidad tenga una reserva o carga
+pendiente y se promueve sólo cuando la formación termina. La regresión
+`full_load_consist_uses_head_order_for_each_cargo_unit` cubre una cabeza y una
+pieza articulada con capacidades distintas, carga parcial en varios ticks y
+conservación del stock. El escenario ferroviario dual comprueba además el
+retorno a A durante la ventana de simulación sin depender de una posición
+accidental en el tick final. Core queda en `2778 passed; 0 failed; 1 ignored`,
+con Clippy de producción y check del cliente en verde. La descarga de
+consistes, las capacidades heterogéneas de tren por unidad y las reservas de
+formaciones duales siguen pendientes; #329 permanece abierta.

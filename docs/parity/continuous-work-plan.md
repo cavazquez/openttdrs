@@ -7842,9 +7842,21 @@ Normal, perfil `clean-static`), la captura fresca del commit publicado cambia
 (`7,8682 %`) con esta corrección; el delta medio baja de `2,8565` a `2,5157`.
 Las trazas JSON siguen contando sólo los `1.572` parents del orden global: los
 `7` proxies de banda se ordenan deliberadamente en sus listas locales y se
-validan principalmente por la evidencia raster. Las capturas `In2x` y `Out2x`
-no terminaron dentro de 120 s bajo este workload ampliado, así que no se
-presentan como paridad de escala. Pasan `1538` tests del cliente (2 ignorados),
-Clippy con `-D warnings`, formato, documentación de paridad y check de atlas.
-#326 y #567 siguen abiertos por las demás familias de composición, escalas y
-la aceptación naval completa.
+validan principalmente por la evidencia raster. La primera ejecución de
+`In2x`/`Out2x` usó un socket Weston stale y no terminó; esa limitación de
+infraestructura no se toma como evidencia de rendimiento. Pasan `1538` tests
+del cliente (2 ignorados), Clippy con `-D warnings`, formato, documentación de
+paridad y check de atlas. #326 y #567 siguen abiertos por las demás familias de
+composición, escalas y la aceptación naval completa.
+
+Validación #326-SCALE-MATRIX (2026-09-15): con sockets Weston aislados, la
+misma matriz sí produjo ambos framebuffers. `In2x` (escala ortográfica `0,5`)
+queda en `86.865/921.600` píxeles distintos (`9,4255 %`) y su traza candidata
+contiene `442` parents frente a `798` nativos; `Out2x` (escala `2`) queda en
+`759.410/921.600` (`82,4012 %`) y `13.353` parents frente a `6.004` nativos.
+En `Out2x` el sorter aún usa deliberadamente el AABB histórico porque el
+primer pase diagonal sin optimizar llegó a más de `35.000` parents y no
+terminó dentro de 180 s. La diferencia deja acotada la siguiente subetapa:
+preservar el primer remap de la cámara de captura y reducir el conjunto
+diagonal antes de habilitar precisión en `Out2x`; no se declara paridad de
+escala ni se cierra #326.

@@ -711,6 +711,9 @@ pub struct VehicleCargoList {
     pub staged_keep: u32,
 }
 
+const VEHICLE_ACTION_KEEP: usize = 2;
+const VEHICLE_ACTION_LOAD: usize = 3;
+
 impl VehicleCargoList {
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -723,6 +726,19 @@ impl VehicleCargoList {
             .iter()
             .map(|p| u32::from(p.count))
             .fold(0, u32::saturating_add)
+    }
+
+    /// Cantidad almacenada que ya no está pendiente de una reserva de carga.
+    #[must_use]
+    pub fn stored_count(&self) -> u32 {
+        let total = self.total();
+        total.saturating_sub(self.action_counts[VEHICLE_ACTION_LOAD].min(total))
+    }
+
+    /// Cantidad de packets asociados a una reserva que aún debe cargarse.
+    #[must_use]
+    pub fn reserved_count(&self) -> u32 {
+        self.action_counts[VEHICLE_ACTION_LOAD].min(self.total())
     }
 
     #[must_use]
@@ -771,6 +787,71 @@ impl VehicleCargoList {
         for p in packets {
             self.push(p);
         }
+    }
+
+    /// Añade packets ya seleccionados por la estación como `MTA_LOAD`.
+    ///
+    /// Se preserva el límite de la sección reservada (sin fusionar con el
+    /// último packet) porque `OpenTTD` mantiene los packets `MTA_LOAD` en el
+    /// extremo que `CargoReturn` recorre al cancelar una visita.
+    pub fn append_reserved_packets(
+        &mut self,
+        packets: impl IntoIterator<Item = CargoPacket>,
+    ) -> u32 {
+        let mut added = 0_u32;
+        for packet in packets {
+            if packet.count == 0 {
+                continue;
+            }
+            added = added.saturating_add(u32::from(packet.count));
+            self.packets.push(packet);
+        }
+        self.action_counts[VEHICLE_ACTION_LOAD] =
+            self.action_counts[VEHICLE_ACTION_LOAD].saturating_add(added);
+        added
+    }
+
+    /// Promueve una parte de la reserva a carga efectiva (`MTA_KEEP`).
+    pub fn load_reserved(&mut self, amount: u32) -> u32 {
+        let moved = amount.min(self.reserved_count());
+        self.action_counts[VEHICLE_ACTION_LOAD] =
+            self.action_counts[VEHICLE_ACTION_LOAD].saturating_sub(moved);
+        self.action_counts[VEHICLE_ACTION_KEEP] =
+            self.action_counts[VEHICLE_ACTION_KEEP].saturating_add(moved);
+        moved
+    }
+
+    /// Extrae desde el extremo los packets aún reservados para devolverlos a
+    /// la estación. El orden de salida se invierte para conservar FIFO.
+    pub fn take_reserved_packets(&mut self, amount: u32) -> Vec<CargoPacket> {
+        let target = amount.min(self.reserved_count());
+        let mut left = target;
+        let mut out = Vec::new();
+        while left > 0 {
+            let Some(mut packet) = self.packets.pop() else {
+                break;
+            };
+            let available = u32::from(packet.count);
+            if available <= left {
+                left = left.saturating_sub(available);
+                out.push(packet);
+                continue;
+            }
+            #[allow(clippy::cast_possible_truncation)]
+            let take = left as u16;
+            let Some(taken) = packet.split(take) else {
+                self.packets.push(packet);
+                break;
+            };
+            self.packets.push(packet);
+            out.push(taken);
+            left = 0;
+        }
+        let moved = target.saturating_sub(left);
+        self.action_counts[VEHICLE_ACTION_LOAD] =
+            self.action_counts[VEHICLE_ACTION_LOAD].saturating_sub(moved);
+        out.reverse();
+        out
     }
 
     /// Extrae hasta `amount` unidades (FIFO), mismo tipo que el primero si hay.

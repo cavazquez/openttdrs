@@ -63,6 +63,39 @@ mod tests {
     }
 
     #[test]
+    fn vehicle_reserved_packets_promote_and_return_fifo() {
+        let mut list = VehicleCargoList::default();
+        list.append_reserved_packets([
+            CargoPacket::new(CargoType::Coal, 4, TileCoord::new(1, 1)),
+            CargoPacket::new(CargoType::Coal, 3, TileCoord::new(2, 2)),
+        ]);
+
+        assert_eq!(list.total(), 7);
+        assert_eq!(list.reserved_count(), 7);
+        assert_eq!(list.stored_count(), 0);
+        assert_eq!(list.load_reserved(4), 4);
+        assert_eq!(list.reserved_count(), 3);
+        assert_eq!(list.stored_count(), 4);
+
+        let returned = list.take_reserved_packets(2);
+        assert_eq!(returned.iter().map(|p| p.count).sum::<u16>(), 2);
+        assert_eq!(returned[0].source, TileCoord::new(2, 2));
+        assert_eq!(list.total(), 5);
+        assert_eq!(list.reserved_count(), 1);
+        assert_eq!(list.stored_count(), 4);
+
+        assert_eq!(
+            list.take_reserved_packets(20)
+                .iter()
+                .map(|p| p.count)
+                .sum::<u16>(),
+            1
+        );
+        assert_eq!(list.reserved_count(), 0);
+        assert_eq!(list.stored_count(), 4);
+    }
+
+    #[test]
     fn payment_days_follow_packet_age() {
         let mut p = CargoPacket::new(CargoType::Coal, 1, TileCoord::new(0, 0));
         p.periods_in_transit = 10;

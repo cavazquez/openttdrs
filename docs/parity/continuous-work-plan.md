@@ -8152,3 +8152,13 @@ refit sobre una cabeza y un remolque con cargos distintos y comprueba ambos
 resultados. Core queda en `2766` tests exitosos y `1` ignorado; #329 sigue
 abierta por reservas, carga parcial, cadenas articuladas completas y demás
 contratos de `HandleStationRefit`.
+
+Corrección #329-STATION-LOAD-NEXT-HOP (2026-09-15, `fb2814e5`): la carga de
+estación y la carga secundaria de correo consultan un stock filtrado por las
+próximas estaciones y extraen sólo esos destinos o packets sin `next_hop`.
+Packets ya encaminados conservan su `next_hop`; sólo los packets legacy/sin
+destino reciben una ruta nueva. La regresión
+`station_loading_preserves_packet_next_hop_across_conditional_orders` cubre
+dos ramas condicionales y evita que un lote de la segunda rama se reescriba a
+la primera. Core queda en `2768` tests exitosos y `1` ignorado; el cliente
+compila. La reserva nativa por vehículo y la carga parcial siguen pendientes.

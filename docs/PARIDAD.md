@@ -5372,3 +5372,15 @@ un remolque con cargos iniciales diferentes, ejecuta el autorefit y verifica la
 mutación de ambos. La suite core queda en `2766 passed; 0 failed; 1 ignored` y
 clippy de la biblioteca en verde. Reservas, carga parcial y consist articulado
 completo siguen pendientes; #329 permanece abierta.
+
+Corrección #329-STATION-LOAD-NEXT-HOP (2026-09-15, `fb2814e5`): la carga
+normal de estación y la carga secundaria de correo ya exponen sólo el stock
+cuyo `next_hop` coincide con alguna próxima estación, además de los packets sin
+destino explícito. La extracción route-aware preserva los packets destinados a
+otras ramas y los packets que ya tenían ruta no se sobrescriben al cargarlos;
+los packets legacy/sin hop siguen recibiendo la ruta calculada. La regresión
+`station_loading_preserves_packet_next_hop_across_conditional_orders` cubre un
+consist con dos destinos condicionales. Core queda en `2768 passed; 0 failed;
+1 ignored`, clippy de producción y check del cliente en verde. Las reservas
+nativas por vehículo, carga parcial/retorno y el modelo completo de
+`HandleStationRefit` siguen pendientes; #329 permanece abierta.

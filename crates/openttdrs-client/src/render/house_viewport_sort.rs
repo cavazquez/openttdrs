@@ -470,16 +470,25 @@ impl DiagonalViewportSortScope {
     }
 
     #[must_use]
-    fn child_crosses_parent_band_range(
+    fn child_only_visible_bands(
         self,
         parent_range: Option<(i64, i64)>,
         child: SpriteScreenBounds,
-    ) -> bool {
+    ) -> Vec<i64> {
         let Some((parent_start, parent_end)) = parent_range else {
-            return false;
+            return Vec::new();
         };
         let (child_start, child_end) = self.sprite_band_range(child);
-        child_start < parent_start || child_end > parent_end
+        let band_height = self.band_height.max(1);
+        let visible_height = (self.screen_top - self.screen_bottom).max(0);
+        let visible_band_end = (visible_height + band_height - 1) / band_height;
+        (0..visible_band_end)
+            .filter(|band| {
+                child_start <= *band
+                    && *band < child_end
+                    && !(parent_start <= *band && *band < parent_end)
+            })
+            .collect()
     }
 }
 
@@ -630,6 +639,16 @@ fn child_promotion_parent(
         insertion_key: child.insertion_key,
         source_depth,
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ViewportPromotionCandidate {
+    original_parent: Entity,
+    child_entity: Entity,
+    combine_ordinal: u8,
+    entity_bits: u64,
+    promoted_parent: ViewportSortableParent,
+    current_depth: f32,
 }
 
 /// IDs de assets cuyo tamaño o contenido cambió desde el último pase.
@@ -900,43 +919,42 @@ pub(crate) fn sort_viewport_sortable_parents(
         input.push((entity, parent, transform.translation.z));
     }
 
-    // En un `SpriteCombine`, el primer sprite que cruza la banda se vuelve
-    // parent local de esa llamada nativa. El child sigue apuntando al parent
-    // ECS original para conservar el bloque completo; al final del sort se
-    // mueve también ese parent original y la sincronización habitual mantiene
-    // unidos los restantes children.
+    // En un `SpriteCombine`, el primer sprite que alcanza una banda que el
+    // parent no cubre se vuelve parent local de esa llamada nativa. Un mismo
+    // bloque puede necesitar más de una promoción si sus children agregan
+    // bandas distintas; los candidates se deduplican por entidad al final.
+    // Cada child sigue apuntando al parent ECS original para conservar el
+    // bloque completo; la sincronización habitual mantiene unidos los que no
+    // fueron promovidos.
     child_depth_windows.independent_children.clear();
-    let mut promotion_by_parent: HashMap<Entity, (u8, u64, Entity, ViewportSortableParent, f32)> =
+    let mut promotion_by_parent: HashMap<Entity, ViewportPromotionCandidate> = HashMap::new();
+    let mut promotion_by_parent_band: HashMap<(Entity, i64), ViewportPromotionCandidate> =
         HashMap::new();
-    if precise_scope.is_some() {
+    if let Some(precise_scope) = precise_scope {
         for (entity, child, promotable, segmented, visibility, transform, sprite) in
             &mut promotable_children
         {
             let Some(parent_state) = parent_states.get(&child.parent).copied() else {
                 continue;
             };
-            let Some(child_sprite_bounds) = precise_scope.and_then(|_| {
-                sprite.and_then(|(sprite, anchor)| {
-                    sprite_screen_bounds(
-                        &sprite,
-                        &anchor,
-                        &transform,
-                        images.as_deref(),
-                        texture_atlases.as_deref(),
-                    )
-                })
+            let Some(child_sprite_bounds) = sprite.and_then(|(sprite, anchor)| {
+                sprite_screen_bounds(
+                    &sprite,
+                    &anchor,
+                    &transform,
+                    images.as_deref(),
+                    texture_atlases.as_deref(),
+                )
             }) else {
                 continue;
             };
-            let crosses_parent_band = segmented.is_some_and(|_| {
-                precise_scope.is_some_and(|precise_scope| {
-                    precise_scope.child_crosses_parent_band_range(
-                        parent_state.screen_band_range,
-                        child_sprite_bounds,
-                    )
-                })
-            });
-            if (parent_state.included && !crosses_parent_band)
+            let child_only_bands = if segmented.is_some() {
+                precise_scope
+                    .child_only_visible_bands(parent_state.screen_band_range, child_sprite_bounds)
+            } else {
+                Vec::new()
+            };
+            if (parent_state.included && (segmented.is_none() || child_only_bands.is_empty()))
                 || (!parent_state.included && !parent_state.can_promote_child())
                 || visibility
                     .as_ref()
@@ -948,39 +966,78 @@ pub(crate) fn sort_viewport_sortable_parents(
                 &child_promotion_parent(&promotable, transform.translation.z),
                 Some(child_sprite_bounds),
                 scope,
-                precise_scope,
+                Some(precise_scope),
             ) {
                 continue;
             }
             let candidate_rank = (promotable.combine_ordinal, entity.to_bits());
-            let replace = promotion_by_parent
-                .get(&child.parent)
-                .is_none_or(|current| {
-                    child_promotion_is_before(&promotable, entity, &(current.0, current.1))
-                });
-            if replace {
-                promotion_by_parent.insert(
-                    child.parent,
-                    (
-                        candidate_rank.0,
-                        candidate_rank.1,
-                        entity,
-                        child_promotion_parent(&promotable, transform.translation.z),
-                        transform.translation.z,
-                    ),
-                );
+            let candidate = ViewportPromotionCandidate {
+                original_parent: child.parent,
+                child_entity: entity,
+                combine_ordinal: candidate_rank.0,
+                entity_bits: candidate_rank.1,
+                promoted_parent: child_promotion_parent(&promotable, transform.translation.z),
+                current_depth: transform.translation.z,
+            };
+            if parent_state.included && segmented.is_some() {
+                for band in child_only_bands {
+                    let replace = promotion_by_parent_band
+                        .get(&(child.parent, band))
+                        .is_none_or(|current| {
+                            child_promotion_is_before(
+                                &promotable,
+                                entity,
+                                &(current.combine_ordinal, current.entity_bits),
+                            )
+                        });
+                    if replace {
+                        promotion_by_parent_band.insert((child.parent, band), candidate);
+                    }
+                }
+            } else {
+                let replace = promotion_by_parent
+                    .get(&child.parent)
+                    .is_none_or(|current| {
+                        child_promotion_is_before(
+                            &promotable,
+                            entity,
+                            &(current.combine_ordinal, current.entity_bits),
+                        )
+                    });
+                if replace {
+                    promotion_by_parent.insert(child.parent, candidate);
+                }
             }
         }
     }
-    let mut promoted_origins = HashMap::new();
-    for (original_parent, (_, _, child_entity, promoted_parent, current_depth)) in
-        promotion_by_parent
-    {
-        promoted_origins.insert(child_entity, original_parent);
+    let mut promoted_candidates: HashMap<Entity, ViewportPromotionCandidate> = promotion_by_parent
+        .into_values()
+        .map(|candidate| (candidate.child_entity, candidate))
+        .collect();
+    for candidate in promotion_by_parent_band.into_values() {
+        promoted_candidates
+            .entry(candidate.child_entity)
+            .or_insert(candidate);
+    }
+    let mut promoted_candidates: Vec<_> = promoted_candidates.into_values().collect();
+    promoted_candidates.sort_unstable_by(|left, right| {
+        left.promoted_parent
+            .insertion_key
+            .cmp(&right.promoted_parent.insertion_key)
+            .then_with(|| left.combine_ordinal.cmp(&right.combine_ordinal))
+            .then_with(|| left.entity_bits.cmp(&right.entity_bits))
+    });
+    let mut promoted_origins = Vec::new();
+    for candidate in promoted_candidates {
+        promoted_origins.push((candidate.child_entity, candidate.original_parent));
         child_depth_windows
             .independent_children
-            .insert(child_entity);
-        input.push((child_entity, promoted_parent, current_depth));
+            .insert(candidate.child_entity);
+        input.push((
+            candidate.child_entity,
+            candidate.promoted_parent,
+            candidate.current_depth,
+        ));
     }
 
     #[cfg(test)]
@@ -1031,7 +1088,9 @@ pub(crate) fn sort_viewport_sortable_parents(
     // `sync_viewport_sortable_children` indexes its windows by the original
     // ECS parent. Alias the promoted child slot there and move the invisible
     // original parent to the same slot so all children preserve their block.
-    for (&promoted_entity, &original_parent) in &promoted_origins {
+    // A vector keeps the choice deterministic when one block contributes
+    // multiple promoted children.
+    for (promoted_entity, original_parent) in promoted_origins {
         let Some(promoted_index) = input
             .iter()
             .position(|(entity, _, _)| *entity == promoted_entity)
@@ -1326,7 +1385,35 @@ mod tests {
         };
         assert_eq!(band_scope.sprite_band_range(parent), (4, 5));
         assert_eq!(band_scope.sprite_band_range(child), (4, 6));
-        assert!(band_scope.child_crosses_parent_band_range(Some((4, 5)), child));
+        assert_eq!(
+            band_scope.child_only_visible_bands(Some((4, 5)), child),
+            vec![5]
+        );
+
+        let visible_band_scope = DiagonalViewportSortScope {
+            screen_top: 0,
+            screen_bottom: -720,
+            band_height: 51,
+            ..scope
+        };
+        let child_above_and_below = SpriteScreenBounds {
+            bottom: -190.0,
+            top: -60.0,
+            ..parent
+        };
+        assert_eq!(
+            visible_band_scope.child_only_visible_bands(Some((2, 3)), child_above_and_below),
+            vec![1, 3]
+        );
+        let child_only_above_viewport = SpriteScreenBounds {
+            bottom: -45.0,
+            top: 5.0,
+            ..parent
+        };
+        assert_eq!(
+            visible_band_scope.child_only_visible_bands(Some((0, 1)), child_only_above_viewport),
+            Vec::<i64>::new()
+        );
 
         // `AddSortableSpriteToDraw` recorta contra el rectángulo del PNG, no
         // contra el prisma del parent. Un píxel dentro del borde izquierdo se

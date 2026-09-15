@@ -186,7 +186,8 @@ pub fn find_path_cached(
 }
 
 /// Variante con caché de [`find_ship_path_with_cost`]. La clave incluye las
-/// dos propiedades de velocidad para no reutilizar una ruta de otro motor.
+/// propiedades de velocidad y penalizaciones para no reutilizar una ruta con
+/// otro perfil naval.
 #[must_use]
 pub fn find_ship_path_cached(
     map: &Map,
@@ -207,7 +208,7 @@ pub fn find_ship_path_cached(
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::engine::{ENGINE_TRAIN_KIRBY, NEWGRF_ENGINE_ID_BASE, engine_by_id};
+    use crate::engine::{ENGINE_SHIP_MPS, ENGINE_TRAIN_KIRBY, NEWGRF_ENGINE_ID_BASE, engine_by_id};
     use crate::map::{RAIL_TB_X, RAIL_TB_Y, TileKind, WaterClass, make_water_tile};
     use crate::rail_type::{RailType, set_rail_type_on_tile};
     use crate::tnbp_decode::JgrTunnelRecord;
@@ -728,6 +729,7 @@ mod tests {
             ocean_speed_frac: 0,
             canal_speed_frac: 192,
             max_speed: 0,
+            ..ShipPathCost::default()
         };
         assert_eq!(cost.tile_cost(Some(WaterClass::Sea)), 100);
         assert_eq!(cost.tile_cost(Some(WaterClass::Canal)), 400);
@@ -774,6 +776,7 @@ mod tests {
             ocean_speed_frac: 0,
             canal_speed_frac: 0,
             max_speed: 128,
+            ..ShipPathCost::default()
         };
         let around_lock = find_ship_path_with_cost(
             &lock_map,
@@ -793,6 +796,41 @@ mod tests {
             1_100,
             "el centro añade 800 a tres pasos de mar"
         );
+
+        let mut altered_curve_cost = ShipPathCost::default();
+        altered_curve_cost.curve45_penalty = 0;
+        assert!(
+            cache
+                .get_ship(
+                    TileCoord::new(0, 2),
+                    TileCoord::new(6, 2),
+                    altered_curve_cost,
+                )
+                .is_none(),
+            "la caché naval debe separar penalizaciones de curva"
+        );
+    }
+
+    #[test]
+    fn ship_yapf_profile_uses_game_curve_settings() {
+        let engine = engine_by_id(ENGINE_SHIP_MPS).expect("motor naval vanilla");
+        let settings = crate::PathfindingSettings {
+            ship_curve45_penalty: 12,
+            ship_curve90_penalty: 34,
+            ..crate::PathfindingSettings::default()
+        };
+        let cost = ShipPathCost::from_engine_with_settings(engine, &settings);
+        assert_eq!(cost.curve45_penalty, 12);
+        assert_eq!(cost.curve90_penalty, 34);
+
+        let capped = crate::PathfindingSettings {
+            ship_curve45_penalty: u32::MAX,
+            ship_curve90_penalty: u32::MAX,
+            ..settings
+        };
+        let cost = ShipPathCost::from_engine_with_settings(engine, &capped);
+        assert_eq!(cost.curve45_penalty, crate::MAX_SHIP_CURVE_PENALTY);
+        assert_eq!(cost.curve90_penalty, crate::MAX_SHIP_CURVE_PENALTY);
     }
 
     #[test]

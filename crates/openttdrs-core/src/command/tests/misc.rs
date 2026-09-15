@@ -576,6 +576,21 @@ fn set_pathfinding_settings_clamps_and_is_idempotent() {
     assert_eq!(s.pathfinding.path_backoff_interval, 1);
     assert!(s.pathfinding.reverse_at_signals);
 
+    let too_high = crate::PathfindingSettings {
+        ship_curve45_penalty: u32::MAX,
+        ship_curve90_penalty: u32::MAX,
+        ..crate::PathfindingSettings::default()
+    };
+    apply_command(&mut s, &Command::SetPathfindingSettings(too_high)).unwrap();
+    assert_eq!(
+        s.pathfinding.ship_curve45_penalty,
+        crate::MAX_SHIP_CURVE_PENALTY
+    );
+    assert_eq!(
+        s.pathfinding.ship_curve90_penalty,
+        crate::MAX_SHIP_CURVE_PENALTY
+    );
+
     apply_command(
         &mut s,
         &Command::SetPathfindingSettings(crate::PathfindingSettings::default()),

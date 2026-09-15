@@ -17,6 +17,15 @@ pub const DEFAULT_WAIT_TWOWAY_SIGNAL_DAYS: u8 = 41;
 /// Valor especial: no girar nunca / no hacer look-ahead.
 pub const PBS_WAIT_FOREVER: u8 = 255;
 
+/// Penalización YAPF por curva naval de 45 grados (`1 * YAPF_TILE_LENGTH`).
+pub const DEFAULT_SHIP_CURVE45_PENALTY: u32 = 100;
+
+/// Penalización YAPF por curva naval de 90 grados (`6 * YAPF_TILE_LENGTH`).
+pub const DEFAULT_SHIP_CURVE90_PENALTY: u32 = 600;
+
+/// Límite nativo para las penalizaciones de curva naval.
+pub const MAX_SHIP_CURVE_PENALTY: u32 = 1_000_000;
+
 /// Ajustes de pathfinding persistidos en la partida.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PathfindingSettings {
@@ -38,6 +47,12 @@ pub struct PathfindingSettings {
     /// delante del tren es PBS (`SigSegState::Path`).
     #[serde(default = "default_reserve_paths")]
     pub reserve_paths: bool,
+    /// Penalización YAPF por curva naval de 45 grados.
+    #[serde(default = "default_ship_curve45_penalty")]
+    pub ship_curve45_penalty: u32,
+    /// Penalización YAPF por curva naval de 90 grados.
+    #[serde(default = "default_ship_curve90_penalty")]
+    pub ship_curve90_penalty: u32,
 }
 
 fn default_wait_oneway() -> u8 {
@@ -52,6 +67,14 @@ fn default_reserve_paths() -> bool {
     false
 }
 
+fn default_ship_curve45_penalty() -> u32 {
+    DEFAULT_SHIP_CURVE45_PENALTY
+}
+
+fn default_ship_curve90_penalty() -> u32 {
+    DEFAULT_SHIP_CURVE90_PENALTY
+}
+
 impl Default for PathfindingSettings {
     fn default() -> Self {
         Self {
@@ -61,6 +84,8 @@ impl Default for PathfindingSettings {
             wait_oneway_signal: DEFAULT_WAIT_ONEWAY_SIGNAL_DAYS,
             wait_twoway_signal: DEFAULT_WAIT_TWOWAY_SIGNAL_DAYS,
             reserve_paths: false,
+            ship_curve45_penalty: DEFAULT_SHIP_CURVE45_PENALTY,
+            ship_curve90_penalty: DEFAULT_SHIP_CURVE90_PENALTY,
         }
     }
 }
@@ -140,6 +165,14 @@ mod tests {
         assert_eq!(
             PathfindingSettings::default().twoway_signal_timeout_ticks(),
             Some(41 * TICKS_PER_DAY * 2)
+        );
+        assert_eq!(
+            PathfindingSettings::default().ship_curve45_penalty,
+            DEFAULT_SHIP_CURVE45_PENALTY
+        );
+        assert_eq!(
+            PathfindingSettings::default().ship_curve90_penalty,
+            DEFAULT_SHIP_CURVE90_PENALTY
         );
     }
 

@@ -4,7 +4,7 @@ use crate::map::TileCoord;
 
 use super::{PathNetwork, water::ShipPathCost};
 
-type PathCacheKey = (i32, i32, i32, i32, u8, u8, u8, u8, u16);
+type PathCacheKey = (i32, i32, i32, i32, u8, u8, u8, u8, u16, u32, u32);
 
 /// Caché de rutas por tick (no se serializa; se invalida al avanzar la simulación).
 #[derive(Debug, Default, Clone)]
@@ -81,15 +81,23 @@ fn cache_key(
     network: PathNetwork,
     ship_cost: Option<ShipPathCost>,
 ) -> PathCacheKey {
-    let (ship_cost_present, ocean_speed_frac, canal_speed_frac, max_speed) =
-        ship_cost.map_or((0, 0, 0, 0), |cost| {
-            (
-                1,
-                cost.ocean_speed_frac,
-                cost.canal_speed_frac,
-                cost.max_speed,
-            )
-        });
+    let (
+        ship_cost_present,
+        ocean_speed_frac,
+        canal_speed_frac,
+        max_speed,
+        curve45_penalty,
+        curve90_penalty,
+    ) = ship_cost.map_or((0, 0, 0, 0, 0, 0), |cost| {
+        (
+            1,
+            cost.ocean_speed_frac,
+            cost.canal_speed_frac,
+            cost.max_speed,
+            cost.curve45_penalty,
+            cost.curve90_penalty,
+        )
+    });
     (
         from.x,
         from.y,
@@ -106,5 +114,7 @@ fn cache_key(
         ocean_speed_frac,
         canal_speed_frac,
         max_speed,
+        curve45_penalty,
+        curve90_penalty,
     )
 }

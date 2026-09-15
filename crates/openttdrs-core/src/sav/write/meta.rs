@@ -454,6 +454,8 @@ pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
             (2, "pf.wait_oneway_signal"),
             (2, "pf.wait_twoway_signal"),
             (1, "pf.reserve_paths"),
+            (6, "pf.yapf.ship_curve45_penalty"),
+            (6, "pf.yapf.ship_curve90_penalty"),
             (2, "vehicle.train_acceleration_model"),
             (1, "vehicle.wagon_speed_limits"),
             (1, "vehicle.disable_elrails"),
@@ -521,6 +523,22 @@ pub(super) fn pats_record(state: &GameState) -> Vec<u8> {
         state.pathfinding.wait_oneway_signal,
         state.pathfinding.wait_twoway_signal,
         u8::from(state.pathfinding.reserve_paths),
+    ];
+    record.extend_from_slice(
+        &state
+            .pathfinding
+            .ship_curve45_penalty
+            .min(crate::pathfinding_settings::MAX_SHIP_CURVE_PENALTY)
+            .to_be_bytes(),
+    );
+    record.extend_from_slice(
+        &state
+            .pathfinding
+            .ship_curve90_penalty
+            .min(crate::pathfinding_settings::MAX_SHIP_CURVE_PENALTY)
+            .to_be_bytes(),
+    );
+    record.extend_from_slice(&[
         state.train_acceleration_model as u8,
         u8::from(state.construction.wagon_speed_limits),
         u8::from(state.construction.disable_elrails),
@@ -534,7 +552,7 @@ pub(super) fn pats_record(state: &GameState) -> Vec<u8> {
         state.vehicle_breakdowns.min(2),
         u8::from(state.order.selectgoods),
         u8::from(state.no_servicing_if_no_breakdowns),
-    ];
+    ]);
     record.extend_from_slice(&state.subsidy_duration.to_be_bytes());
     record.extend_from_slice(&[
         state.subsidy_multiplier.min(3),

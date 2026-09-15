@@ -578,6 +578,12 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             next.path_backoff_interval = next.path_backoff_interval.max(1);
             next.wait_oneway_signal = next.wait_oneway_signal.max(2);
             next.wait_twoway_signal = next.wait_twoway_signal.max(2);
+            next.ship_curve45_penalty = next
+                .ship_curve45_penalty
+                .min(crate::pathfinding_settings::MAX_SHIP_CURVE_PENALTY);
+            next.ship_curve90_penalty = next
+                .ship_curve90_penalty
+                .min(crate::pathfinding_settings::MAX_SHIP_CURVE_PENALTY);
             if state.pathfinding == next {
                 return Ok(());
             }

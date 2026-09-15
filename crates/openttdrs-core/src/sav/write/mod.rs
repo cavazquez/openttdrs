@@ -1112,6 +1112,8 @@ mod tests {
         state.pathfinding.wait_oneway_signal = 9;
         state.pathfinding.wait_twoway_signal = 10;
         state.pathfinding.reserve_paths = true;
+        state.pathfinding.ship_curve45_penalty = 12_345;
+        state.pathfinding.ship_curve90_penalty = 54_321;
         state.train_acceleration_model = crate::engine::TrainAccelerationModel::Original;
         state.freight_trains = 4;
         state.road_vehicle_acceleration_model =
@@ -1171,6 +1173,8 @@ mod tests {
         assert_table_field_type(&pats.body, 2, "vehicle.plane_crashes");
         assert_table_field_type(&pats.body, 2, "economy.type");
         assert_table_field_type(&pats.body, 2, "economy.town_growth_rate");
+        assert_table_field_type(&pats.body, 6, "pf.yapf.ship_curve45_penalty");
+        assert_table_field_type(&pats.body, 6, "pf.yapf.ship_curve90_penalty");
         assert_table_field_type(&pats.body, 4, "linkgraph.recalc_interval");
         assert_table_field_type(&pats.body, 4, "linkgraph.recalc_time");
         assert_table_field_type(&pats.body, 2, "linkgraph.distribution_pax");

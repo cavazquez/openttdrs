@@ -246,6 +246,22 @@ pub(crate) fn settings_from_chunks(chunks: &[RawChunk]) -> ParsedSettings {
                 parsed.pathfinding.reserve_paths = value;
                 found = true;
             }
+            if let Some(value) = record_get(&record, "pf.yapf.ship_curve45_penalty")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok())
+            {
+                parsed.pathfinding.ship_curve45_penalty =
+                    value.min(crate::pathfinding_settings::MAX_SHIP_CURVE_PENALTY);
+                found = true;
+            }
+            if let Some(value) = record_get(&record, "pf.yapf.ship_curve90_penalty")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok())
+            {
+                parsed.pathfinding.ship_curve90_penalty =
+                    value.min(crate::pathfinding_settings::MAX_SHIP_CURVE_PENALTY);
+                found = true;
+            }
             if let Some(value) =
                 record_get(&record, "vehicle.train_acceleration_model").and_then(SlValue::as_u64)
             {
@@ -676,6 +692,53 @@ mod tests {
         );
         assert!(parsed.station_noise_level);
         assert_eq!(parsed.vehicle_breakdowns, 2);
+    }
+
+    #[test]
+    fn reads_ship_yapf_curve_penalties_as_u32_and_clamps_native_maximum() {
+        let body = build_table_body(
+            &[
+                (6, "pf.yapf.ship_curve45_penalty"),
+                (6, "pf.yapf.ship_curve90_penalty"),
+            ],
+            &[{
+                let mut record = Vec::new();
+                record.extend_from_slice(&123_u32.to_be_bytes());
+                record.extend_from_slice(&456_u32.to_be_bytes());
+                record
+            }],
+        );
+        let chunk = RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body,
+        };
+        let parsed = settings_from_chunks(&[chunk]);
+        assert_eq!(parsed.pathfinding.ship_curve45_penalty, 123);
+        assert_eq!(parsed.pathfinding.ship_curve90_penalty, 456);
+
+        let body = build_table_body(
+            &[
+                (6, "pf.yapf.ship_curve45_penalty"),
+                (6, "pf.yapf.ship_curve90_penalty"),
+            ],
+            &[{
+                let mut record = Vec::new();
+                record.extend_from_slice(&(u32::MAX).to_be_bytes());
+                record.extend_from_slice(&0_u32.to_be_bytes());
+                record
+            }],
+        );
+        let parsed = settings_from_chunks(&[RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body,
+        }]);
+        assert_eq!(
+            parsed.pathfinding.ship_curve45_penalty,
+            crate::pathfinding_settings::MAX_SHIP_CURVE_PENALTY
+        );
+        assert_eq!(parsed.pathfinding.ship_curve90_penalty, 0);
     }
 
     #[test]

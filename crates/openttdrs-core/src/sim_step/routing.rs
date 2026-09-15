@@ -253,7 +253,7 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
                     &state.engine_catalog,
                     &state.vehicles[i],
                 );
-                pathfinder::ShipPathCost::from_engine(engine)
+                pathfinder::ShipPathCost::from_engine_with_settings(engine, &state.pathfinding)
             });
             nonrail_jobs.push(GenericRouteJob {
                 vehicle_idx: i,

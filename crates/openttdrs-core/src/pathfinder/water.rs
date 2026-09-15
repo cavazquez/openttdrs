@@ -8,6 +8,10 @@ use crate::engine::EngineDef;
 use crate::map::{
     Map, TileCoord, TileKind, WaterClass, diag_dir_offset, effective_water_class_for_ship,
 };
+use crate::pathfinding_settings::{
+    DEFAULT_SHIP_CURVE45_PENALTY, DEFAULT_SHIP_CURVE90_PENALTY, MAX_SHIP_CURVE_PENALTY,
+    PathfindingSettings,
+};
 use crate::rail_pbs::YAPF_TILE_LENGTH;
 use crate::ship_movement::{
     ship_subcoord, ship_track_exit_diagdir, ship_trackdir, water_tile_is_lock,
@@ -16,11 +20,6 @@ use crate::ship_movement::{
 
 use super::astar::{AstarNode, manhattan, reconstruct};
 use super::network::{PathNetwork, is_network_tile};
-
-/// Penalización vanilla de YAPF por una curva de 45 grados (`1 * tile`).
-pub const SHIP_CURVE45_PENALTY: u32 = YAPF_TILE_LENGTH;
-/// Penalización vanilla de YAPF por una curva de 90 grados (`6 * tile`).
-pub const SHIP_CURVE90_PENALTY: u32 = 6 * YAPF_TILE_LENGTH;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct ShipNodeKey {
@@ -53,16 +52,33 @@ impl PartialOrd for ShipAstarNode {
 
 /// Propiedades del coste naval que YAPF obtiene de `ShipVehicleInfo`.
 ///
-/// Las dos propiedades son reducciones (`0` = sin reducción), no fracciones
-/// multiplicativas. El coste de un tile usa la misma conversión que
-/// `yapf_ship.cpp`: `base + base * reduction / (256 - reduction)`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+/// Las propiedades de velocidad son reducciones (`0` = sin reducción), no
+/// fracciones multiplicativas. El coste de un tile usa la misma conversión que
+/// `yapf_ship.cpp`: `base + base * reduction / (256 - reduction)`; las
+/// penalizaciones de curva se toman de `pf.yapf.ship_curve*_penalty`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ShipPathCost {
     pub ocean_speed_frac: u8,
     pub canal_speed_frac: u8,
     /// Velocidad máxima estática del `ShipVehicleInfo`, usada por la
     /// penalización del centro de una esclusa.
     pub max_speed: u16,
+    /// Penalización configurable de YAPF por curva naval de 45 grados.
+    pub curve45_penalty: u32,
+    /// Penalización configurable de YAPF por curva naval de 90 grados.
+    pub curve90_penalty: u32,
+}
+
+impl Default for ShipPathCost {
+    fn default() -> Self {
+        Self {
+            ocean_speed_frac: 0,
+            canal_speed_frac: 0,
+            max_speed: 0,
+            curve45_penalty: DEFAULT_SHIP_CURVE45_PENALTY,
+            curve90_penalty: DEFAULT_SHIP_CURVE90_PENALTY,
+        }
+    }
 }
 
 impl ShipPathCost {
@@ -72,7 +88,18 @@ impl ShipPathCost {
             ocean_speed_frac: engine.ocean_speed_frac,
             canal_speed_frac: engine.canal_speed_frac,
             max_speed: engine.max_speed,
+            curve45_penalty: DEFAULT_SHIP_CURVE45_PENALTY,
+            curve90_penalty: DEFAULT_SHIP_CURVE90_PENALTY,
         }
+    }
+
+    /// Extrae el perfil naval del motor y aplica los ajustes YAPF de la partida.
+    #[must_use]
+    pub fn from_engine_with_settings(engine: &EngineDef, settings: &PathfindingSettings) -> Self {
+        let mut cost = Self::from_engine(engine);
+        cost.curve45_penalty = settings.ship_curve45_penalty.min(MAX_SHIP_CURVE_PENALTY);
+        cost.curve90_penalty = settings.ship_curve90_penalty.min(MAX_SHIP_CURVE_PENALTY);
+        cost
     }
 
     #[must_use]
@@ -178,7 +205,7 @@ impl ShipPathCost {
             crate::rail_pbs::YAPF_TILE_CORNER_LENGTH
         };
         self.track_tile_cost(base, ship_water_class(map, previous, current), skipped)
-            .saturating_add(Self::curve_penalty(previous_trackdir, trackdir))
+            .saturating_add(self.curve_penalty(previous_trackdir, trackdir))
             .saturating_add(preferred_direction_penalty(current, trackdir))
             .saturating_add(self.lock_penalty(map, current))
     }
@@ -204,11 +231,11 @@ impl ShipPathCost {
     }
 
     #[must_use]
-    fn curve_penalty(previous: u8, current: u8) -> u32 {
+    fn curve_penalty(self, previous: u8, current: u8) -> u32 {
         if trackdir_crosses_trackdir(previous, current) {
-            SHIP_CURVE90_PENALTY
+            self.curve90_penalty
         } else if next_trackdir(previous) != Some(current) {
-            SHIP_CURVE45_PENALTY
+            self.curve45_penalty
         } else {
             0
         }

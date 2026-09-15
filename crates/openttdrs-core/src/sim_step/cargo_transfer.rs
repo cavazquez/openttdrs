@@ -220,6 +220,82 @@ fn vehicle_load_unload_speed(state: &mut GameState, vehicle_idx: usize, cargo: C
         .map_or_else(|| crate::cargo_packet::load_unload_speed(cargo), u32::from)
 }
 
+/// Devuelve la capacidad de carga de la unidad que está siendo procesada.
+///
+/// La cabeza de un consist ferroviario guarda en `Vehicle::capacity` la suma
+/// de todas sus unidades después de `ConsistChanged`; `LoadUnloadVehicle`, en
+/// cambio, resta la carga de cada vagón contra su propio `cargo_cap`. Para una
+/// cabeza con unidades enganchadas hay que reconstruir ese valor local desde
+/// el motor/refit; los followers ya conservan su capacidad individual.
+fn vehicle_unit_capacity(state: &mut GameState, vehicle_idx: usize) -> u32 {
+    let Some(vehicle) = state.vehicles.get(vehicle_idx) else {
+        return 0;
+    };
+    if vehicle.kind != VehicleKind::Train
+        || vehicle.prev_unit.is_some()
+        || vehicle.next_unit.is_none()
+    {
+        return vehicle.capacity;
+    }
+    let Some(engine_id) = vehicle.engine_id else {
+        // Los escenarios legacy pueden usar una cabeza ferroviaria sintética
+        // sin `EngineID`; `ConsistChanged` conserva en `capacity` sólo la suma
+        // agregada de los vagones en ese caso. Su capacidad local histórica
+        // es la del vehículo genérico, no esa suma.
+        return crate::vehicle::VEHICLE_CAPACITY;
+    };
+    let Some(engine) = crate::engine::engine_in_catalog(&state.engine_catalog, engine_id)
+        .or_else(|| crate::engine::engine_by_id(engine_id))
+        .cloned()
+    else {
+        // Un motor no catalogado sigue el mismo contrato de compatibilidad:
+        // el `cargo_cap` local no puede ser la capacidad agregada de la
+        // cabeza después de reconstruir el consist.
+        return vehicle.capacity;
+    };
+    if vehicle.refit_capacity > 0 {
+        return u32::from(vehicle.refit_capacity);
+    }
+    let refit_capacity = crate::newgrf_callback::resolve_vehicle_current_refit_capacity(
+        &engine,
+        &mut state.vehicles[vehicle_idx],
+    );
+    if let Some(capacity) = refit_capacity {
+        return capacity;
+    }
+    let property_capacity = crate::newgrf_callback::resolve_vehicle_capacity_property_callback(
+        &engine,
+        &mut state.vehicles[vehicle_idx],
+    );
+    if let Some(capacity) = property_capacity {
+        let cargo = state.vehicles[vehicle_idx]
+            .cargo_type
+            .or(engine.cargo)
+            .unwrap_or(CargoType::Passengers);
+        return crate::cargo_spec::apply_cargo_capacity_multiplier(
+            capacity,
+            &state.cargo_spec_catalog,
+            cargo,
+        );
+    }
+    if engine.capacity > 0 {
+        let cargo = state.vehicles[vehicle_idx]
+            .cargo_type
+            .or(engine.cargo)
+            .unwrap_or(CargoType::Passengers);
+        return crate::cargo_spec::apply_cargo_capacity_multiplier(
+            engine.capacity,
+            &state.cargo_spec_catalog,
+            cargo,
+        );
+    }
+    if engine.is_train_engine() {
+        0
+    } else {
+        state.vehicles[vehicle_idx].capacity
+    }
+}
+
 /// Refresca las capacidades que pueden cambiar mediante CB36 antes de
 /// `LoadUnloadStation`.
 ///
@@ -993,12 +1069,12 @@ pub(super) fn unload_vehicles(
             .orders
             .get(state.vehicles[order_vehicle_idx].current_order)
             .map_or(OrderUnloadType::UnloadIfPossible, |o| o.unload_type());
-        let cargo_pct = if state.vehicles[i].capacity == 0 {
+        let unit_capacity = vehicle_unit_capacity(state, i);
+        let cargo_pct = if unit_capacity == 0 {
             0
         } else {
             u8::try_from(
-                (u64::from(state.vehicles[i].cargo) * 100 / u64::from(state.vehicles[i].capacity))
-                    .min(100),
+                (u64::from(state.vehicles[i].cargo) * 100 / u64::from(unit_capacity)).min(100),
             )
             .unwrap_or(100)
         };
@@ -1056,7 +1132,7 @@ pub(super) fn unload_vehicles(
         state.stations[station_idx].time_since_unload = 0;
         let vehicle_owner = state.vehicles[i].owner;
         if let Some(from) = state.vehicles[i].last_pickup_station {
-            let capacity = state.vehicles[i].capacity.max(unload_units);
+            let capacity = unit_capacity.max(unload_units);
             let travel_time = state.vehicles[i]
                 .last_depart_tick
                 .map(|depart| state.tick.get().saturating_sub(depart))
@@ -1431,6 +1507,7 @@ pub(super) fn load_vehicles(
         }
         let loading = state.vehicles[i].cargo_loading;
         let mut has_reserved_load = state.vehicles[i].cargo_packets.reserved_count() > 0;
+        let unit_capacity = vehicle_unit_capacity(state, i);
         // Con carga a bordo: solo seguir cargando si full_load o carga gradual.
         if state.vehicles[i].cargo != 0 && !allow_top_up && !loading && !has_reserved_load {
             continue;
@@ -1461,13 +1538,13 @@ pub(super) fn load_vehicles(
                 .is_some_and(|capacity| {
                     state.vehicles[i].aircraft_mail_packets.total() < u32::from(capacity)
                 });
-        let primary_can_load = state.vehicles[i].capacity > 0 && !locomotive_without_wagon;
+        let primary_can_load = unit_capacity > 0 && !locomotive_without_wagon;
         if !primary_can_load && !can_load_aircraft_mail {
             state.vehicles[i].cargo_loading = false;
             continue;
         }
         if (allow_top_up || loading)
-            && state.vehicles[i].cargo >= state.vehicles[i].capacity
+            && state.vehicles[i].cargo >= unit_capacity
             && !can_load_aircraft_mail
             && !has_reserved_load
         {
@@ -1678,7 +1755,27 @@ fn finish_consist_loading(state: &mut GameState, loaded_this_tick: &[bool]) {
         {
             continue;
         }
-        state.vehicles[head_idx].advance_after_loading();
+        let consist_load = units
+            .iter()
+            .map(|&idx| {
+                let capacity = vehicle_unit_capacity(state, idx);
+                let vehicle = &state.vehicles[idx];
+                (
+                    vehicle
+                        .cargo_type
+                        .or_else(|| vehicle.cargo_packets.primary_type())
+                        .unwrap_or(CargoType::Passengers),
+                    vehicle.cargo,
+                    capacity,
+                )
+            })
+            .collect::<Vec<_>>();
+        let should_wait = state.vehicles[head_idx]
+            .current_order_ref()
+            .is_some_and(|order| order.should_wait_for_consist_loading(&consist_load));
+        if !should_wait {
+            state.vehicles[head_idx].advance_after_consist_loading();
+        }
     }
 }
 
@@ -2282,7 +2379,7 @@ fn reserve_vehicle_cargo_at_station(
 ) -> bool {
     state.vehicles[vehicle_idx].ensure_packets_from_legacy();
     state.stations[station_idx].ensure_packets_from_stock();
-    let capacity = state.vehicles[vehicle_idx].capacity;
+    let capacity = vehicle_unit_capacity(state, vehicle_idx);
     let room = capacity.saturating_sub(state.vehicles[vehicle_idx].cargo);
     if room == 0 {
         return false;
@@ -2498,7 +2595,8 @@ fn try_load_reserved_from_station(
     state.stats.cargo_units_loaded += u64::from(moved);
 
     let pending = state.vehicles[vehicle_idx].cargo_packets.reserved_count();
-    let full = state.vehicles[vehicle_idx].cargo >= state.vehicles[vehicle_idx].capacity;
+    let capacity = vehicle_unit_capacity(state, vehicle_idx);
+    let full = state.vehicles[vehicle_idx].cargo >= capacity;
     let defer_order_advance = defer_consist_order_advance(state, order_vehicle_idx, vehicle_idx);
     let station_empty = state.stations[station_idx].cargo_packets.total_of(cargo) == 0;
     let full_load = state.vehicles[order_vehicle_idx]
@@ -2530,7 +2628,7 @@ fn try_load_from_industry(
     if state.vehicles[vehicle_idx].cargo_packets.reserved_count() > 0 {
         return false;
     }
-    let vcap = state.vehicles[vehicle_idx].capacity;
+    let vcap = vehicle_unit_capacity(state, vehicle_idx);
     let room = vcap.saturating_sub(state.vehicles[vehicle_idx].cargo);
     let vcargo_type = state.vehicles[vehicle_idx].cargo_type;
     let station_pos = state.stations[station_idx].pos;
@@ -2656,7 +2754,7 @@ fn try_load_from_station_waiting_cargo(
     state.vehicles[vehicle_idx].ensure_packets_from_legacy();
     state.stations[station_idx].ensure_packets_from_stock();
     let kind = state.vehicles[vehicle_idx].kind;
-    let vcap = state.vehicles[vehicle_idx].capacity;
+    let vcap = vehicle_unit_capacity(state, vehicle_idx);
     let room = vcap.saturating_sub(state.vehicles[vehicle_idx].cargo);
     let next_stations = crate::VehicleOrder::get_next_stopping_station(
         &state.vehicles[order_vehicle_idx].orders,
@@ -3917,6 +4015,79 @@ mod tests {
             state.stations[0].cargo_packets.total_of(CargoType::Goods),
             10
         );
+    }
+
+    #[test]
+    fn full_load_train_consist_uses_each_unit_capacity() {
+        let source = TileCoord::new(1, 1);
+        let destination = TileCoord::new(3, 3);
+        let mut state = GameState::new(6, 6);
+        let mut tile = state.map.get(source).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 2 << 3;
+        tile.m3 = 1;
+        state.map.set_tile(source, tile).unwrap();
+
+        let mut station = crate::Station::new_with_kind(source, crate::StopKind::RailStation);
+        station.rating = 255;
+        station.add_waiting_cargo(CargoType::Coal, 60);
+        state.stations.push(station);
+
+        let mut head = crate::Vehicle::new(47, VehicleKind::Train, source, source);
+        head.orders = vec![
+            crate::VehicleOrder::station_with_flags(source, true, false),
+            crate::VehicleOrder::station(destination),
+        ];
+        head.next_unit = Some(48);
+
+        let mut wagon = crate::Vehicle::new(48, VehicleKind::Train, source, source);
+        wagon.engine_id = Some(crate::ENGINE_WAGON_COAL);
+        wagon.cargo_type = Some(CargoType::Coal);
+        wagon.capacity = 30;
+        wagon.prev_unit = Some(47);
+        state.vehicles.extend([head, wagon]);
+        crate::train_consist::consist_changed(&mut state.vehicles, 47);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+
+        assert_eq!(state.vehicles[0].capacity, 30);
+        assert_eq!(state.vehicles[1].capacity, 30);
+
+        let unloaded = vec![false; 2];
+        let mut loaded = vec![false; 2];
+        load_vehicles(&mut state, &mut loaded, &unloaded);
+
+        assert!(
+            !loaded[0],
+            "la locomotora no debe absorber la capacidad agregada"
+        );
+        assert!(loaded[1]);
+        assert_eq!(state.vehicles[0].cargo, 0);
+        assert_eq!(state.vehicles[1].cargo, 30);
+        assert!(state.vehicles[1].cargo_packets.stored_count() > 0);
+        assert!(state.vehicles[1].cargo_packets.reserved_count() > 0);
+        assert_eq!(state.vehicles[0].current_order, 0);
+        assert_eq!(
+            state.stations[0].cargo_packets.total_of(CargoType::Coal),
+            30
+        );
+
+        let mut completed = false;
+        for _ in 2..=32 {
+            let mut loaded = vec![false; 2];
+            load_vehicles(&mut state, &mut loaded, &unloaded);
+            assert!(loaded[1]);
+            if state.vehicles[1].cargo_packets.reserved_count() == 0 {
+                completed = true;
+                break;
+            }
+        }
+
+        assert!(completed, "la reserva del vagón debe terminar");
+        assert_eq!(state.vehicles[0].cargo, 0);
+        assert_eq!(state.vehicles[1].cargo, 30);
+        assert_eq!(state.vehicles[0].current_order, 1);
     }
 
     #[test]

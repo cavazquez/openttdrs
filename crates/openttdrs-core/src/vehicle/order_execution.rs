@@ -329,6 +329,26 @@ impl super::model::Vehicle {
         self.do_advance_after_loading();
     }
 
+    /// Avanza después de cargar un consist cuya terminación ya fue evaluada
+    /// sobre todas sus unidades.
+    ///
+    /// `Vehicle::capacity` de la cabeza de un tren puede ser la capacidad
+    /// agregada del consist, mientras que `FullLoad` se decide por la
+    /// capacidad local de cada unidad. La fase de carga hace esa evaluación
+    /// antes de llamar aquí; repetir el chequeo escalar de la cabeza haría que
+    /// una locomotora sin bodega mantuviera la orden para siempre.
+    pub(crate) fn advance_after_consist_loading(&mut self) {
+        if self.orders.is_empty() {
+            return;
+        }
+        self.sanitize_current_order();
+        if self.schedule_timetable_wait(super::model::TimetableWaitKind::AfterLoad) {
+            self.progress = 255;
+            return;
+        }
+        self.do_advance_after_loading();
+    }
+
     fn do_advance_after_loading(&mut self) {
         self.mark_train_station_departure_hold();
         self.path.clear();

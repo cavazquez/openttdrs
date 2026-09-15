@@ -3,6 +3,24 @@
 use crate::GameState;
 use crate::cargo::CargoType;
 
+fn consist_cargo_snapshot(state: &GameState, vehicle_id: u32) -> (u32, Option<CargoType>) {
+    let head_id = crate::consist_head_id(&state.vehicles, vehicle_id).unwrap_or(vehicle_id);
+    let mut total = 0_u32;
+    let mut cargo_type = None;
+    for unit_id in crate::consist_unit_ids(&state.vehicles, head_id) {
+        let Some(vehicle) = state.vehicles.iter().find(|vehicle| vehicle.id == unit_id) else {
+            continue;
+        };
+        total = total.saturating_add(vehicle.cargo);
+        if cargo_type.is_none() && vehicle.cargo > 0 {
+            cargo_type = vehicle
+                .cargo_type
+                .or_else(|| vehicle.cargo_packets.primary_type());
+        }
+    }
+    (total, cargo_type)
+}
+
 /// Opciones de la sonda de ciclo carga/descarga.
 #[derive(Debug, Clone, Copy)]
 pub struct CargoProbeOptions {
@@ -69,43 +87,44 @@ pub fn probe_vehicle_cargo_cycle(
     let mut ticks_run = 0u64;
 
     for _ in 0..opts.max_ticks {
-        let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == opts.vehicle_id) else {
+        if !state.vehicles.iter().any(|v| v.id == opts.vehicle_id) {
             break;
-        };
-        let cargo_before = state.vehicles[vehicle_idx].cargo;
+        }
+        let (cargo_before, _) = consist_cargo_snapshot(state, opts.vehicle_id);
         state.step();
         ticks_run += 1;
         let tick = state.tick.get();
-        let Some(v) = state.vehicles.iter().find(|v| v.id == opts.vehicle_id) else {
+        if !state.vehicles.iter().any(|v| v.id == opts.vehicle_id) {
             break;
-        };
+        }
+        let (cargo_after, cargo_type_after) = consist_cargo_snapshot(state, opts.vehicle_id);
 
-        if !loaded && v.cargo > 0 {
+        if !loaded && cargo_after > 0 {
             loaded = true;
-            units_loaded_peak = v.cargo;
-            cargo_type = v.cargo_type;
+            units_loaded_peak = cargo_after;
+            cargo_type = cargo_type_after;
             tick_loaded = Some(tick);
-        } else if loaded && v.cargo > units_loaded_peak {
-            units_loaded_peak = v.cargo;
+        } else if loaded && cargo_after > units_loaded_peak {
+            units_loaded_peak = cargo_after;
         }
 
         if loaded
             && !delivered
             && state.stats.cargo_deliveries > deliveries_start
-            && (v.cargo == 0 || (cargo_before > 0 && v.cargo < cargo_before))
+            && (cargo_after == 0 || (cargo_before > 0 && cargo_after < cargo_before))
         {
             // Descarga gradual: contar entrega al primer tick con pago/stats,
             // o cuando el vehículo queda vacío.
-            if v.cargo == 0 || state.stats.cargo_units_delivered > 0 {
+            if cargo_after == 0 || state.stats.cargo_units_delivered > 0 {
                 delivered = true;
-                units_delivered = units_loaded_peak.max(cargo_before.saturating_sub(v.cargo));
+                units_delivered = units_loaded_peak.max(cargo_before.saturating_sub(cargo_after));
                 tick_delivered = Some(tick);
-                if v.cargo == 0 {
+                if cargo_after == 0 {
                     break;
                 }
             }
         }
-        if loaded && delivered && v.cargo == 0 {
+        if loaded && delivered && cargo_after == 0 {
             break;
         }
     }

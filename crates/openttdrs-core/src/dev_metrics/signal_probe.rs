@@ -83,7 +83,17 @@ fn maybe_spawn_blocker(state: &mut GameState, opts: &SignalWaitProbeOptions) -> 
     let Some(vehicle) = state.vehicles.iter().find(|v| v.id == opts.vehicle_id) else {
         return false;
     };
-    if vehicle.pos != opts.signal_tile || vehicle.cargo == 0 {
+    let head_id = crate::consist_head_id(&state.vehicles, opts.vehicle_id).unwrap_or(vehicle.id);
+    let consist_loaded = crate::consist_unit_ids(&state.vehicles, head_id)
+        .into_iter()
+        .any(|unit_id| {
+            state
+                .vehicles
+                .iter()
+                .find(|candidate| candidate.id == unit_id)
+                .is_some_and(|unit| unit.cargo > 0)
+        });
+    if vehicle.pos != opts.signal_tile || !consist_loaded {
         return false;
     }
     spawn_blocker_train(state, blocker_id, blocker_tile);

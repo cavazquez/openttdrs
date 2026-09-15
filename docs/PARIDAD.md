@@ -5722,3 +5722,16 @@ Validación: `2797` tests de core pasados, `0` fallidos y `1` ignorado, Clippy
 estricto de core, check del cliente y formato verdes. #329/#567 siguen abiertas
 por trackdirs físicos adicionales, settings configurables, callbacks y cachés
 visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-YAPF-CURVE-SETTINGS (2026-09-15, `d736dfb2`): las
+penalizaciones configurables `pf.yapf.ship_curve45_penalty` y
+`pf.yapf.ship_curve90_penalty` dejan de estar hardcodeadas en el coste naval.
+El perfil del motor las toma de `PathfindingSettings`, limita cada valor al
+rango nativo `0..=1000000` y las incorpora a la clave de caché para no mezclar
+rutas de partidas o perfiles distintos. PATS las carga y guarda como
+`SLE_UINT` de 32 bits, y el `serde` de configuraciones antiguas conserva los
+defaults vanilla. Las regresiones cubren perfil, clamp, caché y round-trip.
+Validación: `2799` tests de core pasados, `0` fallidos y `1` ignorado, Clippy
+estricto de core, check del cliente, formato y `git diff --check` verdes.
+#329/#567 siguen abiertas por la exposición numérica en la UI experta,
+trackdirs físicos adicionales, callbacks y cachés visuales NewGRF restantes.

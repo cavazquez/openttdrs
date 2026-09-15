@@ -8520,3 +8520,15 @@ acueductos. Validación: `2797` tests de core pasados, `0` fallidos y `1` ignora
 Clippy estricto de core, check del cliente y formato verdes. #329/#567 siguen
 abiertos por trackdirs físicos adicionales, settings configurables, callbacks y
 cachés visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-YAPF-CURVE-SETTINGS (2026-09-15, `d736dfb2`): las
+penalizaciones configurables `pf.yapf.ship_curve45_penalty` y
+`pf.yapf.ship_curve90_penalty` se aplican ahora desde `PathfindingSettings` al
+perfil de `YapfShip`; el límite `0..=1000000` replica el setting nativo y ambos
+valores forman parte de la clave de caché. PATS los serializa como `SLE_UINT`
+de 32 bits y el lector conserva defaults vanilla para saves anteriores. Las
+pruebas cubren selección de perfil, clamp, separación de caché y round-trip.
+Validación: `2799` tests de core pasados, `0` fallidos y `1` ignorado, Clippy
+estricto de core, check del cliente, formato y `git diff --check` verdes.
+#329/#567 siguen abiertos por la exposición numérica en la UI experta,
+trackdirs físicos adicionales, callbacks y cachés visuales NewGRF restantes.

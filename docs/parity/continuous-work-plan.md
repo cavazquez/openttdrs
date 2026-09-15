@@ -8200,3 +8200,13 @@ exitosos, `1` ignorado, con clippy, formato y check del cliente en verde.
 Esto corrige el ámbito local de la reserva, pero todavía no asocia packets a
 un vehículo concreto ni modela su devolución/carga parcial entre ticks; #329
 permanece abierta.
+
+Corrección #329-STATION-RESERVATION-SAV-ROUNDTRIP (2026-09-15, `e561d0bd`):
+la hidratación de `STNN.goods[].cargo.reserved_count` reconstruye también
+`reserved_by_cargo`, y el exportador asigna primero la reserva conocida al slot
+correspondiente antes de repartir cualquier remanente legacy. El round-trip
+con carbón y correo verifica que una reserva de carbón no reaparezca como
+reserva de correo al guardar/cargar; la suite focalizada de SAV y clippy de
+producción pasan. La asociación nativa por vehículo, el retorno de packets
+reservados y la carga parcial entre ticks siguen pendientes; #329 permanece
+abierta.

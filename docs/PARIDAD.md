@@ -5420,3 +5420,12 @@ paralelo; core queda en `2770 passed; 0 failed; 1 ignored`, con clippy, formato
 y check del cliente en verde. La asociación nativa por vehículo, la carga
 parcial entre ticks y el retorno de reservas siguen pendientes; #329 permanece
 abierta.
+
+Corrección #329-STATION-RESERVATION-SAV-ROUNDTRIP (2026-09-15, `e561d0bd`):
+`STNN.goods[].cargo.reserved_count` se hidrata ahora por `CargoType` y el
+writer exporta primero la reserva conocida al slot correcto; sólo el remanente
+sin tipo usa la distribución legacy determinista. El round-trip con carbón y
+correo comprueba que guardar/cargar no reasigne una reserva al cargo vecino.
+La prueba focalizada de SAV, clippy, formato y check del cliente pasan. La
+asociación nativa por vehículo, el retorno de packets reservados y la carga
+parcial entre ticks siguen pendientes; #329 permanece abierta.

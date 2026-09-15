@@ -5,7 +5,7 @@ use std::collections::{BinaryHeap, HashMap};
 use crate::engine::EngineDef;
 use crate::map::{Map, TileCoord, TileKind, WaterClass, effective_water_class_for_ship};
 use crate::rail_pbs::YAPF_TILE_LENGTH;
-use crate::ship_movement::water_tiles_connected;
+use crate::ship_movement::{water_tile_is_lock, water_tiles_connected};
 
 use super::astar::{AstarNode, manhattan, reconstruct};
 use super::network::{PathNetwork, is_network_tile};
@@ -19,6 +19,9 @@ use super::network::{PathNetwork, is_network_tile};
 pub struct ShipPathCost {
     pub ocean_speed_frac: u8,
     pub canal_speed_frac: u8,
+    /// Velocidad máxima estática del `ShipVehicleInfo`, usada por la
+    /// penalización del centro de una esclusa.
+    pub max_speed: u16,
 }
 
 impl ShipPathCost {
@@ -27,6 +30,7 @@ impl ShipPathCost {
         Self {
             ocean_speed_frac: engine.ocean_speed_frac,
             canal_speed_frac: engine.canal_speed_frac,
+            max_speed: engine.max_speed,
         }
     }
 
@@ -55,10 +59,37 @@ impl ShipPathCost {
         let mut total: u32 = 0;
         let mut current = from;
         for &next in path {
-            total = total.saturating_add(self.tile_cost(ship_water_class(map, current, next)));
+            total = total.saturating_add(self.step_cost(map, current, next));
             current = next;
         }
         total
+    }
+
+    #[must_use]
+    fn step_cost(self, map: &Map, current: TileCoord, next: TileCoord) -> u32 {
+        self.tile_cost(ship_water_class(map, current, next))
+            .saturating_add(self.lock_penalty(map, next))
+    }
+
+    /// Penalización de `YapfShip` para el centro de una esclusa.
+    #[must_use]
+    fn lock_penalty(self, map: &Map, tile: TileCoord) -> u32 {
+        let Some(raw) = map.get(tile) else {
+            return 0;
+        };
+        // `LockPart::Middle == 0`; lower/upper no detienen el barco en el
+        // sentido del coste YAPF.
+        if raw.kind != TileKind::Water
+            || !water_tile_is_lock(map, tile)
+            || (raw.m5 >> 2) & 0x03 != 0
+        {
+            return 0;
+        }
+        let reduction = u32::from(self.canal_speed_frac);
+        let canal_speed = u32::from(self.max_speed).saturating_mul(256 - reduction) / 256;
+        // `TILE_HEIGHT` es 8 en OpenTTD; el barco queda detenido al cruzar
+        // un nivel y YAPF lo expresa en unidades de `YAPF_TILE_LENGTH`.
+        8 * YAPF_TILE_LENGTH * canal_speed / 128
     }
 }
 
@@ -131,7 +162,7 @@ fn find_water_path_with_cost(
                 continue;
             }
 
-            let step = ship_cost.map_or(1, |cost| cost.tile_cost(ship_water_class(map, cur, next)));
+            let step = ship_cost.map_or(1, |cost| cost.step_cost(map, cur, next));
             let tentative = cur_g.saturating_add(step);
             if g_score.get(&next).is_some_and(|&g| tentative >= g) {
                 continue;

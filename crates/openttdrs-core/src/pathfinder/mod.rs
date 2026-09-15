@@ -672,6 +672,7 @@ mod tests {
         let cost = ShipPathCost {
             ocean_speed_frac: 0,
             canal_speed_frac: 128,
+            max_speed: 0,
         };
         assert_eq!(cost.tile_cost(Some(WaterClass::Sea)), 100);
         assert_eq!(cost.tile_cost(Some(WaterClass::Canal)), 200);
@@ -701,6 +702,41 @@ mod tests {
             weighted
                 .iter()
                 .all(|tile| tile.y != 2 || tile.x == 0 || tile.x == 6)
+        );
+
+        let mut lock_map = Map::new_flat(7, 5, 0);
+        for y in [1_i32, 2, 3] {
+            for x in 0..=6_i32 {
+                make_water_tile(&mut lock_map, TileCoord::new(x, y), WaterClass::Sea)
+                    .expect("agua");
+            }
+        }
+        let lock_tile = TileCoord::new(3, 2);
+        let mut raw_lock = lock_map.get(lock_tile).expect("esclusa");
+        raw_lock.m5 = 0x20; // WaterTileType::Lock + LockPart::Middle.
+        lock_map.set_tile(lock_tile, raw_lock).expect("esclusa raw");
+        let lock_cost = ShipPathCost {
+            ocean_speed_frac: 0,
+            canal_speed_frac: 0,
+            max_speed: 128,
+        };
+        let around_lock = find_ship_path_with_cost(
+            &lock_map,
+            TileCoord::new(0, 2),
+            TileCoord::new(6, 2),
+            lock_cost,
+        )
+        .expect("desvío de esclusa");
+        assert_eq!(around_lock.len(), 8);
+        assert!(!around_lock.contains(&lock_tile));
+        assert_eq!(
+            lock_cost.path_cost(
+                &lock_map,
+                TileCoord::new(0, 2),
+                &[TileCoord::new(1, 2), TileCoord::new(2, 2), lock_tile]
+            ),
+            1_100,
+            "el centro añade 800 a tres pasos de mar"
         );
     }
 

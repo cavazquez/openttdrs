@@ -5323,3 +5323,14 @@ cliente queda en `1542` tests exitosos (2 ignorados), con Clippy, formato y
 `git diff --check` en verde. Es cobertura de contrato ECS; #326/#329/#567
 siguen abiertas por la aceptación raster, halftiles y layouts/callbacks
 NewGRF aún no cubiertos.
+
+Diagnóstico #326/#561-RAIL-GLASS-AB (2026-09-15): una captura limpia de
+`Kale_TitleGame.sav` en `132,2` (800×600, Normal) aisló el techo de estación.
+La selección y el orden coinciden en `109/109` comandos, `32/32` capas y
+`8/8` vidrios. La máscara temporal dio delta medio `0,382722` sin overlay,
+`0,408451` con alpha `0,50`, `0,394033` con `0,25` y `0,536719` con `1,0`.
+No se adopta el menor control: `PALETTE_TO_TRANSPARENT` del blitter 8bpp
+remapea el color de destino y no equivale a un alpha uniforme; diferentes
+regiones requieren distintas transformaciones. Se conserva el `0,50` calibrado
+previamente y #326/#561 siguen abiertas por la composición dependiente del
+framebuffer.

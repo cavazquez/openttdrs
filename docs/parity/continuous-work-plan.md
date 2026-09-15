@@ -8096,3 +8096,16 @@ pronunciadas. Verifica contra `foundation_draw_plan` el número de bloques,
 ausencia de césped inclinado, relación child→foundation del apron y altura
 efectiva de `BUILD`; pasan `1542` tests del cliente (2 ignorados). Esta matriz
 fortalece la subetapa de aeropuertos, pero no cierra #326/#329/#567.
+
+Diagnóstico #326/#561-RAIL-GLASS-AB (2026-09-15): la captura focalizada de
+`Kale_TitleGame.sav`, centro `132,2`, 800×600, `Normal`, perfil limpio, aisló
+el techo de estación. El orden/geométrica del stream nativo y Rust coincide
+en `109/109` comandos, `32/32` capas y `8/8` vidrios; el residuo es de
+composición. La A/B temporal de la máscara obtuvo `6129` píxeles distintos y
+delta medio `0,382722` con alpha `0,0`; `7336` y `0,408451` con el calibrado
+`0,50`; `7336` y `0,536719` con `1,0`; el intermedio `0,25` dio `0,394033`.
+El mejor resultado agregado no conserva la semántica: distintas regiones del
+techo requieren resultados diferentes porque el blitter 8bpp aplica
+`PALETTE_TO_TRANSPARENT` según el color de destino. Se conserva `0,50` como
+aproximación calibrada previa y no se cierra #326/#561: falta una composición
+dependiente del framebuffer, no otro cambio de parent/child por intuición.

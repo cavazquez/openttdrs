@@ -5448,3 +5448,13 @@ otra estación y correo disponible mientras se reserva carbón. Core queda en
 `2773 passed; 0 failed; 1 ignored`, con Clippy de producción y check del
 cliente en verde. La integración en `load_vehicles` y la persistencia SAV de
 la propiedad física siguen pendientes; #329 permanece abierta.
+
+Corrección #329-VEHICLE-RESERVATION-SAV-ROUNDTRIP (2026-09-15, `ccf8c5e2`):
+el importador conserva `MTA_LOAD` cuando los packets reservados ya no están en
+la cola visible de la estación, recupera la estación desde
+`last_loading_station` y reconstruye `reserved_physically_by_cargo`. El test
+`export_roundtrip_preserves_physical_vehicle_reservation` comprueba que no se
+pierdan ni dupliquen carbón, correo o contadores al exportar/importar. Core
+queda en `2774 passed; 0 failed; 1 ignored`, con Clippy de producción y check
+del cliente en verde. La integración en `load_vehicles` y la carga parcial
+entre ticks siguen pendientes; #329 permanece abierta.

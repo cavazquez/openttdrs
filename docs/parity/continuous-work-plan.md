@@ -8235,3 +8235,15 @@ rechazo de otra estación y coexistencia con una reserva virtual. Core queda en
 cliente en verde. El barrido `load_vehicles` todavía usa la ruta inmediata y
 el nuevo estado físico aún no está codificado en el wire SAV; #329 permanece
 abierta.
+
+Corrección #329-VEHICLE-RESERVATION-SAV-ROUNDTRIP (2026-09-15, `ccf8c5e2`):
+la importación conserva las reservas `MTA_LOAD` aunque el stock restante de la
+estación sea menor, reatacha el vehículo a `last_loading_station` y reconstruye
+`reserved_physically_by_cargo`. La reconciliación limita sólo reservas sin
+respaldo en packets o vehículos; el caso físico conserva estación, cargo,
+`stored_count` y `reserved_count` después de exportar/importar. La regresión
+`export_roundtrip_preserves_physical_vehicle_reservation` y la existente de
+reservas virtuales pasan; core queda en `2774` tests exitosos y `1` ignorado,
+con Clippy de producción y check del cliente en verde. La integración del
+estado reservado en `load_vehicles` y la carga parcial entre ticks siguen
+pendientes; #329 permanece abierta.

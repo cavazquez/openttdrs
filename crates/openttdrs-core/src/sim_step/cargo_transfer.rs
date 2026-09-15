@@ -531,6 +531,16 @@ fn aircraft_mail_should_unload_at_station(state: &GameState, vehicle_idx: usize)
 }
 
 fn finish_vehicle_unloading_if_empty(state: &mut GameState, vehicle_idx: usize) -> bool {
+    if !clear_vehicle_unloading_if_empty(state, vehicle_idx) {
+        return false;
+    }
+    state.vehicles[vehicle_idx].advance_after_unloading();
+    state.vehicles[vehicle_idx].sync_order_destination_with_stations(&state.map, &state.stations);
+    trigger_vehicle_empty_if_consist_empty(state, vehicle_idx);
+    true
+}
+
+fn clear_vehicle_unloading_if_empty(state: &mut GameState, vehicle_idx: usize) -> bool {
     let Some(vehicle) = state.vehicles.get(vehicle_idx) else {
         return false;
     };
@@ -540,9 +550,6 @@ fn finish_vehicle_unloading_if_empty(state: &mut GameState, vehicle_idx: usize) 
     state.vehicles[vehicle_idx].clear_cargo();
     state.vehicles[vehicle_idx].last_pickup_station = None;
     state.vehicles[vehicle_idx].last_depart_tick = None;
-    state.vehicles[vehicle_idx].advance_after_unloading();
-    state.vehicles[vehicle_idx].sync_order_destination_with_stations(&state.map, &state.stations);
-    trigger_vehicle_empty_if_consist_empty(state, vehicle_idx);
     true
 }
 
@@ -918,6 +925,7 @@ pub(super) fn unload_vehicles(
         .enumerate()
         .take(state.vehicles.len())
     {
+        let order_vehicle_idx = vehicle_order_index(state, i);
         if *loaded_flag {
             continue;
         }
@@ -958,14 +966,18 @@ pub(super) fn unload_vehicles(
         let Some(station_idx) = station_index_at_vehicle(state, &state.vehicles[i]) else {
             continue;
         };
-        if !vehicle_should_unload_at_station(&state.vehicles[i], state) {
+        if !vehicle_should_unload_at_station(
+            &state.vehicles[i],
+            &state.vehicles[order_vehicle_idx],
+            state,
+        ) {
             continue;
         }
         let cargo_type = vcargo_type.unwrap_or(CargoType::Goods);
         let Some(st) = state.stations.get(station_idx) else {
             continue;
         };
-        if !station_matches_current_order(&state.vehicles[i], st.pos) {
+        if !station_matches_current_order(&state.vehicles[order_vehicle_idx], st.pos) {
             continue;
         }
         let station_pos = st.pos;
@@ -977,9 +989,9 @@ pub(super) fn unload_vehicles(
         // orden o capacidad. Es el historial que consume NewGRF 0x8A.
         state.stations[station_idx].mark_vehicle_of_type(state.vehicles[i].kind);
         // CargoDist / P2.19: `PrepareUnload` + `Stage` (TRANSFER/DELIVER/KEEP).
-        let unload_type = state.vehicles[i]
+        let unload_type = state.vehicles[order_vehicle_idx]
             .orders
-            .get(state.vehicles[i].current_order)
+            .get(state.vehicles[order_vehicle_idx].current_order)
             .map_or(OrderUnloadType::UnloadIfPossible, |o| o.unload_type());
         let cargo_pct = if state.vehicles[i].capacity == 0 {
             0
@@ -991,8 +1003,8 @@ pub(super) fn unload_vehicles(
             .unwrap_or(100)
         };
         let next_stations = crate::VehicleOrder::get_next_stopping_station(
-            &state.vehicles[i].orders,
-            state.vehicles[i].cur_implicit_order_index,
+            &state.vehicles[order_vehicle_idx].orders,
+            state.vehicles[order_vehicle_idx].cur_implicit_order_index,
             station_pos,
             Some(cargo_pct),
         );
@@ -1332,6 +1344,8 @@ pub(super) fn unload_vehicles(
             if mail_remaining {
                 state.vehicles[i].clear_cargo();
                 state.vehicles[i].cargo_unloading = true;
+            } else if defer_consist_order_advance(state, order_vehicle_idx, i) {
+                let _ = clear_vehicle_unloading_if_empty(state, i);
             } else {
                 let _ = finish_vehicle_unloading_if_empty(state, i);
             }
@@ -1342,6 +1356,8 @@ pub(super) fn unload_vehicles(
             state.vehicles[i].cargo_unloading = true;
         }
     }
+
+    finish_consist_unloading(state, unloaded_this_tick);
 
     for industry_idx in delivered_industries {
         if !state
@@ -1663,6 +1679,55 @@ fn finish_consist_loading(state: &mut GameState, loaded_this_tick: &[bool]) {
             continue;
         }
         state.vehicles[head_idx].advance_after_loading();
+    }
+}
+
+fn finish_consist_unloading(state: &mut GameState, unloaded_this_tick: &[bool]) {
+    let heads: Vec<_> = state
+        .vehicles
+        .iter()
+        .enumerate()
+        .filter(|(_, vehicle)| vehicle.prev_unit.is_none() && vehicle.next_unit.is_some())
+        .map(|(idx, _)| idx)
+        .collect();
+    for head_idx in heads {
+        let mut units = Vec::new();
+        let mut current = Some(head_idx);
+        let mut visited = 0_usize;
+        while let Some(idx) = current {
+            units.push(idx);
+            current = state.vehicles[idx].next_unit.and_then(|next_id| {
+                state
+                    .vehicles
+                    .iter()
+                    .position(|vehicle| vehicle.id == next_id)
+            });
+            visited = visited.saturating_add(1);
+            if visited >= 256 {
+                break;
+            }
+        }
+        if !units
+            .iter()
+            .any(|&idx| unloaded_this_tick.get(idx).copied().unwrap_or(false))
+        {
+            continue;
+        }
+        let all_empty = units.iter().all(|&idx| {
+            state.vehicles[idx].cargo == 0 && state.vehicles[idx].aircraft_mail_packets.is_empty()
+        });
+        if !all_empty {
+            state.vehicles[head_idx].cargo_unloading = true;
+            continue;
+        }
+        for &idx in &units {
+            if state.vehicles[idx].cargo_unloading {
+                let _ = clear_vehicle_unloading_if_empty(state, idx);
+            }
+        }
+        state.vehicles[head_idx].advance_after_unloading();
+        state.vehicles[head_idx].sync_order_destination_with_stations(&state.map, &state.stations);
+        trigger_vehicle_empty_if_consist_empty(state, head_idx);
     }
 }
 
@@ -2784,7 +2849,11 @@ fn try_load_from_station_waiting_cargo(
     true
 }
 
-fn vehicle_should_unload_at_station(vehicle: &crate::Vehicle, state: &GameState) -> bool {
+fn vehicle_should_unload_at_station(
+    vehicle: &crate::Vehicle,
+    order_vehicle: &crate::Vehicle,
+    state: &GameState,
+) -> bool {
     if vehicle.cargo == 0 {
         return false;
     }
@@ -2802,9 +2871,9 @@ fn vehicle_should_unload_at_station(vehicle: &crate::Vehicle, state: &GameState)
     if !at_stop {
         return false;
     }
-    let unload_type = vehicle
+    let unload_type = order_vehicle
         .orders
-        .get(vehicle.current_order)
+        .get(order_vehicle.current_order)
         .map_or(OrderUnloadType::UnloadIfPossible, |order| {
             order.unload_type()
         });
@@ -2832,7 +2901,7 @@ fn vehicle_should_unload_at_station(vehicle: &crate::Vehicle, state: &GameState)
         // (mina en cobertura). No usar la estación física sola: una entrega
         // cercana a la mina también tendría cobertura.
         if let Some(crate::VehicleOrder::Station { station, .. }) =
-            vehicle.orders.get(vehicle.current_order)
+            order_vehicle.orders.get(order_vehicle.current_order)
             && station::station_is_freight_pickup_stop(
                 &state.map,
                 &state.industries,
@@ -2843,13 +2912,13 @@ fn vehicle_should_unload_at_station(vehicle: &crate::Vehicle, state: &GameState)
             return false;
         }
         // Sin órdenes: no descargar en el origen del lote (carga en hub/industria).
-        if vehicle.orders.is_empty() && vehicle.cargo_source == Some(station_pos) {
+        if order_vehicle.orders.is_empty() && vehicle.cargo_source == Some(station_pos) {
             return false;
         }
         // Hub de transferencia: acaba de cargar aquí y aún tiene otro destino.
         // (No aplica si `manhattan_to_dest == 0`: entrega en la misma estación
         // que cubría la industria de recogida.)
-        if vehicle.orders.is_empty()
+        if order_vehicle.orders.is_empty()
             && vehicle.last_pickup_station == Some(station_pos)
             && vehicle.manhattan_to_dest() > 0
         {
@@ -3848,6 +3917,103 @@ mod tests {
             state.stations[0].cargo_packets.total_of(CargoType::Goods),
             10
         );
+    }
+
+    #[test]
+    fn unload_consist_uses_head_order_for_each_cargo_unit() {
+        let pos = TileCoord::new(1, 1);
+        let destination = TileCoord::new(3, 3);
+        let source = TileCoord::new(0, 0);
+        let mut state = GameState::new(6, 6);
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 2 << 3;
+        tile.m3 = 1;
+        state.map.set_tile(pos, tile).unwrap();
+
+        let mut station = crate::Station::new_with_kind(pos, crate::StopKind::RailStation);
+        station.rating = 255;
+        state.stations.push(station);
+
+        let mut head = crate::Vehicle::new(43, VehicleKind::Train, pos, pos);
+        head.capacity = 10;
+        head.orders = vec![
+            crate::VehicleOrder::station_with_flags(pos, false, true),
+            crate::VehicleOrder::station(destination),
+        ];
+        head.next_unit = Some(44);
+
+        let mut part = crate::Vehicle::new(44, VehicleKind::Train, pos, pos);
+        part.capacity = 10;
+        part.cargo_type = Some(CargoType::Goods);
+        part.prev_unit = Some(43);
+        part.cargo_packets
+            .push(crate::CargoPacket::new(CargoType::Goods, 3, source));
+        part.sync_cargo_from_packets();
+        state.vehicles.extend([head, part]);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+
+        let mut unloaded = vec![false; 2];
+        unload_vehicles(&mut state, 1, &[false; 2], &mut unloaded);
+
+        assert!(!unloaded.iter().any(|unloaded| *unloaded));
+        assert_eq!(state.vehicles[1].cargo, 3);
+        assert_eq!(state.vehicles[0].current_order, 0);
+        assert_eq!(
+            state.stations[0].cargo_packets.total_of(CargoType::Goods),
+            0
+        );
+    }
+
+    #[test]
+    fn unload_consist_defers_head_order_until_all_units_are_empty() {
+        let pos = TileCoord::new(1, 1);
+        let destination = TileCoord::new(3, 3);
+        let source = TileCoord::new(0, 0);
+        let mut state = GameState::new(6, 6);
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 2 << 3;
+        tile.m3 = 1;
+        state.map.set_tile(pos, tile).unwrap();
+
+        let mut station = crate::Station::new_with_kind(pos, crate::StopKind::RailStation);
+        station.rating = 255;
+        state.stations.push(station);
+
+        let mut head = crate::Vehicle::new(45, VehicleKind::Train, pos, pos);
+        head.capacity = 10;
+        head.orders = vec![
+            crate::VehicleOrder::station_with_flags(pos, false, false),
+            crate::VehicleOrder::station(destination),
+        ];
+        head.next_unit = Some(46);
+        head.cargo_packets
+            .push(crate::CargoPacket::new(CargoType::Goods, 1, source));
+        head.sync_cargo_from_packets();
+
+        let mut part = crate::Vehicle::new(46, VehicleKind::Train, pos, pos);
+        part.capacity = 30;
+        part.cargo_type = Some(CargoType::Goods);
+        part.prev_unit = Some(45);
+        part.cargo_packets
+            .push(crate::CargoPacket::new(CargoType::Goods, 30, source));
+        part.sync_cargo_from_packets();
+        state.vehicles.extend([head, part]);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+
+        let mut unloaded = vec![false; 2];
+        unload_vehicles(&mut state, 1, &[false; 2], &mut unloaded);
+
+        assert!(unloaded.iter().all(|unloaded| *unloaded));
+        assert_eq!(state.vehicles[0].cargo, 0);
+        assert!(state.vehicles[1].cargo > 0);
+        assert_eq!(state.vehicles[0].current_order, 0);
+        assert!(state.vehicles[0].cargo_unloading);
     }
 
     #[test]

@@ -58,6 +58,7 @@ struct ShipDockRouteCandidate {
 /// Por debajo de este tamaño, el overhead de sincronización supera el ahorro
 /// y conviene mantener la caché secuencial por tick.
 const PARALLEL_GENERIC_ROUTE_THRESHOLD: usize = 32;
+const SHIP_DOCKING_OCCUPANCY_PENALTY: u32 = 3 * crate::rail_pbs::YAPF_TILE_LENGTH;
 
 impl StationRouteProfile {
     fn record_path(&mut self, elapsed_ns: u64, found: bool) {
@@ -394,6 +395,48 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
 /// más cercano. Para estaciones con varias piezas, esta búsqueda evalúa todos
 /// los `DockingTile` físicos y permite elegir el de menor ruta navegable, como
 /// hace `YapfShip` al resolver una estación nativa multi-muelle.
+fn ship_docking_occupancy_penalty(
+    state: &GameState,
+    vehicle_idx: usize,
+    path: &[TileCoord],
+) -> u32 {
+    let Some(vehicle) = state.vehicles.get(vehicle_idx) else {
+        return 0;
+    };
+    let docking_tiles: HashSet<TileCoord> = path
+        .iter()
+        .copied()
+        .filter(|&tile| {
+            state.map.get(tile).is_some_and(|raw| {
+                raw.m1 & 0x80 != 0
+                    && crate::ship_movement::is_water_network_tile_at(&state.map, tile)
+            })
+        })
+        .collect();
+    docking_tiles
+        .into_iter()
+        .map(|tile| {
+            let occupied = state
+                .vehicles
+                .iter()
+                .filter(|other| {
+                    other.kind == VehicleKind::Ship
+                        && other.id != vehicle.id
+                        && other.pos == tile
+                        && other.ship_state & crate::ship_movement::SHIP_STATE_DEPOT == 0
+                        && !state
+                            .map
+                            .get(other.pos)
+                            .is_some_and(|raw| raw.kind == crate::TileKind::ShipDepot)
+                })
+                .count();
+            u32::try_from(occupied)
+                .unwrap_or(u32::MAX)
+                .saturating_mul(SHIP_DOCKING_OCCUPANCY_PENALTY)
+        })
+        .fold(0, u32::saturating_add)
+}
+
 fn route_ship_to_available_dock(
     state: &mut GameState,
     vehicle_idx: usize,
@@ -425,7 +468,8 @@ fn route_ship_to_available_dock(
             continue;
         };
         let key = (
-            pathfinder::ship_path_cost_for_path(&state.map, from, &path, ship_path_cost),
+            pathfinder::ship_path_cost_for_path(&state.map, from, &path, ship_path_cost)
+                .saturating_add(ship_docking_occupancy_penalty(state, vehicle_idx, &path)),
             path.len(),
             candidate.x.abs_diff(from.x) + candidate.y.abs_diff(from.y),
             candidate.x,
@@ -991,6 +1035,29 @@ mod tests {
                 &HashSet::from([ReservedRailStep::new(TileCoord::new(5, 1), 0x01)]),
             ),
             "las reservas ya acumuladas siguen teniendo prioridad"
+        );
+    }
+
+    #[test]
+    fn ship_docking_occupancy_matches_yapf_and_ignores_depot_ships() {
+        let mut state = GameState::new(8, 8);
+        let docking = TileCoord::new(3, 3);
+        crate::map::make_water_tile(&mut state.map, docking, crate::WaterClass::Sea)
+            .expect("agua de amarre");
+        let mut raw = state.map.get(docking).expect("amarre");
+        raw.m1 |= 0x80;
+        state.map.set_tile(docking, raw).expect("amarre raw");
+
+        let own = Vehicle::new(10, VehicleKind::Ship, docking, docking);
+        let other = Vehicle::new(20, VehicleKind::Ship, docking, docking);
+        let mut in_depot = Vehicle::new(30, VehicleKind::Ship, docking, docking);
+        in_depot.ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
+        state.vehicles = vec![own, other, in_depot];
+
+        assert_eq!(
+            ship_docking_occupancy_penalty(&state, 0, &[docking]),
+            SHIP_DOCKING_OCCUPANCY_PENALTY,
+            "YAPF cuenta el barco visible y excluye el propio y el del depósito"
         );
     }
 

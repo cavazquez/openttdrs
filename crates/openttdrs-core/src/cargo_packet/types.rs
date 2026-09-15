@@ -603,6 +603,9 @@ impl StationCargoList {
             return 0;
         }
         for packet in &mut packets {
+            if packet.first_station.is_none() {
+                packet.first_station = Some(station);
+            }
             packet.update_loading_tile(current_tile);
         }
         let moved = packets

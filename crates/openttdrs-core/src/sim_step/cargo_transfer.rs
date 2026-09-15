@@ -933,6 +933,14 @@ pub(super) fn unload_vehicles(
         if mail_unloaded {
             unloaded_this_tick[i] = true;
         }
+        // Una reserva `MTA_LOAD` ocupa el extremo físico de la cola del
+        // vehículo. `Stage` exige que ese contador sea cero y, si se ejecuta
+        // antes de la carga, perdería la estación propietaria y dejaría el
+        // contador de la estación reteniendo stock para siempre. La visita
+        // que la creó debe consumirla en la fase de carga siguiente.
+        if state.vehicles[i].cargo_packets.reserved_count() > 0 {
+            continue;
+        }
         let vcargo = state.vehicles[i].cargo;
         if vcargo == 0 {
             if mail_unloaded {
@@ -1404,7 +1412,7 @@ pub(super) fn load_vehicles(
             continue;
         }
         let loading = state.vehicles[i].cargo_loading;
-        let has_reserved_load = state.vehicles[i].cargo_packets.reserved_count() > 0;
+        let mut has_reserved_load = state.vehicles[i].cargo_packets.reserved_count() > 0;
         // Con carga a bordo: solo seguir cargando si full_load o carga gradual.
         if state.vehicles[i].cargo != 0 && !allow_top_up && !loading && !has_reserved_load {
             continue;
@@ -1471,6 +1479,10 @@ pub(super) fn load_vehicles(
 
         if unloaded_this_tick[i] {
             continue;
+        }
+        if !has_reserved_load && primary_can_load && allow_top_up {
+            let _ = reserve_vehicle_cargo_at_station(state, i, station_idx);
+            has_reserved_load = state.vehicles[i].cargo_packets.reserved_count() > 0;
         }
         if has_reserved_load {
             if primary_can_load {
@@ -2039,6 +2051,109 @@ fn try_load_aircraft_mail_from_station_waiting_cargo(
     true
 }
 
+/// Reserva físicamente la capacidad libre de una unidad en una orden de carga
+/// completa. `OpenTTD` hace esta operación antes de `Load`, por lo que el stock
+/// que ya quedó asignado a otra unidad no vuelve a competir en la misma visita.
+/// La promoción a `MTA_KEEP` queda a cargo de `try_load_reserved_from_station`.
+fn reserve_vehicle_cargo_at_station(
+    state: &mut GameState,
+    vehicle_idx: usize,
+    station_idx: usize,
+) -> bool {
+    state.vehicles[vehicle_idx].ensure_packets_from_legacy();
+    state.stations[station_idx].ensure_packets_from_stock();
+    let capacity = state.vehicles[vehicle_idx].capacity;
+    let room = capacity.saturating_sub(state.vehicles[vehicle_idx].cargo);
+    if room == 0 {
+        return false;
+    }
+
+    let station_pos = state.stations[station_idx].pos;
+    let next_stations = crate::VehicleOrder::get_next_stopping_station(
+        &state.vehicles[vehicle_idx].orders,
+        state.vehicles[vehicle_idx].cur_implicit_order_index,
+        station_pos,
+        None,
+    );
+    let stock = state.stations[station_idx]
+        .cargo_packets
+        .stock_for_next_stations(&next_stations);
+    let preferred = state.vehicles[vehicle_idx].cargo_type;
+    let kind = state.vehicles[vehicle_idx].kind;
+    let cargo = match kind {
+        VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => {
+            preferred.unwrap_or(CargoType::Passengers)
+        }
+        VehicleKind::Truck | VehicleKind::Train => {
+            let Some(cargo) = stock.pick_freight_to_load(preferred) else {
+                return false;
+            };
+            if cargo.is_freight()
+                && !matches!(
+                    cargo,
+                    CargoType::Goods
+                        | CargoType::Valuables
+                        | CargoType::Steel
+                        | CargoType::Paper
+                        | CargoType::Food
+                        | CargoType::Candy
+                        | CargoType::Toys
+                        | CargoType::FizzyDrinks
+                )
+                && !station::station_is_freight_pickup_stop(
+                    &state.map,
+                    &state.industries,
+                    station_pos,
+                    cargo,
+                )
+                && !state.vehicles[vehicle_idx].orders.is_empty()
+            {
+                return false;
+            }
+            cargo
+        }
+        VehicleKind::Ship => {
+            if preferred.is_some_and(|cargo| !cargo.is_freight()) {
+                preferred.unwrap_or(CargoType::Passengers)
+            } else if let Some(cargo) = stock.pick_freight_to_load(preferred) {
+                cargo
+            } else if stock.get(CargoType::Passengers) > 0 {
+                CargoType::Passengers
+            } else {
+                return false;
+            }
+        }
+    };
+    if !state.stations[station_idx].accepts_cargo(cargo) {
+        return false;
+    }
+
+    let visit = state.vehicles[vehicle_idx]
+        .station_visit_with_callbacks_and_catalog(state.tick.get(), &state.engine_catalog);
+    station::note_station_load_attempt(&mut state.stations[station_idx], cargo, visit);
+    let vehicle_pos = state.vehicles[vehicle_idx].pos;
+    let reserved = state.stations[station_idx]
+        .cargo_packets
+        .reserve_for_vehicle(
+            station_pos,
+            cargo,
+            room,
+            &next_stations,
+            vehicle_pos,
+            &mut state.vehicles[vehicle_idx].cargo_packets,
+        );
+    if reserved == 0 {
+        return false;
+    }
+
+    // La cola de packets ya no contiene las unidades reservadas, por lo que
+    // los agregados legacy deben reflejar sólo el remanente visible.
+    state.stations[station_idx].sync_stock_from_packets();
+    state.vehicles[vehicle_idx].sync_cargo_from_packets();
+    state.vehicles[vehicle_idx].cargo_loading = true;
+    true
+}
+
 /// Consume primero una reserva `MTA_LOAD` rehidratada o creada por el
 /// primitive estación→vehículo. Los packets ya están en la bodega: sólo se
 /// reasigna la cantidad cargada a `MTA_KEEP` y se libera el contador de la
@@ -2091,8 +2206,9 @@ fn try_load_reserved_from_station(
     if moved == 0 {
         return false;
     }
-    let first_pickup = state.vehicles[vehicle_idx].cargo == 0
+    let first_pickup = state.vehicles[vehicle_idx].cargo_packets.stored_count() == 0
         && state.vehicles[vehicle_idx].aircraft_mail_packets.is_empty();
+    state.vehicles[vehicle_idx].mark_cargo_loaded(station_pos);
     state.vehicles[vehicle_idx].sync_cargo_from_packets();
     state.vehicles[vehicle_idx].last_pickup_station = Some(station_pos);
     state.vehicles[vehicle_idx].last_depart_tick = Some(state.tick.get());
@@ -3330,6 +3446,66 @@ mod tests {
         assert_eq!(
             state.stations[0].cargo_packets.reserved,
             state.vehicles[0].cargo_packets.reserved_count()
+        );
+    }
+
+    #[test]
+    fn full_load_station_reserves_before_partial_promotion() {
+        let pos = TileCoord::new(1, 1);
+        let mut state = GameState::new(5, 5);
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 2 << 3;
+        tile.m3 = 1;
+        state.map.set_tile(pos, tile).unwrap();
+
+        let mut station = crate::Station::new_with_kind(pos, crate::StopKind::TruckStop);
+        station.rating = 255;
+        station.add_waiting_cargo(CargoType::Goods, 20);
+        state.stations.push(station);
+
+        let mut truck = crate::Vehicle::new(39, VehicleKind::Truck, pos, pos);
+        truck.cargo_type = Some(CargoType::Goods);
+        truck.capacity = 10;
+        truck.orders = vec![crate::VehicleOrder::station_with_flags(pos, true, false)];
+        state.vehicles.push(truck);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+
+        let mut loaded = vec![false];
+        let mut unloaded = vec![false];
+        unload_vehicles(&mut state, 1, &[false], &mut unloaded);
+        load_vehicles(&mut state, &mut loaded, &unloaded);
+
+        let pending = state.vehicles[0].cargo_packets.reserved_count();
+        assert!(loaded[0]);
+        assert!(pending > 0, "la reserva debe sobrevivir a la carga parcial");
+        assert_eq!(state.vehicles[0].cargo_packets.stored_count() + pending, 10);
+        assert_eq!(
+            state.stations[0].cargo_packets.total_of(CargoType::Goods),
+            10
+        );
+        assert_eq!(state.stations[0].cargo_packets.reserved, pending);
+        assert_eq!(state.stations[0].cargo_stock.get(CargoType::Goods), 10);
+
+        for tick in 2..=32 {
+            let mut loaded = vec![false];
+            let mut unloaded = vec![false];
+            unload_vehicles(&mut state, tick, &[false], &mut unloaded);
+            load_vehicles(&mut state, &mut loaded, &unloaded);
+            assert!(loaded[0]);
+            if state.vehicles[0].cargo_packets.reserved_count() == 0 {
+                break;
+            }
+        }
+
+        assert_eq!(state.vehicles[0].cargo, 10);
+        assert_eq!(state.vehicles[0].cargo_packets.reserved_count(), 0);
+        assert_eq!(state.stations[0].cargo_packets.reserved, 0);
+        assert_eq!(
+            state.stations[0].cargo_packets.total_of(CargoType::Goods),
+            10
         );
     }
 

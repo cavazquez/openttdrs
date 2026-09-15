@@ -8069,3 +8069,22 @@ parents), incluidos ghost, boyas y capas. Pasan los `1540` tests del cliente
 cierra la subetapa de culling multizoom; #326/#567 permanecen abiertas por los
 residuos de raster, las identidades nativas aún no cubiertas y otras familias
 gráficas.
+
+Corrección #326/#329-AIRPORT-FOUNDATION-SLOPE (2026-09-15, `8bf3c154`): los
+aeropuertos inclinados de las rutas `MP_STATION/Airport` y `TileKind::Airport`
+replican ahora el orden de `DrawTile_Station`: `FOUNDATION_LEVELED` se emite
+antes del suelo, la superficie pasa a ser plana y los `DrawGroundSprite` de
+apron/cercas se adjuntan al último parent de la fundación. Las capas `BUILD`
+de `StationGfx` conservan parents independientes, pero usan la altura efectiva
+de la superficie; el callback CB150 de un `AirportTile` custom sigue pudiendo
+suprimir la fundación y los docks no entran en esta ruta.
+
+La regresión
+`sloped_airports_level_ground_for_station_and_imported_object_paths` cubre un
+airport `MP_STATION` y otro aeropuerto importado en pendiente, verifica dos
+fundaciones, ausencia de césped inclinado, children con profundidad estable y
+las capas `2661/2662` sobre la superficie nivelada. Pasan `1541` tests del
+cliente (2 ignorados), Clippy estricto del binario, formato y `git diff
+--check`. Esta subetapa queda publicada, pero no cierra #326/#329/#567: siguen
+pendientes la matriz completa de slopes/halftiles/rotaciones, layouts y
+callbacks NewGRF restantes, además de aceptación raster en saves reales.

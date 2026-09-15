@@ -8088,3 +8088,11 @@ cliente (2 ignorados), Clippy estricto del binario, formato y `git diff
 --check`. Esta subetapa queda publicada, pero no cierra #326/#329/#567: siguen
 pendientes la matriz completa de slopes/halftiles/rotaciones, layouts y
 callbacks NewGRF restantes, además de aceptación raster en saves reales.
+
+Regresión publicada `#326/#329-AIRPORT-FOUNDATION-MATRIX` (`325565b7`,
+2026-09-15): `sloped_airport_foundation_matrix_keeps_blocks_and_surface_children`
+ejercita las cuatro orientaciones de esquina tanto para pendientes simples como
+pronunciadas. Verifica contra `foundation_draw_plan` el número de bloques,
+ausencia de césped inclinado, relación child→foundation del apron y altura
+efectiva de `BUILD`; pasan `1542` tests del cliente (2 ignorados). Esta matriz
+fortalece la subetapa de aeropuertos, pero no cierra #326/#329/#567.

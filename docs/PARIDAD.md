@@ -5312,3 +5312,14 @@ nivelada. La suite queda en `1541` tests exitosos (2 ignorados), con Clippy
 estricto del binario, formato y `git diff --check` en verde. La corrección no
 cierra #326/#329/#567: aún falta la matriz amplia de pendientes, halftiles,
 rotaciones, callbacks/layouts NewGRF y aceptación raster sobre saves reales.
+
+Regresión de matriz #326/#329-AIRPORT-FOUNDATION-MATRIX (2026-09-15,
+`325565b7`): `sloped_airport_foundation_matrix_keeps_blocks_and_surface_children`
+recorre las cuatro esquinas altas en pendientes simples y las cuatro variantes
+pronunciadas. En las ocho combinaciones conserva todos los bloques que devuelve
+`foundation_draw_plan`, elimina el césped inclinado, mantiene el apron como
+child de la fundación y deja `BUILD` sobre la superficie efectiva. La suite
+cliente queda en `1542` tests exitosos (2 ignorados), con Clippy, formato y
+`git diff --check` en verde. Es cobertura de contrato ECS; #326/#329/#567
+siguen abiertas por la aceptación raster, halftiles y layouts/callbacks
+NewGRF aún no cubiertos.

@@ -54,3 +54,14 @@ CB150 ya tiene el contrato booleano probado en el renderer y este corte cubre
 un caso combinado de foundation Action5 y selección runtime E/O. Sigue fuera
 la matriz completa de bloques/medias teselas y rotaciones de compositor, además
 de los sonidos y demás scopes avanzados. Esos puntos continúan en #329/#326.
+
+## Matriz vanilla de pendientes
+
+La regresión `sloped_airport_foundation_matrix_keeps_blocks_and_surface_children`
+(`325565b7`, 2026-09-15) cubre las cuatro esquinas altas en dos familias:
+pendiente simple y pendiente pronunciada. Las ocho combinaciones comparan la
+cantidad de bloques con `foundation_draw_plan`, exigen superficie plana sin
+césped inclinado, comprueban el apron como child de la fundación y validan la
+altura efectiva de las capas BUILD. Es una garantía adicional para las rutas
+vanilla/importada; no sustituye la captura raster de `Kale_TitleGame.sav` ni
+cierra el alcance mayor de #326/#329.

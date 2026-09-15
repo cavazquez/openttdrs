@@ -96,6 +96,102 @@ mod tests {
     }
 
     #[test]
+    fn station_vehicle_reservation_moves_promotes_and_returns_without_duplication() {
+        let station = TileCoord::new(4, 4);
+        let next = TileCoord::new(8, 8);
+        let source = TileCoord::new(1, 1);
+        let mut station_cargo = StationCargoList::default();
+        station_cargo.add_amount(CargoType::Coal, 7, source);
+        station_cargo.add_amount(CargoType::Mail, 5, source);
+        let mut vehicle = VehicleCargoList::default();
+
+        assert_eq!(
+            station_cargo.reserve_for_vehicle(
+                station,
+                CargoType::Coal,
+                5,
+                &[next],
+                station,
+                &mut vehicle,
+            ),
+            5
+        );
+        assert_eq!(station_cargo.total_of(CargoType::Coal), 2);
+        assert_eq!(station_cargo.available_of(CargoType::Coal), 2);
+        assert_eq!(station_cargo.available_of(CargoType::Mail), 5);
+        assert_eq!(station_cargo.reserved, 5);
+        assert_eq!(vehicle.reservation_station, Some(station));
+        assert_eq!(vehicle.reservation_cargo, Some(CargoType::Coal));
+        assert_eq!(vehicle.reserved_count(), 5);
+        assert_eq!(
+            station_cargo.reserve_for_vehicle(
+                TileCoord::new(5, 5),
+                CargoType::Coal,
+                1,
+                &[next],
+                station,
+                &mut vehicle,
+            ),
+            0
+        );
+        assert_eq!(vehicle.reserved_count(), 5);
+
+        assert_eq!(
+            station_cargo.load_reserved_from_vehicle(station, &mut vehicle, 3),
+            3
+        );
+        assert_eq!(vehicle.stored_count(), 3);
+        assert_eq!(vehicle.reserved_count(), 2);
+        assert_eq!(station_cargo.reserved, 2);
+        assert_eq!(station_cargo.available_of(CargoType::Coal), 2);
+
+        assert_eq!(
+            station_cargo.return_reserved_from_vehicle(station, &mut vehicle, 2, None, station,),
+            2
+        );
+        assert_eq!(station_cargo.reserved, 0);
+        assert_eq!(station_cargo.total_of(CargoType::Coal), 4);
+        assert_eq!(station_cargo.total_of(CargoType::Mail), 5);
+        assert_eq!(vehicle.total(), 3);
+        assert_eq!(vehicle.reserved_count(), 0);
+        assert_eq!(vehicle.reservation_station, None);
+        assert_eq!(vehicle.reservation_cargo, None);
+    }
+
+    #[test]
+    fn virtual_reservation_consumption_does_not_release_physical_vehicle_reservation() {
+        let station = TileCoord::new(4, 4);
+        let source = TileCoord::new(1, 1);
+        let mut station_cargo = StationCargoList::default();
+        station_cargo.add_amount(CargoType::Coal, 10, source);
+        let mut vehicle = VehicleCargoList::default();
+
+        assert_eq!(
+            station_cargo.reserve_for_vehicle(
+                station,
+                CargoType::Coal,
+                4,
+                &[],
+                station,
+                &mut vehicle,
+            ),
+            4
+        );
+        assert_eq!(station_cargo.reserve_for(CargoType::Coal, 2), 2);
+        station_cargo.consume_reserved_for(CargoType::Coal, 2);
+
+        assert_eq!(station_cargo.reserved, 4);
+        assert_eq!(station_cargo.available_of(CargoType::Coal), 6);
+        assert_eq!(vehicle.reserved_count(), 4);
+        assert_eq!(
+            station_cargo.load_reserved_from_vehicle(station, &mut vehicle, 4),
+            4
+        );
+        assert_eq!(station_cargo.reserved, 0);
+        assert_eq!(station_cargo.total_of(CargoType::Coal), 6);
+    }
+
+    #[test]
     fn payment_days_follow_packet_age() {
         let mut p = CargoPacket::new(CargoType::Coal, 1, TileCoord::new(0, 0));
         p.periods_in_transit = 10;

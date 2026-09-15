@@ -183,6 +183,11 @@ pub struct StationCargoList {
     /// remanente legacy se trata de forma conservadora para cualquier cargo.
     #[serde(default)]
     pub reserved_by_cargo: BTreeMap<CargoType, u32>,
+    /// Parte de `reserved_by_cargo` que ya fue movida físicamente a un vehículo
+    /// como `MTA_LOAD`. Se mantiene separada porque el contador legacy también
+    /// representa reservas virtuales cuyos packets siguen en esta cola.
+    #[serde(default)]
+    pub reserved_physically_by_cargo: BTreeMap<CargoType, u32>,
     /// Campo legacy `packets` (saves / JSON antiguos); se migra a [`Self::by_next_hop`].
     #[serde(default, alias = "packets")]
     legacy_packets: VecDeque<CargoPacket>,
@@ -258,7 +263,35 @@ impl StationCargoList {
     #[must_use]
     pub fn available_of(&self, cargo: CargoType) -> u32 {
         let total = self.total_of(cargo);
-        total.saturating_sub(self.reserved_for(cargo))
+        let typed_physical = self
+            .reserved_physically_by_cargo
+            .get(&cargo)
+            .copied()
+            .unwrap_or(0)
+            .min(self.reserved_by_cargo.get(&cargo).copied().unwrap_or(0));
+        total.saturating_sub(self.reserved_for(cargo).saturating_sub(typed_physical))
+    }
+
+    fn physically_reserved_for(&self, cargo: CargoType) -> u32 {
+        self.reserved_physically_by_cargo
+            .get(&cargo)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    fn physically_reserved_total(&self) -> u32 {
+        self.reserved_physically_by_cargo
+            .values()
+            .copied()
+            .fold(0, u32::saturating_add)
+            .min(self.reserved)
+    }
+
+    fn available_count(&self) -> u32 {
+        self.total_count().saturating_sub(
+            self.reserved
+                .saturating_sub(self.physically_reserved_total()),
+        )
     }
 
     #[must_use]
@@ -414,7 +447,7 @@ impl StationCargoList {
     /// Se mantiene para callers legacy y pruebas de compatibilidad. Las
     /// nuevas rutas de carga deben usar [`Self::reserve_for`].
     pub fn reserve(&mut self, amount: u32) -> u32 {
-        let available = self.total_count().saturating_sub(self.reserved);
+        let available = self.available_count();
         let take = amount.min(available);
         self.reserved = self.reserved.saturating_add(take);
         take
@@ -422,9 +455,7 @@ impl StationCargoList {
 
     /// Reserva hasta `amount` unidades del cargo indicado.
     pub fn reserve_for(&mut self, cargo: CargoType, amount: u32) -> u32 {
-        let available = self
-            .total_of(cargo)
-            .saturating_sub(self.reserved_for(cargo));
+        let available = self.available_of(cargo);
         let take = amount.min(available);
         if take == 0 {
             return 0;
@@ -438,27 +469,32 @@ impl StationCargoList {
     /// Consume la reserva nueva de un cargo, dejando intacta la parte legacy
     /// que no está asociada a ningún tipo.
     pub fn consume_reserved_for(&mut self, cargo: CargoType, amount: u32) {
-        let known = self
+        let known_total = self
             .reserved_by_cargo
             .get(&cargo)
             .copied()
             .unwrap_or(0)
-            .min(amount);
-        if known > 0 {
+            .min(self.reserved);
+        let physical = self.physically_reserved_for(cargo).min(known_total);
+        let known_virtual = known_total.saturating_sub(physical);
+        let consumed_virtual = known_virtual.min(amount);
+        if consumed_virtual > 0 {
             let remaining = self
                 .reserved_by_cargo
                 .get(&cargo)
                 .copied()
                 .unwrap_or(0)
-                .saturating_sub(known);
+                .saturating_sub(consumed_virtual);
             if remaining == 0 {
                 self.reserved_by_cargo.remove(&cargo);
             } else if let Some(entry) = self.reserved_by_cargo.get_mut(&cargo) {
                 *entry = remaining;
             }
-            self.reserved = self.reserved.saturating_sub(known);
+            self.reserved = self.reserved.saturating_sub(consumed_virtual);
         }
-        self.reserved = self.reserved.saturating_sub(amount.saturating_sub(known));
+        let remaining = amount.saturating_sub(consumed_virtual);
+        let legacy = self.legacy_reserved_count().min(remaining);
+        self.reserved = self.reserved.saturating_sub(legacy);
     }
 
     /// Consume reserva legacy al cargar.
@@ -469,16 +505,169 @@ impl StationCargoList {
             if remaining == 0 {
                 break;
             }
-            let known = self
-                .reserved_by_cargo
-                .get(&cargo)
-                .copied()
-                .unwrap_or(0)
-                .min(remaining);
-            self.consume_reserved_for(cargo, known);
-            remaining = remaining.saturating_sub(known);
+            let known_total = self.reserved_by_cargo.get(&cargo).copied().unwrap_or(0);
+            let physical = self.physically_reserved_for(cargo).min(known_total);
+            let known_virtual = known_total.saturating_sub(physical);
+            let consumed = known_virtual.min(remaining);
+            if consumed > 0 {
+                self.consume_reserved_for(cargo, consumed);
+                remaining = remaining.saturating_sub(consumed);
+            }
         }
-        self.reserved = self.reserved.saturating_sub(remaining);
+        let legacy = self.legacy_reserved_count().min(remaining);
+        self.reserved = self.reserved.saturating_sub(legacy);
+    }
+
+    fn legacy_reserved_count(&self) -> u32 {
+        let known_total = self
+            .reserved_by_cargo
+            .values()
+            .copied()
+            .fold(0, u32::saturating_add)
+            .min(self.reserved);
+        self.reserved.saturating_sub(known_total)
+    }
+
+    fn reserve_physically_for(&mut self, cargo: CargoType, amount: u32) {
+        if amount == 0 {
+            return;
+        }
+        self.reserved = self.reserved.saturating_add(amount);
+        let known = self.reserved_by_cargo.entry(cargo).or_default();
+        *known = known.saturating_add(amount);
+        let physical = self.reserved_physically_by_cargo.entry(cargo).or_default();
+        *physical = physical.saturating_add(amount);
+    }
+
+    fn consume_physical_reserved_for(&mut self, cargo: CargoType, amount: u32) -> u32 {
+        let moved = amount.min(self.physically_reserved_for(cargo));
+        if moved == 0 {
+            return 0;
+        }
+        let remaining_physical = self
+            .reserved_physically_by_cargo
+            .get(&cargo)
+            .copied()
+            .unwrap_or(0)
+            .saturating_sub(moved);
+        if remaining_physical == 0 {
+            self.reserved_physically_by_cargo.remove(&cargo);
+        } else if let Some(entry) = self.reserved_physically_by_cargo.get_mut(&cargo) {
+            *entry = remaining_physical;
+        }
+
+        let remaining_known = self
+            .reserved_by_cargo
+            .get(&cargo)
+            .copied()
+            .unwrap_or(0)
+            .saturating_sub(moved);
+        if remaining_known == 0 {
+            self.reserved_by_cargo.remove(&cargo);
+        } else if let Some(entry) = self.reserved_by_cargo.get_mut(&cargo) {
+            *entry = remaining_known;
+        }
+        self.reserved = self.reserved.saturating_sub(moved);
+        moved
+    }
+
+    /// Reserva packets físicamente para una visita de vehículo (`Reserve`).
+    ///
+    /// A diferencia de [`Self::reserve_for`], los packets dejan la cola de la
+    /// estación y pasan al extremo `MTA_LOAD` del vehículo. El origen se
+    /// guarda en el vehículo para que una cancelación pueda devolverlos a la
+    /// estación correcta. Las reservas virtuales legacy del mismo cargo no se
+    /// mezclan: no tienen identidad suficiente para devolverse sin riesgo.
+    pub fn reserve_for_vehicle(
+        &mut self,
+        station: TileCoord,
+        cargo: CargoType,
+        amount: u32,
+        next_stations: &[TileCoord],
+        current_tile: TileCoord,
+        destination: &mut VehicleCargoList,
+    ) -> u32 {
+        if amount == 0 || !destination.can_accept_reserved_from_station(station, cargo) {
+            return 0;
+        }
+        let physical = self.physically_reserved_for(cargo);
+        if self.reserved_for(cargo) > physical {
+            return 0;
+        }
+        let take = amount.min(self.available_of(cargo));
+        if take == 0 {
+            return 0;
+        }
+        let mut packets = self.take_for(cargo, take, next_stations);
+        if packets.is_empty() {
+            return 0;
+        }
+        for packet in &mut packets {
+            packet.update_loading_tile(current_tile);
+        }
+        let moved = packets
+            .iter()
+            .map(|packet| u32::from(packet.count))
+            .fold(0, u32::saturating_add);
+        self.reserve_physically_for(cargo, moved);
+        destination.append_reserved_packets_from_station(station, cargo, packets);
+        moved
+    }
+
+    /// Promueve la reserva física de una visita a carga efectiva (`Load`).
+    pub fn load_reserved_from_vehicle(
+        &mut self,
+        station: TileCoord,
+        destination: &mut VehicleCargoList,
+        amount: u32,
+    ) -> u32 {
+        let Some(cargo) = destination.reservation_cargo else {
+            return 0;
+        };
+        if destination.reservation_station != Some(station) {
+            return 0;
+        }
+        let move_limit = amount
+            .min(destination.reserved_count())
+            .min(self.physically_reserved_for(cargo));
+        let moved = destination.load_reserved(move_limit);
+        self.consume_physical_reserved_for(cargo, moved)
+    }
+
+    /// Devuelve a esta estación la parte de `MTA_LOAD` que no llegó a
+    /// cargarse. El extremo reservado se recorre hacia atrás, pero la salida
+    /// se entrega en FIFO para que la cola no cambie de orden.
+    pub fn return_reserved_from_vehicle(
+        &mut self,
+        station: TileCoord,
+        source: &mut VehicleCargoList,
+        amount: u32,
+        next_hop: Option<TileCoord>,
+        current_tile: TileCoord,
+    ) -> u32 {
+        let Some(cargo) = source.reservation_cargo else {
+            return 0;
+        };
+        if source.reservation_station != Some(station) {
+            return 0;
+        }
+        let target = amount
+            .min(source.reserved_count())
+            .min(self.physically_reserved_for(cargo));
+        if target == 0 {
+            return 0;
+        }
+        let packets = source.take_reserved_packets(target);
+        let moved = packets
+            .iter()
+            .map(|packet| u32::from(packet.count))
+            .fold(0, u32::saturating_add);
+        for mut packet in packets {
+            packet.update_unloading_tile(current_tile);
+            packet.next_hop = next_hop;
+            self.push(packet);
+        }
+        self.consume_physical_reserved_for(cargo, moved)
     }
 
     /// Migra un balance agregado a packets sintéticos.
@@ -702,6 +891,12 @@ pub struct VehicleCargoList {
     /// transferir, entregar, conservar y cargar.
     #[serde(default)]
     pub action_counts: [u32; 4],
+    /// Estación propietaria de la sección `MTA_LOAD` pendiente.
+    #[serde(default)]
+    pub reservation_station: Option<TileCoord>,
+    /// Cargo de la sección `MTA_LOAD` pendiente.
+    #[serde(default)]
+    pub reservation_cargo: Option<CargoType>,
     /// Conteos por acción tras `Stage` (P2.19).
     #[serde(skip)]
     pub staged_transfer: u32,
@@ -764,6 +959,8 @@ impl VehicleCargoList {
     pub fn clear(&mut self) {
         self.packets.clear();
         self.action_counts = [0; 4];
+        self.reservation_station = None;
+        self.reservation_cargo = None;
         self.staged_transfer = 0;
         self.staged_deliver = 0;
         self.staged_keep = 0;
@@ -811,6 +1008,34 @@ impl VehicleCargoList {
         added
     }
 
+    fn can_accept_reserved_from_station(&self, station: TileCoord, cargo: CargoType) -> bool {
+        self.reserved_count() == 0
+            || (self.reservation_station == Some(station) && self.reservation_cargo == Some(cargo))
+    }
+
+    fn append_reserved_packets_from_station(
+        &mut self,
+        station: TileCoord,
+        cargo: CargoType,
+        packets: Vec<CargoPacket>,
+    ) -> u32 {
+        debug_assert!(self.can_accept_reserved_from_station(station, cargo));
+        debug_assert!(packets.iter().all(|packet| packet.cargo == cargo));
+        let added = self.append_reserved_packets(packets);
+        if added > 0 {
+            self.reservation_station = Some(station);
+            self.reservation_cargo = Some(cargo);
+        }
+        added
+    }
+
+    fn clear_reservation_source_if_settled(&mut self) {
+        if self.reserved_count() == 0 {
+            self.reservation_station = None;
+            self.reservation_cargo = None;
+        }
+    }
+
     /// Promueve una parte de la reserva a carga efectiva (`MTA_KEEP`).
     pub fn load_reserved(&mut self, amount: u32) -> u32 {
         let moved = amount.min(self.reserved_count());
@@ -818,6 +1043,7 @@ impl VehicleCargoList {
             self.action_counts[VEHICLE_ACTION_LOAD].saturating_sub(moved);
         self.action_counts[VEHICLE_ACTION_KEEP] =
             self.action_counts[VEHICLE_ACTION_KEEP].saturating_add(moved);
+        self.clear_reservation_source_if_settled();
         moved
     }
 
@@ -850,6 +1076,7 @@ impl VehicleCargoList {
         let moved = target.saturating_sub(left);
         self.action_counts[VEHICLE_ACTION_LOAD] =
             self.action_counts[VEHICLE_ACTION_LOAD].saturating_sub(moved);
+        self.clear_reservation_source_if_settled();
         out.reverse();
         out
     }
@@ -963,6 +1190,8 @@ impl VehicleCargoList {
         self.staged_transfer = 0;
         self.staged_deliver = 0;
         self.staged_keep = 0;
+        self.reservation_station = None;
+        self.reservation_cargo = None;
         self.action_counts = [0; 4];
         if self.packets.is_empty() {
             return false;

@@ -8247,3 +8247,15 @@ reservas virtuales pasan; core queda en `2774` tests exitosos y `1` ignorado,
 con Clippy de producción y check del cliente en verde. La integración del
 estado reservado en `load_vehicles` y la carga parcial entre ticks siguen
 pendientes; #329 permanece abierta.
+
+Corrección #329-VEHICLE-RESERVATION-RUNTIME-CONSUME (2026-09-15, `4a3111ce`):
+`load_vehicles` procesa primero una reserva `MTA_LOAD` asociada a la estación
+actual, promueve sólo la cantidad permitida por rating/velocidad y conserva el
+remanente para el tick siguiente. Esa visita no cae por accidente en industria,
+correo ni carga inmediata, y la regresión
+`station_loading_consumes_existing_vehicle_reservation_first` verifica que no
+se duplique el stock visible y que el contador de estación coincida con
+`reserved_count`. Core queda en `2775` tests exitosos y `1` ignorado, con Clippy
+de producción y check del cliente en verde. Todavía falta crear reservas nuevas
+desde el barrido runtime, devolverlas al cambiar de ruta y cubrir consistes
+articulados; #329 permanece abierta.

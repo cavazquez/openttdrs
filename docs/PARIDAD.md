@@ -5458,3 +5458,14 @@ pierdan ni dupliquen carbón, correo o contadores al exportar/importar. Core
 queda en `2774 passed; 0 failed; 1 ignored`, con Clippy de producción y check
 del cliente en verde. La integración en `load_vehicles` y la carga parcial
 entre ticks siguen pendientes; #329 permanece abierta.
+
+Corrección #329-VEHICLE-RESERVATION-RUNTIME-CONSUME (2026-09-15, `4a3111ce`):
+`load_vehicles` consume primero una reserva `MTA_LOAD` ya asociada a la estación
+visitada, aplica el límite de rating/velocidad y deja el remanente para los
+ticks siguientes. La ruta queda aislada de industria, correo y stock inmediato;
+`station_loading_consumes_existing_vehicle_reservation_first` comprueba la
+carga parcial, la ausencia de duplicación y la correspondencia entre la reserva
+de estación y `reserved_count`. Core queda en `2775 passed; 0 failed; 1 ignored`,
+con Clippy de producción y check del cliente en verde. La creación de reservas
+nuevas en el barrido, su devolución al cambiar de ruta y consistes articulados
+siguen pendientes; #329 permanece abierta.

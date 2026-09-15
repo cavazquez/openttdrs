@@ -380,10 +380,9 @@ impl StationCargoList {
             .chain(self.legacy_packets.iter())
             .any(|packet| {
                 packet.cargo == cargo
-                    && (packet.next_hop.is_none()
-                        || packet
-                            .next_hop
-                            .is_some_and(|hop| next_stations.contains(&hop)))
+                    && packet
+                        .next_hop
+                        .is_none_or(|hop| next_stations.contains(&hop))
             })
     }
 

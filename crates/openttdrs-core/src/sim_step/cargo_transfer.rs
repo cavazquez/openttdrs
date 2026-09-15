@@ -1564,36 +1564,23 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
         order_station,
         None,
     );
-    let target = refit_cargo.or_else(|| {
-        let station = state.stations.get(station_idx)?;
-        let mut candidates = crate::cargo::ALL_CARGO_TYPES.to_vec();
-        candidates.extend(station.cargo_stock.custom_entries().map(|(cargo, _)| cargo));
-        candidates
-            .into_iter()
-            .filter(|cargo| station.cargo_stock.get(*cargo) > 0)
-            .filter(|cargo| station.accepts_cargo(*cargo))
-            .filter(|cargo| station.cargo_packets.has_cargo_for(*cargo, &next_stations))
-            .filter(|cargo| {
-                unit_ids.iter().any(|unit_id| {
-                    state
-                        .vehicles
-                        .iter()
-                        .position(|v| v.id == *unit_id)
-                        .is_some_and(|idx| {
-                            refit_options_for_station_unit(state, idx).contains(cargo)
-                        })
-                })
-            })
-            .max_by_key(|cargo| station.cargo_stock.get(*cargo))
-    });
-    let Some(target) = target else {
-        return false;
+    let targets: Vec<(u32, CargoType)> = if let Some(target) = refit_cargo {
+        unit_ids
+            .iter()
+            .copied()
+            .map(|unit_id| (unit_id, target))
+            .collect()
+    } else {
+        station_auto_refit_targets(state, station_idx, &unit_ids, &next_stations)
     };
+    if targets.is_empty() {
+        return false;
+    }
 
     let mut refits = Vec::new();
     let mut total_cost = 0_i64;
-    for unit_id in &unit_ids {
-        let Some(idx) = state.vehicles.iter().position(|v| v.id == *unit_id) else {
+    for (unit_id, target) in targets {
+        let Some(idx) = state.vehicles.iter().position(|v| v.id == unit_id) else {
             continue;
         };
         if state.vehicles[idx].cargo_type == Some(target) {
@@ -1615,7 +1602,7 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
         let Some(engine) = engine else {
             // Vehículos de escenarios sin motor catalogado no tienen callback
             // de coste; conservamos la capacidad legacy sin cobrar.
-            refits.push((idx, 0_i64));
+            refits.push((idx, target, 0_i64));
             continue;
         };
         let subtype = state.vehicles[idx].cargo_subtype;
@@ -1634,13 +1621,13 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
             continue;
         }
         total_cost = total_cost.saturating_add(cost);
-        refits.push((idx, cost));
+        refits.push((idx, target, cost));
     }
     if refits.is_empty() || total_cost > state.economy.money {
         return false;
     }
 
-    for (idx, _cost) in refits {
+    for (idx, target, _cost) in refits {
         let engine = state.vehicles[idx]
             .engine_id
             .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
@@ -1715,6 +1702,137 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
     }
     state.economy.money -= total_cost;
     true
+}
+
+/// Elige el cargo de cada unidad para un autorefit de estación.
+///
+/// `HandleStationRefit` no fuerza un único tipo para todo el consist: primero
+/// retira la capacidad de la unidad actual y prefiere el candidato con menos
+/// capacidad restante en las otras unidades; los empates se resuelven por
+/// stock disponible. Mantener esa cuenta local evita que una cabeza y un
+/// vagón con cargas distintas converjan siempre al primer cargo de la lista.
+fn station_auto_refit_targets(
+    state: &GameState,
+    station_idx: usize,
+    unit_ids: &[u32],
+    next_stations: &[TileCoord],
+) -> Vec<(u32, CargoType)> {
+    let mut capacity_left = std::collections::HashMap::<CargoType, u32>::new();
+    for &unit_id in unit_ids {
+        let Some(vehicle) = state.vehicles.iter().find(|vehicle| vehicle.id == unit_id) else {
+            continue;
+        };
+        if let Some(cargo) = vehicle.cargo_type {
+            let entry = capacity_left.entry(cargo).or_default();
+            *entry = entry.saturating_add(vehicle.capacity);
+        }
+    }
+
+    let mut targets = Vec::new();
+    for &unit_id in unit_ids {
+        let Some(vehicle_idx) = state
+            .vehicles
+            .iter()
+            .position(|vehicle| vehicle.id == unit_id)
+        else {
+            continue;
+        };
+        let current_cargo = state.vehicles[vehicle_idx].cargo_type;
+        if let Some(cargo) = current_cargo
+            && let Some(capacity) = capacity_left.get_mut(&cargo)
+        {
+            *capacity = capacity.saturating_sub(state.vehicles[vehicle_idx].capacity);
+        }
+
+        let station = &state.stations[station_idx];
+        let mut candidates = crate::cargo::ALL_CARGO_TYPES.to_vec();
+        candidates.extend(station.cargo_stock.custom_entries().map(|(cargo, _)| cargo));
+        candidates.retain(|cargo| {
+            station.cargo_stock.get(*cargo) > 0
+                && station.accepts_cargo(*cargo)
+                && station.cargo_packets.has_cargo_for(*cargo, next_stations)
+                && refit_options_for_station_unit(state, vehicle_idx).contains(cargo)
+                && station_refit_capacity_for_target(state, vehicle_idx, *cargo) > 0
+        });
+
+        let mut selected = current_cargo.filter(|cargo| candidates.contains(cargo));
+        for cargo in candidates {
+            let remaining = capacity_left.get(&cargo).copied().unwrap_or(0);
+            let better = selected.is_none_or(|selected_cargo| {
+                let selected_remaining = capacity_left.get(&selected_cargo).copied().unwrap_or(0);
+                remaining < selected_remaining
+                    || (remaining == selected_remaining
+                        && station.cargo_stock.get(cargo) > station.cargo_stock.get(selected_cargo))
+            });
+            if better {
+                selected = Some(cargo);
+            }
+        }
+
+        if let Some(target) = selected {
+            let capacity = if current_cargo == Some(target) {
+                state.vehicles[vehicle_idx].capacity
+            } else {
+                station_refit_capacity_for_target(state, vehicle_idx, target)
+            };
+            let entry = capacity_left.entry(target).or_default();
+            *entry = entry.saturating_add(capacity);
+            targets.push((unit_id, target));
+        } else if let Some(cargo) = current_cargo {
+            let entry = capacity_left.entry(cargo).or_default();
+            *entry = entry.saturating_add(state.vehicles[vehicle_idx].capacity);
+        }
+    }
+    targets
+}
+
+/// Capacidad que `DetermineCapacity` usaría para una unidad y cargo destino.
+///
+/// La consulta se hace sobre una copia: los callbacks pueden escribir
+/// registros persistentes y una evaluación de selección no debe mutar el
+/// vehículo real antes de que el refit haya sido aceptado.
+fn station_refit_capacity_for_target(
+    state: &GameState,
+    vehicle_idx: usize,
+    cargo: CargoType,
+) -> u32 {
+    let vehicle = &state.vehicles[vehicle_idx];
+    let Some(engine) = vehicle
+        .engine_id
+        .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
+        .cloned()
+        .or_else(|| {
+            vehicle
+                .engine_id
+                .and_then(crate::engine::engine_by_id)
+                .cloned()
+        })
+    else {
+        return vehicle.capacity;
+    };
+    let mut probe = vehicle.clone();
+    probe.cargo_type = Some(cargo);
+    let callback_capacity =
+        crate::newgrf_callback::resolve_vehicle_refit_capacity_callback(&engine, &mut probe, cargo);
+    let property_capacity =
+        crate::newgrf_callback::resolve_vehicle_capacity_property_callback(&engine, &mut probe)
+            .map(|capacity| {
+                crate::cargo_spec::apply_cargo_capacity_multiplier(
+                    capacity,
+                    &state.cargo_spec_catalog,
+                    cargo,
+                )
+            })
+            .or_else(|| {
+                (engine.capacity > 0).then(|| {
+                    crate::cargo_spec::apply_cargo_capacity_multiplier(
+                        engine.capacity,
+                        &state.cargo_spec_catalog,
+                        cargo,
+                    )
+                })
+            });
+    callback_capacity.or(property_capacity).unwrap_or(0)
 }
 
 fn refit_options_for_station_unit(state: &GameState, vehicle_idx: usize) -> Vec<CargoType> {
@@ -2875,6 +2993,54 @@ mod tests {
         assert!(state.vehicles[0].cargo > 0);
         assert!(loaded[0]);
         assert_eq!(state.stations[0].cargo_stock.get(CargoType::Coal), 20);
+    }
+
+    #[test]
+    fn station_auto_refit_balances_distinct_consist_cargo_types() {
+        let pos = TileCoord::new(1, 1);
+        let mut state = GameState::new(4, 4);
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 2 << 3;
+        tile.m3 = 1;
+        state.map.set_tile(pos, tile).unwrap();
+
+        let mut station = crate::Station::new_with_kind(pos, crate::StopKind::TruckStop);
+        station.rating = 100;
+        station.add_waiting_cargo(CargoType::Coal, 20);
+        station.add_waiting_cargo(CargoType::Goods, 30);
+        state.stations.push(station);
+
+        let mut head = crate::Vehicle::new(34, VehicleKind::Truck, pos, pos);
+        head.cargo_type = Some(CargoType::Coal);
+        head.capacity = 20;
+        head.refit_capacity = 20;
+        head.next_unit = Some(35);
+        head.orders = vec![crate::VehicleOrder::station_with_refit(
+            pos,
+            crate::OrderLoadType::LoadIfPossible,
+            crate::OrderUnloadType::UnloadIfPossible,
+            crate::OrderNonStop::NonStopDestination,
+            None,
+            true,
+        )];
+        let mut tail = crate::Vehicle::new(35, VehicleKind::Truck, pos, pos);
+        tail.cargo_type = Some(CargoType::Mail);
+        tail.capacity = 30;
+        tail.refit_capacity = 30;
+        tail.prev_unit = Some(34);
+        state.vehicles.extend([head, tail]);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+
+        assert_eq!(
+            station_auto_refit_targets(&state, 0, &[34, 35], &[]),
+            vec![(34, CargoType::Goods), (35, CargoType::Coal)]
+        );
+        assert!(maybe_refit_at_station(&mut state, 0, 0));
+        assert_eq!(state.vehicles[0].cargo_type, Some(CargoType::Goods));
+        assert_eq!(state.vehicles[1].cargo_type, Some(CargoType::Coal));
     }
 
     #[test]

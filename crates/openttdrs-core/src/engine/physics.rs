@@ -211,13 +211,16 @@ pub fn ship_speed_for_tile_with_speed(
     raw_speed: u16,
     is_canal: bool,
 ) -> u16 {
-    let frac = if is_canal {
+    let reduction = if is_canal {
         engine.canal_speed_frac
     } else {
         engine.ocean_speed_frac
     };
-    let frac = if frac == 0 { 256u32 } else { u32::from(frac) };
-    let speed = u32::from(raw_speed).saturating_mul(frac) / 256;
+    // OpenTTD stores these properties as a reduction: 0 means no reduction
+    // and 255 leaves one 256th of the raw speed. See
+    // `Engine::ApplyWaterClassSpeedFrac` in `engine_type.h`.
+    let multiplier = 256_u32 - u32::from(reduction);
+    let speed = u32::from(raw_speed).saturating_mul(multiplier) / 256;
     u16::try_from(speed).unwrap_or(u16::MAX).max(1)
 }
 
@@ -741,6 +744,24 @@ mod tests {
     #[test]
     fn standstill_yields_zero_progress_step() {
         assert_eq!(progress_step_for_speed(0, DIR_SW), 0);
+    }
+
+    #[test]
+    fn ship_speed_properties_are_native_reductions() {
+        let mut engine = crate::engine::engine_for_vehicle(
+            crate::vehicle::VehicleKind::Ship,
+            crate::engine::ENGINE_SHIP_MPS,
+        )
+        .clone();
+        engine.max_speed = 100;
+        engine.ocean_speed_frac = 64;
+        engine.canal_speed_frac = 128;
+
+        assert_eq!(ship_speed_for_tile(&engine, false), 75);
+        assert_eq!(ship_speed_for_tile(&engine, true), 50);
+
+        engine.ocean_speed_frac = 0;
+        assert_eq!(ship_speed_for_tile(&engine, false), 100);
     }
 
     #[test]

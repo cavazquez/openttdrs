@@ -6339,7 +6339,7 @@ mod tests {
         assert_eq!(eng.cargo_age_period, 37);
         assert_eq!(eng.ship_acceleration, 7);
         assert_eq!(crate::ship_speed_for_tile(eng, false), 50);
-        assert_eq!(crate::ship_speed_for_tile(eng, true), 25);
+        assert_eq!(crate::ship_speed_for_tile(eng, true), 75);
         assert!(
             parse_action0_vehicle_metas(&[0x00, ACTION0_FEATURE_SHIPS, 0x01, 0x01, 0x00, 0x14])
                 .is_none()

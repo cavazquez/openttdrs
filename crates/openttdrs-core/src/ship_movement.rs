@@ -279,6 +279,9 @@ pub fn water_tiles_connected(map: &Map, cur: TileCoord, next: TileCoord) -> bool
     if !is_water_network_tile_at(map, cur) || !is_water_network_tile_at(map, next) {
         return false;
     }
+    if !crate::water_aqueduct_allows_adjacent_step(map, cur, next) {
+        return false;
+    }
     let hc = tile_height(map, cur);
     let hn = tile_height(map, next);
     if hc == hn {
@@ -894,6 +897,49 @@ fn sync_ship_path_cache(v: &mut Vehicle, map: Option<&Map>) {
     }
 }
 
+/// Salta el vano de un acueducto cuando el barco deja una rampa por su lado
+/// interior. El path naval conserva sólo la rampa opuesta, igual que el
+/// `TrackFollower` nativo conserva `tiles_skipped` en vez de materializar el
+/// corredor como una serie de vecinos.
+fn ship_enter_aqueduct(
+    v: &mut Vehicle,
+    map: &Map,
+    old_tile: TileCoord,
+    new_tile: TileCoord,
+) -> Option<bool> {
+    let other = crate::water_aqueduct_other_end(map, old_tile)?;
+    let tile = map.get(old_tile)?;
+    let (dx, dy) = crate::map::diag_dir_offset(tile.m5 & 0x03);
+    if (new_tile.x - old_tile.x, new_tile.y - old_tile.y) != (dx, dy) {
+        return None;
+    }
+    if let Some(&front) = v.path.front()
+        && front != other
+    {
+        reverse_ship_after_blocked_track(v, Some(map), None);
+        return Some(false);
+    }
+    if v.path.front() == Some(&other) {
+        v.path.pop_front();
+    }
+    let path_next = v.path.front().copied();
+    let entry_diagdir = tile.m5 & 0x03;
+    let track = choose_ship_track(map, other, entry_diagdir, path_next, v.dest);
+    let Some(entry) = ship_subcoord(entry_diagdir, track) else {
+        reverse_ship_after_blocked_track(v, Some(map), None);
+        return Some(false);
+    };
+
+    v.ship_x = other.x.saturating_mul(16) + i32::from(entry.x_subcoord);
+    v.ship_y = other.y.saturating_mul(16) + i32::from(entry.y_subcoord);
+    v.ship_track = track;
+    v.ship_state = ship_state_for_track(track);
+    v.pos = other;
+    apply_ship_direction_change(v, entry.dir);
+    sync_ship_path_cache(v, Some(map));
+    Some(true)
+}
+
 /// `TrackDirectionToTrackdir` para los seis tracks navales vanilla.
 fn ship_trackdir(track: u8, direction: VehicleDirection) -> u8 {
     let reverse = match track {
@@ -1308,6 +1354,15 @@ fn ship_controller_tick_inner(
                 mark_ship_depot_arrival(v, map);
                 v.cur_speed = 0;
                 v.advance_destination_after_arrival_with_catalog(engine_catalog);
+                return;
+            }
+            continue;
+        }
+
+        if let Some(map) = map
+            && let Some(teleported) = ship_enter_aqueduct(v, map, old_tile, new_tile)
+        {
+            if !teleported {
                 return;
             }
             continue;
@@ -1932,6 +1987,43 @@ mod tests {
         assert_eq!(v.ship_rotation_y_pos, Some(v.ship_y));
         assert_eq!(v.cur_speed, 0);
         assert!(v.path.is_empty());
+    }
+
+    #[test]
+    fn ship_controller_jumps_aqueduct_span_at_inner_ramp() {
+        let mut map = crate::Map::new_flat(8, 3, 0);
+        let west_water = TileCoord::new(0, 1);
+        let west_ramp = TileCoord::new(1, 1);
+        let east_ramp = TileCoord::new(5, 1);
+        let east_water = TileCoord::new(6, 1);
+        for tile in [west_water, east_water] {
+            map.set_kind(tile, TileKind::Water).unwrap();
+        }
+        for (tile, direction) in [(west_ramp, 2), (east_ramp, 0)] {
+            map.set_kind(tile, TileKind::Water).unwrap();
+            map.set_mapt_m5(tile, 0x90, 0x80 | (2 << 2) | direction)
+                .unwrap();
+        }
+
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, west_ramp, east_water);
+        ship.running = true;
+        ship.ship_pos_valid = true;
+        ship.ship_x = west_ramp.x * 16 + 15;
+        ship.ship_y = west_ramp.y * 16 + 8;
+        ship.direction = DIR_SW;
+        ship.ship_rotation = DIR_SW;
+        ship.ship_track = TRACK_X;
+        ship.ship_state = SHIP_STATE_TRACK_X;
+        ship.cur_speed = 255;
+        ship.progress = 255;
+        ship.path.push_back(east_ramp);
+        ship.path.push_back(east_water);
+
+        ship_controller_tick(&mut ship, Some(&map));
+
+        assert_eq!(ship.pos, east_ramp, "el vano debe saltarse en un solo paso");
+        assert_eq!(ship.path.front(), Some(&east_water));
+        assert_eq!((ship.ship_x & 0xF, ship.ship_y & 0xF), (0, 8));
     }
 
     #[test]

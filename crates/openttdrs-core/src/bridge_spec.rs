@@ -2,7 +2,7 @@
 //!
 //! El catálogo mutable [`BridgeSpecDef`] admite overrides Action0 `Bridges` (`0x06`).
 
-use crate::map::{RAIL_TB_X, RAIL_TB_Y, Tile, TileCoord};
+use crate::map::{RAIL_TB_X, RAIL_TB_Y, Tile, TileCoord, diag_dir_offset};
 use crate::newgrf_sprites::DecodedSprite;
 use crate::rail_signals::calendar_year_at_tick;
 use crate::tick::GameTick;
@@ -657,6 +657,59 @@ pub fn road_bridge_other_end(map: &crate::map::Map, ramp: TileCoord) -> Option<T
 #[must_use]
 pub fn rail_bridge_other_end(map: &crate::map::Map, ramp: TileCoord) -> Option<TileCoord> {
     bridge_other_end(map, ramp, crate::map::TileKind::RailBridge)
+}
+
+/// Otra rampa de un acueducto (`TRANSPORT_WATER`), siguiendo el vano sobre el
+/// terreno que queda entre ambas bocas.
+///
+/// Las rampas de agua se conservan semánticamente como `Water`, pero el
+/// `MAPT` de las bocas sigue siendo `MP_TUNNELBRIDGE` y `m5` lleva el tipo de
+/// transporte en bits 2–3. El filtro de transporte evita confundir una rampa
+/// naval con una tesela de agua ordinaria que casualmente tenga la misma
+/// dirección.
+#[must_use]
+pub fn water_aqueduct_other_end(map: &crate::map::Map, ramp: TileCoord) -> Option<TileCoord> {
+    let tile = map.get(ramp)?;
+    if tile.kind != crate::map::TileKind::Water
+        || !tile.is_tunnel_bridge_tile()
+        || tile.m5 & 0x80 == 0
+        || (tile.m5 >> 2) & 0x03 != 2
+    {
+        return None;
+    }
+    bridge_other_end(map, ramp, crate::map::TileKind::Water)
+}
+
+/// Comprueba el único enlace lateral válido de una rampa de acueducto.
+///
+/// `GetTileTrackStatus_TunnelBridge` sólo devuelve la vía cuando el barco
+/// entra por el lado exterior de la rampa. El lado interior se resuelve como
+/// salto hacia la otra rampa y no como vecino ortogonal.
+#[must_use]
+pub fn water_aqueduct_allows_adjacent_step(
+    map: &crate::map::Map,
+    current: TileCoord,
+    next: TileCoord,
+) -> bool {
+    if water_aqueduct_other_end(map, current).is_some() {
+        let Some(tile) = map.get(current) else {
+            return false;
+        };
+        let (dx, dy) = diag_dir_offset(tile.m5 & 0x03);
+        if (next.x - current.x, next.y - current.y) != (-dx, -dy) {
+            return false;
+        }
+    }
+    if water_aqueduct_other_end(map, next).is_some() {
+        let Some(tile) = map.get(next) else {
+            return false;
+        };
+        let (dx, dy) = diag_dir_offset(tile.m5 & 0x03);
+        if (next.x - current.x, next.y - current.y) != (dx, dy) {
+            return false;
+        }
+    }
+    true
 }
 
 /// Pieza de vano según distancia a cada rampa (`CalcBridgePiece` en `tunnelbridge_cmd.cpp`).

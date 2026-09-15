@@ -247,6 +247,10 @@ mod tests {
         m.set_tile(c, t).unwrap();
     }
 
+    fn write_water(m: &mut Map, c: TileCoord) {
+        m.set_kind(c, TileKind::Water).unwrap();
+    }
+
     fn write_rail(m: &mut Map, c: TileCoord, trackbits: u8) {
         m.set_kind(c, TileKind::Rail).unwrap();
         let mut t = m.get(c).unwrap();
@@ -262,6 +266,12 @@ mod tests {
     fn write_bridge(m: &mut Map, c: TileCoord, kind: TileKind, m5: u8) {
         m.set_kind(c, kind).unwrap();
         m.set_mapt_m5(c, 0x90, 0x80 | m5).unwrap();
+    }
+
+    fn write_aqueduct_ramp(m: &mut Map, c: TileCoord, direction: u8) {
+        m.set_kind(c, TileKind::Water).unwrap();
+        m.set_mapt_m5(c, 0x90, 0x80 | (2 << 2) | (direction & 0x03))
+            .unwrap();
     }
 
     #[test]
@@ -522,6 +532,7 @@ mod tests {
                 write_rail(&mut m, TileCoord::new(2, y), RAIL_TB_Y);
             }
         }
+
         write_rail(&mut m, TileCoord::new(2, 2), RAIL_TB_X | RAIL_TB_Y);
         assert!(
             find_path(
@@ -554,6 +565,50 @@ mod tests {
             )
             .is_some(),
             "con curva el giro es válido"
+        );
+    }
+
+    #[test]
+    fn ship_path_jumps_aqueduct_and_rejects_inner_ramp_side() {
+        let mut map = Map::new_flat(8, 3, 0);
+        write_water(&mut map, TileCoord::new(0, 1));
+        write_aqueduct_ramp(&mut map, TileCoord::new(1, 1), 2);
+        write_aqueduct_ramp(&mut map, TileCoord::new(5, 1), 0);
+        write_water(&mut map, TileCoord::new(6, 1));
+
+        let path = find_path(
+            &map,
+            TileCoord::new(0, 1),
+            TileCoord::new(6, 1),
+            PathNetwork::Water,
+        )
+        .expect("el barco debe cruzar el acueducto por sus rampas");
+        assert_eq!(
+            path,
+            vec![
+                TileCoord::new(1, 1),
+                TileCoord::new(5, 1),
+                TileCoord::new(6, 1)
+            ]
+        );
+        assert_eq!(
+            crate::bridge_middle_length(TileCoord::new(1, 1), TileCoord::new(5, 1)),
+            3
+        );
+        assert_eq!(
+            ShipPathCost::default().path_cost(&map, TileCoord::new(0, 1), &path),
+            600,
+            "el salto debe cobrar las tres teselas omitidas"
+        );
+        assert!(
+            find_path(
+                &map,
+                TileCoord::new(1, 0),
+                TileCoord::new(6, 1),
+                PathNetwork::Water,
+            )
+            .is_none(),
+            "una rampa no debe aceptar una entrada lateral"
         );
     }
 

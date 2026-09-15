@@ -2,6 +2,7 @@
 
 use std::collections::{BinaryHeap, HashMap};
 
+use crate::bridge_spec::{bridge_middle_length, water_aqueduct_other_end};
 use crate::engine::EngineDef;
 use crate::map::{Map, TileCoord, TileKind, WaterClass, effective_water_class_for_ship};
 use crate::rail_pbs::YAPF_TILE_LENGTH;
@@ -59,7 +60,12 @@ impl ShipPathCost {
         let mut total: u32 = 0;
         let mut current = from;
         for &next in path {
-            total = total.saturating_add(self.step_cost(map, current, next));
+            let step = if water_aqueduct_other_end(map, current) == Some(next) {
+                self.aqueduct_step_cost(map, current, next)
+            } else {
+                self.step_cost(map, current, next)
+            };
+            total = total.saturating_add(step);
             current = next;
         }
         total
@@ -69,6 +75,15 @@ impl ShipPathCost {
     fn step_cost(self, map: &Map, current: TileCoord, next: TileCoord) -> u32 {
         self.tile_cost(ship_water_class(map, current, next))
             .saturating_add(self.lock_penalty(map, next))
+    }
+
+    #[must_use]
+    fn aqueduct_step_cost(self, map: &Map, current: TileCoord, next: TileCoord) -> u32 {
+        let span_tiles = u32::from(bridge_middle_length(current, next));
+        self.step_cost(map, current, next).saturating_add(
+            self.tile_cost(Some(WaterClass::Canal))
+                .saturating_mul(span_tiles),
+        )
     }
 
     /// Penalización de `YapfShip` para el centro de una esclusa.
@@ -173,6 +188,29 @@ fn find_water_path_with_cost(
                 est_total: tentative.saturating_add(heuristic(next, to, ship_cost)),
                 pos: next,
             });
+        }
+
+        // Un acueducto es un wormhole naval: las rampas son las únicas
+        // teselas `MP_TUNNELBRIDGE` y el tramo intermedio puede conservar
+        // tierra, agua u otra capa. `FollowTrackWater` salta al otro extremo
+        // al salir por la dirección de la rampa; no debe recorrer el terreno
+        // de abajo como una secuencia de teselas de agua.
+        if let Some(other) = water_aqueduct_other_end(map, cur)
+            && (other == to
+                || map
+                    .get_kind(other)
+                    .is_some_and(|kind| is_network_tile(map, other, kind, PathNetwork::Water)))
+        {
+            let step = ship_cost.map_or(1, |cost| cost.aqueduct_step_cost(map, cur, other));
+            let tentative = cur_g.saturating_add(step);
+            if g_score.get(&other).is_none_or(|&g| tentative < g) {
+                g_score.insert(other, tentative);
+                parent.insert(other, cur);
+                heap.push(AstarNode {
+                    est_total: tentative.saturating_add(heuristic(other, to, ship_cost)),
+                    pos: other,
+                });
+            }
         }
     }
     None

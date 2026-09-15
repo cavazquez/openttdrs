@@ -7918,7 +7918,18 @@ Validación #326-SORT-LOCAL-PROXY-TRACE-REAL (2026-09-15): con el primer frame
 ya centrado, la traza real de Kale registra `precise_scope`, `1.572` parents
 globales y `9` proxies locales; el analizador queda en `0` cajas de referencia
 ausentes y `0` sprites distintos para las identidades observadas. La misma
-ejecución con traza agotó el timeout antes de emitir PNG porque serializa el
-stream diagnóstico repetidamente; su JSON sí es válido y no se usa para la
-métrica raster anterior. #326 permanece abierta por las familias y escalas
+ejecución con traza agotó el timeout antes de emitir PNG por el costo residual
+de repetir el sorter durante el settle; su JSON sí es válido y no se usa para
+la métrica raster anterior. #326 permanece abierta por las familias y escalas
 restantes.
+
+Corrección #326-SORT-TRACE-DEDUPE (2026-09-15, `5fe8711b`): el escritor de
+`OPENTTDRS_VIEWPORT_SORT_TRACE_OUT` calcula una firma local del snapshot
+completo —parents, orden, profundidades, scope y proxies— y omite la
+serialización cuando nada cambió. La firma incluye explícitamente el estado de
+cada proxy segmentado y tiene una regresión dedicada; el cliente queda en
+`1539` tests exitosos (2 ignorados), Clippy y formato verdes. La ejecución Kale
+trazada produjo un JSON estable de `463.933` bytes con `1.572` parents y `9`
+proxies, pero todavía no emitió PNG dentro del timeout por el costo del sorter
+repetido durante el settle. La optimización queda publicada como mejora del
+instrumento, no como cierre de #326.

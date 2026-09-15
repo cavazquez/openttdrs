@@ -76,6 +76,9 @@ global. Cada proxy conserva `band`, `source_child`, `original_parent`,
 `sprite_id`, `world_bounds` y las profundidades de origen/final; por eso el
 conteo efectivo para investigar una promoción es `parents + local_proxies`.
 El campo es opcional para mantener compatibilidad con trazas anteriores.
+El escritor deduplica snapshots consecutivos por una firma que incluye scope,
+orden, profundidades y proxies; una captura que sólo espera frames estables no
+debe reserializar el mismo documento una y otra vez.
 Son instrumentos de diagnóstico: no sustituyen `report.json`, no se publican
 como baseline y no permiten declarar paridad por una sola región.
 

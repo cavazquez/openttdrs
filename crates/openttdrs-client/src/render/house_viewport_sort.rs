@@ -8,6 +8,7 @@
 //! de parent y children; no se inventa geometría desde el atlas.
 
 use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::path::Path;
 
 use bevy::asset::{AssetEvent, AssetId};
@@ -969,11 +970,24 @@ fn export_viewport_sort_trace(
     scope: Option<TileViewportBounds>,
     precise_scope: Option<DiagonalViewportSortScope>,
     local_proxies: &[ViewportSegmentProxyTrace],
+    last_signature: &mut Option<u64>,
 ) {
     let Some(path) = std::env::var_os("OPENTTDRS_VIEWPORT_SORT_TRACE_OUT") else {
         return;
     };
     let path = Path::new(&path);
+    let signature = viewport_sort_trace_signature(
+        input,
+        order,
+        sorted_depths,
+        scope,
+        precise_scope,
+        local_proxies,
+        path,
+    );
+    if *last_signature == Some(signature) {
+        return;
+    }
     let parents: Vec<_> = order
         .iter()
         .enumerate()
@@ -1046,12 +1060,87 @@ fn export_viewport_sort_trace(
     match serde_json::to_vec(&document)
         .and_then(|bytes| std::fs::write(path, bytes).map_err(serde_json::Error::io))
     {
-        Ok(()) => {}
+        Ok(()) => *last_signature = Some(signature),
         Err(error) => warn!(
             "No se pudo escribir OPENTTDRS_VIEWPORT_SORT_TRACE_OUT={}: {error}",
             path.display()
         ),
     }
+}
+
+fn viewport_sort_trace_signature(
+    input: &[(Entity, ViewportSortableParent, f32)],
+    order: &[usize],
+    sorted_depths: &[f32],
+    scope: Option<TileViewportBounds>,
+    precise_scope: Option<DiagonalViewportSortScope>,
+    local_proxies: &[ViewportSegmentProxyTrace],
+    path: &Path,
+) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    path.hash(&mut hasher);
+    input.len().hash(&mut hasher);
+    for (entity, parent, input_depth) in input {
+        entity.to_bits().hash(&mut hasher);
+        parent.sprite_id.hash(&mut hasher);
+        parent.bounds.xmin.hash(&mut hasher);
+        parent.bounds.ymin.hash(&mut hasher);
+        parent.bounds.zmin.hash(&mut hasher);
+        parent.bounds.xmax.hash(&mut hasher);
+        parent.bounds.ymax.hash(&mut hasher);
+        parent.bounds.zmax.hash(&mut hasher);
+        parent.insertion_key.hash(&mut hasher);
+        parent.source_depth.to_bits().hash(&mut hasher);
+        input_depth.to_bits().hash(&mut hasher);
+    }
+    order.hash(&mut hasher);
+    sorted_depths.len().hash(&mut hasher);
+    for depth in sorted_depths {
+        depth.to_bits().hash(&mut hasher);
+    }
+    match scope {
+        Some(scope) => {
+            1_u8.hash(&mut hasher);
+            scope.tx0.hash(&mut hasher);
+            scope.ty0.hash(&mut hasher);
+            scope.tx1.hash(&mut hasher);
+            scope.ty1.hash(&mut hasher);
+        }
+        None => 0_u8.hash(&mut hasher),
+    }
+    match precise_scope {
+        Some(scope) => {
+            1_u8.hash(&mut hasher);
+            scope.row_min.hash(&mut hasher);
+            scope.row_max.hash(&mut hasher);
+            scope.column_min.hash(&mut hasher);
+            scope.column_max.hash(&mut hasher);
+            scope.screen_left.hash(&mut hasher);
+            scope.screen_right.hash(&mut hasher);
+            scope.screen_bottom.hash(&mut hasher);
+            scope.screen_top.hash(&mut hasher);
+            scope.band_height.hash(&mut hasher);
+        }
+        None => 0_u8.hash(&mut hasher),
+    }
+    local_proxies.len().hash(&mut hasher);
+    for proxy in local_proxies {
+        proxy.band.hash(&mut hasher);
+        proxy.band_ordinal.hash(&mut hasher);
+        proxy.source_child.to_bits().hash(&mut hasher);
+        proxy.original_parent.to_bits().hash(&mut hasher);
+        proxy.parent.sprite_id.hash(&mut hasher);
+        proxy.parent.insertion_key.hash(&mut hasher);
+        proxy.parent.bounds.xmin.hash(&mut hasher);
+        proxy.parent.bounds.ymin.hash(&mut hasher);
+        proxy.parent.bounds.zmin.hash(&mut hasher);
+        proxy.parent.bounds.xmax.hash(&mut hasher);
+        proxy.parent.bounds.ymax.hash(&mut hasher);
+        proxy.parent.bounds.zmax.hash(&mut hasher);
+        proxy.source_depth.to_bits().hash(&mut hasher);
+        proxy.sorted_depth.to_bits().hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
 /// Aplica el ordenador de OpenTTD a los parents del viewport actual.
@@ -1114,6 +1203,7 @@ pub(crate) fn sort_viewport_sortable_parents(
     images: Option<Res<Assets<Image>>>,
     texture_atlases: Option<Res<Assets<TextureAtlasLayout>>>,
     mut previous_scope: Local<Option<ViewportSortScopeState>>,
+    mut previous_trace_signature: Local<Option<u64>>,
 ) {
     let scope = viewport_sort_scope(
         viewport.sim.as_deref(),
@@ -1705,6 +1795,7 @@ pub(crate) fn sort_viewport_sortable_parents(
         scope,
         precise_scope,
         &local_proxy_trace,
+        &mut previous_trace_signature,
     );
     for proxy_entity in existing_segment_proxies.into_values() {
         commands.entity(proxy_entity).despawn();
@@ -2274,6 +2365,47 @@ mod tests {
 
         assign_segment_proxy_depths(&[0], Some(4.0), None, &mut depths);
         assert_eq!(depths[0], 4.0 + VIEWPORT_SEGMENT_PROXY_EDGE_STEP);
+    }
+
+    #[test]
+    fn viewport_sort_trace_signature_tracks_local_proxy_changes() {
+        let mut world = World::new();
+        let entity = world.spawn_empty().id();
+        let parent = ViewportSortableParent {
+            sprite_id: 1_422,
+            bounds: ParentSpriteBounds::new(0, 0, 0, 15, 15, 15),
+            insertion_key: 7,
+            source_depth: 1.0,
+        };
+        let input = [(entity, parent, 1.0)];
+        let order = [0];
+        let sorted_depths = [1.0];
+        let path = std::path::Path::new("/tmp/viewport-sort-signature-test.json");
+        let without_proxy =
+            viewport_sort_trace_signature(&input, &order, &sorted_depths, None, None, &[], path);
+        let same_without_proxy =
+            viewport_sort_trace_signature(&input, &order, &sorted_depths, None, None, &[], path);
+        let proxy = ViewportSegmentProxyTrace {
+            band: 1,
+            band_ordinal: 0,
+            source_child: entity,
+            original_parent: entity,
+            parent,
+            source_depth: 1.0,
+            sorted_depth: 1.000_001,
+        };
+        let with_proxy = viewport_sort_trace_signature(
+            &input,
+            &order,
+            &sorted_depths,
+            None,
+            None,
+            &[proxy],
+            path,
+        );
+
+        assert_eq!(without_proxy, same_without_proxy);
+        assert_ne!(without_proxy, with_proxy);
     }
 
     #[test]

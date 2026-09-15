@@ -6,6 +6,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::engine::{get_advance_distance, get_advance_speed, ship_speed_for_tile_with_speed};
+use crate::linkgraph_parity::Randomizer;
 use crate::map::{Map, TILE_PIXEL_HEIGHT, TileCoord, TileKind};
 use crate::vehicle::{
     DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, Vehicle, VehicleDirection,
@@ -773,8 +774,15 @@ fn ship_track_exit_diagdir(entry: u8, track: u8) -> Option<u8> {
 /// `Trackdir`. Como el runtime local guarda rutas por teselas, se enumeran los
 /// tres tracks que alcanzan ese lado, se descartan los vecinos desconectados y
 /// se compara la longitud de una ruta desde cada salida hasta `dest`.
-fn reverse_ship_into_trackdir(v: &mut Vehicle, map: &Map) -> bool {
+fn reverse_ship_into_trackdir(v: &mut Vehicle, map: &Map, random: Option<&mut Randomizer>) -> bool {
     let reverse_entry = (ship_exit_diagdir(v.direction, v.ship_track) + 2) & 3;
+    // `YapfShip::ChooseShipTrack` no longer has a destination to score when
+    // the high-level water route is lost.  In particular, a legacy `Station`
+    // order aimed at a buoy is not a valid ship destination: OpenTTD falls
+    // back to one of the reverse trackdirs exposed by the current tile,
+    // without testing the neighbour or comparing its distance to `dest`.
+    // Keep that fallback separate from the normal route-aware reversal.
+    let route_lost = v.no_network_route_to_order || ship_station_order_to_buoy(v, Some(map));
     let mut candidates = Vec::new();
     for track in [
         TRACK_X,
@@ -791,17 +799,30 @@ fn reverse_ship_into_trackdir(v: &mut Vehicle, map: &Map) -> bool {
             continue;
         };
         let next = tile_in_diagdir(v.pos, exit);
-        if !water_tiles_connected(map, v.pos, next) {
+        if !route_lost && !water_tiles_connected(map, v.pos, next) {
             continue;
         }
 
-        let route_len = if next == v.dest {
+        let route_len = if route_lost {
+            None
+        } else if next == v.dest {
             Some(1)
         } else {
             crate::pathfinder::find_path(map, next, v.dest, crate::pathfinder::PathNetwork::Water)
                 .map(|path| path.len().saturating_add(1))
         };
         candidates.push((route_len.unwrap_or(usize::MAX), track, subcoord.dir));
+    }
+
+    if route_lost && !candidates.is_empty() {
+        // `CheckShipReverse` asks YAPF for a fallback trackdir when the
+        // high-level route is gone. The local tile-path model keeps the same
+        // deterministic winner, but it still has to consume the native
+        // `GetRandomTrackdir` draw so later timers and breakdowns see the same
+        // global RNG stream.
+        if let Some(rng) = random {
+            let _ = rng.next();
+        }
     }
 
     let Some((_, track, direction)) = candidates.into_iter().min_by_key(|candidate| {
@@ -822,9 +843,13 @@ fn reverse_ship_into_trackdir(v: &mut Vehicle, map: &Map) -> bool {
     true
 }
 
-fn reverse_ship_after_blocked_track(v: &mut Vehicle, map: Option<&Map>) {
+fn reverse_ship_after_blocked_track(
+    v: &mut Vehicle,
+    map: Option<&Map>,
+    random: Option<&mut Randomizer>,
+) {
     if let Some(map) = map
-        && reverse_ship_into_trackdir(v, map)
+        && reverse_ship_into_trackdir(v, map, random)
     {
         return;
     }
@@ -1117,6 +1142,20 @@ fn mark_station_buoy_route_lost(v: &mut Vehicle, map: Option<&Map>) {
     }
 }
 
+/// Consume el presupuesto RNG del fallback `CreateRandomPath` de YAPF.
+///
+/// El runtime local conserva la ruta acuática como teselas y proyecta
+/// `ship_path` después de cada entrada; `OpenTTD`, en cambio, puede hacer una
+/// segunda consulta del camino perdido mientras la ruta proyectada todavía
+/// contiene más de una tesela. La cantidad de draws se conserva aquí aunque
+/// la elección geométrica siga siendo la ya validada por el controlador local.
+fn consume_lost_ship_path_rng(path_len_before_entry: usize, rng: &mut Randomizer) {
+    let calls = if path_len_before_entry > 1 { 2 } else { 1 };
+    for _ in 0..calls {
+        let _ = rng.next();
+    }
+}
+
 /// Alinea la proa al siguiente paso del path (A* tile → eje X/Y).
 fn face_path_target(v: &mut Vehicle) {
     let Some(&next) = v.path.front() else {
@@ -1152,6 +1191,29 @@ pub fn ship_controller_tick_with_catalog(
     v: &mut Vehicle,
     map: Option<&Map>,
     engine_catalog: &[crate::engine::EngineDef],
+) {
+    ship_controller_tick_inner(v, map, engine_catalog, None);
+}
+
+/// Variante del controlador que comparte el `Randomizer` global de la
+/// partida. Las llamadas históricas sin `GameState` conservan el flujo
+/// determinista local mediante [`ship_controller_tick_with_catalog`].
+#[allow(clippy::too_many_lines)]
+pub fn ship_controller_tick_with_catalog_and_rng(
+    v: &mut Vehicle,
+    map: Option<&Map>,
+    engine_catalog: &[crate::engine::EngineDef],
+    rng: &mut Randomizer,
+) {
+    ship_controller_tick_inner(v, map, engine_catalog, Some(rng));
+}
+
+#[allow(clippy::too_many_lines)]
+fn ship_controller_tick_inner(
+    v: &mut Vehicle,
+    map: Option<&Map>,
+    engine_catalog: &[crate::engine::EngineDef],
+    mut random: Option<&mut Randomizer>,
 ) {
     if v.kind != VehicleKind::Ship {
         return;
@@ -1243,37 +1305,45 @@ pub fn ship_controller_tick_with_catalog(
         }
 
         if map.is_some_and(|m| !is_water_network_tile_at(m, new_tile)) {
-            reverse_ship_after_blocked_track(v, map);
+            reverse_ship_after_blocked_track(v, map, random.as_deref_mut());
             return;
         }
         if let Some(map) = map
             && !water_tiles_connected(map, old_tile, new_tile)
         {
-            reverse_ship_after_blocked_track(v, Some(map));
+            reverse_ship_after_blocked_track(v, Some(map), random.as_deref_mut());
             return;
         }
 
         let Some(diagdir) = diagdir_between_tiles(old_tile, new_tile) else {
-            reverse_ship_after_blocked_track(v, map);
+            reverse_ship_after_blocked_track(v, map, random.as_deref_mut());
             return;
         };
 
         // Path tile → track: consumir frente si coincide; X/Y por eje de entrada.
+        let path_len_before_entry = v.path.len();
         if v.path.front() == Some(&new_tile) {
             v.path.pop_front();
         } else if !v.path.is_empty() {
             // Ruta desfasada: como `ReverseShip`, no saltar a un frente lejano.
-            reverse_ship_after_blocked_track(v, map);
+            reverse_ship_after_blocked_track(v, map, random.as_deref_mut());
             return;
         }
 
+        let lost_route_cache_empty = v.ship_path.is_empty();
         let path_next = v.path.front().copied();
+        if lost_route_cache_empty
+            && station_buoy_order
+            && let Some(rng) = random.as_deref_mut()
+        {
+            consume_lost_ship_path_rng(path_len_before_entry, rng);
+        }
         let track = map.map_or_else(
             || choose_track_for_entry(diagdir),
             |m| choose_ship_track(m, new_tile, diagdir, path_next, v.dest),
         );
         let Some(entry) = ship_subcoord(diagdir, track) else {
-            reverse_ship_after_blocked_track(v, map);
+            reverse_ship_after_blocked_track(v, map, random.as_deref_mut());
             return;
         };
 
@@ -2099,6 +2169,33 @@ mod tests {
                 .dir,
             DIR_W
         );
+    }
+
+    #[test]
+    fn ship_reverse_on_lost_buoy_uses_available_reverse_track_order() {
+        let mut s = GameState::new(10, 6);
+        water_line(&mut s, 4, 1, 8);
+        let buoy = TileCoord::new(4, 4);
+        apply_command(&mut s, &Command::PlaceBuoy(buoy)).unwrap();
+
+        let from = TileCoord::new(5, 4);
+        let mut v = Vehicle::new(1, VehicleKind::Ship, from, buoy);
+        v.running = true;
+        v.orders = vec![VehicleOrder::station(buoy)];
+        v.current_order = 0;
+        v.ship_pos_valid = true;
+        v.ship_x = from.x * 16 + 7;
+        v.ship_y = from.y * 16;
+        v.direction = DIR_W;
+        v.ship_rotation = DIR_W;
+        v.ship_track = TRACK_UPPER;
+        v.ship_state = SHIP_STATE_TRACK_UPPER;
+
+        assert!(reverse_ship_into_trackdir(&mut v, &s.map, None));
+        assert_eq!(v.direction, DIR_SE);
+        assert_eq!(v.ship_track, TRACK_Y);
+        assert_eq!(v.ship_state, SHIP_STATE_TRACK_Y);
+        assert_eq!(v.cur_speed, 0);
     }
 
     #[test]

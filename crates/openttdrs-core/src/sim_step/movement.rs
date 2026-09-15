@@ -480,6 +480,14 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                 });
         }
         if breakdown_stopped {
+            // `ShipController` incrementa su contador al comienzo de
+            // `Ship::Tick`, antes de que el handler de averías pueda detener
+            // el movimiento. La rama normal lo hace dentro del controlador;
+            // conservarlo aquí evita perder ese tick al salir temprano.
+            if state.vehicles[i].kind == VehicleKind::Ship {
+                state.vehicles[i].ship_tick_counter =
+                    state.vehicles[i].ship_tick_counter.wrapping_add(1);
+            }
             continue;
         }
         let prev_speed = state.vehicles[i].cur_speed;
@@ -509,12 +517,25 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             };
         let train_accel = state.train_acceleration_model;
         refresh_vehicle_track_speed_cap(state, i, vehicle_kind);
-        state.vehicles[i].step_with_map_and_accel_and_catalog_and_plane_speed(
-            Some(&state.map),
-            train_accel,
-            &state.engine_catalog,
-            state.construction.plane_speed,
-        );
+        if vehicle_kind == VehicleKind::Ship {
+            // `ShipController` consume el mismo stream global que el resto
+            // de los timers cuando YAPF genera una ruta perdida. Las APIs
+            // genéricas de `Vehicle::step` no reciben `GameState`, por eso
+            // esta rama inyecta el RNG sólo en el tick autoritativo.
+            crate::ship_movement::ship_controller_tick_with_catalog_and_rng(
+                &mut state.vehicles[i],
+                Some(&state.map),
+                &state.engine_catalog,
+                &mut state.random,
+            );
+        } else {
+            state.vehicles[i].step_with_map_and_accel_and_catalog_and_plane_speed(
+                Some(&state.map),
+                train_accel,
+                &state.engine_catalog,
+                state.construction.plane_speed,
+            );
+        }
         if vehicle_kind == VehicleKind::Train
             && state.vehicles[i].is_consist_head()
             && ((state.vehicles[i].train_flags ^ previous_train_flags) & (1 << 7)) != 0
@@ -1202,6 +1223,25 @@ mod tests {
         assert!(!handle_vehicle_breakdown(&mut train, 0));
         assert_eq!(train.breakdown_ctr, 0);
         assert_eq!(train.breakdown_delay, 0);
+    }
+
+    #[test]
+    fn ship_breakdown_tick_still_advances_controller_counter() {
+        let pos = TileCoord::new(2, 2);
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, pos, pos);
+        ship.running = true;
+        ship.breakdown_ctr = 1;
+        ship.breakdown_delay = 157;
+        ship.ship_tick_counter = 8;
+        ship.newgrf_tick_counter = 1;
+
+        let mut state = GameState::new(8, 8);
+        state.vehicles.push(ship);
+        move_vehicles(&mut state);
+
+        assert_eq!(state.vehicles[0].ship_tick_counter, 9);
+        assert_eq!(state.vehicles[0].cur_speed, 0);
+        assert_eq!(state.vehicles[0].breakdown_ctr, 1);
     }
 
     #[test]

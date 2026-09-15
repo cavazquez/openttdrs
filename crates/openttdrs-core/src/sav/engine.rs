@@ -261,6 +261,47 @@ fn engine_kind_matches_vehicle(
     )
 }
 
+/// Recalcula las cachés que `UpdateCache` de `OpenTTD` materializa después de
+/// resolver un motor. `VEHS` conserva el slot nativo, pero no estas
+/// propiedades derivadas; si el slot pertenece a un GRF, dejar la caché
+/// vanilla instalada puede limitar silenciosamente la velocidad del vehículo
+/// importado (en especial en barcos y aeronaves).
+fn refresh_sav_vehicle_engine_cache(
+    state: &mut crate::GameState,
+    vehicle_index: usize,
+    engine: &crate::engine::EngineDef,
+) {
+    let position = state.vehicles[vehicle_index].pos;
+    let is_canal = state
+        .map
+        .get(position)
+        .and_then(crate::map::water_class)
+        .is_some_and(|water_class| water_class == crate::map::WaterClass::Canal);
+    let vehicle = &mut state.vehicles[vehicle_index];
+
+    vehicle.cached_cargo_age_period = engine.cargo_age_period;
+    match vehicle.kind {
+        crate::vehicle::VehicleKind::Ship => {
+            let raw_speed = crate::newgrf_callback::vehicle_max_speed(engine, vehicle);
+            vehicle.cached_max_speed =
+                crate::engine::ship_speed_for_tile_with_speed(engine, raw_speed, is_canal);
+        }
+        crate::vehicle::VehicleKind::Aircraft => {
+            vehicle.cached_max_speed = crate::newgrf_callback::vehicle_max_speed(engine, vehicle);
+            vehicle.cached_aircraft_mail_age_period =
+                crate::newgrf_callback::aircraft_mail_cargo_age_period(
+                    engine,
+                    vehicle,
+                    &state.cargo_spec_catalog,
+                );
+        }
+        crate::vehicle::VehicleKind::Bus
+        | crate::vehicle::VehicleKind::Truck
+        | crate::vehicle::VehicleKind::Tram
+        | crate::vehicle::VehicleKind::Train => {}
+    }
+}
+
 /// Vuelve a enlazar vehículos importados con el catálogo después de aplicar
 /// el stack `NewGRF`.
 ///
@@ -274,7 +315,8 @@ pub(crate) fn rehydrate_sav_vehicle_engines(state: &mut crate::GameState) -> usi
     let mut changed = 0;
     let mut train_changed = false;
 
-    for vehicle in &mut state.vehicles {
+    for vehicle_index in 0..state.vehicles.len() {
+        let vehicle = &state.vehicles[vehicle_index];
         let Some(native_id) = vehicle.native_engine_type else {
             continue;
         };
@@ -296,16 +338,27 @@ pub(crate) fn rehydrate_sav_vehicle_engines(state: &mut crate::GameState) -> usi
         });
 
         if let Some(catalog_id) = catalog_id {
-            if vehicle.engine_id != Some(catalog_id) {
-                vehicle.engine_id = Some(catalog_id);
+            if state.vehicles[vehicle_index].engine_id != Some(catalog_id) {
+                state.vehicles[vehicle_index].engine_id = Some(catalog_id);
                 changed += 1;
-                train_changed |= vehicle.kind == crate::vehicle::VehicleKind::Train;
             }
-        } else if mapping_is_custom && vehicle.engine_id.take().is_some() {
+            if mapping_is_custom
+                && let Some(engine) = state
+                    .engine_catalog
+                    .iter()
+                    .find(|engine| engine.id == catalog_id)
+                    .cloned()
+            {
+                refresh_sav_vehicle_engine_cache(state, vehicle_index, &engine);
+                train_changed |=
+                    state.vehicles[vehicle_index].kind == crate::vehicle::VehicleKind::Train;
+            }
+        } else if mapping_is_custom && state.vehicles[vehicle_index].engine_id.take().is_some() {
             // Un GRF que falta o cuyo tipo no coincide no debe heredar el
             // primer motor vanilla de la clase como si fuera el original.
             changed += 1;
-            train_changed |= vehicle.kind == crate::vehicle::VehicleKind::Train;
+            train_changed |=
+                state.vehicles[vehicle_index].kind == crate::vehicle::VehicleKind::Train;
         }
     }
 
@@ -381,8 +434,8 @@ pub(crate) fn hydrate_state_from_pool(
 mod tests {
     use super::*;
     use crate::sav::SavOpaqueChunk;
-    use crate::sav::chunks::CH_TABLE;
-    use crate::sav::table::tests::build_table_body;
+    use crate::sav::chunks::{CH_SPARSE_TABLE, CH_TABLE};
+    use crate::sav::table::tests::{build_table_body, write_gamma};
 
     #[test]
     fn resolves_newgrf_engine_from_eids_mapping() {
@@ -477,6 +530,129 @@ mod tests {
         assert_eq!(state.vehicles[0].engine_id, Some(custom.id));
         assert_eq!(state.vehicles[0].capacity, 37);
         assert_eq!(state.vehicles[1].capacity, 30);
+    }
+
+    #[test]
+    fn rehydrates_imported_custom_ship_and_refreshes_depot_cache() {
+        let mut custom = crate::engine::engine_for_vehicle(
+            crate::vehicle::VehicleKind::Ship,
+            crate::engine::ENGINE_SHIP_MPS,
+        )
+        .clone();
+        custom.id = 60_002;
+        custom.newgrf_grfid = 0x4355_5303;
+        custom.newgrf_local_id = 43;
+        custom.from_newgrf = true;
+        custom.max_speed = 120;
+        custom.ocean_speed_frac = 64;
+        custom.canal_speed_frac = 128;
+        custom.cargo_age_period = 37;
+
+        let mut state = crate::GameState::new(16, 16);
+        state.engine_catalog.push(custom.clone());
+        let mut record = Vec::new();
+        write_gamma(206, &mut record);
+        record.extend_from_slice(&custom.newgrf_grfid.to_be_bytes());
+        record.extend_from_slice(&custom.newgrf_local_id.to_be_bytes());
+        record.push(2); // VEH_SHIP
+        record.push(0); // substitute_id
+        state.sav_opaque_chunks = vec![SavOpaqueChunk {
+            name: *b"EIDS",
+            ch_type: CH_SPARSE_TABLE,
+            body: build_table_body(
+                &[
+                    (6, "grfid"),
+                    (4, "internal_id"),
+                    (2, "type"),
+                    (2, "substitute_id"),
+                ],
+                &[record],
+            ),
+        }];
+
+        let depot = crate::TileCoord::new(4, 4);
+        state
+            .map
+            .set_kind(depot, crate::map::TileKind::ShipDepot)
+            .expect("ship depot");
+        state
+            .map
+            .set_m1(
+                depot,
+                crate::map::set_water_class_m1(0, crate::map::WaterClass::Canal),
+            )
+            .expect("depot water class");
+        let mut ship =
+            crate::vehicle::Vehicle::new(10, crate::vehicle::VehicleKind::Ship, depot, depot);
+        ship.engine_id = Some(crate::engine::ENGINE_SHIP_MPS);
+        ship.native_engine_type = Some(206);
+        ship.cached_max_speed = vanilla_ship_cached_max_speed(206).expect("vanilla cache");
+        ship.cached_cargo_age_period = crate::engine::DEFAULT_CARGO_AGE_PERIOD;
+        ship.acceleration = 9;
+        state.vehicles = vec![ship];
+
+        assert_eq!(rehydrate_sav_vehicle_engines(&mut state), 1);
+        assert_eq!(state.vehicles[0].engine_id, Some(custom.id));
+        assert_eq!(state.vehicles[0].cached_max_speed, 60);
+        assert_eq!(state.vehicles[0].cached_cargo_age_period, 37);
+        assert_eq!(state.vehicles[0].acceleration, 9);
+    }
+
+    #[test]
+    fn rehydrates_imported_custom_aircraft_and_refreshes_fta_cache() {
+        let mut custom = crate::engine::engine_for_vehicle(
+            crate::vehicle::VehicleKind::Aircraft,
+            crate::engine::ENGINE_AIRCRAFT_DAKOTA,
+        )
+        .clone();
+        custom.id = 60_003;
+        custom.newgrf_grfid = 0x4355_5304;
+        custom.newgrf_local_id = 44;
+        custom.from_newgrf = true;
+        custom.max_speed = 512;
+        custom.cargo_age_period = 41;
+
+        let mut state = crate::GameState::new(16, 16);
+        state.engine_catalog.push(custom.clone());
+        let mut record = Vec::new();
+        write_gamma(253, &mut record);
+        record.extend_from_slice(&custom.newgrf_grfid.to_be_bytes());
+        record.extend_from_slice(&custom.newgrf_local_id.to_be_bytes());
+        record.push(3); // VEH_AIRCRAFT
+        record.push(0); // substitute_id
+        state.sav_opaque_chunks = vec![SavOpaqueChunk {
+            name: *b"EIDS",
+            ch_type: CH_SPARSE_TABLE,
+            body: build_table_body(
+                &[
+                    (6, "grfid"),
+                    (4, "internal_id"),
+                    (2, "type"),
+                    (2, "substitute_id"),
+                ],
+                &[record],
+            ),
+        }];
+
+        let pos = crate::TileCoord::new(4, 4);
+        let mut aircraft =
+            crate::vehicle::Vehicle::new(11, crate::vehicle::VehicleKind::Aircraft, pos, pos);
+        aircraft.engine_id = Some(crate::engine::ENGINE_AIRCRAFT_DAKOTA);
+        aircraft.native_engine_type = Some(253);
+        aircraft.cached_max_speed = vanilla_aircraft_cached_max_speed(253).expect("vanilla cache");
+        aircraft.cached_cargo_age_period = crate::engine::DEFAULT_CARGO_AGE_PERIOD;
+        aircraft.cached_aircraft_mail_age_period = crate::engine::DEFAULT_CARGO_AGE_PERIOD;
+        aircraft.aircraft_mail_capacity = Some(7);
+        aircraft.acceleration = 13;
+        state.vehicles = vec![aircraft];
+
+        assert_eq!(rehydrate_sav_vehicle_engines(&mut state), 1);
+        assert_eq!(state.vehicles[0].engine_id, Some(custom.id));
+        assert_eq!(state.vehicles[0].cached_max_speed, 512);
+        assert_eq!(state.vehicles[0].cached_cargo_age_period, 41);
+        assert_eq!(state.vehicles[0].cached_aircraft_mail_age_period, 41);
+        assert_eq!(state.vehicles[0].aircraft_mail_capacity, Some(7));
+        assert_eq!(state.vehicles[0].acceleration, 13);
     }
 
     #[test]

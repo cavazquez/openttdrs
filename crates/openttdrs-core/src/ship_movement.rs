@@ -490,7 +490,10 @@ fn ship_max_speed(
     let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
     let mut max_speed = crate::newgrf_callback::vehicle_max_speed(engine, v);
     if let Some(map) = map {
-        let is_canal = map.get(v.pos).is_some_and(crate::map::is_canal_tile);
+        let is_canal = map
+            .get(v.pos)
+            .and_then(crate::map::water_class)
+            .is_some_and(|water_class| water_class == crate::map::WaterClass::Canal);
         // OpenTTD aplica la fracción océano/canal después de `GetVehicleProperty`.
         // No volver al `engine.max_speed` base: CB36 puede haber modificado la
         // velocidad de esta unidad.

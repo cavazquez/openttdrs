@@ -4993,6 +4993,19 @@ las bocas `2370` y `2366`; la captura no cambió (`77258/921600`, delta medio
 `2,814533`). #326 sigue abierta por el compositor segmentado general y las
 familias de combines que aún no publican este contrato.
 
+Corrección #326-SEGMENTED-BAND-SELECTOR (2026-09-14, `4867aaba`): el sorter
+calcula ahora las bandas visibles que cada child combinado aporta por fuera
+del parent original y elige el primer child por banda, permitiendo varias
+promociones del mismo bloque cuando son necesarias. La selección se deduplica
+de forma determinista y las bandas que sólo quedan fuera del viewport no
+generan parents espurios. La captura Kale con el producer de túnel vigente
+conserva `1574` parents y exactamente el mismo raster (`77258/921600`, delta
+medio `2,814533`); la suite del cliente pasa `1532` tests, con 2 ignorados,
+y Clippy queda verde. Al probar árboles, la traza alcanzó `1581` identidades
+exactas, pero promover un `Sprite` Bevy completo alteró `1037` píxeles que
+antes coincidían; se retiró ese producer hasta implementar clipping por banda
+real. #326 continúa abierta.
+
 Corrección #331-NEWS-AVAILABILITY-OPENING (2026-09-14, `1cab5140`): el cliente
 localiza también las noticias generadas de disponibilidad de vehículos
 (`Nuevo`, preview exclusiva y cuerpo con motor/ID) y la apertura de una nueva

@@ -3255,6 +3255,15 @@ tramo de vuelo libre de esta fixture, no la paridad global de aeronaves:
 #330/#329 mantienen pendientes otros perfiles, cinemática aire/mar,
 callbacks/runtime NewGRF y redes amplias.
 
+La verificación extendida del 2026-09-15 amplió esta misma fixture a
+`initial` más 1000 ticks (`1001` muestras). El comparador coincide en todas las
+muestras para `pos`, `previous_pos`, `state`, `targetairport`, `speed`,
+`progress`, `subspeed`, `direction`, `running`, `x_pos`, `y_pos` y `z_pos`.
+Esta ventana cubre además el recorrido por los nodos de espera previos a la
+arista de aterrizaje, la reserva del helipad y el descenso `HELI_LOWER`; no
+implica paridad de otros perfiles ni cierre de #330/#329. Código publicado en
+`a8c312e6`.
+
 ### Regenerar
 
 ```bash
@@ -3292,6 +3301,25 @@ cargo run -p openttdrs-core --bin sav_airport_fta_runner -- \
 python3 scripts/compare_airport_fta_traces.py \
   /tmp/helidepot-openttd-native-300.jsonl \
   /tmp/helidepot-openttdrs-300.jsonl
+```
+
+Para repetir la ventana más reciente de 1000 ticks sin reemplazar el oráculo
+versionado:
+
+```bash
+OPENTTD_BIN="$PWD/reference/openttd-upstream/build/openttd" \
+OPENTTDRS_AIRPORT_FTA_TRACE_TICKS=1000 \
+./scripts/export_openttd_airport_fta_trace.sh \
+  crates/openttdrs-core/tests/fixtures/helidepot_fta_cycle_15_3.sav \
+  /tmp/helidepot-openttd-native-1000.jsonl 1000
+
+cargo run -p openttdrs-core --bin sav_airport_fta_runner -- \
+  crates/openttdrs-core/tests/fixtures/helidepot_fta_cycle_15_3.sav \
+  --ticks 1000 --out /tmp/helidepot-openttdrs-1000.jsonl
+
+python3 scripts/compare_airport_fta_traces.py \
+  /tmp/helidepot-openttd-native-1000.jsonl \
+  /tmp/helidepot-openttdrs-1000.jsonl
 ```
 
 Actualización #326/#564-AIRPORT-ROTATION-FOUNDATION (2026-09-10, `1c5cc49a`):

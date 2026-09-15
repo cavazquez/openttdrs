@@ -23,6 +23,23 @@ El bloque termina sólo con `git commit` y `git push`. La captura raster se usa
 cuando hay compositor WGPU; si el entorno no lo permite, se registra el bloqueo
 y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
+## Etapa publicada — 2026-09-15 — #330 Helidepot FTA: aproximación completa
+
+La misma fixture `helidepot_fta_cycle_15_3.sav` ahora coincide con el oráculo
+OpenTTD 15.3 en `initial` más 1000 ticks (`1001` muestras). La comparación
+abarca `pos`, `previous_pos`, `state`, `targetairport`, `speed`, `progress`,
+`subspeed`, `direction`, `running` y las coordenadas físicas `x_pos`, `y_pos`,
+`z_pos` en cada muestra. El tramo de vuelo libre sigue todos los nodos de
+espera `TO_ALL` antes de aceptar la arista de aterrizaje, conserva la reserva
+del helipad en la transición y ejecuta la aproximación del Helidepot con las
+dos pasadas nativas por tick, incluido `HELI_LOWER`.
+
+Validación publicada: 2761 tests del core pasados, 1 ignorado, Clippy estricto,
+formato, `git diff --check` y el comparador diferencial (1000/1000). Commit de
+código `a8c312e6`. Esto cierra la ventana reproducida del Helidepot, no la
+paridad global: #330/#329 siguen abiertos para otros perfiles de aeropuertos,
+cinemática aire/mar, callbacks/runtime NewGRF y redes amplias.
+
 ## Etapa publicada — 2026-09-14 — #330 aeronave FTA Helidepot
 
 El fixture `helidepot_fta_cycle_15_3.sav` coincide con OpenTTD 15.3 en el

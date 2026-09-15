@@ -5156,3 +5156,16 @@ temporal rojo 20/128 de la referencia frente al perfil `CLEAN` congelado.
 Pasaron `1534` tests del cliente (2 ignorados), formato y Clippy del binario.
 #326/#567 permanecen abiertas por aceptación visual amplia, callbacks y el
 resto de la semántica naval.
+
+Corrección #326/#567-ROADSTOP-ACTION5-SOURCE (2026-09-14, `f41abd74`): el
+generador de paradas drive-through interpreta el pseudo-sprite Action5 `05 11
+FF 08` como encabezado y toma las ocho filas físicas siguientes (`2020..2027`),
+en vez de las ocho filas anteriores que pertenecían a otro bloque de sprites.
+Se regeneraron los ocho recortes bus/camión, la metadata NFO y el atlas
+versionado. En `Kale_TitleGame.sav`, a 1280×720 y escala 1, la divergencia baja
+de `77.258/921.600` (`8,3830 %`) a `72.446/921.600` (`7,8609 %`): −4.812
+píxeles, −6,23 % del residuo previo, sin traslación global. El foco de paradas
+pasantes recupera las estructuras azul/blanco de OpenTTD. Pasan la regresión
+8bpp/32bpp, atlas byte-a-byte, `1534` tests del cliente y Clippy del binario.
+Esto no cierra #326/#567: el framebuffer global, otras familias visuales y la
+semántica naval restante siguen pendientes.

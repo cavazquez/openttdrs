@@ -7814,3 +7814,14 @@ desactiva animaciones. Pasan los `1534` tests del cliente (2 ignorados), el
 formato y Clippy del binario. Esta evidencia no cierra #326/#567: quedan la
 aceptación raster en las demás orientaciones/escenarios, callbacks y el resto
 de la semántica naval.
+
+Corrección #326/#567-ROADSTOP-ACTION5-SOURCE (2026-09-14, `f41abd74`): el
+generador de paradas drive-through trata `05 11 FF 08` como encabezado Action5
+y consume sus ocho filas físicas siguientes (`2020..2027`). La implementación
+anterior miraba hacia atrás y terminaba usando otro bloque de sprites, por eso
+las paradas aparecían marrones en vez de azul/blanco. Se regeneraron recortes,
+metadata NFO y atlas; la regresión cubre los perfiles 8bpp y 32bpp. En el Kale
+real de 1280×720, la comparación pasa de `77.258` a `72.446` píxeles distintos
+(−4.812; −6,23 % del residuo), sin traslación global. Pasan `1534` tests del
+cliente, Clippy del binario, formato y el check del atlas. #326/#567 quedan
+abiertos por la composición raster global y las demás familias/semánticas.

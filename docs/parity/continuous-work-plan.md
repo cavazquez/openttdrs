@@ -8329,3 +8329,17 @@ tests exitosos y `1` ignorado, con Clippy de producción y check del cliente en
 verde. La rehidratación explícita de capacidades locales en casos SAV/EngineID
 no catalogado y la cobertura de consistes duales/heterogéneos más complejos
 siguen pendientes; #329 permanece abierta.
+
+Corrección #329-VEHICLE-CONSIST-LOCAL-CAPACITY-SAV (2026-09-15, `fa758dab`):
+la resolución de capacidad local se comparte entre carga/descarga runtime y
+el writer SAV. La importación conserva `VEHS.common.cargo_cap` por unidad,
+incluidos vagones con capacidades heterogéneas, y `ConsistChanged` ya no
+reemplaza ese valor por el default del motor al recalcular la capacidad
+agregada de la cabeza. Al reexportar, la cabeza serializa su capacidad local
+en vez de la suma del consist. La regresión
+`sav_roundtrip_preserves_local_capacity_for_heterogeneous_consist` cubre
+capacidades 40/60, `cargo_cap` de locomotora cero y reimportación con suma 100.
+Core queda en `2781` tests exitosos y `1` ignorado, con Clippy de producción y
+check del cliente en verde. La capacidad exacta de una cabeza cuyo EngineID
+custom no está catalogado y las formaciones duales todavía requieren una
+fuente local persistente propia; #329 permanece abierta.

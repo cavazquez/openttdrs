@@ -5438,3 +5438,13 @@ los packets desde el extremo en orden FIFO, incluyendo splits. El test
 saturación. Core queda en `2771 passed; 0 failed; 1 ignored`, con clippy
 estricto en verde. Este primitive aún no está conectado al barrido estación→
 vehículo ni conserva la estación propietaria; #329 permanece abierta.
+
+Corrección #329-STATION-VEHICLE-RESERVATION-PRIMITIVE (2026-09-15, `447889bb`):
+`StationCargoList::reserve_for_vehicle` mueve packets elegibles al extremo
+`MTA_LOAD` del vehículo y conserva estación/cargo de origen. `Load` y `Return`
+actualizan por separado la reserva física y la virtual legacy, sin duplicar
+stock; las regresiones cubren promoción parcial, devolución FIFO, rechazo de
+otra estación y correo disponible mientras se reserva carbón. Core queda en
+`2773 passed; 0 failed; 1 ignored`, con Clippy de producción y check del
+cliente en verde. La integración en `load_vehicles` y la persistencia SAV de
+la propiedad física siguen pendientes; #329 permanece abierta.

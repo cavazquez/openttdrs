@@ -8222,3 +8222,16 @@ suite core queda en `2771` tests exitosos y `1` ignorado, con clippy estricto
 verde. Es el primitive de la propiedad por vehículo; la reserva todavía no
 está conectada al barrido de estaciones ni guarda la estación propietaria, por
 lo que #329 permanece abierta.
+
+Corrección #329-STATION-VEHICLE-RESERVATION-PRIMITIVE (2026-09-15, `447889bb`):
+`StationCargoList::reserve_for_vehicle` mueve físicamente los packets elegibles
+al extremo `MTA_LOAD` del vehículo, registra la estación y el cargo de origen,
+y separa esas unidades de las reservas virtuales legacy. Las operaciones
+`load_reserved_from_vehicle` y `return_reserved_from_vehicle` actualizan ambos
+contadores sin duplicar stock, soportan promoción parcial y devuelven el tramo
+reservado en FIFO; las regresiones cubren correo disponible junto a carbón,
+rechazo de otra estación y coexistencia con una reserva virtual. Core queda en
+`2773` tests exitosos y `1` ignorado, con Clippy de producción y check del
+cliente en verde. El barrido `load_vehicles` todavía usa la ruta inmediata y
+el nuevo estado físico aún no está codificado en el wire SAV; #329 permanece
+abierta.

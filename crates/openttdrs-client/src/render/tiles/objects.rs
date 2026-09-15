@@ -22,7 +22,8 @@ use super::{
     catenary_under_low_bridge,
     helpers::{
         FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, TRAM_OVERLAY_LAYER_FRAC, spawn_empty_bounding_box,
-        spawn_forced_leveled_foundation_with_child_parent, spawn_foundation_child_sprite_at,
+        spawn_forced_leveled_foundation_with_child_parent, spawn_foundation_child_ground_sprite_at,
+        spawn_foundation_child_sprite_at, spawn_ground_sprite_at,
     },
     sloped_or_flat_image, spawn_ground_sprite,
 };
@@ -1149,6 +1150,8 @@ fn spawn_airport_station_ground_layers(
     base_z: u8,
     half_h: f32,
     gfx: u8,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
 ) -> bool {
     let Some(base) = airport_station_base_for_gfx(gfx) else {
         return false;
@@ -1193,18 +1196,18 @@ fn spawn_airport_station_ground_layers(
     } else {
         image.sprite()
     };
-    commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        tint_building_sprite(sprite),
-        Transform::from_translation(ground_tile_pos_half(
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            base_z,
-            0.030,
-            half_h,
-        )),
-    ));
+    let base_position = ground_tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.030, half_h);
+    let sprite = tint_building_sprite(sprite);
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(commands, sprite, ctx, base_position, map_width, parent);
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(base_position),
+        ));
+    }
 
     for (index, layer) in airport_station_ground_layers_for_gfx(gfx)
         .iter()
@@ -1258,16 +1261,21 @@ fn spawn_airport_station_ground_layers(
             0,
             None,
         );
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            tint_building_sprite(if layer.company_coloured {
-                sprite_from_atlas_or_company_white_colour(company, owner_colour, image, layer.path)
-            } else {
-                image.sprite()
-            }),
-            Transform::from_translation(pos),
-        ));
+        let sprite = tint_building_sprite(if layer.company_coloured {
+            sprite_from_atlas_or_company_white_colour(company, owner_colour, image, layer.path)
+        } else {
+            image.sprite()
+        });
+        if let Some(parent) = foundation_child_parent {
+            spawn_foundation_child_sprite_at(commands, sprite, ctx, pos, map_width, parent);
+        } else {
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(pos),
+            ));
+        }
     }
     true
 }
@@ -1707,6 +1715,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 | StationTileClass::Bus
                 | StationTileClass::Truck
                 | StationTileClass::RoadWaypoint
+                | StationTileClass::Airport
                 | StationTileClass::Dock
         )
     {
@@ -2854,11 +2863,27 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             if buildings_hidden() {
                 return;
             }
-            let half_h = if tileh == 0 {
-                TILE_HALF_H
-            } else {
-                slope_half_h(tileh)
-            };
+            // `DrawTile_Station` nivela también los aeropuertos vanilla antes
+            // de dibujar su `StationGfx`. El suelo y las cercas son
+            // `DrawGroundSprite`, por lo que deben quedar bajo el mismo
+            // parent de foundation; las capas BUILD siguen siendo parents
+            // independientes sobre la superficie efectiva.
+            let airport_foundation = spawn_forced_leveled_foundation_with_child_parent(
+                commands,
+                map,
+                dims,
+                assets,
+                ctx,
+                tileh,
+                "station-airport",
+                "station-airport-foundation",
+                foundation_newgrf,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            );
+            let airport_base_z = airport_foundation.surface_base_z;
+            let airport_child_parent = airport_foundation.child_parent;
+            let half_h = TILE_HALF_H;
             // Los tiles `MP_STATION` importados conservan el índice
             // `StationGfx` vanilla completo, no el enum interno 0..7.
             if !spawn_airport_station_ground_layers(
@@ -2867,17 +2892,27 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 company,
                 owner_colour,
                 ctx,
-                base_z,
+                airport_base_z,
                 half_h,
                 m5,
+                dims.0,
+                airport_child_parent,
             ) {
-                let tower_pos = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.04, half_h);
-                commands.spawn((
-                    MapVisualLayer,
-                    ctx.map_tile_chunk(),
-                    tint_building_sprite(assets.airport_station_gfx_sprite(m5).sprite()),
-                    Transform::from_translation(tower_pos),
-                ));
+                let tower_pos =
+                    tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), airport_base_z, 0.04, half_h);
+                let sprite = tint_building_sprite(assets.airport_station_gfx_sprite(m5).sprite());
+                if let Some(parent) = airport_child_parent {
+                    spawn_foundation_child_sprite_at(
+                        commands, sprite, ctx, tower_pos, dims.0, parent,
+                    );
+                } else {
+                    commands.spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        sprite,
+                        Transform::from_translation(tower_pos),
+                    ));
+                }
             }
             spawn_airport_station_overlays(
                 commands,
@@ -2885,7 +2920,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 company,
                 owner_colour,
                 ctx,
-                base_z,
+                airport_base_z,
                 m5,
                 dims.0,
             );
@@ -5887,11 +5922,6 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
             spawn_ship_depot_tile(commands, assets, company, owner_colour, ctx, base_z, dims.0);
         }
         TileKind::Airport => {
-            let half_h = if tileh == 0 {
-                TILE_HALF_H
-            } else {
-                slope_half_h(tileh)
-            };
             let m5 = ctx.tile.map(|t| t.m5).unwrap_or(0);
             // A newly built NewGRF airport stores the vanilla `subst` in
             // `m5`, so use the per-tile global gfx retained on its Station
@@ -5995,17 +6025,19 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                 return;
             }
 
-            // El fallback plano Action1/3 y la ruta vanilla sí se apoyan en
-            // el ground normal que la pasarela unificada emite para una
-            // estación. Los layouts completos ya retornaron arriba.
-            let ground = sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
-            spawn_ground_sprite(commands, &ground, Color::WHITE, ctx, slope_half_ground);
-
+            // Si el Action3 custom no pudo materializarse, conserva la misma
+            // decisión de foundation que tomó `DrawNewAirportTile`: su
+            // callback CB150 puede suprimirla incluso cuando luego se usa el
+            // sustituto vanilla. Para la ruta puramente vanilla la fundación
+            // siempre se aplica en pendiente, antes del suelo.
+            let mut airport_foundation = None;
+            let mut foundation_decided = false;
             if let Some(gfx) = newgrf_gfx
                 && let Some(def) = airport_tile_catalog.iter().find(|candidate| {
                     candidate.gfx.as_u16() == gfx && candidate.has_newgrf_sprites()
                 })
             {
+                foundation_decided = true;
                 let draws_foundation = tileh != 0
                     && airport_tile_draws_default_foundation(
                         def,
@@ -6018,8 +6050,8 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                         climate,
                         newgrf_stack,
                     );
-                let (custom_base_z, child_parent) = if draws_foundation {
-                    let foundation = spawn_forced_leveled_foundation_with_child_parent(
+                if draws_foundation {
+                    airport_foundation = Some(spawn_forced_leveled_foundation_with_child_parent(
                         commands,
                         map,
                         dims,
@@ -6031,11 +6063,12 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                         foundation_newgrf,
                         action5_sprites.as_deref_mut(),
                         images.as_deref_mut(),
-                    );
-                    (foundation.surface_base_z, foundation.child_parent)
-                } else {
-                    (base_z, None)
-                };
+                    ));
+                }
+                let (custom_base_z, child_parent) = airport_foundation
+                    .map_or((base_z, None), |foundation| {
+                        (foundation.surface_base_z, foundation.child_parent)
+                    });
                 if spawn_newgrf_airport_tile(
                     commands,
                     ctx,
@@ -6057,6 +6090,58 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                     return;
                 }
             }
+            if !foundation_decided && tileh != 0 {
+                airport_foundation = Some(spawn_forced_leveled_foundation_with_child_parent(
+                    commands,
+                    map,
+                    dims,
+                    assets,
+                    ctx,
+                    tileh,
+                    "airport",
+                    "airport-foundation",
+                    foundation_newgrf,
+                    action5_sprites.as_deref_mut(),
+                    images.as_deref_mut(),
+                ));
+            }
+            let (airport_base_z, airport_child_parent, foundation_applied) = airport_foundation
+                .map_or((base_z, None, false), |foundation| {
+                    (foundation.surface_base_z, foundation.child_parent, true)
+                });
+            // Después de `DrawFoundation` OpenTTD dibuja el ground plano y lo
+            // adjunta al parent de la fundación; no conserva el sprite de
+            // césped inclinado de la tesela original.
+            let ground = if foundation_applied {
+                assets.grass.clone()
+            } else {
+                sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes)
+            };
+            if let Some(parent) = airport_child_parent {
+                spawn_foundation_child_ground_sprite_at(
+                    commands,
+                    &ground,
+                    Color::WHITE,
+                    ctx,
+                    airport_base_z,
+                    0.0,
+                    TILE_HALF_H,
+                    dims.0,
+                    parent,
+                );
+            } else if foundation_applied {
+                spawn_ground_sprite_at(
+                    commands,
+                    &ground,
+                    Color::WHITE,
+                    ctx,
+                    airport_base_z,
+                    0.0,
+                    TILE_HALF_H,
+                );
+            } else {
+                spawn_ground_sprite(commands, &ground, Color::WHITE, ctx, slope_half_ground);
+            }
             let imported_station_gfx = ctx.tile.is_some_and(|tile| {
                 let station_id = u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8);
                 stations.iter().any(|station| {
@@ -6076,9 +6161,11 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                     company,
                     owner_colour,
                     ctx,
-                    base_z,
-                    half_h,
+                    airport_base_z,
+                    TILE_HALF_H,
                     m5,
+                    dims.0,
+                    airport_child_parent,
                 );
             if !spawned_ground {
                 let sprite = if imported_station_gfx {
@@ -6093,9 +6180,9 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                     Transform::from_translation(tile_pos_half(
                         ctx.tx_i32(),
                         ctx.ty_i32(),
-                        base_z,
+                        airport_base_z,
                         0.04,
-                        half_h,
+                        TILE_HALF_H,
                     )),
                 ));
             }
@@ -6106,13 +6193,13 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                     company,
                     owner_colour,
                     ctx,
-                    base_z,
+                    airport_base_z,
                     m5,
                     dims.0,
                 );
             }
             if !imported_station_gfx && piece == openttdrs_core::AirportPiece::Tower {
-                spawn_airport_radar_overlay(commands, assets, ctx, base_z, dims.0);
+                spawn_airport_radar_overlay(commands, assets, ctx, airport_base_z, dims.0);
             }
         }
         TileKind::RoadBridge | TileKind::RailBridge => {

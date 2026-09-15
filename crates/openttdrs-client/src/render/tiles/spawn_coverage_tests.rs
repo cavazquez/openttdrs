@@ -9181,6 +9181,200 @@ fn imported_airport_uses_full_station_gfx_not_airport_piece_fallbacks() {
 }
 
 #[test]
+fn sloped_airports_level_ground_for_station_and_imported_object_paths() {
+    let assets = boot_assets_app();
+    let apron = assets
+        .airport_station_sprite(2634)
+        .expect("apron airport")
+        .clone();
+    let mut map = Map::new_flat(7, 4, 0);
+    let station_coord = TileCoord::new(1, 1);
+    let imported_coord = TileCoord::new(4, 1);
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+
+    // Una esquina elevada en cada tesela fuerza el mismo
+    // `DrawFoundation(FOUNDATION_LEVELED)` que usa OpenTTD para Airport.
+    for coord in [station_coord, imported_coord] {
+        map.set_height(coord, 5).expect("altura alta airport");
+        map.set_height(c(coord.x + 1, coord.y), 4)
+            .expect("altura oeste airport");
+        map.set_height(c(coord.x, coord.y + 1), 4)
+            .expect("altura este airport");
+        map.set_height(c(coord.x + 1, coord.y + 1), 4)
+            .expect("altura sur airport");
+    }
+    map.set_tile(
+        station_coord,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m5: 27,     // APT_PIER_NW_NE
+            m6: 1 << 3, // StationType::Airport
+            ..tile_template()
+        },
+    )
+    .expect("airport MP_STATION");
+    map.set_tile(
+        imported_coord,
+        Tile {
+            kind: TileKind::Airport,
+            mapt: 0x50,
+            m2: 17,
+            m5: 28, // APT_PIER
+            ..tile_template()
+        },
+    )
+    .expect("airport importado");
+    let mut imported_station = Station::new_with_kind(imported_coord, StopKind::Airport);
+    imported_station.ottd_station_id = Some(17);
+    imported_station.airport_tiles.push(imported_coord);
+    let imported_stations = vec![imported_station];
+
+    let grid = RenderGrid::from_map(&map, 7, 4);
+    let station_ctx = TileRenderContext::new(&map, &grid, 1, 1);
+    let imported_ctx = TileRenderContext::new(&map, &grid, 4, 1);
+    assert_ne!(
+        station_ctx.info.tileh, 0,
+        "el airport MP_STATION debe estar inclinado"
+    );
+    assert_ne!(
+        imported_ctx.info.tileh, 0,
+        "el airport importado debe estar inclinado"
+    );
+    let expected_surface = |ctx: &TileRenderContext| {
+        ctx.info.base_z.saturating_add(
+            openttdrs_core::foundation_draw_plan(
+                ctx.info.tileh,
+                openttdrs_core::FOUNDATION_LEVELED,
+                0,
+            )
+            .surface_z_delta,
+        )
+    };
+
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    &[],
+                    4.0,
+                    true,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+                spawn_transport_object_tile(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 4, 1),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &imported_stations,
+                    &[],
+                    None,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                );
+            },
+        )
+        .expect("airport slope spawn");
+
+    let foundation_parents: std::collections::HashSet<_> = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .filter_map(|(entity, parent)| {
+            (FOUNDATION_ORIGINAL_SPRITE_BASE..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                .contains(&parent.sprite_id)
+                .then_some(entity)
+        })
+        .collect();
+    assert_eq!(
+        foundation_parents.len(),
+        2,
+        "cada camino de airport debe nivelar la pendiente"
+    );
+    assert!(
+        world.query::<&Sprite>().iter(&world).all(|sprite| {
+            !world
+                .resource::<TsAssets>()
+                .0
+                .grass_slopes
+                .iter()
+                .any(|grass| grass.matches(sprite))
+        }),
+        "el aeropuerto nivelado no puede conservar césped inclinado"
+    );
+
+    let children: Vec<_> = world
+        .query::<(&ViewportSortableChild, &Sprite, &Transform)>()
+        .iter(&world)
+        .filter(|(child, _, _)| foundation_parents.contains(&child.parent))
+        .collect();
+    assert!(
+        children.len() >= 2,
+        "los suelos de ambos aeropuertos deben quedar bajo la foundation"
+    );
+    assert!(
+        children.iter().any(|(_, sprite, _)| apron.matches(sprite)),
+        "el apron StationGfx debe ser child de la foundation"
+    );
+    assert!(
+        children
+            .iter()
+            .all(|(child, _, transform)| child.source_depth == transform.translation.z),
+        "los children de airport deben conservar su profundidad fuente"
+    );
+
+    let expected_surfaces = [
+        expected_surface(&station_ctx),
+        expected_surface(&imported_ctx),
+    ];
+    let airport_buildings: Vec<_> = world
+        .query::<&ViewportSortableParent>()
+        .iter(&world)
+        .filter(|parent| [2661, 2662].contains(&parent.sprite_id))
+        .collect();
+    assert_eq!(
+        airport_buildings.len(),
+        2,
+        "ambos AirportTile conservan su capa BUILD"
+    );
+    assert!(
+        airport_buildings.iter().all(|parent| {
+            expected_surfaces
+                .iter()
+                .any(|surface| parent.bounds.zmin == i32::from(*surface) * 8)
+        }),
+        "las capas BUILD deben usar la superficie nivelada"
+    );
+}
+
+#[test]
 fn imported_airport_radar_keeps_its_rotating_parent_and_frame_anchor() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();

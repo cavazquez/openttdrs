@@ -1368,6 +1368,10 @@ pub(super) fn load_vehicles(
     let has_loadable_supply = has_loadable_supply(state);
     if !has_loadable_supply
         && !state.vehicles.iter().any(|vehicle| vehicle.cargo_loading)
+        && !state
+            .vehicles
+            .iter()
+            .any(|vehicle| vehicle.cargo_packets.reserved_count() > 0)
         && !state.vehicles.iter().any(|vehicle| {
             vehicle
                 .current_order_ref()
@@ -1400,8 +1404,9 @@ pub(super) fn load_vehicles(
             continue;
         }
         let loading = state.vehicles[i].cargo_loading;
+        let has_reserved_load = state.vehicles[i].cargo_packets.reserved_count() > 0;
         // Con carga a bordo: solo seguir cargando si full_load o carga gradual.
-        if state.vehicles[i].cargo != 0 && !allow_top_up && !loading {
+        if state.vehicles[i].cargo != 0 && !allow_top_up && !loading && !has_reserved_load {
             continue;
         }
         if state.vehicles[i].cargo_unloading {
@@ -1438,6 +1443,7 @@ pub(super) fn load_vehicles(
         if (allow_top_up || loading)
             && state.vehicles[i].cargo >= state.vehicles[i].capacity
             && !can_load_aircraft_mail
+            && !has_reserved_load
         {
             state.vehicles[i].cargo_loading = false;
             continue;
@@ -1464,6 +1470,12 @@ pub(super) fn load_vehicles(
             station_index_at_vehicle(state, &state.vehicles[i]) == Some(station_idx);
 
         if unloaded_this_tick[i] {
+            continue;
+        }
+        if has_reserved_load {
+            if primary_can_load {
+                let _ = try_load_reserved_from_station(state, i, station_idx, loaded_flag);
+            }
             continue;
         }
         if can_load_aircraft_mail {
@@ -2027,6 +2039,102 @@ fn try_load_aircraft_mail_from_station_waiting_cargo(
     true
 }
 
+/// Consume primero una reserva `MTA_LOAD` rehidratada o creada por el
+/// primitive estación→vehículo. Los packets ya están en la bodega: sólo se
+/// reasigna la cantidad cargada a `MTA_KEEP` y se libera el contador de la
+/// estación, sin volver a extraer stock visible.
+#[allow(clippy::too_many_lines)]
+fn try_load_reserved_from_station(
+    state: &mut GameState,
+    vehicle_idx: usize,
+    station_idx: usize,
+    loaded_flag: &mut bool,
+) -> bool {
+    let station_pos = state.stations[station_idx].pos;
+    let Some(cargo) = state.vehicles[vehicle_idx].cargo_packets.reservation_cargo else {
+        return false;
+    };
+    if state.vehicles[vehicle_idx]
+        .cargo_packets
+        .reservation_station
+        != Some(station_pos)
+    {
+        return false;
+    }
+    let pending = state.vehicles[vehicle_idx].cargo_packets.reserved_count();
+    if pending == 0 {
+        return false;
+    }
+
+    let visit = state.vehicles[vehicle_idx]
+        .station_visit_with_callbacks_and_catalog(state.tick.get(), &state.engine_catalog);
+    station::note_station_load_attempt(&mut state.stations[station_idx], cargo, visit);
+    let company = state.vehicles[vehicle_idx].owner;
+    let rating =
+        station::station_rating_for_company_cargo(&state.stations[station_idx], company, cargo);
+    let speed = vehicle_load_unload_speed(state, vehicle_idx, cargo);
+    let mut load = station::load_amount_for_rating(pending.min(speed), rating);
+    if load == 0 && rating > 0 {
+        load = 1.min(speed);
+    }
+    if load == 0 {
+        return false;
+    }
+
+    let moved = state.stations[station_idx]
+        .cargo_packets
+        .load_reserved_from_vehicle(
+            station_pos,
+            &mut state.vehicles[vehicle_idx].cargo_packets,
+            load,
+        );
+    if moved == 0 {
+        return false;
+    }
+    let first_pickup = state.vehicles[vehicle_idx].cargo == 0
+        && state.vehicles[vehicle_idx].aircraft_mail_packets.is_empty();
+    state.vehicles[vehicle_idx].sync_cargo_from_packets();
+    state.vehicles[vehicle_idx].last_pickup_station = Some(station_pos);
+    state.vehicles[vehicle_idx].last_depart_tick = Some(state.tick.get());
+    let visit = state.vehicles[vehicle_idx]
+        .station_visit_with_callbacks_and_catalog(state.tick.get(), &state.engine_catalog);
+    station::on_station_cargo_pickup(&mut state.stations[station_idx], cargo, company, visit);
+    if state.stations[station_idx].cargo_packets.total_of(cargo) == 0 {
+        trigger_station_cargo_animation(
+            state,
+            station_pos,
+            crate::StationAnimationTrigger::CargoTaken,
+            cargo,
+        );
+    }
+    let vehicle_pos = state.vehicles[vehicle_idx].pos;
+    trigger_station_vehicle_load_animation(state, station_pos, vehicle_pos);
+    *loaded_flag = true;
+    if first_pickup {
+        let vehicle_id = state.vehicles[vehicle_idx].id;
+        trigger_vehicle_randomisation_event(state, vehicle_id, VehicleRandomTrigger::NewCargo);
+        state.stats.cargo_pickups += 1;
+    }
+    state.stats.cargo_units_loaded += u64::from(moved);
+
+    let pending = state.vehicles[vehicle_idx].cargo_packets.reserved_count();
+    let full = state.vehicles[vehicle_idx].cargo >= state.vehicles[vehicle_idx].capacity;
+    let station_empty = state.stations[station_idx].cargo_packets.total_of(cargo) == 0;
+    let full_load = state.vehicles[vehicle_idx]
+        .orders
+        .get(state.vehicles[vehicle_idx].current_order)
+        .is_some_and(|order| order.full_load());
+    if pending > 0 {
+        state.vehicles[vehicle_idx].cargo_loading = true;
+    } else if full || station_empty && !full_load {
+        state.vehicles[vehicle_idx].cargo_loading = false;
+        state.vehicles[vehicle_idx].advance_after_loading();
+    } else {
+        state.vehicles[vehicle_idx].cargo_loading = true;
+    }
+    true
+}
+
 #[allow(clippy::too_many_lines)] // carga de industria, órdenes y next-hop son una transición atómica.
 fn try_load_from_industry(
     state: &mut GameState,
@@ -2035,6 +2143,9 @@ fn try_load_from_industry(
     loaded_flag: &mut bool,
 ) -> bool {
     state.vehicles[vehicle_idx].ensure_packets_from_legacy();
+    if state.vehicles[vehicle_idx].cargo_packets.reserved_count() > 0 {
+        return false;
+    }
     let vcap = state.vehicles[vehicle_idx].capacity;
     let room = vcap.saturating_sub(state.vehicles[vehicle_idx].cargo);
     let vcargo_type = state.vehicles[vehicle_idx].cargo_type;
@@ -3161,6 +3272,64 @@ mod tests {
         assert_eq!(
             state.vehicles[0].cargo_packets.packets[0].next_hop,
             Some(second_next)
+        );
+    }
+
+    #[test]
+    fn station_loading_consumes_existing_vehicle_reservation_first() {
+        let pos = TileCoord::new(1, 1);
+        let mut state = GameState::new(5, 5);
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 2 << 3;
+        tile.m3 = 1;
+        state.map.set_tile(pos, tile).unwrap();
+
+        let mut station = crate::Station::new_with_kind(pos, crate::StopKind::TruckStop);
+        station.rating = 100;
+        station.add_waiting_cargo(CargoType::Goods, 5);
+        station.sync_stock_from_packets();
+        let mut truck = crate::Vehicle::new(38, VehicleKind::Truck, pos, pos);
+        truck.cargo_type = Some(CargoType::Goods);
+        truck.capacity = 10;
+        truck.orders = vec![crate::VehicleOrder::station(pos)];
+        assert_eq!(
+            station.cargo_packets.reserve_for_vehicle(
+                pos,
+                CargoType::Goods,
+                5,
+                &[],
+                pos,
+                &mut truck.cargo_packets,
+            ),
+            5
+        );
+        truck.sync_cargo_from_packets();
+        state.stations.push(station);
+        state.vehicles.push(truck);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+        let mut loaded = vec![false];
+
+        load_vehicles(&mut state, &mut loaded, &[false]);
+
+        assert!(loaded[0]);
+        assert!(state.vehicles[0].cargo_packets.stored_count() > 0);
+        assert!(state.vehicles[0].cargo_packets.reserved_count() < 5);
+        assert!(
+            state.vehicles[0]
+                .cargo_packets
+                .reservation_station
+                .is_some()
+        );
+        assert_eq!(
+            state.stations[0].cargo_packets.total_of(CargoType::Goods),
+            0
+        );
+        assert_eq!(
+            state.stations[0].cargo_packets.reserved,
+            state.vehicles[0].cargo_packets.reserved_count()
         );
     }
 

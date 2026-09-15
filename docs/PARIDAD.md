@@ -5522,3 +5522,19 @@ contratos. Core queda en `2780 passed; 0 failed; 1 ignored`, con Clippy de
 producción y check del cliente en verde. La capacidad agregada de la cabeza
 frente a la capacidad local de cada unidad y las reservas de formaciones
 duales siguen pendientes; #329 permanece abierta.
+
+Corrección #329-VEHICLE-CONSIST-UNIT-CAPACITY (2026-09-15, `272060de`):
+la carga y descarga ferroviaria usa ahora la capacidad local de cada unidad.
+La cabeza ya no absorbe la capacidad agregada del consist al reservar stock,
+limitar carga, calcular porcentajes o registrar capacidad del linkgraph. Las
+decisiones `FullLoad`/`FullLoadAny` y el avance de la orden recorren el conjunto
+`(tipo, carga, capacidad)` de todas las unidades; una locomotora sin bodega no
+mantiene bloqueada la orden cuando sus vagones terminaron. Los probes de carga
+y señales agregan el consist completo, como exige una formación cuya carga vive
+en un vagón. El test
+`full_load_train_consist_uses_each_unit_capacity` cubre locomotora sin bodega y
+vagón de carbón de capacidad 30. Core queda en `2781 passed; 0 failed; 1
+ignored`, con Clippy de producción y check del cliente en verde. La
+rehidratación explícita de capacidades locales en casos SAV/EngineID no
+catalogado y la cobertura de consistes duales/heterogéneos más complejos
+siguen pendientes; #329 permanece abierta.

@@ -368,6 +368,25 @@ impl StationCargoList {
         self.as_stock().pick_freight_to_load(preferred)
     }
 
+    /// Indica si hay carga de un tipo para alguno de los próximos destinos.
+    ///
+    /// Es el equivalente de `StationCargoList::HasCargoFor`: un paquete sin
+    /// `next_hop` representa `StationID::Invalid()` y puede viajar a cualquier
+    /// estación; los demás sólo cuentan si coinciden con una de las ramas
+    /// posibles de la orden siguiente.
+    #[must_use]
+    pub fn has_cargo_for(&self, cargo: CargoType, next_stations: &[TileCoord]) -> bool {
+        self.packets()
+            .chain(self.legacy_packets.iter())
+            .any(|packet| {
+                packet.cargo == cargo
+                    && (packet.next_hop.is_none()
+                        || packet
+                            .next_hop
+                            .is_some_and(|hop| next_stations.contains(&hop)))
+            })
+    }
+
     /// Edad máxima (días) del packet más viejo de un tipo (para rating).
     #[must_use]
     pub fn oldest_waiting_days(&self, cargo: CargoType) -> u8 {

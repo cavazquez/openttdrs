@@ -1557,6 +1557,13 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
         }
     }
 
+    state.stations[station_idx].ensure_packets_from_stock();
+    let next_stations = crate::VehicleOrder::get_next_stopping_station(
+        &state.vehicles[vehicle_idx].orders,
+        state.vehicles[vehicle_idx].cur_implicit_order_index,
+        order_station,
+        None,
+    );
     let target = refit_cargo.or_else(|| {
         let station = state.stations.get(station_idx)?;
         let mut candidates = crate::cargo::ALL_CARGO_TYPES.to_vec();
@@ -1565,6 +1572,7 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
             .into_iter()
             .filter(|cargo| station.cargo_stock.get(*cargo) > 0)
             .filter(|cargo| station.accepts_cargo(*cargo))
+            .filter(|cargo| station.cargo_packets.has_cargo_for(*cargo, &next_stations))
             .filter(|cargo| {
                 unit_ids.iter().any(|unit_id| {
                     state
@@ -2818,6 +2826,55 @@ mod tests {
             "el refit debe preceder a la carga"
         );
         assert!(loaded[0]);
+    }
+
+    #[test]
+    fn station_auto_refit_ignores_cargo_for_other_next_station() {
+        let pos = TileCoord::new(1, 1);
+        let next = TileCoord::new(2, 2);
+        let other = TileCoord::new(3, 3);
+        let mut state = GameState::new(5, 5);
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 2 << 3;
+        tile.m3 = 1;
+        state.map.set_tile(pos, tile).unwrap();
+
+        let mut station = crate::Station::new_with_kind(pos, crate::StopKind::TruckStop);
+        station.rating = 100;
+        station
+            .cargo_packets
+            .push(crate::CargoPacket::new(CargoType::Coal, 20, pos).with_next_hop(Some(other)));
+        station
+            .cargo_packets
+            .push(crate::CargoPacket::new(CargoType::Goods, 7, pos).with_next_hop(Some(next)));
+        station.sync_stock_from_packets();
+        state.stations.push(station);
+
+        let mut truck = crate::Vehicle::new(33, VehicleKind::Truck, pos, pos);
+        truck.orders = vec![
+            crate::VehicleOrder::station_with_refit(
+                pos,
+                crate::OrderLoadType::LoadIfPossible,
+                crate::OrderUnloadType::UnloadIfPossible,
+                crate::OrderNonStop::NonStopDestination,
+                None,
+                true,
+            ),
+            crate::VehicleOrder::station(next),
+        ];
+        state.vehicles.push(truck);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+        let mut loaded = vec![false];
+
+        load_vehicles(&mut state, &mut loaded, &[false]);
+
+        assert_eq!(state.vehicles[0].cargo_type, Some(CargoType::Goods));
+        assert!(state.vehicles[0].cargo > 0);
+        assert!(loaded[0]);
+        assert_eq!(state.stations[0].cargo_stock.get(CargoType::Coal), 20);
     }
 
     #[test]

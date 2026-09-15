@@ -106,6 +106,21 @@ mod tests {
     }
 
     #[test]
+    fn station_cargo_list_filters_packets_by_next_station() {
+        let mut list = StationCargoList::default();
+        let source = TileCoord::new(1, 1);
+        let next = TileCoord::new(2, 2);
+        let other = TileCoord::new(3, 3);
+        list.push(CargoPacket::new(CargoType::Coal, 5, source).with_next_hop(Some(other)));
+        list.push(CargoPacket::new(CargoType::Goods, 3, source).with_next_hop(Some(next)));
+
+        assert!(!list.has_cargo_for(CargoType::Coal, &[next]));
+        assert!(list.has_cargo_for(CargoType::Goods, &[next]));
+        list.push(CargoPacket::new(CargoType::Coal, 1, source));
+        assert!(list.has_cargo_for(CargoType::Coal, &[next]));
+    }
+
+    #[test]
     fn stage_classifies_transfer_deliver_keep() {
         let at = TileCoord::new(5, 5);
         let next = TileCoord::new(9, 9);

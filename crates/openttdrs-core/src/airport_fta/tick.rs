@@ -144,6 +144,98 @@ pub fn tick_airport_fta_with_catalog_and_plane_speed(
         return Some(sync_phase_from_node(v, &profile));
     }
 
+    let motion = advance_fta_motion(
+        v,
+        map,
+        &stations[st_idx],
+        &profile,
+        engine_catalog,
+        plane_speed,
+    );
+    let ev = sync_phase_from_node(v, &profile);
+    if motion.just_reached && airport_node_is_loading_stand(profile.kind, v.airport_pos) {
+        // La orden se completa recién al alcanzar físicamente el stand. Antes,
+        // `apply_waypoint_pose` adelantaba el avión y abría la carga a distancia.
+        v.dest = v.pos;
+        v.cur_speed = 0;
+        v.airport_loading_stand_reached = true;
+    }
+    if !motion.mode.is_heli_raise() && v.aircraft_phase_ticks > 0 {
+        v.aircraft_phase_ticks -= 1;
+        return Some(ev);
+    }
+    if motion.just_reached && !motion.ready && !motion.mode.is_airborne_approach() {
+        // Conservar el nodo alcanzado al menos hasta el siguiente tick. Esto
+        // permite abrir la ventana de carga y evita atravesar un stand en el
+        // mismo tick en que se llega físicamente a él.
+        return Some(ev);
+    }
+    if motion.mode.is_heli_raise() && !motion.ready {
+        return Some(ev);
+    }
+    if !v.airport_waypoint_reached {
+        return Some(ev);
+    }
+    if (!motion.mode.is_heli_raise() || motion.ready) && should_finish_takeoff(v, &profile) {
+        let next_entry = target_airport_entry(v, stations);
+        let ev = finish_takeoff(v, &mut stations[st_idx], engine_catalog);
+        apply_target_airport_entry(v, next_entry);
+        return Some(ev);
+    }
+    let next_entry = target_airport_entry(v, stations);
+    let previous_direction = v.direction;
+    let ev = advance_fta_node(
+        v,
+        &mut stations[st_idx],
+        &profile,
+        engine_catalog,
+        next_entry,
+    );
+    if motion.mode.is_airborne_approach() {
+        // `AirportMove` cambia `pos`, pero no fuerza la orientación del
+        // vehículo. El controlador sólo la modifica al mover/ajustar el
+        // siguiente waypoint; conservarla aquí evita girar un helicóptero
+        // quieto al pasar de HELILANDING a HELIENDLANDING.
+        v.direction = previous_direction;
+        // Los nodos del corredor aéreo no tienen el dwell de superficie que
+        // usa el FSM común; el segundo handler nativo procesa el siguiente
+        // nodo en el tick siguiente.
+        v.aircraft_phase_ticks = 0;
+    }
+    Some(ev)
+}
+
+#[derive(Clone, Copy)]
+enum FtaMotionMode {
+    Surface,
+    AirborneApproach,
+    HeliRaise,
+}
+
+impl FtaMotionMode {
+    fn is_airborne_approach(self) -> bool {
+        matches!(self, Self::AirborneApproach)
+    }
+
+    fn is_heli_raise(self) -> bool {
+        matches!(self, Self::HeliRaise)
+    }
+}
+
+struct FtaMotion {
+    just_reached: bool,
+    mode: FtaMotionMode,
+    ready: bool,
+}
+
+fn advance_fta_motion(
+    v: &mut Vehicle,
+    map: &Map,
+    station: &Station,
+    profile: &AirportFtaProfile,
+    engine_catalog: &[crate::engine::EngineDef],
+    plane_speed: u8,
+) -> FtaMotion {
     let node_flags = profile.moving_data
         [usize::from(v.airport_pos).min(profile.moving_data.len().saturating_sub(1))]
     .flags;
@@ -154,66 +246,90 @@ pub fn tick_airport_fta_with_catalog_and_plane_speed(
         // pixel-accurate HELI_RAISE controller is enabled once the imported
         // native acceleration is available.
         && v.acceleration != 0;
-    let just_reached =
-        move_towards_waypoint(v, map, &stations[st_idx], &profile, plane_speed, heli_raise);
-    let ev = sync_phase_from_node(v, &profile);
-    if just_reached && airport_node_is_loading_stand(profile.kind, v.airport_pos) {
-        // La orden se completa recién al alcanzar físicamente el stand. Antes,
-        // `apply_waypoint_pose` adelantaba el avión y abría la carga a distancia.
-        v.dest = v.pos;
-        v.cur_speed = 0;
-        v.airport_loading_stand_reached = true;
+    // Tras entrar desde vuelo libre, OpenTTD mantiene el controlador de
+    // aeronaves (dos pasadas por tick) hasta completar el corredor de
+    // aterrizaje. El FSM de superficie sigue usando su movimiento acotado;
+    // mezclar ambos adelanta los nodos y reinicia `progress`.
+    let airborne_approach = profile.kind == AirportFtaKind::Helidepot
+        && !heli_raise
+        && (v.aircraft_phase == AircraftPhase::Landing
+            || matches!(
+                v.airport_heading,
+                AirportHeading::Landing
+                    | AirportHeading::EndLanding
+                    | AirportHeading::HeliLanding
+                    | AirportHeading::HeliEndLanding
+            )
+            || matches!(v.airport_pos, 7..=10));
+    let mode = if heli_raise {
+        FtaMotionMode::HeliRaise
+    } else if airborne_approach {
+        FtaMotionMode::AirborneApproach
+    } else {
+        FtaMotionMode::Surface
+    };
+    let just_reached = if mode.is_airborne_approach() {
+        advance_airborne_approach(v, map, station, profile, engine_catalog, plane_speed)
+    } else {
+        move_towards_waypoint(v, map, station, profile, plane_speed, mode.is_heli_raise())
+    };
+    if just_reached && mode.is_airborne_approach() {
+        // `advance_aircraft_flight_handler` devuelve el mismo evento de
+        // llegada que `move_towards_waypoint`, pero no es el dueño del flag
+        // del FSM de superficie.
+        v.airport_waypoint_reached = true;
     }
-    let heli_raise_ready = if heli_raise {
-        let speed_limit = aircraft_speed_limit(v, engine_catalog);
-        let mut ready = false;
-        // `Aircraft::Tick` ejecuta dos `AircraftEventHandler` por tick. El
-        // ascenso del helicóptero actualiza velocidad/progreso una vez por
-        // handler, no una vez por frame del FSM Rust.
-        for _ in 0..2 {
-            if advance_heli_raise(v, map, plane_speed, speed_limit) {
-                ready = true;
-                break;
-            }
-        }
-        // El contador de dwell no representa el ascenso físico nativo. Una
-        // vez recuperado el nodo, la altura/progreso guardados son la fuente
-        // de verdad para decidir cuándo termina el HELITAKEOFF.
-        v.aircraft_phase_ticks = 0;
-        ready
+    let ready = if mode.is_heli_raise() {
+        advance_heli_raise_for_tick(v, map, engine_catalog, plane_speed)
     } else {
         false
     };
-    if !heli_raise && v.aircraft_phase_ticks > 0 {
-        v.aircraft_phase_ticks -= 1;
-        return Some(ev);
+    FtaMotion {
+        just_reached,
+        mode,
+        ready,
     }
-    if just_reached && !heli_raise_ready {
-        // Conservar el nodo alcanzado al menos hasta el siguiente tick. Esto
-        // permite abrir la ventana de carga y evita atravesar un stand en el
-        // mismo tick en que se llega físicamente a él.
-        return Some(ev);
-    }
-    if heli_raise && !heli_raise_ready {
-        return Some(ev);
-    }
-    if !v.airport_waypoint_reached {
-        return Some(ev);
-    }
-    if (!heli_raise || heli_raise_ready) && should_finish_takeoff(v, &profile) {
-        let next_entry = target_airport_entry(v, stations);
-        let ev = finish_takeoff(v, &mut stations[st_idx], engine_catalog);
-        apply_target_airport_entry(v, next_entry);
-        return Some(ev);
-    }
-    let next_entry = target_airport_entry(v, stations);
-    Some(advance_fta_node(
-        v,
-        &mut stations[st_idx],
-        &profile,
-        engine_catalog,
-        next_entry,
-    ))
+}
+
+fn advance_airborne_approach(
+    v: &mut Vehicle,
+    map: &Map,
+    station: &Station,
+    profile: &AirportFtaProfile,
+    engine_catalog: &[crate::engine::EngineDef],
+    plane_speed: u8,
+) -> bool {
+    let max_speed = aircraft_speed_limit(v, engine_catalog);
+    let is_helicopter = vehicle_is_helicopter(v, engine_catalog);
+    (0..2).any(|_| {
+        advance_aircraft_flight_handler(
+            v,
+            map,
+            station,
+            profile,
+            plane_speed,
+            max_speed,
+            is_helicopter,
+        )
+    })
+}
+
+fn advance_heli_raise_for_tick(
+    v: &mut Vehicle,
+    map: &Map,
+    engine_catalog: &[crate::engine::EngineDef],
+    plane_speed: u8,
+) -> bool {
+    let speed_limit = aircraft_speed_limit(v, engine_catalog);
+    // `Aircraft::Tick` ejecuta dos `AircraftEventHandler` por tick. El
+    // ascenso del helicóptero actualiza velocidad/progreso una vez por
+    // handler, no una vez por frame del FSM Rust.
+    let ready = (0..2).any(|_| advance_heli_raise(v, map, plane_speed, speed_limit));
+    // El contador de dwell no representa el ascenso físico nativo. Una vez
+    // recuperado el nodo, la altura/progreso guardados son la fuente de verdad
+    // para decidir cuándo termina el HELITAKEOFF.
+    v.aircraft_phase_ticks = 0;
+    ready
 }
 
 fn vehicle_is_helicopter(v: &Vehicle, engine_catalog: &[crate::engine::EngineDef]) -> bool {
@@ -228,14 +344,14 @@ fn vehicle_is_helicopter(v: &Vehicle, engine_catalog: &[crate::engine::EngineDef
 fn tick_aircraft_free_flight_fta(
     v: &mut Vehicle,
     map: &Map,
-    stations: &[Station],
+    stations: &mut [Station],
     engine_catalog: &[crate::engine::EngineDef],
     plane_speed: u8,
 ) -> Option<AircraftPhaseEvent> {
     let station_idx = target_fta_station_idx(v, stations)?;
-    let station = &stations[station_idx];
-    let profile = fta_profile_for_spec(station.airport_spec)?;
-    if !station_uses_airport_fta(station) {
+    let station_pos = stations[station_idx].pos;
+    let profile = fta_profile_for_spec(stations[station_idx].airport_spec)?;
+    if !station_uses_airport_fta(&stations[station_idx]) {
         return None;
     }
 
@@ -259,14 +375,47 @@ fn tick_aircraft_free_flight_fta(
         if advance_aircraft_flight_handler(
             v,
             map,
-            station,
+            &stations[station_idx],
             &profile,
             plane_speed,
             max_speed,
             is_helicopter,
         ) {
-            reached_entry = true;
-            break;
+            let landing_heading = if is_helicopter {
+                AirportHeading::HeliLanding
+            } else {
+                AirportHeading::Landing
+            };
+            // `AircraftEventHandler_Flying` only changes to a landing state
+            // when the alternatives linked to the current airport position
+            // contain LANDING/HELILANDING. Reaching an ordinary holding
+            // waypoint must first advance `pos`; otherwise the Rust path
+            // skips the same `TO_ALL` nodes that OpenTTD traverses.
+            let landing_edge = (profile.fta_edges)(v.airport_pos)
+                .into_iter()
+                .find(|edge| edge.heading == landing_heading);
+            if let Some(edge) = landing_edge
+                && blocks_free_for(&stations[station_idx], v.airport_blocks_held, edge.blocks)
+            {
+                // `AircraftEventHandler_Flying` moves to the selected landing
+                // edge in the same handler that reaches the last holding
+                // waypoint. Keep that transition atomic so the next tick
+                // starts at HELILANDING/LANDING, not one node behind it.
+                v.airport_prev_pos = v.airport_pos;
+                v.airport_pos = edge.next_position;
+                v.airport_blocks_held = edge.blocks;
+                stations[station_idx].airport_blocks |= edge.blocks;
+                v.airport_waypoint_reached = false;
+                v.airport_loading_stand_reached = false;
+                reached_entry = true;
+                break;
+            }
+            if let Some(edge) = choose_next_edge(v, &profile) {
+                v.airport_prev_pos = v.airport_pos;
+                v.airport_pos = edge.next_position;
+                v.airport_waypoint_reached = false;
+                v.airport_loading_stand_reached = false;
+            }
         }
     }
     if reached_entry {
@@ -274,8 +423,7 @@ fn tick_aircraft_free_flight_fta(
         // del aeropuerto objetivo. Dejamos el nodo de entrada marcado como
         // alcanzado para que el tick FTA siguiente elija la arista correcta.
         v.airport_fta_active = true;
-        v.airport_fta_station = Some(station.pos);
-        v.airport_blocks_held = 0;
+        v.airport_fta_station = Some(station_pos);
         v.airport_waypoint_reached = true;
         v.airport_loading_stand_reached = false;
         let approach_is_helicopter = is_helicopter
@@ -331,6 +479,59 @@ fn advance_heli_raise(v: &mut Vehicle, map: &Map, plane_speed: u8, speed_limit: 
     }
     let next_z = current_z.saturating_add(i32::try_from(count).unwrap_or(i32::MAX));
     v.z_pos = Some(i16::try_from(next_z.min(target_z)).unwrap_or(i16::MAX));
+    false
+}
+
+/// Replica el controlador de descenso de helicóptero (`HELI_LOWER`). En
+/// `OpenTTD` este nodo no mueve X/Y: actualiza velocidad/progreso mientras
+/// acerca Z al nivel del helipad y sólo después acelera el rotor para cerrar
+/// el aterrizaje.
+fn advance_heli_lower(
+    v: &mut Vehicle,
+    map: &Map,
+    profile: &AirportFtaProfile,
+    plane_speed: u8,
+    speed_limit: u32,
+) -> bool {
+    let target_z = aircraft_tile_height(map, v.airport_sub_x, v.airport_sub_y)
+        + 1
+        + match profile.spec {
+            crate::airport_class::AirportSpecId::Heliport => 60,
+            crate::airport_class::AirportSpecId::Oilrig => 54,
+            _ => 0,
+        };
+    let current_z = i32::from(v.z_pos.unwrap_or(0));
+    if current_z == target_z {
+        if v.aircraft_rotor_speed >= 80 {
+            return true;
+        }
+        v.aircraft_rotor_speed = v.aircraft_rotor_speed.saturating_add(4);
+        return false;
+    }
+
+    let count = update_aircraft_speed(v, plane_speed, None, speed_limit, true);
+    if count == 0 {
+        return false;
+    }
+    let next_z = if current_z > target_z {
+        current_z.saturating_sub(i32::try_from(count).unwrap_or(i32::MAX))
+    } else {
+        current_z.saturating_add(i32::try_from(count).unwrap_or(i32::MAX))
+    };
+    v.z_pos = Some(
+        i16::try_from(if current_z > target_z {
+            next_z.max(target_z)
+        } else {
+            next_z.min(target_z)
+        })
+        .unwrap_or_else(|_| {
+            if next_z.is_negative() {
+                i16::MIN
+            } else {
+                i16::MAX
+            }
+        }),
+    );
     false
 }
 
@@ -560,6 +761,9 @@ fn advance_aircraft_flight_handler(
 ) -> bool {
     let idx = usize::from(v.airport_pos).min(profile.moving_data.len() - 1);
     let moving = rotated_airport_moving_data(station, profile, profile.moving_data[idx]);
+    if moving.flags & FLAG_HELI_LOWER != 0 {
+        return advance_heli_lower(v, map, profile, plane_speed, max_speed);
+    }
     let (target_x, target_y) = aircraft_flight_target(station, moving);
     let dx = target_x.saturating_sub(v.airport_sub_x);
     let dy = target_y.saturating_sub(v.airport_sub_y);
@@ -683,6 +887,31 @@ fn try_enter_approach(
         .iter()
         .find(|s| s.covers_tile(target) && station_uses_airport_fta(s))?;
     let profile = fta_profile_for_spec(st.airport_spec)?;
+    let is_helicopter = vehicle_is_helicopter(v, engine_catalog);
+    let landing_heading = if is_helicopter {
+        AirportHeading::HeliLanding
+    } else {
+        AirportHeading::Landing
+    };
+    if profile.kind == AirportFtaKind::Helidepot {
+        // El controlador de vuelo libre ya conserva el nodo FTA y la
+        // posición subtesela. No reiniciar la entrada sólo porque el avión
+        // cruza el radio de cuatro teselas: OpenTTD espera a que
+        // `AircraftController` alcance el waypoint actual antes de aceptar
+        // la arista de aterrizaje. Este fallback queda reservado para
+        // aeronaves nuevas sin posición subtesela inicial.
+        if v.airport_subpos_valid {
+            return None;
+        }
+        // `AircraftEventHandler_Flying` sólo cambia a LANDING/HELILANDING
+        // después de inspeccionar las alternativas de la posición FTA actual.
+        if !(profile.fta_edges)(v.airport_pos)
+            .iter()
+            .any(|edge| edge.heading == landing_heading)
+        {
+            return None;
+        }
+    }
     let manhattan = (v.pos.x - target.x).abs() + (v.pos.y - target.y).abs();
     if manhattan > 4 {
         return None;
@@ -695,7 +924,6 @@ fn try_enter_approach(
     v.airport_prev_pos = entry;
     v.airport_waypoint_reached = false;
     v.airport_loading_stand_reached = false;
-    let is_helicopter = vehicle_is_helicopter(v, engine_catalog);
     v.airport_heading = if is_helicopter
         || matches!(
             profile.kind,
@@ -1114,6 +1342,9 @@ fn apply_enter_heading(v: &mut Vehicle, next: u8, profile: &AirportFtaProfile) {
         AirportFtaKind::Helidepot => match next {
             10 | 14 => v.airport_heading = AirportHeading::Helipad1,
             11 | 15 | 17 => v.airport_heading = AirportHeading::HeliTakeoff,
+            8 if matches!(v.airport_heading, AirportHeading::HeliLanding) => {
+                v.airport_heading = AirportHeading::HeliEndLanding;
+            }
             7 | 8 => v.airport_heading = AirportHeading::HeliLanding,
             _ => {}
         },
@@ -2012,6 +2243,8 @@ mod tests {
         vehicle.engine_id = Some(engine_id);
         vehicle.running = true;
         vehicle.aircraft_phase = AircraftPhase::Flying;
+        vehicle.airport_pos = 13;
+        vehicle.airport_prev_pos = 13;
 
         let event = try_enter_approach(&mut vehicle, &[station], &catalog);
 
@@ -2022,6 +2255,31 @@ mod tests {
             AirportHeading::HeliLanding,
             "el flag Action0 debe seleccionar la entrada heli aunque el id no sea vanilla"
         );
+    }
+
+    #[test]
+    fn fta_approach_does_not_skip_a_nearby_holding_node() {
+        let origin = TileCoord::new(34, 29);
+        let mut station = Station::new_with_kind(origin, StopKind::Airport);
+        station.airport_spec = crate::airport_class::AirportSpecId::Helidepot;
+        station.airport_tiles =
+            crate::airport::airport_spec_tiles(origin, station.airport_spec, false)
+                .map(|(coord, _)| coord)
+                .collect();
+
+        let mut vehicle = Vehicle::new(3, VehicleKind::Aircraft, TileCoord::new(33, 32), origin);
+        vehicle.running = true;
+        vehicle.aircraft_phase = AircraftPhase::Flying;
+        vehicle.airport_pos = 4;
+        vehicle.airport_prev_pos = 4;
+        vehicle.airport_heading = AirportHeading::Flying;
+
+        let event = try_enter_approach(&mut vehicle, &[station], &[]);
+
+        assert_eq!(event, None);
+        assert_eq!(vehicle.aircraft_phase, AircraftPhase::Flying);
+        assert_eq!(vehicle.airport_heading, AirportHeading::Flying);
+        assert_eq!(vehicle.airport_pos, 4);
     }
 
     #[test]

@@ -127,10 +127,13 @@ def parse_sprite_offs(repo: Path, mode: str | None) -> dict[int, list[NfoEntry]]
 
 
 def roadstop_action5_sprite_ids(repo: Path, mode: str | None) -> tuple[Path, tuple[int, ...]] | None:
-    """Localiza las ocho imágenes reales inmediatamente anteriores a Action5 0x11.
+    """Localiza las ocho imágenes reales que siguen a Action5 0x11.
 
     OpenGFX conserva estos sprites en ``ogfxe_extra`` (no en el GRF base), por
     lo que no los puede extraer ``descargar_graficos.sh`` con su tabla base.
+    En un NFO, el pseudo-sprite Action5 es el encabezado del bloque: sus
+    imágenes físicas son las ocho filas normales siguientes, no las filas que
+    preceden al encabezado.
     """
     root = repo / "assets" / "opengfx"
     candidates: list[Path] = []
@@ -146,15 +149,22 @@ def roadstop_action5_sprite_ids(repo: Path, mode: str | None) -> tuple[Path, tup
     for nfo in candidates:
         if not nfo.is_file():
             continue
-        last_ids: list[int] = []
-        for line in nfo.read_text(encoding="utf-8", errors="replace").splitlines():
-            m = real.match(line)
-            if m:
-                sid = int(m.group(1))
-                if not last_ids or last_ids[-1] != sid:
-                    last_ids.append(sid)
-            if action.match(line) and len(last_ids) >= 8:
-                return nfo, tuple(last_ids[-8:])
+        lines = nfo.read_text(encoding="utf-8", errors="replace").splitlines()
+        for index, line in enumerate(lines):
+            if not action.match(line):
+                continue
+            following_ids: list[int] = []
+            for following in lines[index + 1 :]:
+                if re.match(r"^\s*\d+\s+\*", following):
+                    break
+                m = real.match(following)
+                if m:
+                    sid = int(m.group(1))
+                    if not following_ids or following_ids[-1] != sid:
+                        following_ids.append(sid)
+                    if len(following_ids) == 8:
+                        return nfo, tuple(following_ids)
+            break
     return None
 
 
@@ -299,6 +309,42 @@ def layer_sprite_id(is_bus: bool, dir_i: int, layer_i: int) -> int:
     return base + dir_i + 4 + layer_i * 4
 
 
+def rust_layer_lines(
+    sprite_id: int,
+    bounds: tuple[int, int, int],
+    dx: int,
+    dy: int,
+    dz: int,
+    z: float,
+    w: float,
+    h: float,
+    x_offs: float,
+    y_offs: float,
+    remap_x_adj: float,
+    png: str,
+) -> str:
+    """Renderiza una capa con el formato estable del archivo generado."""
+    sx, sy, sz = bounds
+    return "\n".join(
+        [
+            "        RoadStopLayerGfx {",
+            f"            sprite_id: {sprite_id},",
+            f"            bounds: ({sx}, {sy}, {sz}),",
+            f"            dx: {dx}.0,",
+            f"            dy: {dy}.0,",
+            f"            dz: {dz}.0,",
+            f"            z: {z:.2f},",
+            f"            w: {w:.1f},",
+            f"            h: {h:.1f},",
+            f"            x_offs: {x_offs:.1f},",
+            f"            y_offs: {y_offs:.1f},",
+            f"            remap_x_adj: {remap_x_adj:.1f},",
+            f'            path: "assets/opengfx/tiles/{png}",',
+            "        },",
+        ]
+    )
+
+
 def write_layers(
     blocks: dict[int, list[tuple[int, int, int, int, int, int]]],
     datas: tuple[int, ...],
@@ -326,11 +372,20 @@ def write_layers(
             )
             yo += yo_delta
             lines.append(
-                f"        RoadStopLayerGfx {{ sprite_id: {sid}, bounds: ({sx}, {sy}, {sz}), "
-                f"dx: {dx}.0, dy: {dy}.0, dz: {dz}.0, "
-                f"z: {z:.2f}, w: {w:.1f}, h: {h:.1f}, x_offs: {xo:.1f}, y_offs: {yo:.1f}, "
-                f"remap_x_adj: {adj:.1f}, "
-                f'path: "assets/opengfx/tiles/{png}" }},'
+                rust_layer_lines(
+                    sid,
+                    (sx, sy, sz),
+                    dx,
+                    dy,
+                    dz,
+                    z,
+                    w,
+                    h,
+                    xo,
+                    yo,
+                    adj,
+                    png,
+                )
             )
     return lines
 
@@ -365,11 +420,20 @@ def write_drive_through_layers(
             if w <= 0.0 or h <= 0.0:
                 w, h = (float(sx * 2), float(sz * 2)) if wh is None else (float(wh[0]), float(wh[1]))
             flat.append(
-                f"        RoadStopLayerGfx {{ sprite_id: {logical_sprite_id}, bounds: ({sx}, {sy}, {sz}), "
-                f"dx: {dx}.0, dy: {dy}.0, dz: {dz}.0, "
-                f"z: {0.05 + layer_i * 0.01:.2f}, w: {w:.1f}, h: {h:.1f}, "
-                f"x_offs: {xo:.1f}, y_offs: {yo:.1f}, remap_x_adj: 0.0, "
-                f'path: "assets/opengfx/tiles/{png}" }},'
+                rust_layer_lines(
+                    logical_sprite_id,
+                    (sx, sy, sz),
+                    dx,
+                    dy,
+                    dz,
+                    0.05 + layer_i * 0.01,
+                    w,
+                    h,
+                    xo,
+                    yo,
+                    0.0,
+                    png,
+                )
             )
     return flat
 
@@ -422,7 +486,8 @@ def main() -> int:
     def block(name: str, flat: list[str]) -> list[str]:
         rows = [f"pub const {name}: [[RoadStopLayerGfx; 3]; 4] = ["]
         for i in range(4):
-            rows.append(f"    [ // {DIRS[i].upper()}")
+            rows.append("    [")
+            rows.append(f"        // {DIRS[i].upper()}")
             rows.extend(flat[i * 3 : (i + 1) * 3])
             rows.append("    ],")
         rows.append("];")
@@ -431,16 +496,17 @@ def main() -> int:
     def drive_through_block(name: str, flat: list[str]) -> list[str]:
         rows = [f"pub const {name}: [[RoadStopLayerGfx; 2]; 2] = ["]
         for i, axis in enumerate(("X", "Y")):
-            rows.append(f"    [ // {axis}")
+            rows.append("    [")
+            rows.append(f"        // {axis}")
             rows.extend(flat[i * 2 : (i + 1) * 2])
             rows.append("    ],")
         rows.append("];")
         return rows
 
     mode_comment = (
-        f"// Modo gráfico detectado: {prefer_bpp} (assets/opengfx/.graphics_mode o carpetas).\n"
+        f"// Modo gráfico detectado: {prefer_bpp} (assets/opengfx/.graphics_mode o carpetas)."
         if prefer_bpp
-        else "// Modo gráfico: desconocido; offsets NFO elegidos por tamaño del PNG.\n"
+        else "// Modo gráfico: desconocido; offsets NFO elegidos por tamaño del PNG."
     )
     out_path = (
         repo / "crates" / "openttdrs-client" / "src" / "sprites" / "road_stop_gfx_data_generated.rs"

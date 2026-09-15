@@ -3,7 +3,8 @@
 
 Los IDs usados por ``DrawTileSeq`` no son los IDs locales Action5 de los PNG
 extra. Este test verifica ambas variantes de gráficos para que una
-regeneración no vuelva a mezclar 2009..2018 con SPR_ROADSTOP_BASE 5978..5985.
+regeneración no vuelva a mezclar los sprites previos al encabezado con
+SPR_ROADSTOP_BASE 5978..5985.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ import gen_road_stop_gfx_data as generator
 
 
 BUILD_IDS = tuple(range(2692, 2724))
-ACTION5_IDS = (2009, 2010, 2013, 2014, 2015, 2016, 2017, 2018)
+ACTION5_IDS = (2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027)
 
 
 def station_land_fixture() -> str:
@@ -80,7 +81,13 @@ class RoadStopSpriteVariantsTest(unittest.TestCase):
         base = "ogfx1_base.nfo" if mode == "8bpp" else "ogfx21_base_32ez.nfo"
         extra = "ogfxe_extra.nfo" if mode == "8bpp" else "ogfx2e_extra_32ez.nfo"
         (sprites / base).write_text(nfo_rows(BUILD_IDS, mode), encoding="utf-8")
-        (sprites / extra).write_text(nfo_rows(ACTION5_IDS, mode, start=50), encoding="utf-8")
+        # Action5 es el encabezado: los ocho sprites consumidos están después
+        # del pseudo-sprite. Dejamos ocho filas previas para evitar que un
+        # parser que mire hacia atrás pueda pasar accidentalmente.
+        before = nfo_rows(tuple(range(2009, 2017)), mode)
+        action = "2019 * 5 05 11 FF 08 00\n"
+        after = nfo_rows(ACTION5_IDS, mode, start=50)
+        (sprites / extra).write_text(before + action + after, encoding="utf-8")
 
         tiles = opengfx / "tiles"
         tiles.mkdir()
@@ -98,7 +105,10 @@ class RoadStopSpriteVariantsTest(unittest.TestCase):
         return repo, upstream
 
     def test_logical_ids_and_bounds_are_graphics_mode_independent(self) -> None:
-        for mode, expected_size in (("8bpp", "w: 3.0, h: 2.0"), ("32bpp", "w: 6.0, h: 4.0")):
+        for mode, expected_size in (
+            ("8bpp", "w: 3.0,\n            h: 2.0"),
+            ("32bpp", "w: 6.0,\n            h: 4.0"),
+        ):
             repo, upstream = self.make_repo(mode)
             blocks = generator.parse_tile_seq_blocks(upstream)
             nfo = generator.parse_sprite_offs(repo, mode)
@@ -127,12 +137,22 @@ class RoadStopSpriteVariantsTest(unittest.TestCase):
                 )
             )
 
-            self.assertIn("sprite_id: 2696, bounds: (11, 1, 10)", bus, mode)
-            self.assertIn("sprite_id: 2704, bounds: (13, 3, 10)", bus, mode)
+            self.assertIn("sprite_id: 2696,\n            bounds: (11, 1, 10)", bus, mode)
+            self.assertIn("sprite_id: 2704,\n            bounds: (13, 3, 10)", bus, mode)
             self.assertIn(expected_size, bus, mode)
-            self.assertIn("sprite_id: 5984, bounds: (16, 3, 16)", truck_dt, mode)
-            self.assertIn("sprite_id: 5985, bounds: (16, 3, 16)", truck_dt, mode)
+            self.assertIn("sprite_id: 5984,\n            bounds: (16, 3, 16)", truck_dt, mode)
+            self.assertIn("sprite_id: 5985,\n            bounds: (16, 3, 16)", truck_dt, mode)
             self.assertNotIn("sprite_id: 2017", truck_dt, mode)
+
+    def test_action5_resolves_following_sprites(self) -> None:
+        for mode in ("8bpp", "32bpp"):
+            repo, _upstream = self.make_repo(mode)
+
+            result = generator.roadstop_action5_sprite_ids(repo, mode)
+
+            self.assertIsNotNone(result, mode)
+            _nfo, sprite_ids = result
+            self.assertEqual(sprite_ids, ACTION5_IDS, mode)
 
 
 if __name__ == "__main__":

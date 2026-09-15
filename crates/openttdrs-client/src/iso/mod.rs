@@ -655,15 +655,15 @@ mod world_pos_to_tile_tests {
         use crate::sprites::{StationTileClass, road_stop_drive_through_layers, road_stop_seq_gfx};
 
         // Kale (253..254, 135..136) usa la variante Y de camiones. OpenTTD
-        // remapea su origen BUILD (13, 0, 0) a (-26, +13) px; en Bevy Y-up
-        // eso es `remap_tile_offset(..) * 0.5 == (-26, -13)`.
+        // remapea su origen BUILD (13, 0, 0) a (-26, +13) px; con el ancla
+        // NFO `(-4, -10)`, en Bevy Y-up queda (-30, +3).
         let spec = &road_stop_drive_through_layers(StationTileClass::Truck, 5)[0];
         let (xrel, yrel) = super::road_stop_overlay_rel(road_stop_seq_gfx(spec));
-        assert_eq!((xrel, yrel), (-40.0, 6.0));
+        assert_eq!((xrel, yrel), (-30.0, 3.0));
 
-        // El cálculo anterior omitía el 0.5 y producía (-66, 19), desplazando
+        // El cálculo anterior omitía el 0.5 y producía (-56, 16), desplazando
         // el muro occidental 26 px hacia fuera y 13 px hacia arriba.
-        assert_ne!((xrel, yrel), (-66.0, 19.0));
+        assert_ne!((xrel, yrel), (-56.0, 16.0));
     }
 
     #[test]

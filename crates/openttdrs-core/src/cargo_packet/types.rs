@@ -262,6 +262,22 @@ impl StationCargoList {
         stock
     }
 
+    /// Stock visible para una carga cuyo siguiente salto puede ser cualquiera
+    /// de `next_stations` (más los packets sin destino explícito).
+    #[must_use]
+    pub fn stock_for_next_stations(&self, next_stations: &[TileCoord]) -> CargoStock {
+        let mut stock = CargoStock::default();
+        for packet in self.packets().chain(self.legacy_packets.iter()) {
+            if packet
+                .next_hop
+                .is_none_or(|hop| next_stations.contains(&hop))
+            {
+                stock.add(packet.cargo, u32::from(packet.count));
+            }
+        }
+        stock
+    }
+
     /// Añade o fusiona con el último packet del mismo hop/tipo/origen/edad.
     pub fn push(&mut self, packet: CargoPacket) {
         self.migrate_legacy();
@@ -295,6 +311,30 @@ impl StationCargoList {
 
     /// Extrae hasta `amount` unidades del tipo `cargo` (FIFO entre hops).
     pub fn take(&mut self, cargo: CargoType, amount: u32) -> Vec<CargoPacket> {
+        self.take_matching(cargo, amount, |_| true)
+    }
+
+    /// Extrae hasta `amount` unidades sólo de los siguientes destinos válidos.
+    ///
+    /// Los packets con `next_hop == None` representan `StationID::Invalid` y
+    /// pueden cargarse para cualquiera de las estaciones siguientes.
+    pub fn take_for(
+        &mut self,
+        cargo: CargoType,
+        amount: u32,
+        next_stations: &[TileCoord],
+    ) -> Vec<CargoPacket> {
+        self.take_matching(cargo, amount, |hop| {
+            hop.is_none_or(|station| next_stations.contains(&station))
+        })
+    }
+
+    fn take_matching(
+        &mut self,
+        cargo: CargoType,
+        amount: u32,
+        mut matches_hop: impl FnMut(Option<TileCoord>) -> bool,
+    ) -> Vec<CargoPacket> {
         self.migrate_legacy();
         if amount == 0 {
             return Vec::new();
@@ -305,6 +345,9 @@ impl StationCargoList {
         for key in keys {
             if left == 0 {
                 break;
+            }
+            if !matches_hop(key.0) {
+                continue;
             }
             let Some(queue) = self.by_next_hop.get_mut(&key) else {
                 continue;

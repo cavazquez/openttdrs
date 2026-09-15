@@ -1900,11 +1900,20 @@ fn try_load_aircraft_mail_from_station_waiting_cargo(
     if !state.stations[station_idx].accepts_cargo(CargoType::Mail) {
         return false;
     }
+    let next_stations = crate::VehicleOrder::get_next_stopping_station(
+        &state.vehicles[vehicle_idx].orders,
+        state.vehicles[vehicle_idx].cur_implicit_order_index,
+        station_pos,
+        None,
+    );
 
     let visit = state.vehicles[vehicle_idx]
         .station_visit_with_callbacks_and_catalog(state.tick.get(), &state.engine_catalog);
     station::note_station_load_attempt(&mut state.stations[station_idx], CargoType::Mail, visit);
-    let available = state.stations[station_idx].cargo_stock.get(CargoType::Mail);
+    let available = state.stations[station_idx]
+        .cargo_packets
+        .stock_for_next_stations(&next_stations)
+        .get(CargoType::Mail);
     let company = state.vehicles[vehicle_idx].owner;
     let rating = station::station_rating_for_company_cargo(
         &state.stations[station_idx],
@@ -1924,7 +1933,11 @@ fn try_load_aircraft_mail_from_station_waiting_cargo(
     }
 
     let _ = state.stations[station_idx].cargo_packets.reserve(load);
-    let mut taken = state.stations[station_idx].take_waiting_cargo(CargoType::Mail, load);
+    let mut taken = state.stations[station_idx].take_waiting_cargo_for_next_stations(
+        CargoType::Mail,
+        load,
+        &next_stations,
+    );
     if taken.is_empty() {
         state.stations[station_idx]
             .cargo_packets
@@ -1932,14 +1945,7 @@ fn try_load_aircraft_mail_from_station_waiting_cargo(
         return false;
     }
 
-    let order_hop = crate::VehicleOrder::get_next_stopping_station(
-        &state.vehicles[vehicle_idx].orders,
-        state.vehicles[vehicle_idx].cur_implicit_order_index,
-        station_pos,
-        None,
-    )
-    .into_iter()
-    .next();
+    let order_hop = next_stations.into_iter().next();
     for packet in &mut taken {
         if packet.first_station.is_none() {
             packet.first_station = Some(station_pos);
@@ -1948,15 +1954,17 @@ fn try_load_aircraft_mail_from_station_waiting_cargo(
         let distribution = state
             .cargo_dist
             .distribution_for(CargoType::Mail, &state.cargo_spec_catalog);
-        packet.next_hop = crate::flow_stat::resolve_next_hop(
-            distribution,
-            &state.runtime.station_flows,
-            station_pos,
-            CargoType::Mail,
-            origin,
-            order_hop,
-            &mut state.random,
-        );
+        if packet.next_hop.is_none() {
+            packet.next_hop = crate::flow_stat::resolve_next_hop(
+                distribution,
+                &state.runtime.station_flows,
+                station_pos,
+                CargoType::Mail,
+                origin,
+                order_hop,
+                &mut state.random,
+            );
+        }
         packet.update_loading_tile(station_pos);
     }
     let loaded_units: u32 = taken.iter().map(|packet| u32::from(packet.count)).sum();
@@ -2144,13 +2152,21 @@ fn try_load_from_station_waiting_cargo(
     let kind = state.vehicles[vehicle_idx].kind;
     let vcap = state.vehicles[vehicle_idx].capacity;
     let room = vcap.saturating_sub(state.vehicles[vehicle_idx].cargo);
+    let next_stations = crate::VehicleOrder::get_next_stopping_station(
+        &state.vehicles[vehicle_idx].orders,
+        state.vehicles[vehicle_idx].cur_implicit_order_index,
+        state.stations[station_idx].pos,
+        None,
+    );
     if room == 0 {
         state.vehicles[vehicle_idx].cargo_loading = false;
         state.vehicles[vehicle_idx].advance_after_loading();
         return true;
     }
     let preferred = state.vehicles[vehicle_idx].cargo_type;
-    let stock = state.stations[station_idx].cargo_stock;
+    let stock = state.stations[station_idx]
+        .cargo_packets
+        .stock_for_next_stations(&next_stations);
 
     let station_pos = state.stations[station_idx].pos;
     let cargo = match kind {
@@ -2225,7 +2241,11 @@ fn try_load_from_station_waiting_cargo(
     }
 
     let _ = state.stations[station_idx].cargo_packets.reserve(load);
-    let mut taken = state.stations[station_idx].take_waiting_cargo(cargo, load);
+    let mut taken = state.stations[station_idx].take_waiting_cargo_for_next_stations(
+        cargo,
+        load,
+        &next_stations,
+    );
     if taken.is_empty() {
         state.stations[station_idx]
             .cargo_packets
@@ -2233,14 +2253,7 @@ fn try_load_from_station_waiting_cargo(
         return false;
     }
     // Feeder + next_hop: Manual = órdenes; Asymmetric/Symmetric = FlowStat.
-    let order_hop = crate::VehicleOrder::get_next_stopping_station(
-        &state.vehicles[vehicle_idx].orders,
-        state.vehicles[vehicle_idx].cur_implicit_order_index,
-        station_pos,
-        None,
-    )
-    .into_iter()
-    .next();
+    let order_hop = next_stations.into_iter().next();
     for packet in &mut taken {
         if packet.first_station.is_none() {
             packet.first_station = Some(station_pos);
@@ -2249,15 +2262,17 @@ fn try_load_from_station_waiting_cargo(
         let distribution = state
             .cargo_dist
             .distribution_for(packet.cargo, &state.cargo_spec_catalog);
-        packet.next_hop = crate::flow_stat::resolve_next_hop(
-            distribution,
-            &state.runtime.station_flows,
-            station_pos,
-            packet.cargo,
-            origin,
-            order_hop,
-            &mut state.random,
-        );
+        if packet.next_hop.is_none() {
+            packet.next_hop = crate::flow_stat::resolve_next_hop(
+                distribution,
+                &state.runtime.station_flows,
+                station_pos,
+                packet.cargo,
+                origin,
+                order_hop,
+                &mut state.random,
+            );
+        }
         packet.update_loading_tile(station_pos);
     }
     let loaded_units: u32 = taken.iter().map(|p| u32::from(p.count)).sum();
@@ -3041,6 +3056,55 @@ mod tests {
         assert!(maybe_refit_at_station(&mut state, 0, 0));
         assert_eq!(state.vehicles[0].cargo_type, Some(CargoType::Goods));
         assert_eq!(state.vehicles[1].cargo_type, Some(CargoType::Coal));
+    }
+
+    #[test]
+    fn station_loading_preserves_packet_next_hop_across_conditional_orders() {
+        let pos = TileCoord::new(1, 1);
+        let first_next = TileCoord::new(2, 2);
+        let second_next = TileCoord::new(3, 3);
+        let mut state = GameState::new(5, 5);
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 2 << 3;
+        tile.m3 = 1;
+        state.map.set_tile(pos, tile).unwrap();
+
+        let mut station = crate::Station::new_with_kind(pos, crate::StopKind::TruckStop);
+        station.rating = 100;
+        station.cargo_packets.push(
+            crate::CargoPacket::new(CargoType::Goods, 1, pos).with_next_hop(Some(first_next)),
+        );
+        station.cargo_packets.push(
+            crate::CargoPacket::new(CargoType::Goods, 7, pos).with_next_hop(Some(second_next)),
+        );
+        station.sync_stock_from_packets();
+        state.stations.push(station);
+
+        let mut truck = crate::Vehicle::new(36, VehicleKind::Truck, pos, pos);
+        truck.orders = vec![
+            crate::VehicleOrder::station(pos),
+            crate::VehicleOrder::conditional(crate::OrderConditionKind::CargoLoadAbove, 50, 3),
+            crate::VehicleOrder::station(first_next),
+            crate::VehicleOrder::station(second_next),
+        ];
+        state.vehicles.push(truck);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+        let mut loaded = vec![false];
+
+        load_vehicles(&mut state, &mut loaded, &[false]);
+
+        assert!(loaded[0]);
+        assert!(
+            state.vehicles[0]
+                .cargo_packets
+                .packets
+                .iter()
+                .any(|packet| { packet.next_hop == Some(second_next) && packet.count > 0 })
+        );
+        assert!(state.vehicles[0].cargo_packets.total() > 1);
     }
 
     #[test]

@@ -885,6 +885,19 @@ impl Station {
         taken
     }
 
+    /// Extrae carga en espera sólo para las próximas estaciones de la orden.
+    pub fn take_waiting_cargo_for_next_stations(
+        &mut self,
+        cargo: CargoType,
+        amount: u32,
+        next_stations: &[TileCoord],
+    ) -> Vec<crate::cargo_packet::CargoPacket> {
+        self.ensure_packets_from_stock();
+        let taken = self.cargo_packets.take_for(cargo, amount, next_stations);
+        self.sync_stock_from_packets();
+        taken
+    }
+
     /// ¿La estación cubre esta tesela (ancla, aeropuerto o unidas)?
     #[must_use]
     pub fn covers_tile(&self, c: TileCoord) -> bool {

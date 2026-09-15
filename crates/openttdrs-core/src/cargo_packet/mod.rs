@@ -121,6 +121,36 @@ mod tests {
     }
 
     #[test]
+    fn station_take_for_next_station_preserves_other_routes() {
+        let mut list = StationCargoList::default();
+        let source = TileCoord::new(1, 1);
+        let next = TileCoord::new(2, 2);
+        let other = TileCoord::new(3, 3);
+        list.push(CargoPacket::new(CargoType::Coal, 5, source).with_next_hop(Some(other)));
+        list.push(CargoPacket::new(CargoType::Coal, 3, source).with_next_hop(Some(next)));
+        list.push(CargoPacket::new(CargoType::Coal, 2, source));
+
+        let taken = list.take_for(CargoType::Coal, 4, &[next]);
+
+        assert_eq!(taken.iter().map(|packet| packet.count).sum::<u16>(), 4);
+        assert!(
+            taken
+                .iter()
+                .all(|packet| packet.next_hop.is_none() || packet.next_hop == Some(next))
+        );
+        assert_eq!(
+            list.by_next_hop
+                .get(&StationHopKey(Some(other)))
+                .map(|packets| packets.iter().map(|packet| packet.count).sum::<u16>()),
+            Some(5)
+        );
+        assert_eq!(
+            list.stock_for_next_stations(&[next]).get(CargoType::Coal),
+            1
+        );
+    }
+
+    #[test]
     fn stage_classifies_transfer_deliver_keep() {
         let at = TileCoord::new(5, 5);
         let next = TileCoord::new(9, 9);

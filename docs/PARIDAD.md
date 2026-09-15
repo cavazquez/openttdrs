@@ -5348,3 +5348,15 @@ remapea el color de destino y no equivale a un alpha uniforme; diferentes
 regiones requieren distintas transformaciones. Se conserva el `0,50` calibrado
 previamente y #326/#561 siguen abiertas por la composición dependiente del
 framebuffer.
+
+Corrección #329-STATION-AUTO-REFIT-NEXT-HOP (2026-09-15, `a1eb0246`): el
+auto-refit de estación filtra la carga en espera por las próximas estaciones
+posibles de la orden. `StationCargoList::has_cargo_for` conserva la semántica de
+`HasCargoFor`: un `next_hop` explícito sólo es candidato para esa estación y un
+hop nulo representa `StationID::Invalid`, válido para cualquier destino. La
+cola se hidrata desde el stock agregado antes de seleccionar, manteniendo la
+compatibilidad con saves antiguos. La regresión
+`station_auto_refit_ignores_cargo_for_other_next_station` cubre el caso en que
+el stock mayor está destinado a otra estación; la suite core termina en
+`2765 passed; 0 failed; 1 ignored`. El balanceo de capacidad, las reservas y
+los consist articulados heterogéneos siguen pendientes; #329 no se cierra.

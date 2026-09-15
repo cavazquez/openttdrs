@@ -8110,6 +8110,20 @@ techo requieren resultados diferentes porque el blitter 8bpp aplica
 aproximación calibrada previa y no se cierra #326/#561: falta una composición
 dependiente del framebuffer, no otro cambio de parent/child por intuición.
 
+Corrección #329-STATION-AUTO-REFIT-NEXT-HOP (2026-09-15, `a1eb0246`): el
+auto-refit de estación filtra ahora la carga en espera por las próximas
+estaciones posibles de la orden. `StationCargoList::has_cargo_for` replica la
+regla nativa: los paquetes con `next_hop` explícito sólo cuentan para la misma
+estación y los paquetes sin hop (`StationID::Invalid`) siguen siendo válidos
+para cualquier destino. Se hidrata la cola de packets antes de seleccionar el
+cargo, por lo que también funciona con stocks agregados de saves antiguos.
+La regresión `station_auto_refit_ignores_cargo_for_other_next_station` prueba
+que un stock mayor con destino distinto no gana sobre el cargo encaminado a la
+siguiente estación; la suite completa de core queda en `2765` tests exitosos y
+`1` ignorado. Este corte no implementa todavía el balanceo de capacidad,
+reservas de carga ni el consist articulado heterogéneo, por lo que #329 sigue
+abierto.
+
 Diagnóstico #326-ROADSTOP-SORT-SCOPE (2026-09-15): se contrastó la vista de
 `Kale_TitleGame.sav` alrededor de `19,210` en `800×600`, `Normal`, contra una
 captura nativa y una exportación Rust con el mismo viewport. El trace nativo de

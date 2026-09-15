@@ -8386,3 +8386,25 @@ rehidratando la suma 37. Core queda en `2783` tests exitosos y `1` ignorado,
 con Clippy de core, formato, documentación y check/Clippy del binario cliente
 en verde. #329 sigue abierta por callbacks y propiedades de vehículo aún no
 modelados, carga/reservas duales y otras rutas NewGRF sin correspondencia.
+
+Corrección #329/#567-SHIP-DEPOT-VEHICLE-CACHE (2026-09-15, `f8a5b56f`): al
+rehidratar un vehículo SAV cuyo `EIDS` apunta a un motor NewGRF custom, el
+runtime recalcula las cachés derivadas que no vienen completas en `VEHS`:
+período de envejecimiento de carga para todas las clases, velocidad efectiva
+de barcos y aeronaves, y período de correo de aeronaves. En particular, un
+barco estacionado en un depósito naval conserva la clase `Canal` del tile y
+aplica la fracción de velocidad del motor custom; la ruta de movimiento naval
+usa también la clase de agua del tile de depósito/estación, no sólo el helper
+visual de canal. Las regresiones
+`rehydrates_imported_custom_ship_and_refreshes_depot_cache` y
+`rehydrates_imported_custom_aircraft_and_refreshes_fta_cache` cubren la
+rehidratación por `EIDS`, la caché previa deliberadamente obsoleta, velocidad,
+envejecimiento y preservación de aceleración/capacidad. Validación: `2785`
+tests de core pasados, `0` fallidos y `1` ignorado en la suite de biblioteca;
+los dos tests nuevos, `sav_load` (4/4) y el subconjunto SAV (20/20, 4
+ignorados), formato, `git diff --check`, Clippy estricto de la biblioteca
+core y del binario cliente, y `cargo check` del cliente quedaron verdes. El
+clippy `--all-targets` global continúa exponiendo lints preexistentes en
+tests/fixtures y no se usa para declarar este bloque verde. #329/#567 siguen
+abiertos por callbacks y propiedades completas de vehículos, agua efectiva en
+túneles/puentes, cachés visuales y la paridad integral del depósito naval.

@@ -8459,3 +8459,13 @@ core pasados, `0` fallidos y `1` ignorado, Clippy estricto de core/binario
 cliente, `cargo check` del cliente y formato verdes. #329/#567 siguen abiertos
 por curvas/trackdirs, ocupación dinámica de muelles, aqueductos, callbacks y
 cachés visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-YAPF-DOCK-OCCUPANCY (2026-09-15, `797d450e`): la
+selección naval entre varios `DockingTile` añade `3 * YAPF_TILE_LENGTH` por
+barco visible en el amarre, excluye el propio barco y no cuenta vehículos con
+`SHIP_STATE_DEPOT`. La prueba
+`ship_docking_occupancy_matches_yapf_and_ignores_depot_ships` verifica la
+penalización de 300 sin modificar la topología ni las rutas sin estación.
+Validación: `2790` tests de core pasados, `0` fallidos y `1` ignorado, Clippy
+estricto, check del cliente y formato verdes. #329/#567 permanecen abiertos
+por curvas/trackdirs, aqueductos, callbacks y cachés visuales NewGRF restantes.

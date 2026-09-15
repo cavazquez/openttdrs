@@ -5384,3 +5384,14 @@ consist con dos destinos condicionales. Core queda en `2768 passed; 0 failed;
 1 ignored`, clippy de producción y check del cliente en verde. Las reservas
 nativas por vehículo, carga parcial/retorno y el modelo completo de
 `HandleStationRefit` siguen pendientes; #329 permanece abierta.
+
+Corrección #329-STATION-RESERVATION-ACCOUNTING (2026-09-15, `4c5d5094`): las
+dos rutas de carga de estación ya consumen únicamente la cantidad de reserva
+que obtuvieron en esa visita. Una reserva previa no se sobreconsume y una
+extracción vacía libera la reserva nueva, evitando dejar el contador global en
+un estado imposible. La regresión
+`station_loading_consumes_only_its_new_reservation` reproduce una estación con
+seis unidades reservadas y verifica que la visita carga sólo una y conserva las
+seis anteriores. Core queda en `2769 passed; 0 failed; 1 ignored`, con clippy de
+producción limpio. La reserva nativa por vehículo, la carga parcial entre ticks
+y el retorno de reservas siguen pendientes; #329 permanece abierta.

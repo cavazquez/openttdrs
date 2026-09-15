@@ -8162,3 +8162,13 @@ destino reciben una ruta nueva. La regresión
 dos ramas condicionales y evita que un lote de la segunda rama se reescriba a
 la primera. Core queda en `2768` tests exitosos y `1` ignorado; el cliente
 compila. La reserva nativa por vehículo y la carga parcial siguen pendientes.
+
+Corrección #329-STATION-RESERVATION-ACCOUNTING (2026-09-15, `4c5d5094`): las
+rutas de carga normal y correo usan la cantidad de reserva realmente obtenida
+antes de extraer packets. Si ya existe una reserva de otra visita, no toman
+unidades adicionales ni consumen su contador; si la extracción queda vacía,
+liberan la reserva recién creada. La regresión
+`station_loading_consumes_only_its_new_reservation` cubre ese interleaving y
+conserva el `next_hop` válido. Core queda en `2769` tests exitosos y `1`
+ignorado; esto corrige la contabilidad local, pero no sustituye la reserva
+nativa asociada a un vehículo ni su retorno entre ticks.

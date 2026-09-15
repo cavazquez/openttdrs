@@ -478,6 +478,24 @@ pub(crate) fn hydrate_sav_industries(
         industry.construction_date = saved.construction_date;
         industry.construction_type = saved.construction_type;
         industry.prod_level = saved.prod_level;
+        // `INDY.produced` es la lista efectiva de slots de la instancia. La
+        // lista puede estar vacía aunque el spec derive un cargo vanilla;
+        // conservar esa distinción evita consumir RNG por una salida que el
+        // OpenTTD nativo no tiene en esta industria cargada.
+        industry.saved_produced_cargos = Some(
+            saved
+                .produced
+                .iter()
+                .filter_map(|entry| {
+                    cargo_from_sav_slot(
+                        entry.cargo_slot,
+                        state.climate,
+                        &[],
+                        state.sav_version.unwrap_or(SAV_GLOBAL_CARGO_SLOTS_VERSION),
+                    )
+                })
+                .collect(),
+        );
         import_industry_output_stock(
             &mut industry,
             saved,
@@ -664,8 +682,8 @@ pub(crate) fn rehydrate_sav_industries_with_catalog(state: &mut GameState) -> us
 
         // A modern INDY row always contains the dynamic vectors, including
         // vectors made exclusively of INVALID_CARGO placeholders. Empty
-        // vectors are left to `with_newgrf_spec` because old saves did not
-        // serialize the reorganised cargo lists.
+        // vectors remain an explicit empty output list because the initial
+        // hydration already marked `INDY.produced` as authoritative.
         let has_saved_slots = !saved.produced.is_empty() || !saved.accepted.is_empty();
         let dynamic_callbacks =
             def.has_input_cargo_types_callback() || def.has_output_cargo_types_callback();
@@ -690,6 +708,7 @@ pub(crate) fn rehydrate_sav_industries_with_catalog(state: &mut GameState) -> us
 
             let valid_inputs = input_slots.iter().flatten().copied().collect::<Vec<_>>();
             let valid_outputs = output_slots.iter().flatten().copied().collect::<Vec<_>>();
+            industry.saved_produced_cargos = Some(valid_outputs.clone());
             industry.newgrf_output_cargo = valid_outputs.first().copied();
             industry.newgrf_secondary_output_cargo = valid_outputs.get(1).copied();
             industry.newgrf_extra_output_cargos = valid_outputs.iter().copied().skip(2).collect();
@@ -1202,6 +1221,10 @@ mod tests {
         assert_eq!(industry.pos, TileCoord::new(1, 2));
         assert_eq!(industry.tiles.len(), 2);
         assert_eq!(industry.spec, Some(IndustrySpec::CoalMine));
+        assert_eq!(
+            industry.saved_produced_cargos,
+            Some(vec![crate::CargoType::Coal, crate::CargoType::Steel])
+        );
         assert_eq!(industry.stock, 77);
         assert_eq!(
             industry.produced_history_for(crate::CargoType::Coal),
@@ -1213,7 +1236,12 @@ mod tests {
                 .as_slice()
             )
         );
-        assert_eq!(industry.extra_produced_cargo(crate::CargoType::Steel), 22);
+        // `INDY.produced` conserva el orden de slots efectivo: el segundo
+        // cargo válido ocupa el stock secundario aunque el spec vanilla no lo
+        // declare. Los cargos desde el tercer slot siguen usando el buffer
+        // extra y se cubren en las pruebas de NewGRF.
+        assert_eq!(industry.secondary_stock, 22);
+        assert_eq!(industry.extra_produced_cargo(crate::CargoType::Steel), 0);
         assert_eq!(industry.accepted_cargo_waiting(crate::CargoType::Grain), 15);
         assert_eq!(industry.last_accepted_date(crate::CargoType::Grain), 10_974);
         assert_eq!(industry.counter, 12_730);

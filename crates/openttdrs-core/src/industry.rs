@@ -1111,6 +1111,15 @@ pub struct Industry {
     /// Cargos efectivos por slot de salida (`None` = slot vacío legacy).
     #[serde(default)]
     pub newgrf_output_cargo_slots: Vec<Option<CargoType>>,
+    /// Lista de salidas serializada en `INDY.produced` cuando la industria
+    /// fue cargada desde un `.sav`.
+    ///
+    /// `Some` también puede ser una lista vacía: en `OpenTTD` la ausencia de
+    /// filas producidas es un estado válido y no debe sustituirse por los
+    /// cargos derivados de `IndustrySpec`. `None` identifica industrias
+    /// creadas por el runtime, que sí usan el fallback de tipo/spec.
+    #[serde(default)]
+    pub saved_produced_cargos: Option<Vec<CargoType>>,
     /// Insumos y multiplicadores de una procesadora `NewGRF`.
     #[serde(default)]
     pub newgrf_processing_inputs: Vec<IndustryProcessingInput>,
@@ -1198,6 +1207,7 @@ impl Industry {
             newgrf_dynamic_cargo_types: false,
             newgrf_input_cargo_slots: Vec::new(),
             newgrf_output_cargo_slots: Vec::new(),
+            saved_produced_cargos: None,
             newgrf_processing_inputs: Vec::new(),
             newgrf_processing_secondary_multipliers: Vec::new(),
             newgrf_processing_extra_multipliers: Vec::new(),
@@ -1252,6 +1262,7 @@ impl Industry {
             newgrf_dynamic_cargo_types: false,
             newgrf_input_cargo_slots: Vec::new(),
             newgrf_output_cargo_slots: Vec::new(),
+            saved_produced_cargos: None,
             newgrf_processing_inputs: Vec::new(),
             newgrf_processing_secondary_multipliers: Vec::new(),
             newgrf_processing_extra_multipliers: Vec::new(),
@@ -1312,6 +1323,7 @@ impl Industry {
             newgrf_dynamic_cargo_types: false,
             newgrf_input_cargo_slots: Vec::new(),
             newgrf_output_cargo_slots: Vec::new(),
+            saved_produced_cargos: None,
             newgrf_processing_inputs: Vec::new(),
             newgrf_processing_secondary_multipliers: Vec::new(),
             newgrf_processing_extra_multipliers: Vec::new(),
@@ -1557,6 +1569,9 @@ impl Industry {
     /// Cargos producidos del spec (primario + secundario).
     #[must_use]
     pub fn produced_cargos(&self) -> Vec<CargoType> {
+        if let Some(cargos) = &self.saved_produced_cargos {
+            return cargos.clone();
+        }
         if self.newgrf_type_id.is_some() {
             let mut cargos = Vec::with_capacity(2 + self.newgrf_extra_output_cargos.len());
             if let Some(cargo) = self.newgrf_output_cargo {
@@ -2764,6 +2779,14 @@ pub(crate) fn change_industry_production_smooth(
             let mut increased = false;
             let mut decreased = false;
             let outputs = industry.produced_cargos();
+            // Una fila `INDY.produced` vacía no tiene una salida sobre la que
+            // aplicar el cierre suave. El OpenTTD nativo además protege la
+            // última instancia vanilla de cada tipo; conservar la instancia
+            // sin inventar una tasa es el estado seguro para una industria
+            // importada cuyo output real todavía no está materializado.
+            if outputs.is_empty() {
+                return IndustryProductionChange::None;
+            }
 
             for (index, cargo) in outputs.into_iter().enumerate() {
                 // `ChangeIndustryProduction` toma una única palabra por
@@ -3473,6 +3496,27 @@ mod tests {
             mine.production_rate_for_output(0),
             15_u8.saturating_add(u8::try_from(step).unwrap_or(u8::MAX))
         );
+    }
+
+    #[test]
+    fn imported_empty_produced_slots_do_not_use_spec_or_rng() {
+        let mut mine = Industry::with_tiles_spec(
+            TileCoord::new(0, 0),
+            IndustrySpec::CoalMine.kind(),
+            IndustrySpec::CoalMine,
+            vec![TileCoord::new(0, 0)],
+            0,
+        );
+        mine.saved_produced_cargos = Some(Vec::new());
+        let mut rng = Randomizer { state: [123, 456] };
+        let before = rng;
+
+        let change =
+            change_industry_production_smooth(&mut mine, Climate::Temperate, 2000, &mut rng);
+
+        assert_eq!(mine.produced_cargos(), Vec::<CargoType>::new());
+        assert_eq!(change, IndustryProductionChange::None);
+        assert_eq!(rng, before);
     }
 
     #[test]

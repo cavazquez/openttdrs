@@ -272,19 +272,27 @@ fn refresh_sav_vehicle_engine_cache(
     engine: &crate::engine::EngineDef,
 ) {
     let position = state.vehicles[vehicle_index].pos;
-    let is_canal = state
+    let uses_canal_fraction = state
         .map
         .get(position)
-        .and_then(crate::map::water_class)
-        .is_some_and(|water_class| water_class == crate::map::WaterClass::Canal);
+        .and_then(crate::map::effective_water_class_for_ship)
+        .is_some_and(|water_class| {
+            matches!(
+                water_class,
+                crate::map::WaterClass::Canal | crate::map::WaterClass::River
+            )
+        });
     let vehicle = &mut state.vehicles[vehicle_index];
 
     vehicle.cached_cargo_age_period = engine.cargo_age_period;
     match vehicle.kind {
         crate::vehicle::VehicleKind::Ship => {
             let raw_speed = crate::newgrf_callback::vehicle_max_speed(engine, vehicle);
-            vehicle.cached_max_speed =
-                crate::engine::ship_speed_for_tile_with_speed(engine, raw_speed, is_canal);
+            vehicle.cached_max_speed = crate::engine::ship_speed_for_tile_with_speed(
+                engine,
+                raw_speed,
+                uses_canal_fraction,
+            );
         }
         crate::vehicle::VehicleKind::Aircraft => {
             vehicle.cached_max_speed = crate::newgrf_callback::vehicle_max_speed(engine, vehicle);

@@ -69,6 +69,25 @@ pub fn water_class(tile: Tile) -> Option<WaterClass> {
     Some(water_class_from_m1(tile.m1))
 }
 
+/// Clase efectiva que usa `Ship::UpdateCache` al cruzar una tesela.
+///
+/// `GetEffectiveWaterClass` de OpenTTD no se limita a `GetWaterClass`: un
+/// túnel/puente de transporte acuático es siempre canal y un rail con
+/// `HalfTileWater` es mar. El modelo semántico conserva esas teselas como
+/// `Water`/`Rail`, por lo que hay que consultar también `MAPT`, `MAP5` y
+/// `M4` antes de caer al valor persistido de `m1`.
+#[must_use]
+pub fn effective_water_class_for_ship(tile: Tile) -> Option<WaterClass> {
+    if tile.is_tunnel_bridge_tile() {
+        let transport = (tile.m5 >> 2) & 0x03;
+        return (transport == 2).then_some(WaterClass::Canal);
+    }
+    if tile.ottd_type_nibble() == 1 && (tile.m3hi & 0x0F) == 13 {
+        return Some(WaterClass::Sea);
+    }
+    water_class(tile)
+}
+
 /// `IsCoastTile` para las representaciones de agua que conserva el mapa.
 ///
 /// Una costa sigue siendo `MP_WATER` en los bytes crudos, pero no es suelo de
@@ -276,6 +295,47 @@ mod tests {
         assert!(tile_has_water_class(depot.kind));
         assert_eq!(water_class(depot), Some(WaterClass::Canal));
         assert!(has_tile_water_ground(depot));
+    }
+
+    #[test]
+    fn effective_ship_water_class_matches_tunnelbridge_and_half_tile_rail() {
+        let water_tunnelbridge = Tile {
+            height: 0,
+            kind: TileKind::Water,
+            mapt: 0x90,
+            m5: 0x80 | (2 << 2), // bridge + TRANSPORT_WATER
+            m1: set_water_class_m1(0, WaterClass::Sea),
+            m6: 0,
+            m8: 0,
+            m3: 0,
+            m2: 0,
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 0,
+        };
+        assert_eq!(
+            effective_water_class_for_ship(water_tunnelbridge),
+            Some(WaterClass::Canal)
+        );
+
+        let half_tile_rail = Tile {
+            height: 0,
+            kind: TileKind::Rail,
+            mapt: 0x10,
+            m3hi: 13, // RailGroundType::HalfTileWater
+            m1: set_water_class_m1(0, WaterClass::Canal),
+            m5: 0,
+            m6: 0,
+            m8: 0,
+            m3: 0,
+            m2: 0,
+            m2_hi: 0,
+            m7: 0,
+        };
+        assert_eq!(
+            effective_water_class_for_ship(half_tile_rail),
+            Some(WaterClass::Sea)
+        );
     }
 
     #[test]

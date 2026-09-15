@@ -490,14 +490,20 @@ fn ship_max_speed(
     let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
     let mut max_speed = crate::newgrf_callback::vehicle_max_speed(engine, v);
     if let Some(map) = map {
-        let is_canal = map
+        let uses_canal_fraction = map
             .get(v.pos)
-            .and_then(crate::map::water_class)
-            .is_some_and(|water_class| water_class == crate::map::WaterClass::Canal);
-        // OpenTTD aplica la fracción océano/canal después de `GetVehicleProperty`.
+            .and_then(crate::map::effective_water_class_for_ship)
+            .is_some_and(|water_class| {
+                matches!(
+                    water_class,
+                    crate::map::WaterClass::Canal | crate::map::WaterClass::River
+                )
+            });
+        // OpenTTD aplica la reducción océano/canal-río después de
+        // `GetVehicleProperty`; `River` comparte la fracción de canal.
         // No volver al `engine.max_speed` base: CB36 puede haber modificado la
         // velocidad de esta unidad.
-        max_speed = ship_speed_for_tile_with_speed(engine, max_speed, is_canal);
+        max_speed = ship_speed_for_tile_with_speed(engine, max_speed, uses_canal_fraction);
         if let Some(bridge_cap) = crate::bridge_spec::bridge_max_speed_for_tile(map, v.pos) {
             max_speed = max_speed.min(bridge_cap);
         }
@@ -2024,6 +2030,36 @@ mod tests {
         let raw = crate::newgrf_callback::vehicle_max_speed(&catalog[0], &mut vehicle);
         assert_eq!(raw, 80);
         assert_eq!(ship_max_speed(&mut vehicle, Some(&map), &catalog), 40);
+    }
+
+    #[test]
+    fn ship_max_speed_uses_canal_fraction_for_river_and_water_tunnelbridge() {
+        let mut engine =
+            crate::engine::engine_for_vehicle(VehicleKind::Ship, crate::engine::ENGINE_SHIP_MPS)
+                .clone();
+        engine.id = 65_104;
+        engine.max_speed = 100;
+        engine.ocean_speed_frac = 64;
+        engine.canal_speed_frac = 128;
+
+        let pos = TileCoord::new(1, 1);
+        let mut vehicle = Vehicle::new(1, VehicleKind::Ship, pos, pos);
+        vehicle.engine_id = Some(engine.id);
+        let catalog = vec![engine];
+        let mut map = crate::Map::new_flat(4, 4, 0);
+
+        crate::map::make_water_tile(&mut map, pos, crate::map::WaterClass::River)
+            .expect("crear río");
+        assert_eq!(ship_max_speed(&mut vehicle, Some(&map), &catalog), 50);
+
+        map.set_mapt_m5(pos, 0x90, 0x80 | (2 << 2))
+            .expect("crear tunnelbridge de agua");
+        map.set_m1(
+            pos,
+            crate::map::set_water_class_m1(0, crate::map::WaterClass::Sea),
+        )
+        .expect("clase persistida");
+        assert_eq!(ship_max_speed(&mut vehicle, Some(&map), &catalog), 50);
     }
 
     #[test]

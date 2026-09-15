@@ -5395,3 +5395,15 @@ seis unidades reservadas y verifica que la visita carga sólo una y conserva las
 seis anteriores. Core queda en `2769 passed; 0 failed; 1 ignored`, con clippy de
 producción limpio. La reserva nativa por vehículo, la carga parcial entre ticks
 y el retorno de reservas siguen pendientes; #329 permanece abierta.
+
+Corrección #326-SORT-SEGMENT-COVERAGE (2026-09-15, `4b37e42a`):
+`analyze_viewport_sort_bands.py` resume ahora la cobertura de identidades
+`sprite_id + world_bounds` por cada segmento nativo y separa las repeticiones
+que provienen de llamadas independientes del sorter. Su bloque
+`order_comparison` marca `not_comparable` mientras la candidata sólo exponga un
+vector global: `final_ordinal` se reinicia en cada `ViewportDoDraw` y concatenar
+los segmentos produciría inversiones falsas. La traza real de Kale queda en
+`8` segmentos y `1024` parents; la candidata conserva `4/8` segmentos con todas
+las identidades únicas observadas, `10` identidades de referencia ausentes y
+`0` repeticiones dentro de segmento. Esto mejora el diagnóstico y no certifica
+paridad de compositor ni cierra #326.

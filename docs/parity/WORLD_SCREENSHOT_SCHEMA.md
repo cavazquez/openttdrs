@@ -97,6 +97,17 @@ distintos sprites y cajas que no aparecen en la pasada global candidata. Una
 misma caja con varios sprites no implica un asset divergente: puede ser el
 primer child visible de una secuencia `StartSpriteCombine` en otra banda.
 
+Cuando se pasa `--candidate-sort`, el informe también publica
+`segment_coverage`: una fila por segmento con las identidades únicas de
+`sprite_id + world_bounds` que sí aparecen en la candidata, las cajas ausentes
+y las variantes de sprite. `reference_repeated_parent_occurrences` separa las
+repeticiones que el native puede emitir en llamadas distintas. El bloque
+`order_comparison` queda explícitamente en `not_comparable` mientras la
+candidata sólo exponga un vector global: `final_ordinal` vuelve a cero en cada
+`ViewportDoDraw`, así que no se concatenan segmentos para fabricar una
+inversión. Esta cobertura es diagnóstica y no convierte una intersección de
+identidades en una certificación de composición.
+
 ## Métricas y registro
 
 El comparador calcula primero el diff sin corrección y luego busca una

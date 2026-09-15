@@ -8172,3 +8172,17 @@ liberan la reserva recién creada. La regresión
 conserva el `next_hop` válido. Core queda en `2769` tests exitosos y `1`
 ignorado; esto corrige la contabilidad local, pero no sustituye la reserva
 nativa asociada a un vehículo ni su retorno entre ticks.
+
+Corrección #326-SORT-SEGMENT-COVERAGE (2026-09-15, `4b37e42a`): el analizador
+`analyze_viewport_sort_bands.py` deja de tratar implícitamente la captura nativa
+como una lista global. El informe agrega cobertura de identidades únicas por
+segmento, repeticiones de parents y ejemplos de cajas/sprites ausentes. También
+marca `order_comparison.status=not_comparable` cuando la candidata sólo aporta
+un vector global, porque el native reinicia `final_ordinal` en cada
+`ViewportDoDraw`; así una inversión entre una parada de un segmento y una
+estación de otro no se presenta como fallo del compositor. La regresión sintética
+y la traza real de Kale pasan: `8` segmentos, `1024` parents, `4/8` segmentos
+con cobertura completa de identidades únicas, `10` identidades ausentes y `0`
+repeticiones dentro de segmento. Es una mejora del diagnóstico, no el cierre de
+#326: siguen pendientes las identidades no cubiertas, clipping/composición y la
+aceptación raster de las familias restantes.

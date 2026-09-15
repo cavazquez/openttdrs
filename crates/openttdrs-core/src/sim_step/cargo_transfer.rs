@@ -1395,19 +1395,20 @@ pub(super) fn load_vehicles(
         .enumerate()
         .take(state.vehicles.len())
     {
+        let order_vehicle_idx = vehicle_order_index(state, i);
         // El refit de estación se evalúa antes de los filtros de capacidad y
         // de locomotora sin vagón: `HandleStationRefit` forma parte de la
         // misma fase que la carga y no depende de que haya stock disponible.
         if let Some(station_idx) = station_index_at_vehicle(state, &state.vehicles[i]) {
             maybe_refit_at_station(state, i, station_idx);
         }
-        let allow_top_up = state.vehicles[i]
+        let allow_top_up = state.vehicles[order_vehicle_idx]
             .orders
-            .get(state.vehicles[i].current_order)
+            .get(state.vehicles[order_vehicle_idx].current_order)
             .is_some_and(|o| o.is_full_load_order());
-        let no_load = state.vehicles[i]
+        let no_load = state.vehicles[order_vehicle_idx]
             .orders
-            .get(state.vehicles[i].current_order)
+            .get(state.vehicles[order_vehicle_idx].current_order)
             .is_some_and(|o| o.no_load());
         if no_load {
             continue;
@@ -1471,7 +1472,7 @@ pub(super) fn load_vehicles(
         if !station.can_service_vehicle(vehicle_kind) {
             continue;
         }
-        if !station_matches_current_order(&state.vehicles[i], station.pos) {
+        if !station_matches_current_order(&state.vehicles[order_vehicle_idx], station.pos) {
             continue;
         }
         state.stations[station_idx].mark_vehicle_of_type(vehicle_kind);
@@ -1482,12 +1483,18 @@ pub(super) fn load_vehicles(
             continue;
         }
         if !has_reserved_load && primary_can_load && allow_top_up {
-            let _ = reserve_vehicle_cargo_at_station(state, i, station_idx);
+            let _ = reserve_vehicle_cargo_at_station(state, i, order_vehicle_idx, station_idx);
             has_reserved_load = state.vehicles[i].cargo_packets.reserved_count() > 0;
         }
         if has_reserved_load {
             if primary_can_load {
-                let _ = try_load_reserved_from_station(state, i, station_idx, loaded_flag);
+                let _ = try_load_reserved_from_station(
+                    state,
+                    i,
+                    order_vehicle_idx,
+                    station_idx,
+                    loaded_flag,
+                );
             }
             continue;
         }
@@ -1499,7 +1506,9 @@ pub(super) fn load_vehicles(
                 loaded_flag,
             );
         }
-        if primary_can_load && try_load_from_industry(state, i, station_idx, loaded_flag) {
+        if primary_can_load
+            && try_load_from_industry(state, i, order_vehicle_idx, station_idx, loaded_flag)
+        {
             continue;
         }
         // Con `MoveGoodsToStation` la mina vuelca al andén: el camión en la tesela de la
@@ -1508,9 +1517,16 @@ pub(super) fn load_vehicles(
             && (physically_at
                 || station_has_industry_waiting(state, station_idx, &state.vehicles[i]))
         {
-            try_load_from_station_waiting_cargo(state, i, station_idx, loaded_flag);
+            try_load_from_station_waiting_cargo(
+                state,
+                i,
+                order_vehicle_idx,
+                station_idx,
+                loaded_flag,
+            );
         }
     }
+    finish_consist_loading(state, loaded_this_tick);
 }
 
 /// Devuelve la sección `MTA_LOAD` cuando la orden que debía recibirla ya no
@@ -1525,7 +1541,7 @@ fn release_invalid_vehicle_reservations(state: &mut GameState) {
         .filter_map(|(vehicle_idx, vehicle)| {
             let source = vehicle.cargo_packets.reservation_station?;
             if vehicle.cargo_packets.reserved_count() == 0
-                || vehicle_route_contains_station(vehicle, source)
+                || vehicle_route_contains_station(state, vehicle_idx, source)
             {
                 return None;
             }
@@ -1562,7 +1578,32 @@ fn release_invalid_vehicle_reservations(state: &mut GameState) {
     }
 }
 
-fn vehicle_route_contains_station(vehicle: &crate::Vehicle, station: TileCoord) -> bool {
+fn vehicle_order_index(state: &GameState, vehicle_idx: usize) -> usize {
+    let mut current = vehicle_idx;
+    let mut visited = 0_usize;
+    while let Some(previous_id) = state.vehicles[current].prev_unit {
+        let Some(previous_idx) = state
+            .vehicles
+            .iter()
+            .position(|vehicle| vehicle.id == previous_id)
+        else {
+            break;
+        };
+        current = previous_idx;
+        visited = visited.saturating_add(1);
+        if visited >= 256 {
+            break;
+        }
+    }
+    current
+}
+
+fn vehicle_route_contains_station(
+    state: &GameState,
+    vehicle_idx: usize,
+    station: TileCoord,
+) -> bool {
+    let vehicle = &state.vehicles[vehicle_order_index(state, vehicle_idx)];
     if vehicle.orders.is_empty() {
         return false;
     }
@@ -1576,6 +1617,53 @@ fn vehicle_route_contains_station(vehicle: &crate::Vehicle, station: TileCoord) 
             } if order_station == station
         )
     })
+}
+
+fn defer_consist_order_advance(
+    state: &GameState,
+    order_vehicle_idx: usize,
+    vehicle_idx: usize,
+) -> bool {
+    order_vehicle_idx != vehicle_idx || state.vehicles[order_vehicle_idx].next_unit.is_some()
+}
+
+fn finish_consist_loading(state: &mut GameState, loaded_this_tick: &[bool]) {
+    let heads: Vec<_> = state
+        .vehicles
+        .iter()
+        .enumerate()
+        .filter(|(_, vehicle)| vehicle.prev_unit.is_none() && vehicle.next_unit.is_some())
+        .map(|(idx, _)| idx)
+        .collect();
+    for head_idx in heads {
+        let mut units = Vec::new();
+        let mut current = Some(head_idx);
+        let mut visited = 0_usize;
+        while let Some(idx) = current {
+            units.push(idx);
+            current = state.vehicles[idx].next_unit.and_then(|next_id| {
+                state
+                    .vehicles
+                    .iter()
+                    .position(|vehicle| vehicle.id == next_id)
+            });
+            visited = visited.saturating_add(1);
+            if visited >= 256 {
+                break;
+            }
+        }
+        if !units
+            .iter()
+            .any(|&idx| loaded_this_tick.get(idx).copied().unwrap_or(false))
+            || units.iter().any(|&idx| {
+                state.vehicles[idx].cargo_loading
+                    || state.vehicles[idx].cargo_packets.reserved_count() > 0
+            })
+        {
+            continue;
+        }
+        state.vehicles[head_idx].advance_after_loading();
+    }
 }
 
 /// Aplica el refit de una orden de estación al consist completo.
@@ -2124,6 +2212,7 @@ fn try_load_aircraft_mail_from_station_waiting_cargo(
 fn reserve_vehicle_cargo_at_station(
     state: &mut GameState,
     vehicle_idx: usize,
+    order_vehicle_idx: usize,
     station_idx: usize,
 ) -> bool {
     state.vehicles[vehicle_idx].ensure_packets_from_legacy();
@@ -2136,8 +2225,8 @@ fn reserve_vehicle_cargo_at_station(
 
     let station_pos = state.stations[station_idx].pos;
     let next_stations = crate::VehicleOrder::get_next_stopping_station(
-        &state.vehicles[vehicle_idx].orders,
-        state.vehicles[vehicle_idx].cur_implicit_order_index,
+        &state.vehicles[order_vehicle_idx].orders,
+        state.vehicles[order_vehicle_idx].cur_implicit_order_index,
         station_pos,
         None,
     );
@@ -2271,6 +2360,7 @@ fn resolve_reserved_vehicle_hops(
 fn try_load_reserved_from_station(
     state: &mut GameState,
     vehicle_idx: usize,
+    order_vehicle_idx: usize,
     station_idx: usize,
     loaded_flag: &mut bool,
 ) -> bool {
@@ -2344,16 +2434,19 @@ fn try_load_reserved_from_station(
 
     let pending = state.vehicles[vehicle_idx].cargo_packets.reserved_count();
     let full = state.vehicles[vehicle_idx].cargo >= state.vehicles[vehicle_idx].capacity;
+    let defer_order_advance = defer_consist_order_advance(state, order_vehicle_idx, vehicle_idx);
     let station_empty = state.stations[station_idx].cargo_packets.total_of(cargo) == 0;
-    let full_load = state.vehicles[vehicle_idx]
+    let full_load = state.vehicles[order_vehicle_idx]
         .orders
-        .get(state.vehicles[vehicle_idx].current_order)
+        .get(state.vehicles[order_vehicle_idx].current_order)
         .is_some_and(|order| order.full_load());
     if pending > 0 {
         state.vehicles[vehicle_idx].cargo_loading = true;
     } else if full || station_empty && !full_load {
         state.vehicles[vehicle_idx].cargo_loading = false;
-        state.vehicles[vehicle_idx].advance_after_loading();
+        if !defer_order_advance {
+            state.vehicles[vehicle_idx].advance_after_loading();
+        }
     } else {
         state.vehicles[vehicle_idx].cargo_loading = true;
     }
@@ -2364,6 +2457,7 @@ fn try_load_reserved_from_station(
 fn try_load_from_industry(
     state: &mut GameState,
     vehicle_idx: usize,
+    order_vehicle_idx: usize,
     station_idx: usize,
     loaded_flag: &mut bool,
 ) -> bool {
@@ -2401,7 +2495,9 @@ fn try_load_from_industry(
 
     if room == 0 {
         state.vehicles[vehicle_idx].cargo_loading = false;
-        state.vehicles[vehicle_idx].advance_after_loading();
+        if !defer_consist_order_advance(state, order_vehicle_idx, vehicle_idx) {
+            state.vehicles[vehicle_idx].advance_after_loading();
+        }
         return true;
     }
 
@@ -2418,8 +2514,8 @@ fn try_load_from_industry(
     let mut packet = crate::cargo_packet::CargoPacket::new(output, count, source);
     packet.first_station = Some(station_pos);
     let order_hop = crate::VehicleOrder::get_next_stopping_station(
-        &state.vehicles[vehicle_idx].orders,
-        state.vehicles[vehicle_idx].cur_implicit_order_index,
+        &state.vehicles[order_vehicle_idx].orders,
+        state.vehicles[order_vehicle_idx].cur_implicit_order_index,
         station_pos,
         None,
     )
@@ -2464,17 +2560,20 @@ fn try_load_from_industry(
 
     let full = state.vehicles[vehicle_idx].cargo >= vcap;
     let industry_empty = state.industries[ind_idx].stock == 0;
-    let full_load = state.vehicles[vehicle_idx]
+    let full_load = state.vehicles[order_vehicle_idx]
         .orders
-        .get(state.vehicles[vehicle_idx].current_order)
+        .get(state.vehicles[order_vehicle_idx].current_order)
         .is_some_and(|o| o.full_load());
-    let full_load_any = state.vehicles[vehicle_idx]
+    let full_load_any = state.vehicles[order_vehicle_idx]
         .orders
-        .get(state.vehicles[vehicle_idx].current_order)
+        .get(state.vehicles[order_vehicle_idx].current_order)
         .is_some_and(|o| o.full_load_any());
+    let defer_order_advance = defer_consist_order_advance(state, order_vehicle_idx, vehicle_idx);
     if full || full_load_any && industry_empty || industry_empty && !full_load {
         state.vehicles[vehicle_idx].cargo_loading = false;
-        state.vehicles[vehicle_idx].advance_after_loading();
+        if !defer_order_advance {
+            state.vehicles[vehicle_idx].advance_after_loading();
+        }
     } else {
         state.vehicles[vehicle_idx].cargo_loading = true;
     }
@@ -2485,6 +2584,7 @@ fn try_load_from_industry(
 fn try_load_from_station_waiting_cargo(
     state: &mut GameState,
     vehicle_idx: usize,
+    order_vehicle_idx: usize,
     station_idx: usize,
     loaded_flag: &mut bool,
 ) -> bool {
@@ -2494,14 +2594,16 @@ fn try_load_from_station_waiting_cargo(
     let vcap = state.vehicles[vehicle_idx].capacity;
     let room = vcap.saturating_sub(state.vehicles[vehicle_idx].cargo);
     let next_stations = crate::VehicleOrder::get_next_stopping_station(
-        &state.vehicles[vehicle_idx].orders,
-        state.vehicles[vehicle_idx].cur_implicit_order_index,
+        &state.vehicles[order_vehicle_idx].orders,
+        state.vehicles[order_vehicle_idx].cur_implicit_order_index,
         state.stations[station_idx].pos,
         None,
     );
     if room == 0 {
         state.vehicles[vehicle_idx].cargo_loading = false;
-        state.vehicles[vehicle_idx].advance_after_loading();
+        if !defer_consist_order_advance(state, order_vehicle_idx, vehicle_idx) {
+            state.vehicles[vehicle_idx].advance_after_loading();
+        }
         return true;
     }
     let preferred = state.vehicles[vehicle_idx].cargo_type;
@@ -2518,7 +2620,9 @@ fn try_load_from_station_waiting_cargo(
             let Some(cargo) = stock.pick_freight_to_load(preferred) else {
                 if state.vehicles[vehicle_idx].cargo_loading {
                     state.vehicles[vehicle_idx].cargo_loading = false;
-                    state.vehicles[vehicle_idx].advance_after_loading();
+                    if !defer_consist_order_advance(state, order_vehicle_idx, vehicle_idx) {
+                        state.vehicles[vehicle_idx].advance_after_loading();
+                    }
                 }
                 return false;
             };
@@ -2540,7 +2644,7 @@ fn try_load_from_station_waiting_cargo(
                     station_pos,
                     cargo,
                 )
-                && !state.vehicles[vehicle_idx].orders.is_empty()
+                && !state.vehicles[order_vehicle_idx].orders.is_empty()
             {
                 return false;
             }
@@ -2660,17 +2764,20 @@ fn try_load_from_station_waiting_cargo(
 
     let full = state.vehicles[vehicle_idx].cargo >= vcap;
     let station_empty = state.stations[station_idx].cargo_stock.get(cargo) == 0;
-    let full_load = state.vehicles[vehicle_idx]
+    let full_load = state.vehicles[order_vehicle_idx]
         .orders
-        .get(state.vehicles[vehicle_idx].current_order)
+        .get(state.vehicles[order_vehicle_idx].current_order)
         .is_some_and(|o| o.full_load());
-    let full_load_any = state.vehicles[vehicle_idx]
+    let full_load_any = state.vehicles[order_vehicle_idx]
         .orders
-        .get(state.vehicles[vehicle_idx].current_order)
+        .get(state.vehicles[order_vehicle_idx].current_order)
         .is_some_and(|o| o.full_load_any());
+    let defer_order_advance = defer_consist_order_advance(state, order_vehicle_idx, vehicle_idx);
     if full || full_load_any && station_empty || station_empty && !full_load {
         state.vehicles[vehicle_idx].cargo_loading = false;
-        state.vehicles[vehicle_idx].advance_after_loading();
+        if !defer_order_advance {
+            state.vehicles[vehicle_idx].advance_after_loading();
+        }
     } else {
         state.vehicles[vehicle_idx].cargo_loading = true;
     }
@@ -3675,6 +3782,75 @@ mod tests {
     }
 
     #[test]
+    fn full_load_consist_uses_head_order_for_each_cargo_unit() {
+        let source = TileCoord::new(1, 1);
+        let destination = TileCoord::new(3, 3);
+        let mut state = GameState::new(6, 6);
+        let mut tile = state.map.get(source).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 2 << 3;
+        tile.m3 = 1;
+        state.map.set_tile(source, tile).unwrap();
+
+        let mut station = crate::Station::new_with_kind(source, crate::StopKind::TruckStop);
+        station.rating = 255;
+        station.add_waiting_cargo(CargoType::Goods, 20);
+        state.stations.push(station);
+
+        let mut head = crate::Vehicle::new(41, VehicleKind::Truck, source, source);
+        head.cargo_type = Some(CargoType::Goods);
+        head.capacity = 4;
+        head.orders = vec![
+            crate::VehicleOrder::station_with_flags(source, true, false),
+            crate::VehicleOrder::station(destination),
+        ];
+        head.next_unit = Some(42);
+
+        let mut part = crate::Vehicle::new(42, VehicleKind::Truck, source, source);
+        part.cargo_type = Some(CargoType::Goods);
+        part.capacity = 6;
+        part.prev_unit = Some(41);
+        part.newgrf_articulated = true;
+        state.vehicles.extend([head, part]);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+
+        let mut loaded = vec![false; 2];
+        let unloaded = vec![false; 2];
+        load_vehicles(&mut state, &mut loaded, &unloaded);
+
+        assert!(loaded.iter().all(|loaded| *loaded));
+        assert_eq!(state.vehicles[0].current_order, 0);
+        assert!(state.vehicles[1].cargo_packets.reserved_count() > 0);
+        assert_eq!(
+            state.stations[0].cargo_packets.total_of(CargoType::Goods),
+            10
+        );
+
+        let mut completed = false;
+        for _ in 2..=32 {
+            let mut loaded = vec![false; 2];
+            load_vehicles(&mut state, &mut loaded, &unloaded);
+            assert!(loaded[1]);
+            if state.vehicles[1].cargo_packets.reserved_count() == 0 {
+                completed = true;
+                break;
+            }
+            assert_eq!(state.vehicles[0].current_order, 0);
+        }
+
+        assert!(completed, "la reserva articulada debe terminar");
+        assert_eq!(state.vehicles[0].current_order, 1);
+        assert_eq!(state.vehicles[0].cargo, 4);
+        assert_eq!(state.vehicles[1].cargo, 6);
+        assert_eq!(
+            state.stations[0].cargo_packets.total_of(CargoType::Goods),
+            10
+        );
+    }
+
+    #[test]
     fn negative_cargo_payment_does_not_wrap_income_counters() {
         assert_eq!(positive_money(i64::MIN), 0);
         assert_eq!(positive_money(-1), 0);
@@ -4011,6 +4187,7 @@ mod tests {
         let mut loaded = false;
         assert!(try_load_from_station_waiting_cargo(
             &mut state,
+            0,
             0,
             0,
             &mut loaded,

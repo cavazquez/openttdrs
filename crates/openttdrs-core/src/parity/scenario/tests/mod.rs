@@ -1131,6 +1131,7 @@ fn train_supply_dual_follower_waits_at_signal_behind_leader() {
 fn train_supply_dual_round_trip_returns_to_a() {
     let mut state = build_train_supply_dual();
     let mut used_return_track = false;
+    let mut returned_to_a = false;
     // Consist multi-vagón + física rail (16 px/tesela × 2 loco/tick): ciclo A→B→A más largo.
     for _ in 0..120_000 {
         state.step();
@@ -1141,6 +1142,9 @@ fn train_supply_dual_round_trip_returns_to_a() {
             .expect("tren dual");
         if train.pos.y == TRAIN_DUAL_TRACK_RET_Y {
             used_return_track = true;
+        }
+        if state.stats.cargo_deliveries > 0 && train.pos == TRAIN_DUAL_STATION_A {
+            returned_to_a = true;
         }
     }
     let train = state
@@ -1159,10 +1163,10 @@ fn train_supply_dual_round_trip_returns_to_a() {
         used_return_track,
         "debe circular por la vía de vuelta y={TRAIN_DUAL_TRACK_RET_Y}"
     );
-    assert_eq!(
-        train.pos, TRAIN_DUAL_STATION_A,
-        "tras el ciclo debe volver a estación A: {:?}",
-        train.pos
+    assert!(
+        returned_to_a,
+        "tras entregar en B debe volver a estación A (posición final {:?})",
+        train.pos,
     );
 }
 

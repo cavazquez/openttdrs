@@ -175,6 +175,14 @@ pub struct StationCargoList {
     /// Cantidad reservada para carga (`reserved_count`).
     #[serde(default)]
     pub reserved: u32,
+    /// Reservas nuevas separadas por cargo.
+    ///
+    /// `reserved` se conserva como total para compatibilidad con JSON/SAV
+    /// antiguos que no podían expresar el cargo de la reserva. Cuando existe
+    /// esta tabla, sus entradas representan la parte conocida del total y el
+    /// remanente legacy se trata de forma conservadora para cualquier cargo.
+    #[serde(default)]
+    pub reserved_by_cargo: BTreeMap<CargoType, u32>,
     /// Campo legacy `packets` (saves / JSON antiguos); se migra a [`Self::by_next_hop`].
     #[serde(default, alias = "packets")]
     legacy_packets: VecDeque<CargoPacket>,
@@ -250,7 +258,7 @@ impl StationCargoList {
     #[must_use]
     pub fn available_of(&self, cargo: CargoType) -> u32 {
         let total = self.total_of(cargo);
-        total.saturating_sub(self.reserved.min(total))
+        total.saturating_sub(self.reserved_for(cargo))
     }
 
     #[must_use]
@@ -380,7 +388,31 @@ impl StationCargoList {
         out
     }
 
-    /// Reserva hasta `amount` unidades para carga (marca `reserved`).
+    /// Cantidad reservada que debe descontarse de un cargo concreto.
+    ///
+    /// El total legacy no asociado a un cargo se aplica a cada consulta: no
+    /// sabemos qué tipo reservó un save antiguo y bloquear de más es más
+    /// seguro que permitir que dos vehículos consuman la misma reserva.
+    #[must_use]
+    pub fn reserved_for(&self, cargo: CargoType) -> u32 {
+        let known_total = self
+            .reserved_by_cargo
+            .values()
+            .copied()
+            .fold(0, u32::saturating_add)
+            .min(self.reserved);
+        let legacy_unassigned = self.reserved.saturating_sub(known_total);
+        self.reserved_by_cargo
+            .get(&cargo)
+            .copied()
+            .unwrap_or(0)
+            .saturating_add(legacy_unassigned)
+    }
+
+    /// Reserva hasta `amount` unidades sin asociarlas a un cargo concreto.
+    ///
+    /// Se mantiene para callers legacy y pruebas de compatibilidad. Las
+    /// nuevas rutas de carga deben usar [`Self::reserve_for`].
     pub fn reserve(&mut self, amount: u32) -> u32 {
         let available = self.total_count().saturating_sub(self.reserved);
         let take = amount.min(available);
@@ -388,9 +420,65 @@ impl StationCargoList {
         take
     }
 
-    /// Consume reserva al cargar.
+    /// Reserva hasta `amount` unidades del cargo indicado.
+    pub fn reserve_for(&mut self, cargo: CargoType, amount: u32) -> u32 {
+        let available = self
+            .total_of(cargo)
+            .saturating_sub(self.reserved_for(cargo));
+        let take = amount.min(available);
+        if take == 0 {
+            return 0;
+        }
+        self.reserved = self.reserved.saturating_add(take);
+        let entry = self.reserved_by_cargo.entry(cargo).or_default();
+        *entry = entry.saturating_add(take);
+        take
+    }
+
+    /// Consume la reserva nueva de un cargo, dejando intacta la parte legacy
+    /// que no está asociada a ningún tipo.
+    pub fn consume_reserved_for(&mut self, cargo: CargoType, amount: u32) {
+        let known = self
+            .reserved_by_cargo
+            .get(&cargo)
+            .copied()
+            .unwrap_or(0)
+            .min(amount);
+        if known > 0 {
+            let remaining = self
+                .reserved_by_cargo
+                .get(&cargo)
+                .copied()
+                .unwrap_or(0)
+                .saturating_sub(known);
+            if remaining == 0 {
+                self.reserved_by_cargo.remove(&cargo);
+            } else if let Some(entry) = self.reserved_by_cargo.get_mut(&cargo) {
+                *entry = remaining;
+            }
+            self.reserved = self.reserved.saturating_sub(known);
+        }
+        self.reserved = self.reserved.saturating_sub(amount.saturating_sub(known));
+    }
+
+    /// Consume reserva legacy al cargar.
     pub fn consume_reserved(&mut self, amount: u32) {
-        self.reserved = self.reserved.saturating_sub(amount);
+        let mut remaining = amount.min(self.reserved);
+        let cargo_keys: Vec<_> = self.reserved_by_cargo.keys().copied().collect();
+        for cargo in cargo_keys {
+            if remaining == 0 {
+                break;
+            }
+            let known = self
+                .reserved_by_cargo
+                .get(&cargo)
+                .copied()
+                .unwrap_or(0)
+                .min(remaining);
+            self.consume_reserved_for(cargo, known);
+            remaining = remaining.saturating_sub(known);
+        }
+        self.reserved = self.reserved.saturating_sub(remaining);
     }
 
     /// Migra un balance agregado a packets sintéticos.

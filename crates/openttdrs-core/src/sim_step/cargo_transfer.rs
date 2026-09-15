@@ -1932,7 +1932,9 @@ fn try_load_aircraft_mail_from_station_waiting_cargo(
         return false;
     }
 
-    let reserved = state.stations[station_idx].cargo_packets.reserve(load);
+    let reserved = state.stations[station_idx]
+        .cargo_packets
+        .reserve_for(CargoType::Mail, load);
     if reserved == 0 {
         return false;
     }
@@ -1944,7 +1946,7 @@ fn try_load_aircraft_mail_from_station_waiting_cargo(
     if taken.is_empty() {
         state.stations[station_idx]
             .cargo_packets
-            .consume_reserved(reserved);
+            .consume_reserved_for(CargoType::Mail, reserved);
         return false;
     }
 
@@ -1973,7 +1975,7 @@ fn try_load_aircraft_mail_from_station_waiting_cargo(
     let loaded_units: u32 = taken.iter().map(|packet| u32::from(packet.count)).sum();
     state.stations[station_idx]
         .cargo_packets
-        .consume_reserved(reserved);
+        .consume_reserved_for(CargoType::Mail, reserved);
 
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0
         && state.vehicles[vehicle_idx].aircraft_mail_packets.is_empty();
@@ -2243,7 +2245,9 @@ fn try_load_from_station_waiting_cargo(
         return false;
     }
 
-    let reserved = state.stations[station_idx].cargo_packets.reserve(load);
+    let reserved = state.stations[station_idx]
+        .cargo_packets
+        .reserve_for(cargo, load);
     if reserved == 0 {
         return false;
     }
@@ -2255,7 +2259,7 @@ fn try_load_from_station_waiting_cargo(
     if taken.is_empty() {
         state.stations[station_idx]
             .cargo_packets
-            .consume_reserved(reserved);
+            .consume_reserved_for(cargo, reserved);
         return false;
     }
     // Feeder + next_hop: Manual = órdenes; Asymmetric/Symmetric = FlowStat.
@@ -2285,7 +2289,7 @@ fn try_load_from_station_waiting_cargo(
     // P2.20: consumir reserva de la cola indexada por hop.
     state.stations[station_idx]
         .cargo_packets
-        .consume_reserved(reserved);
+        .consume_reserved_for(cargo, reserved);
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0
         && state.vehicles[vehicle_idx].aircraft_mail_packets.is_empty();
     if first_pickup {

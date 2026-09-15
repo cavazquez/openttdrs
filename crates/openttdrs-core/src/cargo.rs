@@ -174,7 +174,7 @@ impl Default for OrderSettings {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum CargoType {
     Passengers,
     Coal,

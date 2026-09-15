@@ -106,6 +106,25 @@ mod tests {
     }
 
     #[test]
+    fn station_reservations_are_scoped_to_cargo_type() {
+        let mut list = StationCargoList::default();
+        let source = TileCoord::new(1, 1);
+        list.add_amount(CargoType::Coal, 5, source);
+        list.add_amount(CargoType::Mail, 5, source);
+
+        assert_eq!(list.reserve_for(CargoType::Coal, 5), 5);
+        assert_eq!(list.available_of(CargoType::Coal), 0);
+        assert_eq!(list.available_of(CargoType::Mail), 5);
+        assert_eq!(list.reserve_for(CargoType::Mail, 5), 5);
+        assert_eq!(list.reserved, 10);
+
+        list.consume_reserved_for(CargoType::Coal, 5);
+        assert_eq!(list.reserved, 5);
+        assert_eq!(list.available_of(CargoType::Coal), 5);
+        assert_eq!(list.available_of(CargoType::Mail), 0);
+    }
+
+    #[test]
     fn station_cargo_list_filters_packets_by_next_station() {
         let mut list = StationCargoList::default();
         let source = TileCoord::new(1, 1);

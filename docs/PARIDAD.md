@@ -5469,3 +5469,14 @@ de estación y `reserved_count`. Core queda en `2775 passed; 0 failed; 1 ignored
 con Clippy de producción y check del cliente en verde. La creación de reservas
 nuevas en el barrido, su devolución al cambiar de ruta y consistes articulados
 siguen pendientes; #329 permanece abierta.
+
+Corrección #329-VEHICLE-RESERVATION-RUNTIME-CREATE (2026-09-15, `6027ca3d`):
+las órdenes `FullLoad` y `FullLoadAny` separan ahora físicamente la capacidad
+libre desde la cola de la estación antes de la promoción parcial. El stock
+agregado refleja sólo las unidades aún visibles, `first_station` se ancla para
+packets sin origen y la reserva no se pierde en `Stage`. El test
+`full_load_station_reserves_before_partial_promotion` valida varios ticks,
+conservación de unidades y contadores estación↔vehículo. Core queda en
+`2776 passed; 0 failed; 1 ignored`, con Clippy de producción y check del cliente
+en verde. La devolución al cambiar órdenes y la integración completa de
+consistes articulados siguen pendientes; #329 permanece abierta.

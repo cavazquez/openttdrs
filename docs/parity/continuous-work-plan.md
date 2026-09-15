@@ -8259,3 +8259,15 @@ se duplique el stock visible y que el contador de estación coincida con
 de producción y check del cliente en verde. Todavía falta crear reservas nuevas
 desde el barrido runtime, devolverlas al cambiar de ruta y cubrir consistes
 articulados; #329 permanece abierta.
+
+Corrección #329-VEHICLE-RESERVATION-RUNTIME-CREATE (2026-09-15, `6027ca3d`):
+las visitas `FullLoad` y `FullLoadAny` reservan físicamente la capacidad libre
+desde la cola de la estación antes de promover la carga. La reserva actualiza
+`cargo_stock` al remanente visible, ancla `first_station` si faltaba y queda
+protegida frente a `Stage`; la regresión
+`full_load_station_reserves_before_partial_promotion` recorre los ticks de
+carga parcial y comprueba conservación de unidades y contadores. Core queda en
+`2776` tests exitosos y `1` ignorado, con Clippy de producción y check del
+cliente en verde. Aún falta devolver la sección `MTA_LOAD` al cambiar la orden,
+además de la integración completa de consistes articulados; #329 permanece
+abierta.

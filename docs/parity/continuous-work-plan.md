@@ -8002,3 +8002,22 @@ pool e índice espacial. Pasan los 19 tests del módulo de depósitos, los 101
 tests acuáticos, formato, `git diff --check` y Clippy estricto de la librería;
 #329/#567 permanecen abiertas por callbacks, pathfinding naval amplio y
 aceptación visual/framebuffer.
+
+Corrección #329/#567-SHIP-LOST-ROUTE-RNG (2026-09-15, `d0ff0b45`): el
+controlador naval separa la reversa normal de la ruta perdida de una orden
+`Station` cuyo destino legado es una boya. Cuando la ruta de alto nivel se
+perdió, OpenTTD cae en `CreateRandomPath`/`CheckShipReverse`: toma las salidas
+navales disponibles de la tesela actual sin puntuar la distancia al destino ni
+filtrar por el vecino, y aun así consume el draw de `GetRandomTrackdir`. Rust
+mantiene la elección geométrica local ya validada, pero consume el mismo
+`Randomizer` global desde el paso autoritativo de `GameState`; las APIs
+históricas aisladas siguen siendo deterministas.
+
+El tick detenido por una avería activa también incrementa el contador interno
+de `ShipController`, igual que `Ship::Tick` antes del early return. La traza
+externa de `mvp_openttd_ship.sav` coincide en `1001/1001` muestras (`initial` +
+1000 ticks), incluyendo posición subteselar, rumbo, estado, ruta, avería,
+contador y estado RNG. Pasan `2763` tests del core (1 ignorado), formato,
+`git diff --check` y Clippy estricto de la librería. La evidencia cierra esta
+subetapa, no #329/#567: quedan YAPF/wormholes navales amplios, callbacks/runtime
+NewGRF y aceptación visual/framebuffer completa.

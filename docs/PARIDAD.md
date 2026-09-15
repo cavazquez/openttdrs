@@ -5228,3 +5228,23 @@ sección `part=South` aislada y conserva `ship_depot_other_tile` estricto para
 operaciones que necesitan la huella completa. Esto mejora la normalización de
 órdenes/vehículos importados sin cerrar #329/#567: siguen pendientes
 callbacks, pathfinding naval amplio y aceptación visual/framebuffer.
+
+Corrección #329/#567-SHIP-LOST-ROUTE-RNG (2026-09-15, `d0ff0b45`): el
+controlador naval distingue la reversa normal de la ruta perdida de una orden
+`Station` cuyo destino legado es una boya. En el segundo caso replica la
+elección de `CreateRandomPath`/`CheckShipReverse`: usa las salidas navales
+disponibles de la tesela actual sin aplicar el filtro de vecino ni puntuar la
+distancia al destino, y consume el draw del `Randomizer` global aunque el
+desempate geométrico local sea determinista. El paso autoritativo de
+`GameState` inyecta ese stream sólo en el controlador de barcos; las APIs
+históricas aisladas conservan su comportamiento determinista.
+
+La avería activa también conserva el incremento del contador interno de
+`ShipController` en el tick que detiene el movimiento. El replay externo de
+`mvp_openttd_ship.sav`, iniciado sin mutar el fixture, coincide en `1001/1001`
+muestras (`initial` + 1000 ticks), incluyendo posiciones subteselares, rumbo,
+estado, ruta, avería, contador y estado RNG. Pasan `2763` tests del core (1
+ignorado), formato, `git diff --check` y Clippy de la librería con
+`-D warnings`. Esta frontera queda validada, pero no cierra #329/#567: aún
+faltan YAPF/wormholes navales amplios, callbacks/runtime NewGRF y la aceptación
+visual/framebuffer completa.

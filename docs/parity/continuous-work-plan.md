@@ -7953,3 +7953,22 @@ falso verde. `x`/`y` siguen excluidos porque OpenTTD los congela como campos
 vestigiales bajo FTA. Esto endurece la evidencia de una fixture y no cierra
 #330/#329: faltan perfiles aeroportuarios amplios, tráfico aire/mar y
 callbacks/runtime NewGRF.
+
+Corrección #330-INDUSTRY-IMPORTED-OUTPUTS (2026-09-15, `50b280db`): el
+importador marca `INDY.produced` como la lista efectiva de salidas de la
+instancia, incluyendo explícitamente el caso vacío. `Industry::produced_cargos`
+ya no deriva una salida vanilla que el save no contiene; por eso la economía
+mensual no consume una palabra RNG extra ni marca para cierre una industria
+importada sin salidas. Los slots no vacíos mantienen su orden: los dos primeros
+van a los stocks legacy y los siguientes al buffer extra, y la rehidratación con
+catálogo vuelve a aplicar tasas, historiales y stocks desde las filas nativas.
+
+La evidencia reproducible sobre `mvp_openttd_rich.sav` compara `11108` muestras
+exactas para PBS y dinámica vial después de regenerar ambas trazas sin
+instrumentación temporal. El core pasa `2759` tests (1 ignorado), la compilación
+CMake de OpenTTD pasa, y quedan verdes formato, `git diff --check` y Clippy
+acotado a la librería/binario afectados. La orden global de Clippy con todos
+los targets todavía encuentra advertencias históricas en fixtures de tests y
+módulos ajenos; no se atribuyen a esta corrección ni se mezclan en el alcance.
+#330 permanece abierta por rutas multi-tick, tráfico complejo, presignals y
+los oráculos completos de aire y mar.

@@ -5170,3 +5170,21 @@ pasantes recupera las estructuras azul/blanco de OpenTTD. Pasan la regresión
 8bpp/32bpp, atlas byte-a-byte, `1534` tests del cliente y Clippy del binario.
 Esto no cierra #326/#567: el framebuffer global, otras familias visuales y la
 semántica naval restante siguen pendientes.
+
+Corrección #330-INDUSTRY-IMPORTED-OUTPUTS (2026-09-15, `50b280db`): la
+hidratación de `INDY` conserva la lista efectiva de `produced` como un estado
+distinto del fallback de `IndustrySpec`; una lista vacía sigue siendo vacía y
+no vuelve a inventar Coal ni consume RNG durante el cierre mensual. Cuando hay
+salidas válidas, sus slots conservan el orden nativo y el segundo cargo ocupa
+`secondary_stock`; las salidas desde el tercer slot continúan en el buffer
+extra. La rehidratación con catálogo mantiene la misma lista y reconstruye las
+tasas/stocks desde las filas serializadas.
+
+El replay fresco de `mvp_openttd_rich.sav` queda en `11108/11108` muestras
+coincidentes tanto para `scripts/compare_pbs_traces.py --scope road` como para
+`--scope pbs`, incluido el cierre mensual de la industria y la pasada posterior
+del tile loop. Pasan `2759` tests del core (1 ignorado), formato, Clippy de la
+librería/binario, `git diff --check` y la compilación CMake del oráculo nativo.
+Esto cubre una frontera de RNG/importación; #330 sigue abierta por rutas
+multi-tick, tráfico complejo, presignals y los oráculos completos de aire y
+mar.

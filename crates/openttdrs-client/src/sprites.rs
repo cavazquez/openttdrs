@@ -219,7 +219,7 @@ pub use station::{
 pub use transparency::{
     TRANSPARENT_ALPHA, TransparencyMode, TransparencyOption, apply_mode_to_bits, catenary_hidden,
     catenary_sprite_color, catenary_transparent, is_hidden, is_transparent, mode_from_bits,
-    set_transparency_preferences, sprite_color, text_color, with_to_alpha,
+    set_transparency_preferences, sprite_color, text_effects_hidden, with_to_alpha,
 };
 
 /// Especificación de dibujo de una casa (stage completado).

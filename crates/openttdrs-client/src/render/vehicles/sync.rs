@@ -680,6 +680,10 @@ pub(crate) fn update_vehicles(
         let Some(v) = sim.state.vehicles.get(i) else {
             continue;
         };
+        if crate::sprites::text_effects_hidden() {
+            visibility.set_if_neq(Visibility::Hidden);
+            continue;
+        }
         let pose = vehicle_pose_for_construction(v, sim_clock.tick_alpha, sim.state.construction);
         if vehicle_is_hidden_from_view(&sim, v, pose) {
             visibility.set_if_neq(Visibility::Hidden);

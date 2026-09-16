@@ -429,7 +429,7 @@ pub(crate) fn spawn_initial_vehicles(
         // viewport. Mantenerlo sólo como ayuda explícita de diagnóstico evita
         // que esos textos compitan con carteles y estaciones en zoom lejano.
         if crate::config::env_flag("OPENTTDRS_DEBUG_VEHICLE_CARGO_LABELS")
-            && !crate::sprites::is_hidden(crate::sprites::TransparencyOption::Text)
+            && !crate::sprites::text_effects_hidden()
         {
             commands.spawn((
                 MapVisualLayer,
@@ -439,10 +439,7 @@ pub(crate) fn spawn_initial_vehicles(
                     font_size: FontSize::Px(8.0),
                     ..default()
                 },
-                TextColor(crate::sprites::text_color(
-                    crate::sprites::TransparencyOption::Text,
-                    vehicle_cargo_color(vehicle),
-                )),
+                TextColor(vehicle_cargo_color(vehicle)),
                 Transform::from_translation(vehicle_cargo_label_pos(pos3)),
                 vis,
             ));

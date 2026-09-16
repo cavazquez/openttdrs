@@ -4,6 +4,7 @@ use bevy::prelude::*;
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
 use crate::render::MapVisualLayer;
+use crate::sprites::text_effects_hidden;
 use crate::state::SimWorld;
 use crate::ui::font::HudUiFont;
 
@@ -45,17 +46,31 @@ pub(crate) fn spawn_income_popups(
                 pos.y + 22.0 + tileh as f32 * 2.0,
                 pos.z + 0.5,
             )),
-            Visibility::Visible,
+            if text_effects_hidden() {
+                Visibility::Hidden
+            } else {
+                Visibility::Visible
+            },
         ));
     }
 }
 
 pub(crate) fn animate_income_popups(
     time: Res<Time>,
-    mut q: Query<(Entity, &mut Transform, &mut IncomePopupText)>,
+    mut q: Query<(
+        Entity,
+        &mut Transform,
+        &mut IncomePopupText,
+        &mut Visibility,
+    )>,
     mut commands: Commands,
 ) {
-    for (entity, mut transform, mut popup) in &mut q {
+    for (entity, mut transform, mut popup, mut visibility) in &mut q {
+        *visibility = if text_effects_hidden() {
+            Visibility::Hidden
+        } else {
+            Visibility::Visible
+        };
         popup.lifetime.tick(time.delta());
         transform.translation.y += 28.0 * time.delta_secs();
         if popup.lifetime.is_finished() {

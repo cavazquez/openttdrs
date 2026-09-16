@@ -148,6 +148,22 @@ pub fn is_transparent(to: TransparencyOption) -> bool {
     mode(to) == TransparencyMode::Transparent
 }
 
+/// `DrawTextEffects` omite el pase completo tanto en transparente como en
+/// oculto; conservar las entidades vivas permite que su duración y posición
+/// sigan avanzando mientras no se dibujan.
+#[must_use]
+pub fn text_effects_hidden() -> bool {
+    text_effects_hidden_for_mode(mode(TransparencyOption::Text))
+}
+
+#[must_use]
+fn text_effects_hidden_for_mode(mode: TransparencyMode) -> bool {
+    matches!(
+        mode,
+        TransparencyMode::Transparent | TransparencyMode::Hidden
+    )
+}
+
 /// Tint para sprites de la categoría (blanco u alpha).
 #[must_use]
 pub fn sprite_color(to: TransparencyOption) -> Color {
@@ -156,16 +172,6 @@ pub fn sprite_color(to: TransparencyOption) -> Color {
     } else {
         Color::WHITE
     }
-}
-
-/// Color de texto 2D (carteles / indicadores).
-#[must_use]
-pub fn text_color(to: TransparencyOption, base: Color) -> Color {
-    if !is_transparent(to) {
-        return base;
-    }
-    let c = base.to_srgba();
-    Color::srgba(c.red, c.green, c.blue, TRANSPARENT_ALPHA)
 }
 
 /// Conserva RGB y aplica alpha de transparencia si corresponde.
@@ -360,5 +366,12 @@ mod tests {
             (0.0, 0.0, 0.0)
         );
         assert!((transparent.alpha - (64.0 / 255.0)).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn text_effects_are_skipped_in_transparent_and_hidden_modes() {
+        assert!(!text_effects_hidden_for_mode(TransparencyMode::Visible));
+        assert!(text_effects_hidden_for_mode(TransparencyMode::Transparent));
+        assert!(text_effects_hidden_for_mode(TransparencyMode::Hidden));
     }
 }

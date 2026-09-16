@@ -2240,3 +2240,13 @@ TileLayout, road stop y waypoint pasan con Clippy estricto. La fila continúa
 **parcial runtime**: siguen pendientes otros layouts, foundations/rotaciones
 exhaustivas, paletas, delegación StationScope y callbacks/consumidores NewGRF
 restantes de #326/#329/#567.
+
+Actualización #326/#329-NEWGRF-TILE-LAYOUT-CHILD-OFFSET-SIGNEDNESS (2026-09-16,
+`16e4c7ee`): la matriz refleja ahora que `DrawNewGRFTileSeq` convierte
+`origin.x/y` de child a `uint8_t`, mientras `DrawRailTileSeq` conserva
+`int8_t`. Casas, industrias, objetos y `AirportTile` usan la ruta unsigned;
+estaciones, road stops y waypoints permanecen en la ruta signed. La regresión
+de objeto con `0xFC` confirma el valor `252`, junto con 23 pruebas dirigidas de
+TileLayout y Clippy estricto. La fila continúa **parcial runtime**: siguen
+pendientes otros layouts, foundations/rotaciones exhaustivas, paletas,
+delegación StationScope y callbacks/consumidores NewGRF de #326/#329/#567.

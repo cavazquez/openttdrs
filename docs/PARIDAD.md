@@ -6145,3 +6145,14 @@ quedan verdes junto con Clippy estricto. Esto corrige otra subbrecha de
 composición, pero no cierra #326/#329/#567: siguen pendientes layouts
 restantes, foundations/rotaciones exhaustivas, paletas, callbacks y
 consumidores NewGRF.
+
+Corrección #326/#329-NEWGRF-TILE-LAYOUT-CHILD-OFFSET-SIGNEDNESS (2026-09-16,
+`16e4c7ee`): los offsets `origin.x/y` de children siguen ahora el contrato
+del productor nativo: `DrawNewGRFTileSeq` los consume como bytes sin signo,
+mientras `DrawRailTileSeq` conserva `int8_t`. La conversión compartida
+recupera el byte crudo para casas, industrias, objetos y `AirportTile`, y
+mantiene el camino firmado de estaciones, road stops y waypoints. Una
+regresión de objeto usa `0xFC` y verifica el desplazamiento `252`; la batería
+dirigida de TileLayout pasa con 23 pruebas y Clippy estricto. La corrección es
+parcial y no cierra #326/#329/#567: continúan pendientes otros layouts,
+foundations/rotaciones, paletas, callbacks y consumidores NewGRF.

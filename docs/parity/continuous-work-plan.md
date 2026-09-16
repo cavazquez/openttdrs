@@ -8940,3 +8940,14 @@ global. La regresión de objeto comprueba coordenadas y depth; pasan 22 pruebas
 dirigidas de TileLayout, 4 de road stop, 3 de waypoint y Clippy estricto. La
 fila sigue parcial y #326/#329/#567 permanecen abiertas por layouts restantes,
 foundations/rotaciones exhaustivas, paletas, callbacks y consumidores NewGRF.
+
+### #326/#329-NEWGRF-TILE-LAYOUT-CHILD-OFFSET-SIGNEDNESS — bytes de offsets
+
+Actualizado: 2026-09-16 (`16e4c7ee`). El renderer distingue los dos contratos
+de `DrawCommonTileSeq`: `DrawNewGRFTileSeq` reinterpreta los offsets de child
+como `uint8_t`, y `DrawRailTileSeq` como `int8_t`. La ruta unsigned cubre
+casas, industrias, objetos y `AirportTile`; estaciones, road stops y waypoints
+conservan offsets firmados. La regresión con el byte crudo `0xFC` valida `252`,
+y pasan 23 pruebas dirigidas de TileLayout con Clippy estricto. La fila sigue
+parcial y #326/#329/#567 permanecen abiertas por layouts, foundations/
+rotaciones exhaustivas, paletas, callbacks y consumidores NewGRF restantes.

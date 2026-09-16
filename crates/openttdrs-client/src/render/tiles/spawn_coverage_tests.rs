@@ -15165,6 +15165,27 @@ fn bridge_middle_resolves_newgrf_bridge_overlay_and_catenary_groups_from_south_r
             .iter()
             .any(|(_, rgba)| rgba == &[0, 255, 0, 255])
     );
+    let custom_segmented_count = world
+        .query::<(
+            &ViewportSortableChild,
+            &ViewportSortablePromotableChild,
+            &ViewportSortableSegmentedChild,
+            &ViewportSortableSegmentedSource,
+            &Sprite,
+        )>()
+        .iter(&world)
+        .filter_map(|(child, _, _, _, sprite)| {
+            (child.parent == custom_handles[0].0).then_some(())?;
+            let image = world.resource::<Assets<Image>>().get(&sprite.image)?;
+            let first = image.data.as_deref()?.get(0..4)?;
+            (first == [255, 0, 0, 255] || first == [0, 0, 255, 255] || first == [0, 255, 0, 255])
+                .then_some(())
+        })
+        .count();
+    assert_eq!(
+        custom_segmented_count, 3,
+        "los tres grupos custom del bloque trasero deben conservar fuente y bounds"
+    );
     let custom_front_parents: Vec<_> = world
         .query::<(Entity, &ViewportSortableParent, &Sprite)>()
         .iter(&world)

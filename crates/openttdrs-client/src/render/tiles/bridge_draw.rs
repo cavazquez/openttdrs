@@ -89,10 +89,12 @@ const BRIDGE_REAR_ORDINAL: u8 = 32;
 const BRIDGE_CATENARY_ORDINAL_BASE: u8 = 48;
 const BRIDGE_FRONT_ORDINAL: u8 = 64;
 const BRIDGE_PILLAR_ORDINAL_BASE: u8 = 80;
-const BRIDGE_REAR_CATENARY_CHILD_ORDINAL: u8 = 1;
-const BRIDGE_REAR_DECK_CHILD_ORDINAL: u8 = 2;
-const BRIDGE_REAR_PBS_CHILD_ORDINAL: u8 = 3;
-const BRIDGE_REAR_TRAM_CHILD_ORDINAL: u8 = 4;
+const BRIDGE_REAR_SURFACE_CHILD_ORDINAL: u8 = 1;
+const BRIDGE_REAR_ROAD_OVERLAY_CHILD_ORDINAL: u8 = 2;
+const BRIDGE_REAR_TRAM_OVERLAY_CHILD_ORDINAL: u8 = 3;
+const BRIDGE_REAR_CATENARY_CHILD_ORDINAL: u8 = 4;
+const BRIDGE_REAR_DECK_CHILD_ORDINAL: u8 = 5;
+const BRIDGE_REAR_PBS_CHILD_ORDINAL: u8 = 6;
 const BRIDGE_Z_START: f32 = 3.0;
 const TILE_HEIGHT_PX: f32 = 8.0;
 const TILE_HEIGHT_WORLD: i32 = 8;
@@ -600,36 +602,7 @@ fn bridge_pbs_trace_bounds(on_ramp: bool, foundation_tileh: u8, axis: usize) -> 
     }
 }
 
-/// Materializa un `AddSortableSpriteToDraw` emitido dentro de
-/// `StartSpriteCombine` como child del primer sprite del bloque.
-///
-/// Los overlays del tablero y las reservas PBS no son parents independientes:
-/// OpenTTD los mueve junto con la barandilla trasera cuando el `ViewportSort`
-/// intercambia el puente con una casa, una fundación o una tesela vecina. El
-/// `source_depth` conserva el orden local del bloque y el sistema global de
-/// children lo encierra entre este parent y el siguiente.
-fn spawn_bridge_combined_child(
-    commands: &mut Commands,
-    ctx: &TileRenderContext,
-    map_width: u32,
-    parent: Entity,
-    sprite: Sprite,
-    position: Vec3,
-) {
-    let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
-    commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        sprite,
-        Transform::from_translation(position.with_z(source_depth)),
-        ViewportSortableChild {
-            parent,
-            source_depth,
-        },
-    ));
-}
-
-/// Variante de [`spawn_bridge_combined_child`] para un `AddCombinedSprite`
+/// Variante de un `AddCombinedSprite`
 /// cuya caja y sprite-id ya fueron reconstruidos desde la traza nativa.
 ///
 /// Estos children siguen perteneciendo al bloque del parent original, pero
@@ -669,6 +642,23 @@ fn spawn_bridge_segmented_child(
     ));
 }
 
+/// Identidad estable para un sprite específico de RoadType.
+///
+/// `DecodedSprite` conserva la imagen y sus anclas, pero no el `SpriteID`
+/// original del GRF. El sorter sólo necesita una identidad determinista para
+/// el parent promovido; reservar el rango alto evita confundirla con los IDs
+/// del baseset sin inventar un ID de sprite vanilla.
+fn bridge_specific_sort_sprite_id(
+    def: &openttdrs_core::RoadTypeDef,
+    selector: u8,
+    view_idx: usize,
+) -> u32 {
+    0x8000_0000
+        | (u32::from(def.id.as_u8()) << 16)
+        | (u32::from(selector) << 12)
+        | u32::try_from(view_idx).unwrap_or(u32::MAX).min(0x0FFF)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_bridge_specific_child(
     commands: &mut Commands,
@@ -679,6 +669,9 @@ fn spawn_bridge_specific_child(
     view: &openttdrs_core::DecodedSprite,
     surface_z: u8,
     layer: f32,
+    sprite_id: u32,
+    placement: BridgeTracePlacement,
+    combine_ordinal: u8,
 ) {
     let position = overlay_pos(
         ctx.iso_pos,
@@ -692,7 +685,17 @@ fn spawn_bridge_specific_child(
         ctx.ty_i32(),
     );
     if let Some(parent) = parent {
-        spawn_bridge_combined_child(commands, ctx, map_width, parent, sprite, position);
+        spawn_bridge_segmented_child(
+            commands,
+            ctx,
+            map_width,
+            parent,
+            sprite,
+            position,
+            sprite_id,
+            placement,
+            combine_ordinal,
+        );
     } else {
         commands.spawn((
             MapVisualLayer,
@@ -1588,6 +1591,23 @@ struct BridgeTracePlacement {
     world_z_delta: i32,
     offset: (i32, i32, i32),
     bounds: TraceSpriteBounds,
+}
+
+/// Geometría común de los cuatro elementos que `DrawBridgeRoadBits` agrega al
+/// bloque trasero. Los grupos Action2 específicos cambian la imagen, no la
+/// caja `back_bounds[offset]` ni el origen de `AddSortableSpriteToDraw`.
+fn bridge_road_back_trace_placement(
+    ctx: &TileRenderContext,
+    surface_z: u8,
+    offset: usize,
+) -> BridgeTracePlacement {
+    let (bounds, screen_offset) = bridge_road_catenary_trace_geometry(offset, false);
+    BridgeTracePlacement {
+        world_xy_delta: (0, 0),
+        world_z_delta: (i32::from(surface_z) - i32::from(ctx.info.base_z)) * TILE_HEIGHT_WORLD,
+        offset: screen_offset,
+        bounds,
+    }
 }
 
 /// Datos de una pieza de puente que se exportan al contrato de `world-draw`.
@@ -3409,6 +3429,8 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
     if !span.rail
         && let Some((source_coord, source_tile)) = transport_source
     {
+        let bridge_road_offset =
+            bridge_road_sprite_offset(span, source_tile, on_ramp, foundation_tileh).min(5);
         let road_def =
             crate::render::road_newgrf::newgrf_road_def_for_tile(road_catalog, source_tile);
         let tram_def =
@@ -3423,7 +3445,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 def,
                 map,
                 ROTSG_BRIDGE,
-                bridge_road_sprite_offset(span, source_tile, on_ramp, foundation_tileh),
+                bridge_road_offset,
                 source_coord,
                 source_tile,
                 climate,
@@ -3445,6 +3467,9 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 &view,
                 surface_z,
                 DECK_LAYER_FRAC + 0.001,
+                bridge_specific_sort_sprite_id(def, ROTSG_BRIDGE, bridge_road_offset),
+                bridge_road_back_trace_placement(ctx, surface_z, bridge_road_offset),
+                BRIDGE_REAR_SURFACE_CHILD_ORDINAL,
             );
             custom_bridge_surface = true;
         }
@@ -3453,13 +3478,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 def,
                 map,
                 ROTSG_OVERLAY,
-                BRIDGE_ROAD_OVERLAY_OFFSETS[bridge_road_sprite_offset(
-                    span,
-                    source_tile,
-                    on_ramp,
-                    foundation_tileh,
-                )
-                .min(5)],
+                BRIDGE_ROAD_OVERLAY_OFFSETS[bridge_road_offset],
                 source_coord,
                 source_tile,
                 climate,
@@ -3481,6 +3500,13 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 &view,
                 surface_z,
                 RAIL_ON_BRIDGE_LAYER_FRAC,
+                bridge_specific_sort_sprite_id(
+                    def,
+                    ROTSG_OVERLAY,
+                    BRIDGE_ROAD_OVERLAY_OFFSETS[bridge_road_offset],
+                ),
+                bridge_road_back_trace_placement(ctx, surface_z, bridge_road_offset),
+                BRIDGE_REAR_ROAD_OVERLAY_CHILD_ORDINAL,
             );
         }
         if (source_tile.m3 & 0x0F) != 0
@@ -3489,13 +3515,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 def,
                 map,
                 ROTSG_OVERLAY,
-                BRIDGE_ROAD_OVERLAY_OFFSETS[bridge_road_sprite_offset(
-                    span,
-                    source_tile,
-                    on_ramp,
-                    foundation_tileh,
-                )
-                .min(5)],
+                BRIDGE_ROAD_OVERLAY_OFFSETS[bridge_road_offset],
                 source_coord,
                 source_tile,
                 climate,
@@ -3517,6 +3537,13 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 &view,
                 surface_z,
                 RAIL_ON_BRIDGE_LAYER_FRAC,
+                bridge_specific_sort_sprite_id(
+                    def,
+                    ROTSG_OVERLAY,
+                    BRIDGE_ROAD_OVERLAY_OFFSETS[bridge_road_offset],
+                ),
+                bridge_road_back_trace_placement(ctx, surface_z, bridge_road_offset),
+                BRIDGE_REAR_TRAM_OVERLAY_CHILD_ORDINAL,
             );
             custom_tram_overlay = true;
         }
@@ -3544,8 +3571,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
         if !catenary_hidden()
             && let Some(def) = catenary_def
         {
-            let offset = bridge_road_sprite_offset(span, source_tile, on_ramp, foundation_tileh)
-                .min(BRIDGE_ROAD_CATENARY_BACK_OFFSETS.len() - 1);
+            let offset = bridge_road_offset.min(BRIDGE_ROAD_CATENARY_BACK_OFFSETS.len() - 1);
             let custom_any = def.has_newgrf_specific_group(ROTSG_CATENARY_BACK)
                 || def.has_newgrf_specific_group(ROTSG_CATENARY_FRONT);
             if custom_any {
@@ -3576,6 +3602,13 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                         &view,
                         surface_z,
                         DECK_LAYER_FRAC + 0.002,
+                        bridge_specific_sort_sprite_id(
+                            def,
+                            ROTSG_CATENARY_BACK,
+                            23 + BRIDGE_ROAD_CATENARY_BACK_OFFSETS[offset],
+                        ),
+                        bridge_road_back_trace_placement(ctx, surface_z, offset),
+                        BRIDGE_REAR_CATENARY_CHILD_ORDINAL,
                     );
                 }
                 if def.has_newgrf_specific_group(ROTSG_CATENARY_FRONT)
@@ -3814,7 +3847,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                         offset: (0, 0, 0),
                         bounds,
                     },
-                    BRIDGE_REAR_TRAM_CHILD_ORDINAL,
+                    BRIDGE_REAR_TRAM_OVERLAY_CHILD_ORDINAL,
                 );
             } else {
                 commands.spawn((

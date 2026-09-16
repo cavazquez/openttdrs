@@ -4361,7 +4361,7 @@ fn spawn_road_stop_buildings(
                 map.dimensions().0,
                 vanilla_parent_ordinal.saturating_add(u8::try_from(layer_i).unwrap_or(u8::MAX)),
                 spec,
-                tint_building_sprite(sprite_from_atlas_or_company_white_colour(
+                destination_mask_building_sprite(sprite_from_atlas_or_company_white_colour(
                     company,
                     owner_colour,
                     image,
@@ -4415,7 +4415,7 @@ fn spawn_road_stop_buildings(
             map.dimensions().0,
             vanilla_parent_ordinal.saturating_add(u8::try_from(layer_i).unwrap_or(u8::MAX)),
             spec,
-            tint_building_sprite(sprite_from_atlas_or_company_white_colour(
+            destination_mask_building_sprite(sprite_from_atlas_or_company_white_colour(
                 company,
                 owner_colour,
                 image,
@@ -7107,7 +7107,7 @@ fn spawn_road_depot_tile(
                 map_width,
                 layer_i,
                 &spec,
-                tint_building_sprite(sprite),
+                destination_mask_building_sprite(sprite),
             );
             continue;
         }
@@ -7147,7 +7147,7 @@ fn spawn_road_depot_tile(
                 map_width,
                 layer_i,
                 &spec,
-                tint_building_sprite(sprite),
+                destination_mask_building_sprite(sprite),
             );
             continue;
         }
@@ -7192,7 +7192,7 @@ fn spawn_road_depot_tile(
             map_width,
             layer_i,
             &spec,
-            tint_building_sprite(sprite_from_atlas_or_company_white_colour(
+            destination_mask_building_sprite(sprite_from_atlas_or_company_white_colour(
                 company,
                 owner_colour,
                 image,
@@ -7829,7 +7829,7 @@ fn spawn_rail_depot_tile(
                 building_parent_ordinal,
                 spec,
                 sprite_id,
-                tint_building_sprite(resolved.sprite),
+                destination_mask_building_sprite(resolved.sprite),
                 center,
             );
             continue;
@@ -7892,7 +7892,7 @@ fn spawn_rail_depot_tile(
             building_parent_ordinal,
             spec,
             spec.sprite_id,
-            tint_building_sprite(sprite_from_atlas_or_company_white_colour(
+            destination_mask_building_sprite(sprite_from_atlas_or_company_white_colour(
                 company,
                 owner_colour,
                 image,

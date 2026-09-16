@@ -1345,6 +1345,67 @@ mod tests {
     }
 
     #[test]
+    fn tile_layout_applies_construction_stage_offset_per_action1_set() {
+        let sprite = |red| DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![red, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![
+                vec![sprite(10)],
+                vec![sprite(20), sprite(21)],
+                vec![sprite(30), sprite(31), sprite(32)],
+                vec![sprite(40), sprite(41), sprite(42), sprite(43)],
+            ],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 4,
+                set_id: 9,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    ..TileLayoutSpriteRef::default()
+                },
+                sequence: (0_u16..4)
+                    .map(|set| TileLayoutSpriteRef {
+                        action1_set: Some(set),
+                        ..TileLayoutSpriteRef::default()
+                    })
+                    .collect(),
+            },
+        );
+
+        for (stage, expected) in [
+            (0, [10, 20, 30, 40]),
+            (1, [10, 20, 31, 41]),
+            (2, [10, 20, 31, 42]),
+            (3, [10, 21, 32, 43]),
+        ] {
+            let mut ctx = Action2EvalCtx::default();
+            let layout = graphics
+                .tile_layout_for_local_id_with_stage_ctx(4, 0, stage, &mut ctx)
+                .expect("stage-aware TileLayout");
+            assert_eq!(
+                layout
+                    .sequence
+                    .iter()
+                    .map(|entry| entry.action1_sprite().expect("stage sprite").rgba[0])
+                    .collect::<Vec<_>>(),
+                expected,
+                "construction stage {stage}"
+            );
+        }
+    }
+
+    #[test]
     fn tile_layout_processes_register_offsets_and_dodraw() {
         let sprite = |red| DecodedSprite {
             width: 1,

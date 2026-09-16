@@ -193,21 +193,17 @@ impl IndustryTileSpecDef {
 
     /// Layout `TileSeq` de Action2 para una tesela de industria.
     ///
-    /// La etapa de construcción se resuelve en la vista plana; una vez que
-    /// Action2 selecciona el grupo de layout, cada referencia apunta al
-    /// primer sprite de su set Action1 y no debe volver a indexarse por
-    /// `idx`.
+    /// La etapa de construcción se resuelve en la vista plana y selecciona el
+    /// sprite correspondiente dentro de cada set Action1, como en
+    /// `DrawNewGRFTileSeq`.
     pub fn newgrf_tile_layout_runtime(
         &self,
         idx: usize,
         ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
     ) -> Option<crate::newgrf_sprites::ResolvedTileLayout> {
-        let _ = idx;
-        self.newgrf_runtime.as_ref()?.tile_layout_for_local_id_ctx(
-            u16::from(self.newgrf_local_id),
-            0,
-            ctx,
-        )
+        self.newgrf_runtime
+            .as_ref()?
+            .tile_layout_for_local_id_with_stage_ctx(u16::from(self.newgrf_local_id), 0, idx, ctx)
     }
 
     #[must_use]
@@ -396,16 +392,18 @@ mod tests {
 
     #[test]
     fn runtime_tile_layout_resolves_ground_and_sequence() {
-        let sprite = DecodedSprite {
+        let sprite = |red| DecodedSprite {
             width: 2,
             height: 2,
             x_offs: -1,
             y_offs: 3,
-            rgba: [64, 96, 128, 255].repeat(4),
+            rgba: [red, 96, 128, 255].repeat(4),
             mask: Vec::new(),
         };
+        let preview = sprite(64);
+        let stage_sprites = (0..4).map(|stage| sprite(64 + stage)).collect::<Vec<_>>();
         let mut runtime = TrainSpriteGraphics {
-            sets: vec![vec![sprite.clone()], vec![sprite.clone()]],
+            sets: vec![stage_sprites.clone(), stage_sprites],
             assigns: vec![TrainSpriteAssign {
                 local_id: 9,
                 set_id: 6,
@@ -445,8 +443,8 @@ mod tests {
             newgrf_badge_translation: Vec::new(),
             newgrf_local_id: 9,
             newgrf_grfid: 0,
-            newgrf_preview: Some(sprite.clone()),
-            newgrf_views: vec![sprite],
+            newgrf_preview: Some(preview.clone()),
+            newgrf_views: vec![preview],
             newgrf_runtime: Some(Box::new(runtime)),
         };
         let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
@@ -454,7 +452,23 @@ mod tests {
             panic!("industry TileSeq");
         };
         assert!(layout.complete);
-        assert!(layout.ground.is_some());
+        assert_eq!(
+            layout
+                .ground
+                .expect("industry ground")
+                .sprite
+                .expect("industry ground sprite")
+                .rgba[0],
+            67
+        );
+        assert_eq!(
+            layout.sequence[0]
+                .sprite
+                .as_ref()
+                .expect("industry sprite")
+                .rgba[0],
+            67
+        );
         assert_eq!(layout.sequence[0].origin, [3, 4, 5]);
     }
 }

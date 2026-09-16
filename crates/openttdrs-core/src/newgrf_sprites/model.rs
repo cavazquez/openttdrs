@@ -254,13 +254,29 @@ pub struct ResolvedTileLayout {
 }
 
 impl TileLayout {
+    /// Offset within an Action1 spriteset for a construction stage.
+    ///
+    /// This mirrors `OpenTTD`'s `GetConstructionStageOffset`: sets with one or
+    /// two sprites reuse the available art for intermediate stages, while
+    /// sets with three or four sprites expose the corresponding variants.
+    fn construction_stage_offset(construction_stage: usize, sprite_count: usize) -> usize {
+        let sprite_count = sprite_count.min(4);
+        match construction_stage {
+            1 if sprite_count > 2 => 1,
+            2 if sprite_count > 2 => sprite_count - 2,
+            3 => sprite_count.saturating_sub(1),
+            _ => 0,
+        }
+    }
+
     fn resolve(
         &self,
         graphics: &TrainSpriteGraphics,
         ctx: &Action2EvalCtx,
         view: usize,
+        construction_stage: usize,
     ) -> ResolvedTileLayout {
-        self.resolve_with_palette_var10(graphics, ctx, view, false)
+        self.resolve_with_palette_var10(graphics, ctx, view, false, construction_stage)
     }
 
     /// Resuelve un layout avanzado de `Stations` Action0.
@@ -275,6 +291,7 @@ impl TileLayout {
         ctx: &Action2EvalCtx,
         view: usize,
         allow_palette_var10: bool,
+        construction_stage: usize,
     ) -> ResolvedTileLayout {
         let mut complete = true;
         let ground = resolve_layout_sprite(
@@ -284,6 +301,7 @@ impl TileLayout {
             ctx,
             view,
             allow_palette_var10,
+            construction_stage,
             &mut complete,
         );
         // `DrawCommonTileSeq` sets `skip_childs` when a parent resolves to
@@ -306,6 +324,7 @@ impl TileLayout {
                     ctx,
                     view,
                     allow_palette_var10,
+                    construction_stage,
                     &mut complete,
                 );
                 if is_parent {
@@ -322,6 +341,7 @@ impl TileLayout {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resolve_layout_sprite(
     reference: &TileLayoutSpriteRef,
     is_ground: bool,
@@ -329,6 +349,7 @@ fn resolve_layout_sprite(
     ctx: &Action2EvalCtx,
     _view: usize,
     allow_palette_var10: bool,
+    construction_stage: usize,
     complete: &mut bool,
 ) -> Option<ResolvedTileLayoutSprite> {
     // Register-driven palettes and var10 palette chains still need the
@@ -371,8 +392,14 @@ fn resolve_layout_sprite(
         *complete = false;
         return None;
     }
-    let (sprite, base_sprite, direct_palette) =
-        resolve_layout_sprite_asset(reference, is_ground, graphics, ctx, complete)?;
+    let (sprite, base_sprite, direct_palette) = resolve_layout_sprite_asset(
+        reference,
+        is_ground,
+        graphics,
+        ctx,
+        construction_stage,
+        complete,
+    )?;
 
     let mut origin = reference.origin;
     if !is_ground {
@@ -443,6 +470,7 @@ fn resolve_custom_layout_palette(
     mut sprite: DecodedSprite,
     graphics: &TrainSpriteGraphics,
     ctx: &Action2EvalCtx,
+    construction_stage: usize,
     complete: &mut bool,
 ) -> Option<DecodedSprite> {
     if reference.flags & 0x08 == 0 {
@@ -476,7 +504,18 @@ fn resolve_custom_layout_palette(
     } else {
         0
     };
-    let Ok(palette_index) = usize::try_from(var10.saturating_add(offset)) else {
+    let stage_offset = if reference.flags & 0x04 == 0 {
+        i32::try_from(TileLayout::construction_stage_offset(
+            construction_stage,
+            palettes.len(),
+        ))
+        .unwrap_or(i32::MAX)
+    } else {
+        0
+    };
+    let Ok(palette_index) =
+        usize::try_from(var10.saturating_add(offset).saturating_add(stage_offset))
+    else {
         *complete = false;
         return None;
     };
@@ -501,6 +540,7 @@ fn resolve_layout_sprite_asset(
     is_ground: bool,
     graphics: &TrainSpriteGraphics,
     ctx: &Action2EvalCtx,
+    construction_stage: usize,
     complete: &mut bool,
 ) -> Option<(Option<DecodedSprite>, Option<u16>, u16)> {
     if let Some(set) = reference.action1_set {
@@ -529,6 +569,14 @@ fn resolve_layout_sprite_asset(
             sprite_index =
                 sprite_index.saturating_add(signed_register(ctx, reference.registers.sprite));
         }
+        if reference.flags & 0x02 == 0 {
+            let stage_offset = i32::try_from(TileLayout::construction_stage_offset(
+                construction_stage,
+                sprites.len(),
+            ))
+            .unwrap_or(i32::MAX);
+            sprite_index = sprite_index.saturating_add(stage_offset);
+        }
         let Ok(sprite_index) = usize::try_from(sprite_index) else {
             *complete = false;
             return None;
@@ -538,7 +586,14 @@ fn resolve_layout_sprite_asset(
             return None;
         };
         let direct_palette = resolve_layout_direct_palette(reference, ctx, complete)?;
-        let mut sprite = resolve_custom_layout_palette(reference, sprite, graphics, ctx, complete)?;
+        let mut sprite = resolve_custom_layout_palette(
+            reference,
+            sprite,
+            graphics,
+            ctx,
+            construction_stage,
+            complete,
+        )?;
         if direct_palette == 0 {
             return Some((Some(sprite), None, 0));
         }
@@ -1069,9 +1124,27 @@ impl TrainSpriteGraphics {
         view: usize,
         ctx: &mut Action2EvalCtx,
     ) -> Option<ResolvedTileLayout> {
+        self.tile_layout_for_local_id_with_stage_ctx(local_id, view, 0, ctx)
+    }
+
+    /// Resuelve un `TileLayout` y aplica el offset de etapa de construcción a
+    /// los sprites/paletas Action1, como `DrawNewGRFTileSeq` de `OpenTTD`.
+    pub fn tile_layout_for_local_id_with_stage_ctx(
+        &self,
+        local_id: u16,
+        view: usize,
+        construction_stage: usize,
+        ctx: &mut Action2EvalCtx,
+    ) -> Option<ResolvedTileLayout> {
         if let Some(layouts) = self.station_action0_layouts.get(&local_id) {
             let layout = layouts.get(view).or_else(|| layouts.get(view & 1))?;
-            return Some(layout.resolve_with_palette_var10(self, ctx, view, true));
+            return Some(layout.resolve_with_palette_var10(
+                self,
+                ctx,
+                view,
+                true,
+                construction_stage,
+            ));
         }
         let mut id = self
             .extended_assigns
@@ -1091,7 +1164,7 @@ impl TrainSpriteGraphics {
         for _ in 0..8 {
             let a2 = u8::try_from(id).ok()?;
             if let Some(layout) = self.tile_layouts.get(&a2) {
-                return Some(layout.resolve(self, ctx, view));
+                return Some(layout.resolve(self, ctx, view, construction_stage));
             }
             if let Some(random) = self.action2_random.get(&a2) {
                 let next = eval_action2_random(random, ctx);

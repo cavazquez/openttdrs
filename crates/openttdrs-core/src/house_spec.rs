@@ -410,20 +410,16 @@ impl HouseSpecDef {
 
     /// Layout `TileSeq` de Action2 para una tesela de casa.
     ///
-    /// La etapa se utiliza para seleccionar la rama Action2; una referencia
-    /// de layout ya apunta al primer sprite de su set Action1 y por eso no se
-    /// vuelve a aplicar `idx` como desplazamiento de textura.
+    /// La etapa selecciona la rama Action2 y el sprite de construcción dentro
+    /// de cada set Action1, igual que `DrawNewGRFTileSeq`.
     pub fn newgrf_tile_layout_runtime(
         &self,
         idx: usize,
         ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
     ) -> Option<crate::newgrf_sprites::ResolvedTileLayout> {
-        let _ = idx;
-        self.newgrf_runtime.as_ref()?.tile_layout_for_local_id_ctx(
-            u16::from(self.newgrf_local_id),
-            0,
-            ctx,
-        )
+        self.newgrf_runtime
+            .as_ref()?
+            .tile_layout_for_local_id_with_stage_ctx(u16::from(self.newgrf_local_id), 0, idx, ctx)
     }
 }
 
@@ -1422,16 +1418,18 @@ mod tests {
 
     #[test]
     fn runtime_tile_layout_resolves_ground_and_sequence() {
-        let sprite = DecodedSprite {
+        let sprite = |red| DecodedSprite {
             width: 2,
             height: 2,
             x_offs: -1,
             y_offs: 3,
-            rgba: [96, 128, 160, 255].repeat(4),
+            rgba: [red, 128, 160, 255].repeat(4),
             mask: Vec::new(),
         };
+        let preview = sprite(96);
+        let stage_sprites = (0..4).map(|stage| sprite(96 + stage)).collect::<Vec<_>>();
         let mut runtime = TrainSpriteGraphics {
-            sets: vec![vec![sprite.clone()], vec![sprite.clone()]],
+            sets: vec![stage_sprites.clone(), stage_sprites],
             assigns: vec![TrainSpriteAssign {
                 local_id: 12,
                 set_id: 5,
@@ -1474,7 +1472,7 @@ mod tests {
             name: "layout".into(),
             from_newgrf: true,
             grfid: 1,
-            newgrf_views: vec![sprite.clone()],
+            newgrf_views: vec![preview.clone()],
             newgrf_local_id: 12,
             newgrf_runtime: Some(Box::new(runtime)),
         };
@@ -1483,7 +1481,23 @@ mod tests {
             panic!("house TileSeq");
         };
         assert!(layout.complete);
-        assert!(layout.ground.is_some());
+        assert_eq!(
+            layout
+                .ground
+                .expect("house ground")
+                .sprite
+                .expect("house ground sprite")
+                .rgba[0],
+            98
+        );
+        assert_eq!(
+            layout.sequence[0]
+                .sprite
+                .as_ref()
+                .expect("house sprite")
+                .rgba[0],
+            98
+        );
         assert_eq!(layout.sequence[0].origin, [4, 5, 6]);
     }
 }

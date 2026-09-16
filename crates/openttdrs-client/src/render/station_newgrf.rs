@@ -59,7 +59,15 @@ impl NewGrfStationSpriteCache {
         } else {
             def.newgrf_view(view_idx)?.clone()
         };
-        let idx = u16::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0);
+        // Un runtime NewGRF puede no publicar vistas estáticas. En ese caso
+        // `newgrf_views.len() == 0` no debe convertir todas las orientaciones
+        // en la misma entrada de caché: el índice solicitado sigue siendo
+        // parte de la identidad de la vista materializada.
+        let idx = if def.newgrf_runtime.is_some() {
+            u16::try_from(view_idx).unwrap_or(u16::MAX)
+        } else {
+            u16::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0)
+        };
         let key = (def.id.as_u16(), idx, colour_key, fp, 0, 0);
         Some(
             self.handles
@@ -125,6 +133,23 @@ pub(crate) fn station_newgrf_view_index_for_tile(
 ) -> usize {
     let layout = openttdrs_core::apply_station_draw_tile_layout_callback(def, m5, m5 & 1 != 0, ctx);
     openttdrs_core::station_newgrf_view_index(layout)
+}
+
+/// Resuelve la vista plana que `DrawNewStationTile` usaría para una
+/// orientación. Los specs runtime-only no tienen una copia en
+/// `newgrf_views`, por lo que deben pasar por el grafo Action2 igual que los
+/// layouts y conservar la vista elegida por el contexto actual.
+#[must_use]
+pub(crate) fn station_newgrf_view_for_tile(
+    def: &StationSpecDef,
+    view_idx: usize,
+    ctx: &mut openttdrs_core::Action2EvalCtx,
+) -> Option<openttdrs_core::DecodedSprite> {
+    if def.newgrf_runtime.is_some() {
+        def.newgrf_view_runtime(view_idx, ctx)
+    } else {
+        def.newgrf_view(view_idx).cloned()
+    }
 }
 
 /// Spec NewGRF con vistas Action1/3 para la estación/waypoint que cubre `coord`.
@@ -314,6 +339,84 @@ mod tests {
             .handle_for_runtime(&def, idx2, None, &mut ctx, &mut images)
             .expect("v2");
         assert_ne!(h0, h2);
+    }
+
+    #[test]
+    fn runtime_only_station_view_and_cache_keep_directional_sprite() {
+        use openttdrs_core::{DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics};
+
+        fn solid(r: u8, g: u8, b: u8) -> DecodedSprite {
+            DecodedSprite {
+                width: 1,
+                height: 1,
+                x_offs: 0,
+                y_offs: 0,
+                rgba: vec![r, g, b, 255],
+                mask: Vec::new(),
+            }
+        }
+
+        let red = solid(255, 0, 0);
+        let blue = solid(0, 0, 255);
+        let def = StationSpecDef {
+            id: StationSpecId::from_u16(11),
+            class: openttdrs_core::StationClassId::from_u16(1),
+            label: "Runtime only".into(),
+            short_label: "RTO".into(),
+            disallowed_platforms: 0,
+            disallowed_lengths: 0,
+            callback_mask: 0,
+            flags: 0,
+            animation_status: 0xFF,
+            animation_frames: 0,
+            animation_speed: 2,
+            animation_triggers: 0,
+            from_newgrf: true,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(TrainSpriteGraphics {
+                sets: vec![vec![red.clone(), blue.clone()]],
+                assigns: vec![TrainSpriteAssign {
+                    local_id: 0,
+                    set_id: 0,
+                }],
+                ..Default::default()
+            })),
+            newgrf_grfid: 0,
+            newgrf_grf_version: 0,
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            custom_layouts: Default::default(),
+        };
+        let mut images = Assets::<Image>::default();
+        let mut cache = NewGrfStationSpriteCache::default();
+        let mut view_ctx = openttdrs_core::Action2EvalCtx::default();
+        assert_eq!(
+            station_newgrf_view_for_tile(&def, 1, &mut view_ctx)
+                .expect("runtime-only station view")
+                .rgba,
+            blue.rgba
+        );
+
+        let mut first_ctx = openttdrs_core::Action2EvalCtx::default();
+        let first = cache
+            .handle_for_runtime(&def, 0, None, &mut first_ctx, &mut images)
+            .expect("direction 0");
+        let mut second_ctx = openttdrs_core::Action2EvalCtx::default();
+        let second = cache
+            .handle_for_runtime(&def, 1, None, &mut second_ctx, &mut images)
+            .expect("direction 1");
+        assert_ne!(first, second);
+        assert_eq!(
+            images.get(&first).and_then(|image| image.data.as_deref()),
+            Some(&red.rgba[..])
+        );
+        assert_eq!(
+            images.get(&second).and_then(|image| image.data.as_deref()),
+            Some(&blue.rgba[..])
+        );
     }
 
     #[test]

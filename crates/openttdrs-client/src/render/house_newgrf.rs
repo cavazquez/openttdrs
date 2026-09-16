@@ -51,7 +51,13 @@ impl NewGrfHouseSpriteCache {
         } else {
             def.newgrf_view(view_idx)?.clone()
         };
-        let idx = u16::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0);
+        // Un Action2 runtime-only puede devolver varias vistas aunque no
+        // haya una fila estática para usar como módulo de la clave.
+        let idx = if def.newgrf_runtime.is_some() {
+            u16::try_from(view_idx).unwrap_or(u16::MAX)
+        } else {
+            u16::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0)
+        };
         let key = (def.id, idx, fp, 0, 0);
         Some(
             self.handles
@@ -248,6 +254,63 @@ mod tests {
                     Some(&map),
                 )[..]
             )
+        );
+    }
+
+    #[test]
+    fn house_runtime_only_cache_keeps_view_index() {
+        let red = solid(255, 0, 0);
+        let blue = solid(0, 0, 255);
+        let def = HouseSpecDef {
+            id: 111,
+            local_id: 3,
+            subst_id: 0,
+            building_flags: openttdrs_core::house_spec::BUILDING_FLAG_SIZE_1X1,
+            min_year: 0,
+            max_year: 5000,
+            population: 1,
+            mail_generation: 1,
+            availability: DEFAULT_HOUSE_AVAILABILITY,
+            probability: DEFAULT_HOUSE_PROBABILITY,
+            processing_time: 0,
+            extra_flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            override_id: None,
+            callback_mask: 0,
+            name: "runtime-only house".into(),
+            from_newgrf: true,
+            grfid: 0,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: 3,
+            newgrf_runtime: Some(Box::new(TrainSpriteGraphics {
+                sets: vec![vec![red.clone(), blue.clone()]],
+                assigns: vec![TrainSpriteAssign {
+                    local_id: 3,
+                    set_id: 0,
+                }],
+                ..Default::default()
+            })),
+        };
+        let mut images = Assets::<Image>::default();
+        let mut cache = NewGrfHouseSpriteCache::default();
+        let mut first_ctx = openttdrs_core::Action2EvalCtx::default();
+        let first = cache
+            .handle_for_runtime(&def, 0, &mut first_ctx, &mut images)
+            .expect("house view 0");
+        let mut second_ctx = openttdrs_core::Action2EvalCtx::default();
+        let second = cache
+            .handle_for_runtime(&def, 1, &mut second_ctx, &mut images)
+            .expect("house view 1");
+        assert_ne!(first, second);
+        assert_eq!(
+            images.get(&first).and_then(|image| image.data.as_deref()),
+            Some(&red.rgba[..])
+        );
+        assert_eq!(
+            images.get(&second).and_then(|image| image.data.as_deref()),
+            Some(&blue.rgba[..])
         );
     }
 }

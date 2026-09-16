@@ -1924,9 +1924,10 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 ));
                 let mut callback_ctx = a2.clone();
                 let view_idx = station_newgrf_view_index_for_tile(def, m5, &mut callback_ctx);
-                if let Some(view) = def.newgrf_view(view_idx)
-                    && let Some(handle) =
-                        cache.handle_for_runtime(def, view_idx, owner_colour, &mut a2, images)
+                if let Some(view) = crate::render::station_newgrf::station_newgrf_view_for_tile(
+                    def, view_idx, &mut a2,
+                ) && let Some(handle) =
+                    cache.handle_for_runtime(def, view_idx, owner_colour, &mut a2, images)
                 {
                     let pos3 = crate::iso::overlay_pos(
                         ctx.iso_pos,

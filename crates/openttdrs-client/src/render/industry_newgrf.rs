@@ -54,7 +54,13 @@ impl NewGrfIndustrySpriteCache {
         } else {
             def.newgrf_view(view_idx)?.clone()
         };
-        let idx = u16::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0);
+        // La vista runtime puede existir sin preview/vistas estáticas. No
+        // aliasar sus orientaciones distintas en el slot cero del caché.
+        let idx = if def.newgrf_runtime.is_some() {
+            u16::try_from(view_idx).unwrap_or(u16::MAX)
+        } else {
+            u16::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0)
+        };
         let key = (def.gfx.as_u16(), idx, colour_key, fp, 0, 0);
         Some(
             self.handles
@@ -328,5 +334,42 @@ mod tests {
         assert_eq!(reused, blue_handle);
         assert_eq!(cache.handles.len(), 2);
         assert_eq!(images.len(), 2);
+    }
+
+    #[test]
+    fn industry_runtime_only_cache_keeps_view_index() {
+        let mut def = industry_tile_with_parent_7c_selector();
+        let red = def.newgrf_views[0].clone();
+        let blue = def.newgrf_views[1].clone();
+        let local_id = def.newgrf_local_id;
+        def.newgrf_views.clear();
+        def.newgrf_runtime = Some(Box::new(TrainSpriteGraphics {
+            sets: vec![vec![red.clone(), blue.clone()]],
+            assigns: vec![TrainSpriteAssign {
+                local_id,
+                set_id: 0,
+            }],
+            ..Default::default()
+        }));
+
+        let mut images = Assets::<Image>::default();
+        let mut cache = NewGrfIndustrySpriteCache::default();
+        let mut first_ctx = openttdrs_core::Action2EvalCtx::default();
+        let first = cache
+            .handle_for_runtime(&def, 0, None, &mut first_ctx, &mut images)
+            .expect("industry view 0");
+        let mut second_ctx = openttdrs_core::Action2EvalCtx::default();
+        let second = cache
+            .handle_for_runtime(&def, 1, None, &mut second_ctx, &mut images)
+            .expect("industry view 1");
+        assert_ne!(first, second);
+        assert_eq!(
+            images.get(&first).and_then(|image| image.data.as_deref()),
+            Some(&red.rgba[..])
+        );
+        assert_eq!(
+            images.get(&second).and_then(|image| image.data.as_deref()),
+            Some(&blue.rgba[..])
+        );
     }
 }

@@ -109,7 +109,14 @@ impl NewGrfObjectSpriteCache {
         } else {
             def.view(view_idx)?.clone()
         };
-        let idx = u16::try_from(view_idx % def.views.len().max(1)).unwrap_or(0);
+        // El runtime puede publicar sólo el resultado Action2. Mantener el
+        // índice solicitado evita reutilizar la textura de otra orientación
+        // cuando `def.views` está vacío.
+        let idx = if def.newgrf_runtime.is_some() {
+            u16::try_from(view_idx).unwrap_or(u16::MAX)
+        } else {
+            u16::try_from(view_idx % def.views.len().max(1)).unwrap_or(0)
+        };
         let object_colour = ctx
             .vars
             .get(&0x47)
@@ -461,5 +468,72 @@ mod tests {
             .expect("blue runtime view");
         assert_ne!(red_handle, blue_handle);
         assert_eq!(cache.handles.len(), 2);
+    }
+
+    #[test]
+    fn object_runtime_only_cache_keeps_view_index() {
+        use openttdrs_core::{DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics};
+
+        fn solid(r: u8, g: u8, b: u8) -> DecodedSprite {
+            DecodedSprite {
+                width: 1,
+                height: 1,
+                x_offs: 0,
+                y_offs: 0,
+                rgba: vec![r, g, b, 255],
+                mask: Vec::new(),
+            }
+        }
+
+        let red = solid(255, 0, 0);
+        let blue = solid(0, 0, 255);
+        let def = ObjectSpecDef {
+            id: 6,
+            class_label: "RTO ".into(),
+            name: "runtime-only object".into(),
+            size: OBJECT_SIZE_1X1,
+            from_newgrf: true,
+            local_id: 0,
+            grfid: 0,
+            newgrf_grf_version: 0,
+            climate_mask: openttdrs_core::DEFAULT_OBJECT_CLIMATE_MASK,
+            build_cost_factor: openttdrs_core::DEFAULT_OBJECT_BUILD_COST_FACTOR,
+            clear_cost_factor: openttdrs_core::DEFAULT_OBJECT_CLEAR_COST_FACTOR,
+            flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            callback_mask: 0,
+            views: Vec::new(),
+            newgrf_runtime: Some(Box::new(TrainSpriteGraphics {
+                sets: vec![vec![red.clone(), blue.clone()]],
+                assigns: vec![TrainSpriteAssign {
+                    local_id: 0,
+                    set_id: 0,
+                }],
+                ..Default::default()
+            })),
+            associated_badges: Vec::new(),
+        };
+        let mut images = Assets::<Image>::default();
+        let mut cache = NewGrfObjectSpriteCache::default();
+        let mut first_ctx = openttdrs_core::Action2EvalCtx::default();
+        let first = cache
+            .handle_for_runtime(&def, 0, &mut first_ctx, &mut images)
+            .expect("object view 0");
+        let mut second_ctx = openttdrs_core::Action2EvalCtx::default();
+        let second = cache
+            .handle_for_runtime(&def, 1, &mut second_ctx, &mut images)
+            .expect("object view 1");
+        assert_ne!(first, second);
+        assert_eq!(
+            images.get(&first).and_then(|image| image.data.as_deref()),
+            Some(&red.rgba[..])
+        );
+        assert_eq!(
+            images.get(&second).and_then(|image| image.data.as_deref()),
+            Some(&blue.rgba[..])
+        );
     }
 }

@@ -4175,7 +4175,7 @@ fn spawn_road_stop_buildings(
             def.grfid,
         ));
         let layout = def.newgrf_tile_layout_runtime(usize::from(view_u8), &mut a2);
-        let runtime_fp = def
+        let layout_runtime_fp = def
             .newgrf_runtime
             .as_ref()
             .map_or(0, |_| runtime_fingerprint(&a2, vars::ROAD_STOP, false));
@@ -4190,7 +4190,7 @@ fn spawn_road_stop_buildings(
                 spec_id,
                 false,
                 owner_colour,
-                runtime_fp,
+                layout_runtime_fp,
                 &layout,
                 cache,
                 images,
@@ -4204,10 +4204,18 @@ fn spawn_road_stop_buildings(
         if let Some(view) = view
             && let Some(slot) = road_stop_simple_view_slot(spec_id, dir)
         {
+            // La vista plana puede ejecutar otra cadena Action2 (incluidos
+            // procedimientos/registro 1C) después de intentar el layout. Su
+            // fingerprint debe describir el estado final de esa vista, no el
+            // estado intermedio del layout anterior.
+            let flat_runtime_fp = def
+                .newgrf_runtime
+                .as_ref()
+                .map_or(0, |_| runtime_fingerprint(&a2, vars::ROAD_STOP, false));
             let handle = cache.handle_for_variant(
                 ROADSTOP_ACTION3_CACHE_TYPE,
                 slot,
-                runtime_fp,
+                flat_runtime_fp,
                 &view,
                 images,
             );
@@ -4937,9 +4945,6 @@ fn spawn_newgrf_airport_tile(
     } else {
         None
     };
-    let runtime_fp = action2.as_ref().map_or(0, |action2| {
-        runtime_fingerprint(action2, vars::AIRPORT_TILE, false)
-    });
     // Clone the small decoded descriptor before borrowing the image cache so
     // the catalog remains immutable while the texture is materialized.
     let Some(view) = action2
@@ -4952,6 +4957,12 @@ fn spawn_newgrf_airport_tile(
     let (Some(cache), Some(images)) = (cache, images) else {
         return false;
     };
+    let runtime_fp = action2.as_ref().map_or(0, |action2| {
+        // `newgrf_view_runtime` can finish a variational/procedure chain and
+        // write `var 1C`/registers. Capture the cache identity only after the
+        // exact flat view used for offsets has been selected.
+        runtime_fingerprint(action2, vars::AIRPORT_TILE, false)
+    });
     let image = cache.handle_for_variant_with_company_colour(
         AIRPORT_TILE_ACTION3_CACHE_TYPE,
         gfx,

@@ -24,10 +24,10 @@ use super::{
     catenary_under_low_bridge,
     helpers::{
         FLAT_WATER_LAYER_FRAC, ForcedLeveledFoundation, SHORE_LAYER_FRAC, TRAM_OVERLAY_LAYER_FRAC,
-        forced_leveled_foundation_decision_at, spawn_custom_station_foundation_sprite,
-        spawn_empty_bounding_box, spawn_forced_leveled_foundation_with_child_parent,
-        spawn_foundation_child_ground_sprite_at, spawn_foundation_child_sprite_at,
-        spawn_ground_sprite_at,
+        forced_leveled_foundation_decision_at, spawn_custom_station_foundation_combined_child,
+        spawn_custom_station_foundation_sprite, spawn_empty_bounding_box,
+        spawn_forced_leveled_foundation_with_child_parent, spawn_foundation_child_ground_sprite_at,
+        spawn_foundation_child_sprite_at, spawn_ground_sprite_at,
     },
     sloped_or_flat_image, spawn_ground_sprite,
 };
@@ -1778,7 +1778,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 station_custom_foundation
                     .as_mut()
                     .and_then(|(def, view_idx, action2)| {
-                        spawn_extended_station_foundation(
+                        spawn_custom_station_foundation(
                             commands,
                             map,
                             dims,
@@ -3430,14 +3430,14 @@ fn resolve_station_custom_foundation_for_tile<'a>(
     Some((def, view_idx, action2))
 }
 
-/// Dibuja la variante extendida de un cimiento custom de estación.
+/// Dibuja un cimiento custom de estación, extendido o compuesto.
 ///
-/// El bloque compuesto clásico queda deliberadamente para la siguiente
-/// subetapa: requiere conservar todos los `AddSortableSpriteToDraw` bajo un
-/// único parent combinado. Si la resolución extendida no es materializable,
-/// el caller vuelve al `DrawFoundation(Leveled)` existente.
+/// El primer sprite siempre abre el parent sortable. En el bloque clásico,
+/// los siguientes son children segmentados/promovibles: esto conserva el
+/// `StartSpriteCombine` aunque el primer PNG quede fuera de una banda del
+/// viewport y permite al sorter recuperar cada tramo visible.
 #[allow(clippy::too_many_arguments)]
-fn spawn_extended_station_foundation(
+fn spawn_custom_station_foundation(
     commands: &mut Commands,
     map: &Map,
     dims: (u32, u32),
@@ -3450,14 +3450,15 @@ fn spawn_extended_station_foundation(
     station_sprites: Option<&mut NewGrfStationSpriteCache>,
     images: Option<&mut Assets<Image>>,
 ) -> Option<ForcedLeveledFoundation> {
-    if !def.has_extended_foundations() {
-        return None;
-    }
     let decision =
         forced_leveled_foundation_decision_at(map, ctx.coord, dims, tileh, ctx.info.base_z);
     let edge_info =
         u8::from(!decision.nw_edge.visible) | (u8::from(!decision.ne_edge.visible) << 1);
-    let parts = openttdrs_core::station_custom_foundation_parts(tileh, edge_info, true)?;
+    let parts = openttdrs_core::station_custom_foundation_parts(
+        tileh,
+        edge_info,
+        def.has_extended_foundations(),
+    )?;
     let sprites = def.newgrf_foundation_sprites_runtime(
         u8::try_from(view_idx).unwrap_or(u8::MAX),
         edge_info,
@@ -3505,21 +3506,40 @@ fn spawn_extended_station_foundation(
             decoded,
             images,
         );
-        let parent = spawn_custom_station_foundation_sprite(
-            commands,
-            ctx,
-            "station-rail-foundation-custom",
-            u32::MAX.saturating_sub(u32::from(part)),
-            decoded,
-            Sprite {
-                image: handle,
-                ..default()
-            },
-            u8::try_from(draw_order).unwrap_or(u8::MAX),
-            dims.0,
-            0.36 + draw_order as f32 * 0.0005,
-        );
-        child_parent = Some(parent);
+        let sprite = Sprite {
+            image: handle,
+            ..default()
+        };
+        let sprite_id = u32::MAX.saturating_sub(u32::from(part));
+        let entity = if let Some(parent) = child_parent {
+            spawn_custom_station_foundation_combined_child(
+                commands,
+                ctx,
+                "station-rail-foundation-custom",
+                sprite_id,
+                decoded,
+                sprite,
+                u8::try_from(draw_order).unwrap_or(u8::MAX),
+                dims.0,
+                0.36 + draw_order as f32 * 0.0005,
+                parent,
+            )
+        } else {
+            spawn_custom_station_foundation_sprite(
+                commands,
+                ctx,
+                "station-rail-foundation-custom",
+                sprite_id,
+                decoded,
+                sprite,
+                u8::try_from(draw_order).unwrap_or(u8::MAX),
+                dims.0,
+                0.36 + draw_order as f32 * 0.0005,
+            )
+        };
+        if child_parent.is_none() {
+            child_parent = Some(entity);
+        }
     }
     Some(ForcedLeveledFoundation {
         surface_base_z: decision.surface_base_z,

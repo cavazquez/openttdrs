@@ -8,8 +8,9 @@ use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     AtlasSprite, EMPTY_BOUNDING_BOX_SPRITE_ID, MapTileChunk, MapVisualLayer, TileRenderContext,
-    ViewportSortableChild, ViewportSortableParent, WaterTile, WorldAssets, viewport_insertion_key,
-    viewport_source_depth,
+    ViewportSortableChild, ViewportSortableParent, ViewportSortablePromotableChild,
+    ViewportSortableSegmentedChild, ViewportSortableSegmentedSource, WaterTile, WorldAssets,
+    viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{foundation_gfx_for_tileh, rail_trackbits_for_render};
 use openttdrs_core::{
@@ -702,9 +703,9 @@ pub(crate) fn spawn_foundation_sprite(
 /// Materializa una pieza de `DrawCustomStationFoundations` con el prisma
 /// completo que OpenTTD entrega a `AddSortableSpriteToDraw`.
 ///
-/// Los sprites extendidos de estaciones no usan la tabla de foundations
-/// vanilla: su offset visual viene del propio `DecodedSprite`, mientras que
-/// el parent siempre ocupa `{ {}, {TILE_SIZE, TILE_SIZE, TILE_HEIGHT - 1}, {} }`.
+/// Los sprites custom de estaciones no usan la tabla de foundations vanilla:
+/// su offset visual viene del propio `DecodedSprite`, mientras que el parent
+/// siempre ocupa `{ {}, {TILE_SIZE, TILE_SIZE, TILE_HEIGHT - 1}, {} }`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_custom_station_foundation_sprite(
     commands: &mut Commands,
@@ -736,6 +737,94 @@ pub(crate) fn spawn_custom_station_foundation_sprite(
         Some(trace_bounds),
     );
 
+    let (position, source_depth) =
+        custom_station_foundation_sprite_position(ctx, decoded, map_width, layer);
+
+    commands
+        .spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+            ViewportSortableParent {
+                sprite_id,
+                bounds: custom_station_foundation_parent_bounds(ctx),
+                insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, draw_ordinal),
+                source_depth,
+            },
+        ))
+        .id()
+}
+
+/// Materializa un `AddCombinedSprite` del bloque clásico de cimientos de
+/// estación. El child conserva la fuente completa para que el sorter pueda
+/// promoverlo o recortarlo por banda sin separarlo del parent original.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_custom_station_foundation_combined_child(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    role: &'static str,
+    sprite_id: u32,
+    decoded: &openttdrs_core::DecodedSprite,
+    sprite: Sprite,
+    draw_ordinal: u8,
+    map_width: u32,
+    layer: f32,
+    parent: Entity,
+) -> Entity {
+    let bounds = FoundationSpriteBounds::new(0, 0, 0, 16, 16, 7);
+    let trace_bounds = TraceSpriteBounds::new(
+        i32::from(bounds.ox),
+        i32::from(bounds.oy),
+        i32::from(bounds.oz),
+        i32::from(bounds.ex),
+        i32::from(bounds.ey),
+        i32::from(bounds.ez),
+    );
+    WorldDrawTrace::record_sprite_with_geometry(
+        role,
+        "combined",
+        sprite_id,
+        false,
+        (0, 0, 0),
+        0,
+        Some(trace_bounds),
+    );
+
+    let (position, source_depth) =
+        custom_station_foundation_sprite_position(ctx, decoded, map_width, layer);
+    let source_transform = Transform::from_translation(position);
+    commands
+        .spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite.clone(),
+            source_transform,
+            ViewportSortableChild {
+                parent,
+                source_depth,
+            },
+            ViewportSortablePromotableChild {
+                sprite_id,
+                bounds: custom_station_foundation_parent_bounds(ctx),
+                insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 0),
+                combine_ordinal: draw_ordinal,
+            },
+            ViewportSortableSegmentedChild,
+            ViewportSortableSegmentedSource {
+                sprite,
+                transform: source_transform,
+            },
+        ))
+        .id()
+}
+
+fn custom_station_foundation_sprite_position(
+    ctx: &TileRenderContext,
+    decoded: &openttdrs_core::DecodedSprite,
+    map_width: u32,
+    layer: f32,
+) -> (Vec3, f32) {
     let mut position = overlay_pos(
         ctx.iso_pos,
         f32::from(decoded.x_offs),
@@ -749,25 +838,14 @@ pub(crate) fn spawn_custom_station_foundation_sprite(
     );
     let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
     position.z = source_depth;
+    (position, source_depth)
+}
+
+fn custom_station_foundation_parent_bounds(ctx: &TileRenderContext) -> ParentSpriteBounds {
     let xmin = ctx.tx_i32() * 16;
     let ymin = ctx.ty_i32() * 16;
     let zmin = i32::from(ctx.info.base_z) * i32::from(TILE_PIXEL_HEIGHT);
-    let parent_bounds = ParentSpriteBounds::new(xmin, ymin, zmin, xmin + 15, ymin + 15, zmin + 6);
-
-    commands
-        .spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            sprite,
-            Transform::from_translation(position),
-            ViewportSortableParent {
-                sprite_id,
-                bounds: parent_bounds,
-                insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, draw_ordinal),
-                source_depth,
-            },
-        ))
-        .id()
+    ParentSpriteBounds::new(xmin, ymin, zmin, xmin + 15, ymin + 15, zmin + 6)
 }
 
 /// Desplazamiento visible del origen de `SpriteBounds` de una foundation.

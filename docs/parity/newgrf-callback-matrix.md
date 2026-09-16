@@ -1988,3 +1988,17 @@ conservan el comportamiento anterior. La regresión
 `visual_effect_context_exposes_vehicle_variables_to_cb10` fija la diferencia
 entre ambos scopes; permanecen pendientes otros callbacks visuales y
 consumidores que todavía no migraron al resolver común.
+
+### #326/#329-NEWGRF-RUNTIME-ONLY-VIEWS — cachés planas sin preview estático
+
+Actualizado: 2026-09-16 (`050da4d3`). Las rutas Action1/3 planas de estación,
+industria, casa y objeto pueden recibir gráficos materializados sólo por el
+runtime Action2. Sus cachés conservan ahora el índice de vista pedido en la
+identidad del handle cuando no hay vistas estáticas; así las orientaciones no
+se aliasan en el slot cero. El overlay de estación reutiliza además el
+resolver runtime con el contexto preparado, en lugar de descartar el sprite
+por no existir en `newgrf_views`. Las regresiones verifican cuatro pares de
+handles/píxeles y la selección direccional de estación; el subconjunto
+runtime-only pasa siete pruebas. El alcance cubre el fallback/caché de estas
+cuatro familias, no layouts TileSeq, paletas especiales, callbacks restantes ni
+la invalidación de todos los consumidores: #326/#329/#567 continúan abiertos.

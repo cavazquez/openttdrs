@@ -8640,6 +8640,19 @@ Validación completa: cliente `1544 passed; 2 ignored`, core `2806 passed; 1
 ignored`, Clippy estricto de core/cliente, formato y `git diff --check` verdes.
 #329/#567 sigue abierto por los callbacks y consumidores NewGRF restantes.
 
+Corrección #326/#329-NEWGRF-RUNTIME-ONLY-VIEWS (2026-09-16, `050da4d3`): las
+cachés planas de estación, industria, casa y objeto ya no usan el slot cero
+para todas las vistas de un Action2 runtime-only. La clave conserva el índice
+materializado y evita que orientaciones distintas compartan handle/textura
+cuando no existe una tabla estática. El camino de dibujo de estación consulta
+la vista runtime con el contexto Action2 preparado, de modo que también se
+renderizan specs que sólo tienen gráficos runtime. Las cuatro regresiones de
+caché y la de estación comprueban handles y bytes RGBA; siete pruebas
+runtime-only pasan. Validación completa: cliente `1548 passed; 2 ignored`,
+Clippy estricto, formato y `git diff --check` verdes. Este bloque no cierra
+#326/#329/#567: siguen pendientes layouts, paletas, callbacks y consumidores
+NewGRF fuera de estas cachés.
+
 Corrección #329/#567-VEHICLE-COLOUR-MAPPING-CONTEXT (2026-09-16, `8829e150`):
 los call sites reales de sprites de vehículos, incluido el rotor, pasan ahora
 el contexto Action2 completo a `CBID_VEHICLE_COLOUR_MAPPING` en lugar de

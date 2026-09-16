@@ -5860,3 +5860,19 @@ también pasan. Validación completa: cliente `1544 passed; 2 ignored`, core
 `2806 passed; 1 ignored`, Clippy estricto de core/cliente, formato y
 `git diff --check` verdes. #329/#567 siguen abiertas por callbacks y
 consumidores NewGRF todavía no cubiertos.
+
+Corrección #326/#329-NEWGRF-RUNTIME-ONLY-VIEWS (2026-09-16, `050da4d3`): las
+cachés de sprites planos de estación, industria, casa y objeto conservan ahora
+el índice de vista solicitado cuando un Action2 runtime publica variantes sin
+filas estáticas de preview. Antes todas esas orientaciones podían colisionar en
+la clave cero y reutilizar la textura de otra dirección. El overlay plano de
+estación también resuelve la vista runtime, en vez de consultar sólo
+`newgrf_views`, por lo que un spec runtime-only ya no queda sin sprite. Las
+regresiones `runtime_only_station_view_and_cache_keep_directional_sprite`,
+`industry_runtime_only_cache_keeps_view_index`,
+`house_runtime_only_cache_keeps_view_index` y
+`object_runtime_only_cache_keeps_view_index` fijan handles y píxeles por
+orientación; la suite dirigida runtime-only cubre siete casos. Validación
+completa: cliente `1548 passed; 2 ignored`, Clippy estricto, formato y
+`git diff --check` verdes. #326/#329/#567 permanecen abiertas por layouts,
+paletas, callbacks y consumidores NewGRF restantes.

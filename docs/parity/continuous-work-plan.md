@@ -9087,3 +9087,15 @@ categorías. Pasan 78 pruebas de puentes, 2 de estructuras, Clippy estricto y
 formato. La fila continúa parcial y #326/#329/#567 permanecen abiertas por
 otros producers BUILD, callbacks/consumidores NewGRF, composición global y
 framebuffer.
+
+### #326/#329/#567-HOUSE-INDUSTRY-DESTINATION-TRANSPARENCY — edificios planos y animados
+
+Actualizado: 2026-09-16 (`811d453c`). Las capas BUILD vanilla y las vistas
+directas NewGRF de casas e industrias aplican la máscara de destino 802 cuando
+`TO_HOUSES`/`TO_INDUSTRIES` están transparentes; no usan el alpha blanco
+genérico. El suelo y las fundaciones permanecen opacos. En casas se corta el
+ascensor después de un edificio transparente; en industrias se corta el
+`draw_proc`, y las entidades animadas recalculan la máscara en cada frame y al
+cambiar preferencias. Pasan 85 pruebas dirigidas y Clippy estricto. La fila
+continúa parcial: quedan efectos de industria, otros producers BUILD,
+callbacks/consumidores NewGRF, composición global y framebuffer.

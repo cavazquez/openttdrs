@@ -2355,3 +2355,13 @@ para estructuras. Los `TileLayout` siguen resolviendo `OPAQUE` y paletas por
 entrada, mientras ground, foundations y catenaria permanecen fuera del cambio.
 Pasan 78 pruebas de puente, 2 de estructuras y Clippy estricto; la cobertura
 continúa parcial y no se cierran #326/#329/#567.
+
+Actualización #326/#329/#567-HOUSE-INDUSTRY-DESTINATION-TRANSPARENCY
+(2026-09-16, `811d453c`): las vistas directas NewGRF y las capas BUILD vanilla
+de casas e industrias respetan ahora la máscara de destino 802 para
+`TO_HOUSES`/`TO_INDUSTRIES`; los grounds y foundations quedan fuera del bit de
+transparencia. Las capas animadas de industria actualizan la misma máscara al
+cambiar frame. El renderer corta el ascensor de casa y los `draw_proc` de
+industria cuando el edificio ya fue emitido transparente, manteniendo el
+contrato de `DrawTile_Town`/`DrawTile_Industry`. Pasan 85 pruebas filtradas y
+Clippy estricto. La cobertura sigue parcial y no se cierran #326/#329/#567.

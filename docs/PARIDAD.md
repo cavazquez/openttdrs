@@ -6281,3 +6281,16 @@ fundaciones y catenaria quedan fuera de esta máscara. Pasan 78 pruebas de
 puentes, 2 regresiones de estructuras, Clippy estricto y formato. La corrección
 es parcial y no cierra #326/#329/#567: siguen pendientes otros producers BUILD,
 callbacks/consumidores NewGRF, composición global y comparación de framebuffer.
+
+Corrección #326/#329/#567-HOUSE-INDUSTRY-DESTINATION-TRANSPARENCY (2026-09-16,
+`811d453c`): las capas BUILD planas vanilla y las vistas directas NewGRF de
+casas e industrias usan ahora la máscara de destino equivalente a
+`PALETTE_TO_TRANSPARENT` (`802`) cuando `TO_HOUSES` o `TO_INDUSTRIES` están
+transparentes. Las casas ya no ejecutan el ascensor/draw-proc después de
+enviar un edificio transparente; las industrias tampoco conservan sus
+`draw_proc` después del edificio. Las capas BUILD animadas de industria
+reutilizan la misma máscara al cambiar de frame, mientras ground y
+fundaciones permanecen opacos. Pasan 85 pruebas filtradas de industria/casas
+y Clippy estricto. La corrección es parcial y no cierra #326/#329/#567:
+siguen pendientes otros productores, efectos, callbacks/consumidores NewGRF,
+composición global y comparación de framebuffer.

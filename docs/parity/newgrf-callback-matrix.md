@@ -2034,3 +2034,15 @@ airport tile captura el estado final de `var 1C`/registros antes de crear la
 textura. Las pruebas dirigidas de ambas familias pasan; no se alteran layouts,
 paletas especiales ni callbacks restantes, por lo que #326/#329/#567 continúan
 abiertos.
+
+### #326/#329-NEWGRF-AIRPORT-FLAT-FRAME-CACHE — frames estáticos
+
+Actualizado: 2026-09-16 (`aa810a3d`). `AirportTile` plano conserva el frame
+`m7` en la variante de caché, tanto para `newgrf_views` estáticas como para la
+resolución runtime; la textura ya no queda fijada al primer frame del mismo
+`gfx`. Las entradas planas usan además un namespace distinto del bloque de
+layouts `TileSeq`, cuyos slots siguen incluyendo `gfx` y capa. La regresión
+`airport_flat_cache_keeps_static_animation_frames_separate` comprueba handles y
+bytes RGBA distintos. Esto cubre la identidad de la vista plana, no los
+callbacks, paletas especiales o layouts restantes; #326/#329/#567 continúan
+abiertos.

@@ -5908,3 +5908,15 @@ cuando intervienen `var 1C`, `STO` o procedimientos. Las 102 pruebas NewGRF y
 la suite completa del cliente (`1550 passed; 2 ignored`) pasan, junto con
 Clippy estricto, formato y `git diff --check`. #326/#329/#567 permanecen
 abiertas por layouts, paletas, callbacks y consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-AIRPORT-FLAT-FRAME-CACHE (2026-09-16,
+`aa810a3d`): la caché de la vista plana de `AirportTile` conserva ahora el
+frame `m7` además del fingerprint Action2 final. Antes dos tiles del mismo
+`gfx` podían compartir el primer handle aun cuando `newgrf_views` publicara
+frames estáticos distintos; el namespace plano también quedó separado del
+bloque de slots usado por layouts `TileSeq`. La regresión
+`airport_flat_cache_keeps_static_animation_frames_separate` verifica handles y
+bytes RGBA de ambos frames. Validación completa del cliente: `1551 passed; 2
+ignored`, Clippy estricto del binario, formato y `git diff --check` verdes.
+#326/#329/#567 permanecen abiertas por layouts, paletas, callbacks y
+consumidores NewGRF restantes.

@@ -8696,3 +8696,15 @@ de esa vista. Validación: 34 pruebas de road stop, 4 de aeropuerto y cliente
 completo `1550 passed; 2 ignored`, con Clippy estricto, formato y
 `git diff --check` verdes. #326/#329/#567 siguen abiertas por layouts,
 paletas, callbacks y consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-AIRPORT-FLAT-FRAME-CACHE (2026-09-16,
+`aa810a3d`): la vista plana de `AirportTile` añade `m7` a la variante de
+caché, incluso cuando el catálogo sólo tiene vistas Action1/3 estáticas; para
+runtime combina ese frame explícito con el fingerprint posterior a Action2.
+El namespace de la vista plana se separa del de layouts `TileSeq`, evitando
+colisiones entre un `gfx` usado como slot plano y otro usado como bloque de
+layout. La regresión `airport_flat_cache_keeps_static_animation_frames_separate`
+reproduce dos frames con píxeles distintos y exige handles distintos.
+Validación: cliente `1551 passed; 2 ignored`, Clippy del binario, formato y
+`git diff --check` verdes. #326/#329/#567 permanecen abiertas por layouts,
+paletas, callbacks y consumidores NewGRF restantes.

@@ -17,7 +17,9 @@ use crate::iso::{
     shore_sprite_half_h, shore_tileh_for_draw_shore, slope_half_h, tile_pos_half,
     tile_slope_bits_from_heights,
 };
-use crate::render::newgrf_cache::{runtime_fingerprint, vars};
+use crate::render::newgrf_cache::{
+    runtime_fingerprint, tile_layout_destination_transparent_color, vars,
+};
 use crate::render::shore_newgrf::{NEWGRF_SHORE_TILE_FLAG, NewGrfShoreSpriteCache};
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::WorldDrawTrace;
@@ -25,7 +27,10 @@ use crate::render::{
     MapSpriteBatches, MapVisualLayer, TileRenderContext, ViewportSortableParent, WaterTile,
     WorldAssets, viewport_insertion_key, viewport_source_depth,
 };
-use crate::sprites::{WATER_LOCK_SPRITE_META, WATER_RIVER_SLOPE_SPRITE_META};
+use crate::sprites::{
+    TransparencyOption, WATER_LOCK_SPRITE_META, WATER_RIVER_SLOPE_SPRITE_META, is_hidden,
+    is_transparent,
+};
 
 /// `SPR_FLAT_WATER_TILE` de `table/sprites.h`.
 const SPR_FLAT_WATER_TILE: u32 = 4061;
@@ -45,6 +50,26 @@ pub(crate) const SPR_RIVER_SLOPE_BASE: u32 = 5328;
 const SPR_LOCK_WATER_BASE: u32 = SPR_RIVER_SLOPE_BASE + 4;
 /// `SPR_SHORE_BASE` resuelto por Action5 canals en OpenGFX/OpenGFX2.
 const SPR_SHORE_BASE: u32 = 5936;
+
+/// `DrawWaterTileStruct` recibe `PALETTE_TO_TRANSPARENT` para las piezas de
+/// estructura de una esclusa. El agua que `DrawWaterLock` pinta antes de esa
+/// secuencia sigue siendo ground y no pasa por esta máscara.
+#[must_use]
+fn water_structure_sprite_color(buildings_transparent: bool) -> Color {
+    if buildings_transparent {
+        tile_layout_destination_transparent_color()
+    } else {
+        Color::WHITE
+    }
+}
+
+#[must_use]
+fn water_structure_sprite(mut sprite: Sprite) -> Sprite {
+    if is_transparent(TransparencyOption::Buildings) {
+        sprite.color = water_structure_sprite_color(true);
+    }
+    sprite
+}
 
 /// Convierte el slot local de una vista de agua en el ID lógico que usa la
 /// traza `world-draw`. Las vistas Action1/3 no tienen un ID OpenGFX propio en
@@ -469,6 +494,9 @@ fn spawn_lock_structures(
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
 ) {
+    if is_hidden(TransparencyOption::Buildings) {
+        return;
+    }
     let Some(tile) = ctx.tile else {
         return;
     };
@@ -533,6 +561,7 @@ fn spawn_lock_structures(
                     layer.image_offset + z_offset,
                 )
             };
+        let sprite = water_structure_sprite(sprite);
         let sprite_id = SPR_LOCK_WATER_BASE + logical_offset as u32;
         let bounds = ParentSpriteBounds::new(
             ctx.tx_i32() * 16 + layer.dx,
@@ -1354,18 +1383,41 @@ pub(crate) fn push_water_tile_with_action5(
                 } else {
                     slope_half_h(ctx.info.tileh)
                 };
-                batches.water.push((
-                    ctx.map_tile_chunk(),
-                    crate::render::WaterTile::STATIC,
-                    assets.water_lock[axis][level].sprite(),
-                    Transform::from_translation(tile_pos_half(
-                        ctx.tx_i32(),
-                        ctx.ty_i32(),
-                        ctx.info.base_z,
-                        0.02,
-                        half_h,
-                    )),
-                ));
+                if is_transparent(TransparencyOption::Buildings)
+                    || is_hidden(TransparencyOption::Buildings)
+                {
+                    // El fallback compuesto contiene agua y dos piezas de
+                    // estructura en el mismo PNG. Separarlos sólo en estos
+                    // modos permite dejar el agua visible y aplicar a las
+                    // piezas el mismo contrato que `DrawWaterTileStruct`.
+                    push_water_sprite(&mut batches.water, &assets.water, ctx);
+                    if !is_hidden(TransparencyOption::Buildings) {
+                        spawn_lock_structures(
+                            commands,
+                            map,
+                            assets,
+                            ctx,
+                            map_dims.0,
+                            canal_features,
+                            canal_action5,
+                            action5_sprites.as_deref_mut(),
+                            images.as_deref_mut(),
+                        );
+                    }
+                } else {
+                    batches.water.push((
+                        ctx.map_tile_chunk(),
+                        crate::render::WaterTile::STATIC,
+                        assets.water_lock[axis][level].sprite(),
+                        Transform::from_translation(tile_pos_half(
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                            ctx.info.base_z,
+                            0.02,
+                            half_h,
+                        )),
+                    ));
+                }
             }
         } else if ctx.tile.and_then(water_class) == Some(WaterClass::River) {
             let river_slope = push_river_slope_sprite(
@@ -1524,7 +1576,7 @@ mod tests {
         canal_feature_sprite_with_context, canal_feature_sprite_with_context_and_slot,
         canal_feature_trace_sprite_id, is_watered_tile, lock_structure_layer,
         lock_water_ground_sprite, river_edge_slots, river_edge_sprite_offset,
-        river_slope_sprite_index, shore_sprite_id,
+        river_slope_sprite_index, shore_sprite_id, water_structure_sprite_color,
     };
     use bevy::prelude::{Assets, Image};
     use openttdrs_core::map::{
@@ -1578,6 +1630,21 @@ mod tests {
             let below_snow = canal_action2_context(map.get(coord), 0, Climate::SubArctic, 10);
             assert_eq!(below_snow.vars.get(&0x81), Some(&0), "{kind:?}");
         }
+    }
+
+    #[test]
+    fn lock_structures_use_destination_mask_when_buildings_are_transparent() {
+        let visible = water_structure_sprite_color(false).to_srgba();
+        for channel in [visible.red, visible.green, visible.blue, visible.alpha] {
+            assert!((channel - 1.0).abs() < f32::EPSILON);
+        }
+
+        let transparent = water_structure_sprite_color(true).to_srgba();
+        assert_eq!(
+            (transparent.red, transparent.green, transparent.blue),
+            (0.0, 0.0, 0.0)
+        );
+        assert!((transparent.alpha - 64.0 / 255.0).abs() < f32::EPSILON);
     }
 
     #[test]

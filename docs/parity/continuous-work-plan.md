@@ -8797,3 +8797,15 @@ regresión `airport_nearby_land_info_respects_grf_version_z_units` verifica
 ambas ramas junto con los bits de tipo y pertenencia al aeropuerto. La fila
 continúa parcial por foundations/rotaciones del compositor, paletas y callbacks
 restantes.
+
+### #326/#329-NEWGRF-AIRPORT-TROPIC-ZONE — terreno tropical de `AirportTile`
+
+Actualizado: 2026-09-16 (`a225cefe`). `AirportTile` resuelve el terreno
+tropical desde `TropicZone` en los bits bajos de `MAPT`, como
+`GetTerrainType` upstream. `MAP7` queda reservado al frame de animación y deja
+de producir falsos desiertos; la construcción y limpieza de estaciones/
+aeropuertos conserva el nibble al escribir `MP_STATION`. Las regresiones cubren
+selva, frame animado y colocación sobre árbol; la suite core queda en
+`2813 passed; 1 ignored`, con Clippy estricto. La fila sigue parcial por
+foundations/rotaciones del compositor, paletas y delegación completa de
+`StationScope`.

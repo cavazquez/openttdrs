@@ -6010,3 +6010,14 @@ GRF v7 y anteriores, y en niveles de tesela para GRF v8+, tal como
 conserva el tipo de tesela y el bit de pertenencia al aeropuerto. La suite core
 queda en `2810 passed; 1 ignored`; #326/#329/#567 siguen abiertas por los
 pendientes restantes del compositor y scopes NewGRF.
+
+Corrección #326/#329-NEWGRF-AIRPORT-TROPIC-ZONE (2026-09-16, `a225cefe`):
+`AirportTile` obtiene ahora `GetTerrainType` tropical desde los bits bajos de
+`MAPT` (`TropicZone`), en lugar de interpretar `MAP7` —el frame de animación—
+como una marca de desierto. La construcción de aeropuertos y estaciones
+conserva ese nibble al convertir o limpiar la tesela, por lo que una pista
+colocada en desierto/selva mantiene el valor que consultan `0x41` y `0x60`.
+Las regresiones cubren selva, frame `MAP7` y una colocación sobre árbol tropical;
+la suite core queda en `2813 passed; 1 ignored` y Clippy estricto pasa.
+#326/#329/#567 continúan abiertas por la composición raster, foundations/
+rotaciones y scopes NewGRF restantes.

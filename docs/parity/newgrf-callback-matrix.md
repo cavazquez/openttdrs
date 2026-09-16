@@ -2126,3 +2126,12 @@ para árboles de costa (`MP_WATER`) y waypoints viales (`MP_ROAD`). Las
 regresiones fijan ambos tipos falsos antes de empaquetar terreno, agua, altura
 y pendiente; foundations/rotaciones del compositor, paletas y delegación
 completa de `StationScope` siguen pendientes.
+
+Actualización #326/#329-NEWGRF-AIRPORT-TROPIC-ZONE (2026-09-16,
+`a225cefe`): `AirportTile` toma el terreno tropical de `TropicZone` en
+`MAPT & 0x03`; `MAP7` conserva exclusivamente el frame de animación de la
+tesela. Las rutas de construcción y limpieza de estaciones/aeropuertos
+mantienen ese nibble al escribir `MP_STATION`, y las regresiones cubren la zona
+de selva, el frame con bit 5 y una colocación sobre árbol tropical. La fila
+continúa parcial por foundations/rotaciones, paletas y delegación completa de
+`StationScope`.

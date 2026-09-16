@@ -6335,3 +6335,14 @@ overlays y la catenaria no heredan estos bits. Pasan 31 pruebas de transporte
 y Clippy estricto. La corrección es parcial y no cierra #326/#329/#567:
 quedan otros producers, efectos, callbacks/consumidores NewGRF, composición
 global y comparación de framebuffer.
+
+Corrección #326/#329/#567-LOCK-STRUCTURE-DESTINATION-TRANSPARENCY
+(2026-09-16, `0256f78b`): las piezas estructurales de `DrawWaterLock` respetan
+ahora `TO_BUILDINGS`: custom, Action5 y fallback vanilla usan la máscara de
+destino equivalente a `PALETTE_TO_TRANSPARENT` (`802`) en modo transparente,
+y no crean parents en modo oculto. El fallback compuesto sólo se separa en
+esos modos, manteniendo el agua ground visible/animada y sin aplicar el bit a
+diques, bordes ni superficies. Pasan 24 pruebas focalizadas y Clippy estricto.
+La corrección es parcial y no cierra #326/#329/#567: quedan otros producers,
+efectos, callbacks/consumidores NewGRF, composición global y comparación de
+framebuffer.

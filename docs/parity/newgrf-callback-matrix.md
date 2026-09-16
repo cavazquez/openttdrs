@@ -2396,3 +2396,11 @@ ya no se materializan siempre blancos. Los faroles siguen `TO_HOUSES`, los
 el parent, sin afectar ground, obras, overlays ni catenaria. Pasan 31 pruebas
 de transporte y Clippy estricto; la cobertura continúa parcial y no se
 cierran #326/#329/#567.
+
+Actualización #326/#329/#567-LOCK-STRUCTURE-DESTINATION-TRANSPARENCY
+(2026-09-16, `0256f78b`): el stream BUILD de `DrawWaterLock` aplica ahora el
+contrato de `TO_BUILDINGS` a sus capas custom, Action5 y vanilla. La máscara
+transparente es destino 802 y la invisible suprime los parents; el fallback
+separa agua y estructura sólo en esos modos, sin cambiar diques, bordes ni
+ground de superficie. Pasan 24 pruebas focalizadas y Clippy estricto; la
+cobertura continúa parcial y no se cierran #326/#329/#567.

@@ -9141,3 +9141,14 @@ siguen independientes. Pasan 31 pruebas de transporte y Clippy estricto. La
 fila continúa parcial y #326/#329/#567 permanecen abiertas por otros
 producers, efectos, callbacks/consumidores NewGRF, composición global y
 framebuffer.
+
+### #326/#329/#567-LOCK-STRUCTURE-DESTINATION-TRANSPARENCY — estructuras de esclusa
+
+Actualizado: 2026-09-16 (`0256f78b`). Las piezas BUILD de `DrawWaterLock`
+respetan `TO_BUILDINGS`: custom, Action5 y fallback vanilla reciben destino
+802 en modo transparente y se omiten en modo oculto. El fallback compuesto se
+separa sólo cuando hace falta para que el agua ground siga visible y animada;
+diques, bordes y superficies no heredan el bit. Pasan 24 pruebas focalizadas y
+Clippy estricto. La fila continúa parcial y #326/#329/#567 permanecen abiertas
+por otros producers, efectos, callbacks/consumidores NewGRF, composición global
+y framebuffer.

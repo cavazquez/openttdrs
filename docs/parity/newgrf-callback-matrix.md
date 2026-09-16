@@ -2404,3 +2404,13 @@ transparente es destino 802 y la invisible suprime los parents; el fallback
 separa agua y estructura sólo en esos modos, sin cambiar diques, bordes ni
 ground de superficie. Pasan 24 pruebas focalizadas y Clippy estricto; la
 cobertura continúa parcial y no se cierran #326/#329/#567.
+
+Actualización #326/#329/#567-CATENARY-DESTINATION-TRANSPARENCY
+(2026-09-16, `a3c14603`): la matriz registra que los consumidores de
+`TO_CATENARY` —rail, carretera, estaciones, depósitos, túneles y puentes—
+materializan la transparencia como destino 802 (`64/255`) y no como tinte
+blanco. Los grupos custom `ROTSG_CATENARY_BACK/FRONT` sobre puentes reciben
+la misma normalización antes de ser hijos del parent estructural. No se
+modifican `ROTSG_GROUND`, `ROTSG_OVERLAY`, las superficies ni el modo oculto.
+Pasan 64 pruebas filtradas y Clippy estricto; la cobertura sigue parcial y no
+se cierran #326/#329/#567.

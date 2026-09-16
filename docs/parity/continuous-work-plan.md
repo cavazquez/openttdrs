@@ -9152,3 +9152,15 @@ diques, bordes y superficies no heredan el bit. Pasan 24 pruebas focalizadas y
 Clippy estricto. La fila continúa parcial y #326/#329/#567 permanecen abiertas
 por otros producers, efectos, callbacks/consumidores NewGRF, composición global
 y framebuffer.
+
+### #326/#329/#567-CATENARY-DESTINATION-TRANSPARENCY — rail, carretera y puentes
+
+Actualizado: 2026-09-16 (`a3c14603`). Los sprites de catenaria de rail,
+carretera, estaciones, depósitos, túneles y puentes usan destino 802 cuando
+`TO_CATENARY` está transparente: negro con cobertura `64/255`, no blanco con
+alpha `0,45`. Las vistas custom `ROTSG_CATENARY_BACK/FRONT` de carretera en
+puentes se normalizan con el mismo color antes de entrar al parent/child
+sortable. Las superficies, overlays y el modo oculto permanecen separados.
+Pasan 64 pruebas filtradas de catenaria y Clippy estricto. La fila sigue
+parcial y #326/#329/#567 continúan abiertas por composición global,
+callbacks/consumidores NewGRF y comparación de framebuffer.

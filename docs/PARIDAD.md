@@ -6346,3 +6346,15 @@ diques, bordes ni superficies. Pasan 24 pruebas focalizadas y Clippy estricto.
 La corrección es parcial y no cierra #326/#329/#567: quedan otros producers,
 efectos, callbacks/consumidores NewGRF, composición global y comparación de
 framebuffer.
+
+Corrección #326/#329/#567-CATENARY-DESTINATION-TRANSPARENCY (2026-09-16,
+`a3c14603`): la catenaria de rail, carretera, estaciones, depósitos, túneles
+y puentes usa ahora la máscara de destino equivalente a
+`PALETTE_TO_TRANSPARENT` (`802`) cuando `TO_CATENARY` está transparente:
+negro con cobertura `64/255`, en lugar de blanco con alpha `0,45`. Las vistas
+custom `ROTSG_CATENARY_BACK/FRONT` de carretera sobre puentes reciben la misma
+decisión; las superficies, overlays y la catenaria oculta conservan sus
+contratos independientes. Pasan 64 pruebas filtradas de catenaria y Clippy
+estricto. La corrección es parcial y no cierra #326/#329/#567: siguen
+pendientes composición global, callbacks/consumidores NewGRF y comparación de
+framebuffer.

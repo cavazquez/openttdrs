@@ -9130,3 +9130,14 @@ media altura de pendiente permanecen fuera de la categoría. Las capas
 regresiones de árboles/capas combinadas y Clippy estricto. La fila continúa
 parcial por otros producers, efectos, callbacks/consumidores NewGRF,
 composición global y framebuffer.
+
+### #326/#329/#567-ROADSIDE-DETAIL-DESTINATION-TRANSPARENCY — detalles de calle
+
+Actualizado: 2026-09-16 (`c490f712`). `DrawRoadDetail` asigna las categorías
+nativas por productor: los faroles usan `TO_HOUSES` y los árboles laterales
+`TO_TREES`. La transparencia usa la máscara de destino 802 y la invisibilidad
+omite el parent sortable; el suelo, las obras, los overlays y la catenaria
+siguen independientes. Pasan 31 pruebas de transporte y Clippy estricto. La
+fila continúa parcial y #326/#329/#567 permanecen abiertas por otros
+producers, efectos, callbacks/consumidores NewGRF, composición global y
+framebuffer.

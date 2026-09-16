@@ -2388,3 +2388,11 @@ destino 802 para `TO_TREES` en las copas, incluyendo las capas combinadas que
 siguen al primer parent. El ground y el ajuste de media pendiente no heredan
 la transparencia. Pasan 6 regresiones focalizadas y Clippy estricto; la
 cobertura continúa parcial y no se cierran #326/#329/#567.
+
+Actualización #326/#329/#567-ROADSIDE-DETAIL-DESTINATION-TRANSPARENCY
+(2026-09-16, `c490f712`): los faroles y árboles laterales de `DrawRoadDetail`
+ya no se materializan siempre blancos. Los faroles siguen `TO_HOUSES`, los
+árboles `TO_TREES`; la ruta transparente usa destino 802 y la oculta suprime
+el parent, sin afectar ground, obras, overlays ni catenaria. Pasan 31 pruebas
+de transporte y Clippy estricto; la cobertura continúa parcial y no se
+cierran #326/#329/#567.

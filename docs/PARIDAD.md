@@ -6324,3 +6324,14 @@ las capas combinadas comparten la decisión del parent sortable. Pasan 6
 regresiones de árboles/capas combinadas y Clippy estricto. La corrección es
 parcial y no cierra #326/#329/#567: quedan otros producers, efectos,
 callbacks/consumidores NewGRF, composición global y comparación de framebuffer.
+
+Corrección #326/#329/#567-ROADSIDE-DETAIL-DESTINATION-TRANSPARENCY
+(2026-09-16, `c490f712`): los detalles `DrawRoadDetail` de calles respetan
+ahora el contrato nativo de transparencia e invisibilidad: los faroles usan
+`TO_HOUSES` y los árboles laterales `TO_TREES`. En modo transparente ambos
+usan la máscara de destino equivalente a `PALETTE_TO_TRANSPARENT` (`802`), y
+en modo oculto no se crean sus parents sortables. El suelo, las obras, los
+overlays y la catenaria no heredan estos bits. Pasan 31 pruebas de transporte
+y Clippy estricto. La corrección es parcial y no cierra #326/#329/#567:
+quedan otros producers, efectos, callbacks/consumidores NewGRF, composición
+global y comparación de framebuffer.

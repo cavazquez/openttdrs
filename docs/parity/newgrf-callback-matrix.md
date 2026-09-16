@@ -2470,3 +2470,11 @@ que la ruta de paleta de OpenTTD, de modo que cambiar la velocidad del juego
 no acelera ni ralentiza la animación. La cobertura de industria/callbacks,
 layouts, paletas restantes y compositor continúa parcial; no se cierran las
 issues madre.
+
+Actualización #326/#329/#567-PALETTE-PAUSE-CLOCK (`ae70e27d`): el ciclo de
+presentación usa ahora `PaletteAnimationClock`, alimentado con delta real y
+detenido por el gate de pausa/animación completa. Agua, fuego de refinería,
+`fizzy_drink`, faro/estadio y radio leen la misma fase, eliminando tanto la
+dependencia de `Time<Virtual>` como el salto acumulado durante una pausa. Pasan
+16 pruebas focalizadas, 1.576 tests del cliente y Clippy estricto; la cobertura
+de #326/#329/#567 continúa parcial y no se cierran issues madre.

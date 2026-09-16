@@ -9226,6 +9226,18 @@ permanecen abiertas: falta modelar el contador nativo durante pausas y quedan
 otros ciclos, producers, callbacks/consumidores NewGRF, composición global y
 framebuffer.
 
+### #326/#329/#567-PALETTE-PAUSE-CLOCK — contador compartido
+
+Actualizado: 2026-09-16 (`ae70e27d`). Los ciclos visuales de agua, fuego de
+refinería, `fizzy_drink`, faro/estadio y radio consumen un único contador de
+presentación. El contador acumula `Time<Real>` bajo el gate de animación
+completa, por lo que una pausa no avanza la fase ni provoca un salto al
+reanudar; cambiar la velocidad de la simulación tampoco modifica la cadencia.
+Pasan 16 pruebas focalizadas, 1.576 tests del cliente, 2 ignorados y Clippy
+estricto del binario. La fila continúa parcial y #326/#329/#567 permanecen
+abiertas: faltan la cadencia entera exacta de OpenTTD, otros ciclos/producers,
+callbacks/consumidores NewGRF, composición global y comparación de framebuffer.
+
 ### #326/#329/#567-INDUSTRY-FIZZY-REAL-CLOCK — animación de bebidas Toyland
 
 Actualizado: 2026-09-16 (`2a99e89f`). El ciclo `fizzy_drink` se actualiza con

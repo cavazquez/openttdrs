@@ -6425,3 +6425,15 @@ del usuario. Pasan 2 pruebas del faro y 5 del agua, además de Clippy estricto.
 La corrección es parcial y no cierra #326/#329/#567: quedan la cadencia exacta
 del contador de paleta al pausar, otros producers, callbacks/consumidores
 NewGRF, composición global y comparación de framebuffer.
+
+Corrección #326/#329/#567-PALETTE-PAUSE-CLOCK (2026-09-16,
+`ae70e27d`): los consumidores de paleta comparten ahora un contador de
+presentación que acumula `Time<Real>` sólo cuando el gate de animación completa
+está habilitado y la partida no está pausada. Agua, fuego de refinería,
+`fizzy_drink`, faro/estadio y radio dejan de mantener relojes independientes:
+al pausar no consumen tiempo ni saltan de fase al reanudar, y la velocidad de
+la simulación no altera su cadencia. Pasan 16 pruebas focalizadas, 1.576 tests
+del cliente, 2 ignorados y Clippy estricto del binario. La corrección es
+parcial y no cierra #326/#329/#567: siguen pendientes la cadencia entera exacta
+del contador nativo, otros producers/ciclos, callbacks/consumidores NewGRF,
+composición global y comparación de framebuffer.

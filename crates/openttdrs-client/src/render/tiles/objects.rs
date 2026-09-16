@@ -4532,8 +4532,15 @@ pub(crate) fn spawn_transport_object_tile(
     );
 }
 
-/// Tipo sintético de caché para vistas y layouts Action3 de `AirportTile`.
-const AIRPORT_TILE_ACTION3_CACHE_TYPE: u8 = 0x11;
+/// Namespace sintético de caché para layouts Action3 de `AirportTile`.
+const AIRPORT_TILE_LAYOUT_CACHE_TYPE: u8 = 0x11;
+/// Namespace separado para la vista plana Action1/3 de `AirportTile`.
+///
+/// Los layouts usan bloques de 256 slots por `gfx`; la vista plana conserva
+/// el `gfx` como slot y el frame/estado como variante. Separar los namespaces
+/// evita que un layout de un `gfx` pequeño pueda colisionar con la vista plana
+/// de otro `gfx` al materializar ambos en la misma caché.
+const AIRPORT_TILE_FLAT_CACHE_TYPE: u8 = 0x12;
 
 /// Cada `AirportTile` tiene como máximo 256 slots Action1/`TileSeq`: el id
 /// global válido ya está acotado a `0..256`, así que reservar un bloque entero
@@ -4545,6 +4552,17 @@ const AIRPORT_TILE_ACTION3_CACHE_TYPE: u8 = 0x11;
 fn airport_tile_layout_cache_slot(gfx: u16, layer: usize) -> Option<u16> {
     let layer = u16::try_from(layer).ok()?;
     gfx.checked_mul(256)?.checked_add(layer)
+}
+
+/// Variante de caché de la vista plana: incluso sin Action2 runtime, `m7`
+/// puede seleccionar un frame distinto de `newgrf_views`. En el camino
+/// runtime se mezcla además el fingerprint final de la evaluación para que
+/// dos tiles con el mismo frame pero distinto contexto no compartan imagen.
+#[must_use]
+fn airport_tile_flat_cache_variant(frame: usize, runtime_fp: u32) -> u32 {
+    runtime_fp
+        .wrapping_mul(31)
+        .wrapping_add(u32::try_from(frame).unwrap_or(u32::MAX))
 }
 
 fn airport_tile_layout_is_renderable(
@@ -4642,7 +4660,7 @@ fn spawn_newgrf_airport_layout_ground(
             return false;
         };
         let image = cache.handle_for_variant_with_company_colour_and_modifiers(
-            AIRPORT_TILE_ACTION3_CACHE_TYPE,
+            AIRPORT_TILE_LAYOUT_CACHE_TYPE,
             slot,
             runtime_fp,
             owner_colour,
@@ -4748,7 +4766,7 @@ fn spawn_newgrf_airport_layout_sequence(
                 return false;
             };
             let handle = cache.handle_for_variant_with_company_colour_and_modifiers(
-                AIRPORT_TILE_ACTION3_CACHE_TYPE,
+                AIRPORT_TILE_LAYOUT_CACHE_TYPE,
                 slot,
                 runtime_fp,
                 owner_colour,
@@ -4963,10 +4981,11 @@ fn spawn_newgrf_airport_tile(
         // exact flat view used for offsets has been selected.
         runtime_fingerprint(action2, vars::AIRPORT_TILE, false)
     });
+    let flat_variant = airport_tile_flat_cache_variant(frame, runtime_fp);
     let image = cache.handle_for_variant_with_company_colour(
-        AIRPORT_TILE_ACTION3_CACHE_TYPE,
+        AIRPORT_TILE_FLAT_CACHE_TYPE,
         gfx,
-        runtime_fp,
+        flat_variant,
         owner_colour,
         &view,
         images,
@@ -7658,7 +7677,10 @@ fn spawn_rail_depot_tile(
 
 #[cfg(test)]
 mod tests {
-    use bevy::prelude::{Color, Vec2};
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::prelude::{
+        Assets, Color, Commands, Image, Res, ResMut, Resource, Sprite, Vec2, World,
+    };
 
     use super::{
         INVALID_ROAD_TYPE_ID, ROTSG_DEPOT, TileRenderContext,
@@ -7671,14 +7693,14 @@ mod tests {
         road_depot_newgrf_def_for_tile, road_depot_parent_sprites,
         road_stop_foundation_child_offset, road_stop_layout_ground_slot,
         road_stop_layout_is_static, road_stop_layout_sequence_slot_range, road_stop_parent_sprites,
-        road_stop_simple_view_slot, road_stop_sorted_layer_centers,
+        road_stop_simple_view_slot, road_stop_sorted_layer_centers, spawn_newgrf_airport_tile,
         station_catenary_pylon_parent_bounds, station_catenary_wire_parent_bounds,
         station_catenary_wire_trace_geometry, station_rail_child_offset,
         station_rail_foundation_world_z_delta, station_rail_layer_parent_bounds,
         tunnel_catenary_trace_geometry, tunnel_sortable_parents,
     };
     use openttdrs_core::{
-        DecodedSprite, Map, RoadTramType, RoadType, RoadTypeDef, TileCoord, TileKind,
+        Climate, DecodedSprite, Map, RoadTramType, RoadType, RoadTypeDef, TileCoord, TileKind,
         TrainSpriteGraphics, WaterClass, set_road_type_on_tile, set_tram_road_type_on_tile,
         set_water_class_m1,
     };
@@ -7691,6 +7713,12 @@ mod tests {
         airport_station_ground_layers_for_gfx, rail_depot_build_layers, rail_station_draw_layers,
         road_depot_build_layers, road_stop_drive_through_layers, road_waypoint_build_layers,
     };
+
+    #[derive(Resource)]
+    struct TsMapForObjectTests(Map);
+
+    #[derive(Resource)]
+    struct TsGridForObjectTests(RenderGrid);
 
     fn roadtype_with_depot_group(id: u8, class: RoadTramType) -> RoadTypeDef {
         let view = DecodedSprite {
@@ -7928,6 +7956,116 @@ mod tests {
             complete: true,
         };
         assert!(!airport_tile_layout_is_renderable(u16::MAX, &mixed));
+    }
+
+    #[test]
+    fn airport_flat_cache_keeps_static_animation_frames_separate() {
+        let first_view = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![255, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        let second_view = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![0, 0, 255, 255],
+            mask: Vec::new(),
+        };
+        let gfx = 175;
+        let airport_tile = openttdrs_core::AirportTileSpecDef {
+            gfx: openttdrs_core::AirportTileGfxId(gfx),
+            subst_id: 24,
+            from_newgrf: true,
+            callback_mask: 0,
+            animation_frames: 1,
+            animation_status: 1,
+            animation_speed: 2,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            newgrf_local_id: 0,
+            newgrf_grfid: 0x4150_544C,
+            newgrf_grf_version: 0,
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_preview: Some(first_view.clone()),
+            newgrf_views: vec![first_view.clone(), second_view.clone()],
+            newgrf_runtime: None,
+        };
+        let mut map = Map::new_flat(4, 4, 0);
+        for (coord, frame) in [(TileCoord::new(1, 1), 0_u8), (TileCoord::new(2, 1), 1_u8)] {
+            let mut tile = map.get(coord).expect("airport tile");
+            tile.kind = TileKind::Airport;
+            tile.m7 = frame;
+            map.set_tile(coord, tile).expect("airport frame tile");
+        }
+        let grid = RenderGrid::from_map(&map, 4, 4);
+        let catalog = vec![airport_tile];
+        let mut world = World::new();
+        world.insert_resource(TsMapForObjectTests(map));
+        world.insert_resource(TsGridForObjectTests(grid));
+        world.insert_resource(crate::render::NewGrfAction5SpriteCache::default());
+        world.insert_resource(Assets::<Image>::default());
+        world
+            .run_system_once(
+                move |mut commands: Commands,
+                      map: Res<TsMapForObjectTests>,
+                      grid: Res<TsGridForObjectTests>,
+                      mut cache: ResMut<crate::render::NewGrfAction5SpriteCache>,
+                      mut images: ResMut<Assets<Image>>| {
+                    for (x, y) in [(1, 1), (2, 1)] {
+                        let ctx = TileRenderContext::new(&map.0, &grid.0, x, y);
+                        assert!(spawn_newgrf_airport_tile(
+                            &mut commands,
+                            &ctx,
+                            0,
+                            None,
+                            gfx,
+                            &map.0,
+                            4,
+                            &[],
+                            &[],
+                            &catalog,
+                            &[],
+                            Climate::Temperate,
+                            &[],
+                            Some(&mut cache),
+                            Some(&mut images),
+                            None,
+                        ));
+                    }
+                },
+            )
+            .expect("airport static animation spawn");
+
+        let sprites: Vec<_> = world
+            .query::<&Sprite>()
+            .iter(&world)
+            .map(|sprite| sprite.image.clone())
+            .collect();
+        assert_eq!(sprites.len(), 2, "cada frame plano debe emitir un sprite");
+        assert_ne!(
+            sprites[0], sprites[1],
+            "los frames no deben compartir handle"
+        );
+        let images = world.resource::<Assets<Image>>();
+        let pixels: Vec<_> = sprites
+            .iter()
+            .map(|handle| {
+                images
+                    .get(handle)
+                    .and_then(|image| image.data.as_deref())
+                    .expect("imagen del AirportTile")
+                    .to_vec()
+            })
+            .collect();
+        assert!(pixels.contains(&first_view.rgba));
+        assert!(pixels.contains(&second_view.rgba));
     }
 
     #[test]

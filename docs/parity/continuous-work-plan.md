@@ -9366,3 +9366,13 @@ lectura/escritura persistente materializada. Pasan las regresiones de
 La fila continúa parcial: queda revisar si el replay SAV requiere un PSA del
 aeropuerto separado del mapa persistente compartido por la estación, además
 de los demás gaps de compositor/callbacks; no se cierran las issues madre.
+
+### #326/#329/#567-AIRPORT-TILE-NEARBY-TYPES — tipos nativos en `0x60`
+
+Actualizado: 2026-09-16 (`6bb40854`). El contexto de `AirportTile` ya conserva
+`MP_TUNNELBRIDGE=9` para túneles/puentes y respeta el nibble `MAPT` de tipos
+importados no claros, como `MP_OBJECT=10`, antes del fallback semántico de
+mapas generados. Así la palabra de `GetNearbyTileInformation` mantiene el
+mismo byte alto que OpenTTD. La regresión verifica rail tunnel, road bridge,
+objeto crudo y el empaquetado de `0x60`; pasan 2.825 tests de core, 1 ignorado
+y Clippy estricto. La fila sigue parcial y no se cierran las issues madre.

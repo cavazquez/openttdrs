@@ -6553,3 +6553,13 @@ estricto. La corrección evita la fuga de estado, pero es parcial: aún debe
 desacoplarse, si el replay SAV lo exige, el backing store del PSA del
 aeropuerto respecto del almacenamiento compartido de la estación; no se
 cierran #326/#329/#567.
+
+Corrección #326/#329/#567-AIRPORT-TILE-NEARBY-TYPES (`6bb40854`, 2026-09-16):
+`GetNearbyTileInformation` para `AirportTile` conserva ahora
+`MP_TUNNELBRIDGE=9` en túneles y puentes ferroviarios o viales, y mantiene los
+tipos nativos no cero de mapas importados, incluido `MP_OBJECT=10`. Antes el
+modelo reducía esas estructuras a rail/road o a `MP_CLEAR`, alterando la
+palabra `0x60` que reciben los callbacks. La regresión cubre los dos caminos
+y la palabra empaquetada; pasan 2.825 tests de `openttdrs-core`, 1 ignorado y
+Clippy estricto. Es una corrección parcial del scope vecino y no cierra
+#326/#329/#567.

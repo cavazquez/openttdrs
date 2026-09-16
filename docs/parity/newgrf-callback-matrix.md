@@ -2579,3 +2579,13 @@ el writeback y el contexto real; pasan 2.824 tests de core, 1 ignorado y
 Clippy estricto. Es una corrección de contrato de scopes, no un cierre de
 paridad completa: debe auditarse el backing store propio del aeropuerto frente
 al de la estación y quedan otros callbacks/consumidores y compositor.
+
+### #326/#329/#567-AIRPORT-TILE-NEARBY-TYPES — byte de tipo de `0x60`
+
+Actualización (2026-09-16, `6bb40854`): `AirportTile` conserva el tipo nativo
+`MP_TUNNELBRIDGE=9` para túneles y puentes, independientemente de si la
+estructura es ferroviaria o vial, y mantiene los tipos crudos no cero de
+`MAPT`, incluido `MP_OBJECT=10`, para mapas importados. El empaquetado de
+`GetNearbyTileInformation` y las regresiones de rail tunnel/road bridge quedan
+alineados con OpenTTD. Pasan 2.825 tests de core, 1 ignorado y Clippy estricto;
+la cobertura de vecinos sigue parcial y no se cierran las issues madre.

@@ -7,6 +7,7 @@ use crate::airport::{AirportPiece, airport_station_gfx_animation_frames};
 use crate::airport_tile_action2::airport_tile_random_bits;
 use crate::airport_tile_spec::{
     AirportAnimationTrigger, AirportTileSpecDef, NEW_AIRPORT_TILE_OFFSET,
+    get_translated_airport_tile_id,
 };
 use crate::cargo::CargoType;
 use crate::cargo_spec::CargoSpecDef;
@@ -133,12 +134,28 @@ pub fn step_airport_tiles(map: &mut Map, tick: u64, stations: &[Station]) -> Vec
 /// `airport_tile_gfx`; los saves antiguos pueden no tenerla, en cuyo caso se
 /// usa el byte `m5` como compatibilidad con el mapa nativo.
 fn airport_tile_gfx(station: &Station, map: &Map, coord: TileCoord) -> Option<u16> {
+    airport_tile_gfx_with_overrides(station, map, coord, &[])
+}
+
+fn airport_tile_gfx_with_overrides(
+    station: &Station,
+    map: &Map,
+    coord: TileCoord,
+    airport_tile_overrides: &[u16],
+) -> Option<u16> {
     station
         .airport_tile_gfx
         .iter()
         .find(|(candidate, _)| *candidate == coord)
         .map(|(_, gfx)| *gfx)
         .or_else(|| map.get(coord).map(|tile| u16::from(tile.m5)))
+        .map(|gfx| {
+            if gfx < NEW_AIRPORT_TILE_OFFSET {
+                get_translated_airport_tile_id(gfx, airport_tile_overrides)
+            } else {
+                gfx
+            }
+        })
 }
 
 fn airport_station_index(stations: &[Station], coord: TileCoord) -> Option<usize> {
@@ -148,7 +165,7 @@ fn airport_station_index(stations: &[Station], coord: TileCoord) -> Option<usize
 }
 
 #[allow(clippy::too_many_arguments)]
-fn airport_animation_context_with_towns_and_snow_line(
+fn airport_animation_context_with_towns_and_snow_line_and_overrides(
     map: &Map,
     stations: &[Station],
     towns: &[crate::town::Town],
@@ -156,6 +173,7 @@ fn airport_animation_context_with_towns_and_snow_line(
     airport_catalog: &[crate::airport_class::NewgrfAirportSpecDef],
     climate: Climate,
     snow_line_height: u8,
+    airport_tile_overrides: &[u16],
     newgrf_stack: &[crate::NewGrfEntry],
     coord: TileCoord,
 ) -> Option<(
@@ -164,7 +182,12 @@ fn airport_animation_context_with_towns_and_snow_line(
     crate::newgrf_sprites::Action2EvalCtx,
 )> {
     let station_index = airport_station_index(stations, coord)?;
-    let gfx = airport_tile_gfx(&stations[station_index], map, coord)?;
+    let gfx = airport_tile_gfx_with_overrides(
+        &stations[station_index],
+        map,
+        coord,
+        airport_tile_overrides,
+    )?;
     if gfx < NEW_AIRPORT_TILE_OFFSET {
         return None;
     }
@@ -172,7 +195,7 @@ fn airport_animation_context_with_towns_and_snow_line(
         .iter()
         .find(|candidate| candidate.gfx.as_u16() == gfx && candidate.from_newgrf)
         .cloned()?;
-    let mut ctx = crate::airport_tile_action2::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line(
+    let mut ctx = crate::airport_tile_action2::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line_and_overrides(
         map,
         stations,
         towns,
@@ -182,6 +205,7 @@ fn airport_animation_context_with_towns_and_snow_line(
         &def,
         climate,
         snow_line_height,
+        airport_tile_overrides,
     );
     ctx.set_grf_params(crate::stack_params_for_grfid(
         newgrf_stack,
@@ -361,6 +385,7 @@ pub fn trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog<S: B
         towns,
         climate,
         DEF_SNOW_LINE_HEIGHT,
+        &[],
         catalog,
         airport_catalog,
         active_tiles,
@@ -401,6 +426,7 @@ pub fn trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog_and_
         towns,
         climate,
         DEF_SNOW_LINE_HEIGHT,
+        &[],
         catalog,
         airport_catalog,
         active_tiles,
@@ -421,6 +447,7 @@ fn trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog_impl<S: 
     towns: &[crate::town::Town],
     climate: Climate,
     snow_line_height: u8,
+    airport_tile_overrides: &[u16],
     catalog: &[AirportTileSpecDef],
     airport_catalog: &[crate::airport_class::NewgrfAirportSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
@@ -431,7 +458,8 @@ fn trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog_impl<S: 
     var18_extra: u8,
     sound_events: Option<&mut Vec<StationAnimationSound>>,
 ) -> bool {
-    let Some((station_index, def, mut ctx)) = airport_animation_context_with_towns_and_snow_line(
+    let Some((station_index, def, mut ctx)) =
+        airport_animation_context_with_towns_and_snow_line_and_overrides(
         map,
         stations,
         towns,
@@ -439,9 +467,11 @@ fn trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog_impl<S: 
         airport_catalog,
         climate,
         snow_line_height,
+        airport_tile_overrides,
         newgrf_stack,
         coord,
-    ) else {
+    )
+    else {
         active_tiles.remove(&coord);
         return false;
     };
@@ -611,6 +641,7 @@ pub fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog
         cargo_catalog,
         climate,
         DEF_SNOW_LINE_HEIGHT,
+        &[],
         catalog,
         airport_catalog,
         active_tiles,
@@ -692,6 +723,50 @@ pub fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog
         cargo_catalog,
         climate,
         snow_line_height,
+        &[],
+        catalog,
+        airport_catalog,
+        active_tiles,
+        newgrf_stack,
+        station_anchor,
+        trigger,
+        cargo,
+        Some(sound_events),
+    )
+}
+
+/// Variante de la animación de estación que aplica los overrides persistidos
+/// al resolver `AirportTile` vecinos (`var 0x62`).
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_and_sounds_with_snow_line_and_overrides<
+    S: BuildHasher,
+>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    towns: &[crate::town::Town],
+    cargo_catalog: &[CargoSpecDef],
+    climate: Climate,
+    snow_line_height: u8,
+    airport_tile_overrides: &[u16],
+    catalog: &[AirportTileSpecDef],
+    airport_catalog: &[crate::airport_class::NewgrfAirportSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    newgrf_stack: &[crate::NewGrfEntry],
+    station_anchor: TileCoord,
+    trigger: AirportAnimationTrigger,
+    cargo: Option<CargoType>,
+    sound_events: &mut Vec<StationAnimationSound>,
+) -> Vec<TileCoord> {
+    trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_impl(
+        map,
+        tick,
+        stations,
+        towns,
+        cargo_catalog,
+        climate,
+        snow_line_height,
+        airport_tile_overrides,
         catalog,
         airport_catalog,
         active_tiles,
@@ -714,6 +789,7 @@ fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and
     cargo_catalog: &[CargoSpecDef],
     climate: Climate,
     snow_line_height: u8,
+    airport_tile_overrides: &[u16],
     catalog: &[AirportTileSpecDef],
     airport_catalog: &[crate::airport_class::NewgrfAirportSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
@@ -748,6 +824,7 @@ fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and
             towns,
             climate,
             snow_line_height,
+            airport_tile_overrides,
             catalog,
             airport_catalog,
             active_tiles,
@@ -803,6 +880,7 @@ pub fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog
         cargo_catalog,
         climate,
         DEF_SNOW_LINE_HEIGHT,
+        &[],
         catalog,
         airport_catalog,
         active_tiles,
@@ -884,6 +962,50 @@ pub fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog
         cargo_catalog,
         climate,
         snow_line_height,
+        &[],
+        catalog,
+        airport_catalog,
+        active_tiles,
+        newgrf_stack,
+        station_anchor,
+        trigger,
+        cargo,
+        rng,
+        Some(sound_events),
+    )
+}
+
+/// Variante global-RNG que aplica los overrides persistidos al resolver
+/// `AirportTile` vecinos (`var 0x62`).
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_with_global_rng_and_sounds_with_snow_line_and_overrides<
+    S: BuildHasher,
+>(
+    map: &mut Map,
+    stations: &mut [Station],
+    towns: &[crate::town::Town],
+    cargo_catalog: &[CargoSpecDef],
+    climate: Climate,
+    snow_line_height: u8,
+    airport_tile_overrides: &[u16],
+    catalog: &[AirportTileSpecDef],
+    airport_catalog: &[crate::airport_class::NewgrfAirportSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    newgrf_stack: &[crate::NewGrfEntry],
+    station_anchor: TileCoord,
+    trigger: AirportAnimationTrigger,
+    cargo: Option<CargoType>,
+    rng: &mut crate::cargodist::parity::Randomizer,
+    sound_events: &mut Vec<StationAnimationSound>,
+) -> Vec<TileCoord> {
+    trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_with_global_rng_impl(
+        map,
+        stations,
+        towns,
+        cargo_catalog,
+        climate,
+        snow_line_height,
+        airport_tile_overrides,
         catalog,
         airport_catalog,
         active_tiles,
@@ -906,6 +1028,7 @@ fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and
     cargo_catalog: &[CargoSpecDef],
     climate: Climate,
     snow_line_height: u8,
+    airport_tile_overrides: &[u16],
     catalog: &[AirportTileSpecDef],
     airport_catalog: &[crate::airport_class::NewgrfAirportSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
@@ -939,7 +1062,7 @@ fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and
     let mut sound_events = sound_events;
     for coord in coords {
         let Some((station_index, def, mut ctx)) =
-            airport_animation_context_with_towns_and_snow_line(
+            airport_animation_context_with_towns_and_snow_line_and_overrides(
                 map,
                 stations,
                 towns,
@@ -947,6 +1070,7 @@ fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and
                 airport_catalog,
                 climate,
                 snow_line_height,
+                airport_tile_overrides,
                 newgrf_stack,
                 coord,
             )
@@ -1018,6 +1142,7 @@ fn advance_newgrf_airport_tile<S: BuildHasher>(
     towns: &[crate::town::Town],
     climate: Climate,
     snow_line_height: u8,
+    airport_tile_overrides: &[u16],
     catalog: &[AirportTileSpecDef],
     airport_catalog: &[crate::airport_class::NewgrfAirportSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
@@ -1025,7 +1150,8 @@ fn advance_newgrf_airport_tile<S: BuildHasher>(
     coord: TileCoord,
     sound_events: Option<&mut Vec<StationAnimationSound>>,
 ) -> bool {
-    let Some((station_index, def, mut ctx)) = airport_animation_context_with_towns_and_snow_line(
+    let Some((station_index, def, mut ctx)) =
+        airport_animation_context_with_towns_and_snow_line_and_overrides(
         map,
         stations,
         towns,
@@ -1033,9 +1159,11 @@ fn advance_newgrf_airport_tile<S: BuildHasher>(
         airport_catalog,
         climate,
         snow_line_height,
+        airport_tile_overrides,
         newgrf_stack,
         coord,
-    ) else {
+    )
+    else {
         active_tiles.remove(&coord);
         return false;
     };
@@ -1253,6 +1381,43 @@ pub fn step_newgrf_airport_tiles_with_towns_and_airport_catalog_and_sounds_with_
     tile_loop_visits: &[(TileCoord, crate::map::Tile)],
     sound_events: &mut Vec<StationAnimationSound>,
 ) -> Vec<TileCoord> {
+    step_newgrf_airport_tiles_with_towns_and_airport_catalog_and_sounds_with_snow_line_and_overrides(
+        map,
+        tick,
+        stations,
+        towns,
+        climate,
+        snow_line_height,
+        &[],
+        catalog,
+        airport_catalog,
+        active_tiles,
+        newgrf_stack,
+        tile_loop_visits,
+        sound_events,
+    )
+}
+
+/// Variante del scheduler que aplica los overrides persistidos al scope de
+/// cada `AirportTile` durante `TileLoop` y el avance periódico.
+#[allow(clippy::too_many_arguments)]
+pub fn step_newgrf_airport_tiles_with_towns_and_airport_catalog_and_sounds_with_snow_line_and_overrides<
+    S: BuildHasher,
+>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    towns: &[crate::town::Town],
+    climate: Climate,
+    snow_line_height: u8,
+    airport_tile_overrides: &[u16],
+    catalog: &[AirportTileSpecDef],
+    airport_catalog: &[crate::airport_class::NewgrfAirportSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    newgrf_stack: &[crate::NewGrfEntry],
+    tile_loop_visits: &[(TileCoord, crate::map::Tile)],
+    sound_events: &mut Vec<StationAnimationSound>,
+) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
     for (coord, _) in tile_loop_visits {
         if trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog_impl(
@@ -1262,6 +1427,7 @@ pub fn step_newgrf_airport_tiles_with_towns_and_airport_catalog_and_sounds_with_
             towns,
             climate,
             snow_line_height,
+            airport_tile_overrides,
             catalog,
             airport_catalog,
             active_tiles,
@@ -1291,7 +1457,7 @@ pub fn step_newgrf_airport_tiles_with_towns_and_airport_catalog_and_sounds_with_
     candidates.sort_by_key(|coord| (coord.x, coord.y));
     candidates.dedup();
     for coord in candidates {
-        let Some((_, def, _)) = airport_animation_context_with_towns_and_snow_line(
+        let Some((_, def, _)) = airport_animation_context_with_towns_and_snow_line_and_overrides(
             map,
             stations,
             towns,
@@ -1299,6 +1465,7 @@ pub fn step_newgrf_airport_tiles_with_towns_and_airport_catalog_and_sounds_with_
             airport_catalog,
             climate,
             snow_line_height,
+            airport_tile_overrides,
             newgrf_stack,
             coord,
         ) else {
@@ -1328,6 +1495,7 @@ pub fn step_newgrf_airport_tiles_with_towns_and_airport_catalog_and_sounds_with_
             towns,
             climate,
             snow_line_height,
+            airport_tile_overrides,
             catalog,
             airport_catalog,
             active_tiles,

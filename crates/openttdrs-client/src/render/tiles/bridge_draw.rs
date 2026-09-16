@@ -46,6 +46,24 @@ fn bridge_structure_sprite_color(bridges_transparent: bool) -> Color {
     }
 }
 
+#[must_use]
+const fn bridge_structure_transparency_active(on_ramp: bool, bridges_transparent: bool) -> bool {
+    !on_ramp && bridges_transparent
+}
+
+#[must_use]
+const fn bridge_structure_invisibility_active(on_ramp: bool, bridges_hidden: bool) -> bool {
+    !on_ramp && bridges_hidden
+}
+
+#[must_use]
+fn bridge_transport_sprite_color(on_ramp: bool, bridges_transparent: bool) -> Color {
+    bridge_structure_sprite_color(bridge_structure_transparency_active(
+        on_ramp,
+        bridges_transparent,
+    ))
+}
+
 use super::helpers::{
     bridge_foundation_decision, foundation_surface_at, sloped_or_flat_image,
     spawn_empty_bounding_box, spawn_foundation_child_ground_sprite_at, spawn_foundation_sprite,
@@ -696,6 +714,7 @@ fn spawn_bridge_pbs_reservation(
     surface_z: u8,
     map_width: u32,
     parent: Option<Entity>,
+    bridges_transparent: bool,
 ) {
     let ramp_direction = ctx.tile.map_or(0, |tile| tile.m5);
     let sprite_id = bridge_pbs_reservation_sprite_id(
@@ -732,13 +751,15 @@ fn spawn_bridge_pbs_reservation(
         RAIL_ON_BRIDGE_LAYER_FRAC,
         TILE_HALF_H,
     ) + Vec3::new(offset.x, offset.y, 0.0);
+    let mut sprite = sprite.sprite();
+    sprite.color = bridge_structure_sprite_color(bridges_transparent);
     if let Some(parent) = parent {
-        spawn_bridge_combined_child(commands, ctx, map_width, parent, sprite.sprite(), position);
+        spawn_bridge_combined_child(commands, ctx, map_width, parent, sprite, position);
     } else {
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            sprite.sprite(),
+            sprite,
             Transform::from_translation(position),
         ));
     }
@@ -1724,11 +1745,11 @@ fn spawn_layer(
     draw_ordinal: u8,
     pillar_half: Option<(usize, PillarHalf)>,
     combined_parent: Option<Entity>,
+    bridges_transparent: bool,
 ) -> Option<Entity> {
     if sprite_id == 0 {
         return None;
     }
-    use crate::sprites::{TransparencyOption, is_transparent};
     let palette = bridge_structure_palette_for_sprite(bridge_type, sprite_id);
     let mut sprite = if let Some(handle) = assets.bridge_palettes.handle(sprite_id, palette) {
         Sprite {
@@ -1776,7 +1797,7 @@ fn spawn_layer(
             combined: combined_parent.is_some(),
         },
     );
-    sprite.color = bridge_structure_sprite_color(is_transparent(TransparencyOption::Bridges));
+    sprite.color = bridge_structure_sprite_color(bridges_transparent);
     let (w, h, xrel, yrel) = bridge_sprite_meta(sprite_id).unwrap_or((64.0, 32.0, -32.0, -16.0));
     let crop_x_shift = if let Some((axis, half)) = pillar_half {
         let Some((rect, x_shift)) = pillar_half_crop(axis, half, w, h, xrel) else {
@@ -1853,12 +1874,11 @@ fn spawn_custom_layer(
     twocc_map: Option<&openttdrs_core::DecodedSprite>,
     images: Option<&mut Assets<Image>>,
     combined_parent: Option<Entity>,
+    bridges_transparent: bool,
 ) -> Option<Entity> {
     if reference.sprite_id == 0 {
         return None;
     }
-    use crate::sprites::{TransparencyOption, is_transparent};
-
     let sprite_id = u32::from(reference.sprite_id);
     let (mut sprite, w, h, xrel, yrel, fallback) = if let Some(view) = view {
         let Some(images) = images else {
@@ -1960,7 +1980,7 @@ fn spawn_custom_layer(
             combined: combined_parent.is_some(),
         },
     );
-    sprite.color = bridge_structure_sprite_color(is_transparent(TransparencyOption::Bridges));
+    sprite.color = bridge_structure_sprite_color(bridges_transparent);
     let crop_x_shift = if let Some((axis, half)) = pillar_half {
         let (rect, x_shift) = pillar_half_crop(axis, half, w, h, xrel)?;
         sprite.rect = Some(rect);
@@ -2064,9 +2084,10 @@ mod tests {
         bridge_pillar_flags, bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta,
         bridge_ramp_ground_kind, bridge_ramp_ground_sprite_id, bridge_road_catenary_sprite_ids,
         bridge_road_catenary_trace_geometry, bridge_road_sprite_offset, bridge_span_at,
-        bridge_structure_sprite_color, bridge_surface_z, catenary_under_low_bridge,
-        custom_bridge_sprite, pillar_ground_heights, pillar_half_crop, pillar_segments,
-        road_stop_blocks_bridge_pillars, roadside_detail_visible_under_bridge,
+        bridge_structure_invisibility_active, bridge_structure_sprite_color,
+        bridge_structure_transparency_active, bridge_surface_z, bridge_transport_sprite_color,
+        catenary_under_low_bridge, custom_bridge_sprite, pillar_ground_heights, pillar_half_crop,
+        pillar_segments, road_stop_blocks_bridge_pillars, roadside_detail_visible_under_bridge,
         vanilla_road_stop_disallowed_pillars,
     };
     use crate::sprites::bridge_deck_sprite_ids;
@@ -2084,6 +2105,26 @@ mod tests {
         assert!(transparent.green.abs() < f32::EPSILON);
         assert!(transparent.blue.abs() < f32::EPSILON);
         assert!((transparent.alpha - (64.0 / 255.0)).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn bridge_ramp_heads_ignore_middle_structure_transparency_and_invisibility() {
+        assert!(!bridge_structure_transparency_active(true, true));
+        assert!(bridge_structure_transparency_active(false, true));
+        assert!(!bridge_structure_invisibility_active(true, true));
+        assert!(bridge_structure_invisibility_active(false, true));
+
+        let ramp_transport = bridge_transport_sprite_color(true, true).to_srgba();
+        assert!((ramp_transport.red - 1.0).abs() < f32::EPSILON);
+        assert!((ramp_transport.green - 1.0).abs() < f32::EPSILON);
+        assert!((ramp_transport.blue - 1.0).abs() < f32::EPSILON);
+        assert!((ramp_transport.alpha - 1.0).abs() < f32::EPSILON);
+
+        let middle_transport = bridge_transport_sprite_color(false, true).to_srgba();
+        assert!(middle_transport.red.abs() < f32::EPSILON);
+        assert!(middle_transport.green.abs() < f32::EPSILON);
+        assert!(middle_transport.blue.abs() < f32::EPSILON);
+        assert!((middle_transport.alpha - (64.0 / 255.0)).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -2936,9 +2977,11 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
     road_stop_catalog: &[RoadStopSpecDef],
     bridge_spec_catalog: &[openttdrs_core::BridgeSpecDef],
 ) {
-    use crate::sprites::{TransparencyOption, is_hidden};
+    use crate::sprites::{TransparencyOption, is_hidden, is_transparent};
     let ids = bridge_deck_sprite_ids(span.bridge_type, span.piece);
     let on_ramp = ctx.tile.is_some_and(ramp_tile);
+    let bridge_transparent = is_transparent(TransparencyOption::Bridges);
+    let bridges_transparent = bridge_structure_transparency_active(on_ramp, bridge_transparent);
     // OpenTTD llama a `DrawFoundation` antes de elegir la cabeza de puente.
     // Por eso tanto el sprite como la altura de una rampa deben tomar la
     // pendiente/base efectivas y no el relieve crudo del mapa.
@@ -3089,7 +3132,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
     // Aunque el usuario oculte los puentes, el suelo y la fundación siguen
     // perteneciendo a la tesela. La transparencia sólo debe omitir estructura,
     // barandilla, pilares y catenaria.
-    if is_hidden(TransparencyOption::Bridges) {
+    if bridge_structure_invisibility_active(on_ramp, is_hidden(TransparencyOption::Bridges)) {
         return;
     }
     let ramp_id = ctx.tile.filter(|_| on_ramp).map(|tile| {
@@ -3210,6 +3253,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             twocc_map,
             images.as_deref_mut(),
             None,
+            bridges_transparent,
         )
     } else {
         spawn_layer(
@@ -3248,6 +3292,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             BRIDGE_REAR_ORDINAL,
             None,
             None,
+            bridges_transparent,
         )
     };
     let transport_source = bridge_transport_source(map, ctx.coord, dims, on_ramp);
@@ -3284,6 +3329,8 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 &mut images,
             )
         {
+            let mut sprite = sprite;
+            sprite.color = bridge_transport_sprite_color(on_ramp, bridge_transparent);
             spawn_bridge_specific_child(
                 commands,
                 ctx,
@@ -3318,6 +3365,8 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 &mut images,
             )
         {
+            let mut sprite = sprite;
+            sprite.color = bridge_transport_sprite_color(on_ramp, bridge_transparent);
             spawn_bridge_specific_child(
                 commands,
                 ctx,
@@ -3352,6 +3401,8 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 &mut images,
             )
         {
+            let mut sprite = sprite;
+            sprite.color = bridge_transport_sprite_color(on_ramp, bridge_transparent);
             spawn_bridge_specific_child(
                 commands,
                 ctx,
@@ -3532,7 +3583,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             openttdrs_core::ACTION5_TYPE_BRIDGE_DECKS,
             slot,
             bridge_decks_newgrf,
-            Color::WHITE,
+            bridge_transport_sprite_color(on_ramp, bridge_transparent),
             images,
         )
     {
@@ -3575,6 +3626,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             surface_z,
             dims.0,
             rear_parent,
+            bridges_transparent,
         );
     }
     // `DrawBridgeRoadBits` recibe los tipos y bits desde la rampa sur. En un
@@ -3607,13 +3659,15 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8,
                 Some(TraceSpriteBounds::new(0, 0, 0, 16, 16, 0)),
             );
+            let mut sprite = tram.sprite();
+            sprite.color = bridge_transport_sprite_color(on_ramp, bridge_transparent);
             if let Some(parent) = rear_parent {
-                spawn_bridge_combined_child(commands, ctx, dims.0, parent, tram.sprite(), position);
+                spawn_bridge_combined_child(commands, ctx, dims.0, parent, sprite, position);
             } else {
                 commands.spawn((
                     MapVisualLayer,
                     ctx.map_tile_chunk(),
-                    tram.sprite(),
+                    sprite,
                     Transform::from_translation(position),
                 ));
             }
@@ -3769,6 +3823,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 twocc_map,
                 images.as_deref_mut(),
                 Some(parent),
+                bridges_transparent,
             );
         } else {
             spawn_layer(
@@ -3794,6 +3849,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 BRIDGE_FRONT_ORDINAL,
                 None,
                 Some(parent),
+                bridges_transparent,
             );
         }
     } else if let Some((reference, view)) = custom_front {
@@ -3823,6 +3879,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             twocc_map,
             images.as_deref_mut(),
             None,
+            bridges_transparent,
         );
     } else {
         spawn_layer(
@@ -3843,6 +3900,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             BRIDGE_FRONT_ORDINAL,
             None,
             None,
+            bridges_transparent,
         );
     }
 
@@ -3905,6 +3963,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 twocc_map,
                 images.as_deref_mut(),
                 None,
+                bridges_transparent,
             );
         }
         let back_top_px = z_draw_px.round() as i32 - 2 * TILE_HEIGHT_PX as i32;
@@ -3933,6 +3992,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                     twocc_map,
                     images.as_deref_mut(),
                     None,
+                    bridges_transparent,
                 );
             }
         }
@@ -3963,6 +4023,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 BRIDGE_PILLAR_ORDINAL_BASE,
                 segment.half.map(|half| (span.axis, half)),
                 None,
+                bridges_transparent,
             );
         }
         let back_top_px = z_draw_px.round() as i32 - 2 * TILE_HEIGHT_PX as i32;
@@ -3989,6 +4050,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                     BRIDGE_PILLAR_ORDINAL_BASE + 1,
                     segment.half.map(|half| (span.axis, half)),
                     None,
+                    bridges_transparent,
                 );
             }
         }

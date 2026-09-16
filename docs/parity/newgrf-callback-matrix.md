@@ -2071,3 +2071,16 @@ fecha. Las variables parametrizadas, registros, padres y estado persistente
 siguen cubiertas por `runtime_fingerprint`; no se alteran layouts `TileSeq`,
 paletas especiales ni callbacks restantes, por lo que #326/#329/#567 continúan
 abiertos.
+
+### #326/#329-NEWGRF-OBJECT-SCOPE-FINGERPRINT — variables directas del scope
+
+Actualizado: 2026-09-16 (`0eebce78`). El dominio `Object` incorpora las
+variables directas `42`, `47` y `48` que el resolver escribe para objetos
+construidos: fecha, color de instancia y vista. La regresión
+`object_scope_variables_invalidate_fingerprint` modifica cada valor y exige
+un fingerprint distinto; las claves de materialización conservan además el
+color y el índice de vista para sus contratos de paleta/orientación. Las
+variables parametrizadas de vecinos, registros, padres y estado persistente
+siguen cubiertas por `runtime_fingerprint`; no se alteran layouts `TileSeq`,
+paletas especiales ni callbacks restantes, por lo que #326/#329/#567 continúan
+abiertos.

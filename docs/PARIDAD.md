@@ -5945,3 +5945,15 @@ suite del cliente queda en `1553 passed; 2 ignored`, con 142 pruebas dirigidas
 de Station, Clippy estricto del binario, formato y `git diff --check` verdes.
 #326/#329/#567 permanecen abiertas por layouts, paletas, callbacks y
 consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-OBJECT-SCOPE-FINGERPRINT (2026-09-16,
+`0eebce78`): el fingerprint de las vistas runtime de `Object` incluye ahora
+las variables directas `42`, `47` y `48` (fecha de construcción, color y vista)
+que el resolver materializa para instancias construidas. Antes una variante
+dependiente de la fecha podía reutilizar el handle de otro objeto con el mismo
+spec/gfx; color y vista quedan también alineados con la clave de materialización.
+La regresión `object_scope_variables_invalidate_fingerprint` separa los tres
+casos; la suite del cliente queda en `1554 passed; 2 ignored`, con 55 pruebas
+dirigidas de Object, Clippy estricto del binario, formato y `git diff --check`
+verdes. #326/#329/#567 permanecen abiertas por layouts, paletas, callbacks y
+consumidores NewGRF restantes.

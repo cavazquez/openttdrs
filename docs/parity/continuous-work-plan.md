@@ -8732,3 +8732,14 @@ contextos cuyo Action2 podía producir píxeles distintos. La regresión
 suite completa del cliente pasa `1553 passed; 2 ignored`, junto con Clippy
 estricto, formato y `git diff --check`. El bloque no cierra #326/#329/#567:
 siguen pendientes layouts, paletas, callbacks y consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-OBJECT-SCOPE-FINGERPRINT (2026-09-16,
+`0eebce78`): `Object` deja de omitir en la identidad de sus vistas runtime las
+variables directas `42`, `47` y `48`, correspondientes a fecha de construcción,
+color y vista de la instancia. La regresión
+`object_scope_variables_invalidate_fingerprint` cambia cada una y exige un
+fingerprint distinto; el caso de fecha reproduce la colisión que no quedaba
+cubierta por la clave de color/vista. La suite completa del cliente pasa
+`1554 passed; 2 ignored`, junto con 55 pruebas dirigidas de Object, Clippy
+estricto, formato y `git diff --check`. El bloque no cierra #326/#329/#567:
+siguen pendientes layouts, paletas, callbacks y consumidores NewGRF restantes.

@@ -8568,3 +8568,13 @@ estricto del binario cliente, formato y `git diff --check` verdes; el test del
 binario no llegó a enlazar dentro de la ventana controlada y no se presenta
 como exitoso. #329/#567 permanecen abiertas por reversa física completa,
 callbacks y cachés visuales NewGRF.
+
+Corrección #329/#567-SHIP-YAPF-DEPOT-REVERSE (2026-09-16, `9b0e6c47`): la
+salida naval de un depósito compara dos búsquedas YAPF restringidas, forward y
+`ReverseTrackdir`, con el `ShipPathCost` del motor y los ajustes `pf.ship_curve*`
+vigentes. El controlador autoritativo recibe ahora la configuración de la
+partida, y `ship_depot_reverse_compares_both_yapf_origins` cubre el caso en que
+la rama inversa es más barata aunque el primer tile visible del path apunte al
+frente. Validación: `2804` tests de core pasados, `0` fallidos y `1` ignorado,
+Clippy estricto de core/cliente, formato y `git diff --check` verdes. #329/#567
+permanecen abiertas por callbacks y cachés visuales NewGRF.

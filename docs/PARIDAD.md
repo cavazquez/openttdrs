@@ -5772,3 +5772,14 @@ openttdrs-client --locked --offline`, Clippy estricto del binario cliente,
 formato y `git diff --check` verdes; el test del binario quedó sin enlazar tras
 una espera controlada y no se cuenta como pasado. #329/#567 permanecen abiertas
 por reversa física completa, callbacks y cachés visuales NewGRF.
+
+Corrección #329/#567-SHIP-YAPF-DEPOT-REVERSE (2026-09-16, `9b0e6c47`): al
+liberar un barco, el controlador compara las rutas YAPF desde el origen
+forward y su `ReverseTrackdir`, usando el perfil de velocidad del motor y las
+penalizaciones navales configuradas en `pf.*`; ya no decide sólo por el primer
+vecino de `Vehicle::path`. El tick autoritativo comparte esos settings con el
+controlador y la regresión `ship_depot_reverse_compares_both_yapf_origins`
+fija una red donde la rama inversa gana aunque el path visible empiece hacia
+delante. Validación: `2804` tests de core pasados, `0` fallidos y `1` ignorado,
+Clippy estricto de core/cliente, formato y `git diff --check` verdes. #329/#567
+permanecen abiertas por callbacks y cachés visuales NewGRF restantes.

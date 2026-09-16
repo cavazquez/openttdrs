@@ -834,8 +834,8 @@ pub(crate) fn spawn_house_tile(
             def.newgrf_view_runtime(building_stage, &mut a2)
         } else {
             def.newgrf_view(building_stage).cloned()
-        } && let Some(handle) = cache.handle_for_runtime(def, building_stage, &mut a2, images)
-        {
+        } {
+            let handle = cache.handle_for_resolved_view(def, building_stage, &a2, &view, images);
             let pos3 = house_pos(
                 ctx.iso_pos,
                 f32::from(view.x_offs),
@@ -1725,40 +1725,37 @@ pub(crate) fn spawn_industry_tile_with_world(
             newgrf_stack,
             def.newgrf_grfid,
         ));
-        if let Some(handle) = cache.handle_for_runtime(def, stage, colour, &mut a2, images) {
-            let view = if def.newgrf_runtime.is_some() {
-                def.newgrf_view_runtime(stage, &mut a2)
-            } else {
-                def.newgrf_view(stage).cloned()
+        let view = if def.newgrf_runtime.is_some() {
+            def.newgrf_view_runtime(stage, &mut a2)
+        } else {
+            def.newgrf_view(stage).cloned()
+        };
+        if let Some(view) = view {
+            let handle = cache.handle_for_resolved_view(def, stage, colour, &a2, &view, images);
+            let pos3 = overlay_at(
+                f32::from(view.x_offs),
+                f32::from(view.y_offs),
+                f32::from(view.width),
+                f32::from(view.height),
+                0.5,
+            );
+            let mut sprite = Sprite {
+                image: handle,
+                color: Color::WHITE,
+                ..default()
             };
-            if let Some(view) = view {
-                let pos3 = overlay_at(
-                    f32::from(view.x_offs),
-                    f32::from(view.y_offs),
-                    f32::from(view.width),
-                    f32::from(view.height),
-                    0.5,
-                );
-                let mut sprite = Sprite {
-                    image: handle,
-                    color: Color::WHITE,
-                    ..default()
-                };
-                sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
-                if let Some(parent) = foundation.child_parent {
-                    spawn_foundation_child_sprite_at(
-                        commands, sprite, ctx, pos3, map_width, parent,
-                    );
-                } else {
-                    commands.spawn((
-                        MapVisualLayer,
-                        chunk,
-                        sprite,
-                        Transform::from_translation(pos3),
-                    ));
-                }
-                return;
+            sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
+            if let Some(parent) = foundation.child_parent {
+                spawn_foundation_child_sprite_at(commands, sprite, ctx, pos3, map_width, parent);
+            } else {
+                commands.spawn((
+                    MapVisualLayer,
+                    chunk,
+                    sprite,
+                    Transform::from_translation(pos3),
+                ));
             }
+            return;
         }
     }
     // Los `draw_proc` vanilla se agregan después del edificio mediante
@@ -3471,9 +3468,8 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
             } else {
                 def.view(view_idx).cloned()
             };
-            if let Some(view) = view
-                && let Some(handle) = cache.handle_for_runtime(def, view_idx, &mut a2, images)
-            {
+            if let Some(view) = view {
+                let handle = cache.handle_for_resolved_view(def, view_idx, &a2, &view, images);
                 let pos3 = overlay_pos(
                     ctx.iso_pos,
                     f32::from(view.x_offs),

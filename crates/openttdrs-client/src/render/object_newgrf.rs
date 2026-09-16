@@ -92,6 +92,7 @@ impl NewGrfObjectSpriteCache {
     }
 
     /// Textura resolviendo Action2 con el contexto de la tesela.
+    #[cfg(test)]
     pub(crate) fn handle_for_runtime(
         &mut self,
         def: &ObjectSpecDef,

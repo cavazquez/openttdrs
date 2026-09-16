@@ -35,6 +35,7 @@ impl NewGrfIndustrySpriteCache {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn handle_for_runtime(
         &mut self,
         def: &IndustryTileSpecDef,

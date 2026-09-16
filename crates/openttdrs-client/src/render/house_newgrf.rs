@@ -34,6 +34,7 @@ impl NewGrfHouseSpriteCache {
     }
 
     /// Textura resolviendo Action2 con las variables de la tesela.
+    #[cfg(test)]
     pub(crate) fn handle_for_runtime(
         &mut self,
         def: &HouseSpecDef,

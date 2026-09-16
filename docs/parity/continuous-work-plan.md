@@ -8422,6 +8422,19 @@ queda en 75/50 según la clase de agua. La biblioteca core completa queda en
 efectiva en túneles/puentes, YAPF/costes navales y las propiedades/cachés
 NewGRF restantes.
 
+### #326/#329-NEWGRF-AIRPORT-TILE-RANDOM-NIBBLE — random por tesela
+
+Actualizado: 2026-09-16 (`6243e322`). Se corrigió el uso de `MAP3` en
+`AirportTile`: OpenTTD conserva sólo los bits 4..7 como random de tesela, no
+el byte completo. El contexto Action2 y el replay determinista usado por
+CB152/CB153 comparten ahora `airport_tile_random_bits`, evitando que los bits
+bajos de otros campos de `MP_STATION` seleccionen otra rama o alteren la
+semilla de animación. Las regresiones cubren el word de contexto y la
+invariancia del replay ante cambios de `MAP3[0..3]`; pasaron 80 pruebas
+filtradas de aeropuerto, Clippy estricto y `git diff --check`. #326/#329/#567
+siguen abiertas por foundations/rotaciones, paletas, callbacks y consumidores
+NewGRF restantes.
+
 Corrección #329/#567-SHIP-EFFECTIVE-WATER-CLASS (2026-09-15, `6b2bf6ea`): la
 consulta de velocidad naval usa ahora la contraparte de
 `GetEffectiveWaterClass`. Un tunnel/bridge de transporte acuático fuerza

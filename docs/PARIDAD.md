@@ -6063,3 +6063,16 @@ una cadena que antes elegía otro set y verifica que sólo cambia el slot. Las
 Clippy estricto pasan. Esto corrige una subbrecha de composición NewGRF; no
 cierra #326/#329/#567, que siguen abiertas por layouts, paletas, callbacks y
 consumidores restantes.
+
+Corrección #326/#329-NEWGRF-AIRPORT-TILE-RANDOM-NIBBLE (2026-09-16,
+`6243e322`): el contexto `AirportTile` y el replay determinista de callbacks
+de animación usan ahora exactamente `GetStationTileRandomBits`: sólo
+`MAP3[4..7]` entra en los bits 16..23 del random de la tesela. Antes se
+copiaba todo `MAP3`, por lo que los campos bajos de la codificación de
+estación podían cambiar grupos Action2 y CB152/CB153 sin modificar el random
+nativo. Las regresiones `airport_context_uses_only_station_tile_random_nibble`
+y `airport_animation_random_ignores_station_map3_low_nibble` fijan ambos
+caminos; pasaron 80 pruebas de aeropuerto y Clippy estricto. Esto corrige la
+semántica de randomización por tesela, pero no cierra #326/#329/#567: siguen
+pendientes foundations/rotaciones completas, paletas, callbacks y
+consumidores NewGRF restantes.

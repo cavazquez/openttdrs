@@ -2170,3 +2170,14 @@ el ground, los diques y bordes que usa `ShipDepot`; la regresión
 `canal_offset_callback_does_not_change_base_action1_set` lo fija. La fila
 sigue parcial: no se cierran #326/#329/#567 mientras falten layouts, paletas,
 callbacks y consumidores NewGRF restantes.
+
+Actualización #326/#329-NEWGRF-AIRPORT-TILE-RANDOM-NIBBLE (2026-09-16,
+`6243e322`): el scope de `AirportTile` y el replay de callbacks de animación
+ya codifican los bits aleatorios de la tesela como `MAP3[4..7]`, igual que
+`GetStationTileRandomBits`. El byte completo anterior contaminaba los bits
+16..23 de `var 5F` con campos bajos de `MP_STATION`; esto podía seleccionar
+ramas Action2 o semillas distintas en CB152/CB153. Las regresiones de contexto
+y replay cubren ambas rutas. La fila continúa **parcial runtime**: todavía
+faltan foundations/rotaciones exhaustivas, paletas, delegación completa de
+`StationScope` y callbacks/consumidores NewGRF restantes; #326/#329/#567 siguen
+abiertas.

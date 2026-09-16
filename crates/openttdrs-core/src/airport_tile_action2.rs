@@ -13,9 +13,7 @@ use crate::airport_tile_spec::{
     AirportTileSpecDef, NEW_AIRPORT_TILE_OFFSET, get_translated_airport_tile_id,
 };
 use crate::house_spec::{distance_square, get_town_radius_group};
-use crate::map::{
-    Map, SLOPE_STEEP, Tile, TileCoord, TileKind, is_coast_tile, tile_slope_and_z, water_class,
-};
+use crate::map::{Map, SLOPE_STEEP, Tile, TileCoord, TileKind, tile_slope_and_z, water_class};
 use crate::newgrf_sprites::Action2EvalCtx;
 #[cfg(test)]
 use crate::station::StopKind;
@@ -425,7 +423,7 @@ fn nearby_land_info(
             && candidate.pos == source.pos
             && (candidate.airport_tiles.contains(&nearby) || candidate.pos == nearby)
     });
-    let terrain_bits = water_bits | (u32::from(tile.kind == TileKind::Water) << 1) | (terrain << 2);
+    let terrain_bits = water_bits | (u32::from(tile_type == 6) << 1) | (terrain << 2);
     tile_type << 24
         | u32::from(z) << 16
         | ((terrain_bits << 8) | u32::from(tileh))
@@ -598,7 +596,8 @@ fn tile_kind_as_ottd(map: &Map, stations: &[Station], coord: TileCoord, tile: Ti
     // `GetNearbyTileInformation` exposes shore trees as water and road
     // waypoints as road, even though their stored tile kinds are different.
     // Keep these fake types before the generic semantic mapping below.
-    if is_coast_tile(tile) {
+    let tree_ground = (u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8)) >> 6 & 0x07;
+    if tile.kind == TileKind::Forest && tree_ground == 3 {
         return 6;
     }
     if tile.kind == TileKind::Station
@@ -1325,8 +1324,45 @@ mod tests {
 
         assert_eq!(
             tile_kind_as_ottd(&map, &stations, shore_tree, tree),
+            4,
+            "un árbol con clase de agua pero suelo normal sigue siendo MP_TREES"
+        );
+        let normal_info = nearby_land_info(
+            &map,
+            &stations,
+            &stations[0],
+            shore_tree,
+            Climate::Temperate,
+            DEF_SNOW_LINE_HEIGHT,
+            8,
+        );
+        assert_eq!(
+            normal_info & 0x0200,
+            0,
+            "un árbol normal no activa el bit de costa"
+        );
+
+        tree.m2 = 3 << 6;
+        map.set_tile(shore_tree, tree)
+            .expect("set shore tree ground");
+        assert_eq!(
+            tile_kind_as_ottd(&map, &stations, shore_tree, tree),
             6,
-            "un árbol de costa debe exponerse como MP_WATER"
+            "sólo TREE_GROUND_SHORE debe exponerse como MP_WATER"
+        );
+        let shore_info = nearby_land_info(
+            &map,
+            &stations,
+            &stations[0],
+            shore_tree,
+            Climate::Temperate,
+            DEF_SNOW_LINE_HEIGHT,
+            8,
+        );
+        assert_eq!(
+            shore_info & 0x0200,
+            0x0200,
+            "el tipo falsificado MP_WATER debe activar el bit de costa"
         );
         assert_eq!(
             tile_kind_as_ottd(&map, &stations, road_waypoint, waypoint),

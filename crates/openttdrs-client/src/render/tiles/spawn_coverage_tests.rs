@@ -9946,6 +9946,11 @@ fn newgrf_airport_tile_layout_emits_ground_sortable_parent_and_child() {
             },
             sequence: vec![
                 TileLayoutSpriteRef {
+                    action1_set: Some(2),
+                    origin: [7, -4, i8::MIN],
+                    ..Default::default()
+                },
+                TileLayoutSpriteRef {
                     action1_set: Some(1),
                     origin: [1, 2, 3],
                     extent: [4, 5, 6],
@@ -10110,6 +10115,44 @@ fn newgrf_airport_tile_layout_emits_ground_sortable_parent_and_child() {
         vec![ground_draw_z(coord.x, coord.y, 0.025)],
         "AirportDrawTileLayout debe dejar el ground en DrawGroundSprite"
     );
+    let mut expected_orphan_position = overlay_pos(
+        crate::iso::iso(coord.x, coord.y),
+        f32::from(child.x_offs),
+        f32::from(child.y_offs),
+        f32::from(child.width),
+        f32::from(child.height),
+        0,
+        0.05,
+        coord.x,
+        coord.y,
+    );
+    expected_orphan_position.x += 7.0;
+    expected_orphan_position.y += 4.0;
+    let child_candidates: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .map(|(sprite, transform)| (sprite.image.clone(), transform.translation))
+        .collect();
+    let images = world.resource::<Assets<Image>>();
+    let child_positions: Vec<_> = child_candidates
+        .into_iter()
+        .filter_map(|(handle, depth)| {
+            (images.get(&handle).and_then(|image| image.data.as_deref())
+                == Some(child.rgba.as_slice()))
+            .then_some(depth)
+        })
+        .collect();
+    let orphan_ground_depths: Vec<_> = child_positions
+        .iter()
+        .filter_map(|position| {
+            (position.truncate() == expected_orphan_position.truncate()).then_some(position.z)
+        })
+        .collect();
+    assert_eq!(
+        orphan_ground_depths,
+        vec![ground_draw_z(coord.x, coord.y, 0.05)],
+        "un child sin parent debe conservar offsets de pantalla y orden ground; posiciones={child_positions:?}, esperado={expected_orphan_position:?}"
+    );
     assert_eq!(
         parent_component.bounds,
         crate::render::viewport_sort::ParentSpriteBounds::new(33, 34, 3, 36, 38, 8),
@@ -10117,7 +10160,7 @@ fn newgrf_airport_tile_layout_emits_ground_sortable_parent_and_child() {
     );
     assert_eq!(
         parent_component.insertion_key,
-        crate::render::viewport_insertion_key(2, 2, 2),
+        crate::render::viewport_insertion_key(2, 2, 3),
         "el parent entra en el mismo ordinal BUILD del compositor"
     );
     assert!(

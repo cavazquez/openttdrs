@@ -3888,6 +3888,34 @@ fn newgrf_road_stop_child_center(
     )
 }
 
+/// Centro Bevy de un child que `DrawCommonTileSeq` entrega a
+/// `DrawGroundSprite` porque todavía no encontró un parent.
+///
+/// En ese camino `origin.x/y` no son coordenadas TILE_SEQ del mundo: son
+/// offsets de pantalla firmados desde el ancla de la tesela. Los offsets NFO
+/// del sprite siguen formando el centro base y el eje Y de OpenTTD se invierte
+/// al entrar en Bevy.
+#[allow(clippy::too_many_arguments)]
+fn newgrf_tile_layout_orphan_ground_center(
+    ref_pos: Vec2,
+    origin: [i8; 3],
+    width: f32,
+    height: f32,
+    x_offs: f32,
+    y_offs: f32,
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    layer_z: f32,
+) -> Vec3 {
+    let mut position = overlay_pos(
+        ref_pos, x_offs, y_offs, width, height, base_z, layer_z, tx, ty,
+    );
+    position.x += f32::from(origin[0]);
+    position.y -= f32::from(origin[1]);
+    position
+}
+
 /// Emite la secuencia BUILD de un `TileLayout` custom. Los parents usan las
 /// cajas 3D de `TILE_SEQ_LINE`; los children conservan el anclaje de pantalla
 /// al último parent, que es la semántica de `AddChildSpriteScreen` de OpenTTD.
@@ -4736,6 +4764,7 @@ fn spawn_newgrf_airport_layout_sequence(
     base_z: u8,
     map_width: u32,
     owner_colour: Option<CompanyColour>,
+    foundation_child_parent: Option<Entity>,
     gfx: u16,
     runtime_fp: u32,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
@@ -4893,25 +4922,35 @@ fn spawn_newgrf_airport_layout_sequence(
                 },
             ));
         } else {
-            // Un child huérfano es válido en el formato; OpenTTD lo entrega
-            // como sprite de suelo. Mantenerlo en el ancla de la tesela evita
-            // esconder una pieza visible de un GRF imperfecto.
-            let position = road_stop_build_sprite_center(
+            // `DrawCommonTileSeq` entrega un child sin parent a
+            // `DrawGroundSprite(image, pal, nullptr, offs_x, offs_y)`. No es
+            // una pieza BUILD: sus dos primeros bytes son offsets de pantalla
+            // y el sprite debe conservar el orden del pase ground.
+            let mut position = newgrf_tile_layout_orphan_ground_center(
                 ctx.iso_pos,
+                layer.origin,
+                width,
+                height,
+                x_offs,
+                y_offs,
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 base_z,
                 layer_z,
-                origin,
-                width,
-                height,
             );
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                sprite,
-                Transform::from_translation(position),
-            ));
+            if let Some(parent) = foundation_child_parent {
+                spawn_foundation_child_sprite_at(
+                    commands, sprite, ctx, position, map_width, parent,
+                );
+            } else {
+                position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), layer_z);
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(position),
+                ));
+            }
         }
         emitted = true;
     }
@@ -6158,6 +6197,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5_an
                     custom_base_z,
                     dims.0,
                     owner_colour,
+                    child_parent,
                     gfx,
                     runtime_fp,
                     &layout,
@@ -7795,11 +7835,11 @@ mod tests {
         airport_station_ground_layer_trace_offset, airport_tile_layout_is_renderable,
         buoy_parent_bounds, buoy_trace_bounds, dock_clear_land_sprite_id,
         dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
-        rail_depot_build_parent_sprites, rail_depot_catenary_parent_sprite,
-        rail_depot_foundation_child_offset, rail_depot_reservation_track_visible,
-        rail_station_roof_glass_mask_color, road_depot_foundation_child_offset,
-        road_depot_newgrf_def_for_tile, road_depot_parent_sprites,
-        road_stop_foundation_child_offset, road_stop_layout_ground_slot,
+        newgrf_tile_layout_orphan_ground_center, rail_depot_build_parent_sprites,
+        rail_depot_catenary_parent_sprite, rail_depot_foundation_child_offset,
+        rail_depot_reservation_track_visible, rail_station_roof_glass_mask_color,
+        road_depot_foundation_child_offset, road_depot_newgrf_def_for_tile,
+        road_depot_parent_sprites, road_stop_foundation_child_offset, road_stop_layout_ground_slot,
         road_stop_layout_is_static, road_stop_layout_sequence_slot_range, road_stop_parent_sprites,
         road_stop_simple_view_slot, road_stop_sorted_layer_centers, spawn_newgrf_airport_tile,
         station_catenary_pylon_parent_bounds, station_catenary_wire_parent_bounds,
@@ -7917,6 +7957,36 @@ mod tests {
         // top-left; Y is inverted when entering Bevy's screen coordinates.
         assert_eq!(center.x, 109.0);
         assert_eq!(center.y, 184.0);
+        assert_eq!(center.z, crate::iso::sortable_draw_z(3, 4, 0, 0.05));
+    }
+
+    #[test]
+    fn newgrf_tile_layout_orphan_child_uses_ground_screen_offsets() {
+        let center = newgrf_tile_layout_orphan_ground_center(
+            Vec2::new(100.0, 200.0),
+            [7, -4, i8::MIN],
+            10.0,
+            20.0,
+            -5.0,
+            -6.0,
+            3,
+            4,
+            0,
+            0.05,
+        );
+        let base = super::overlay_pos(
+            Vec2::new(100.0, 200.0),
+            -5.0,
+            -6.0,
+            10.0,
+            20.0,
+            0,
+            0.05,
+            3,
+            4,
+        );
+        assert_eq!(center.x, base.x + 7.0);
+        assert_eq!(center.y, base.y + 4.0);
         assert_eq!(center.z, crate::iso::sortable_draw_z(3, 4, 0, 0.05));
     }
 

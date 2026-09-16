@@ -122,7 +122,8 @@ pub(crate) use tiles::{
     spawn_generic_land_tile_with_objects_and_water, spawn_house_tile,
     spawn_industry_tile_with_world, spawn_rail_tile, spawn_road_tile,
     spawn_station_tile_with_world_and_road_types,
-    spawn_transport_object_tile_with_road_types_and_tramway_action5, spawn_void_tile,
+    spawn_transport_object_tile_with_road_types_and_tramway_action5_and_airport_overrides,
+    spawn_void_tile,
 };
 pub(crate) use vehicles::{
     AircraftRotorSprite, AircraftShadowSprite, ConsistUnitSprite, NewGrfTrainSpriteCache,

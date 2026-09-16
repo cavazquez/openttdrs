@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 use openttdrs_core::map::water_class;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{Climate, WaterClass};
+use openttdrs_core::{
+    Climate, NEW_AIRPORT_TILE_OFFSET, WaterClass, get_translated_airport_tile_id,
+};
 use openttdrs_core::{
     RoadStopSpecDef, StationSpecDef, TramwayDepotReplacement, inclined_slope_direction,
     is_tunnel_entrance_slope, rail_type_from_tile, road_stop_spec_def, road_type_from_tile,
@@ -4599,11 +4601,12 @@ fn resolve_newgrf_airport_layout_for_tile(
     ctx: &TileRenderContext,
     catalog: &[openttdrs_core::AirportTileSpecDef],
     airport_catalog: &[openttdrs_core::NewgrfAirportSpecDef],
+    airport_tile_overrides: &[u16],
     climate: Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) -> Option<(openttdrs_core::newgrf_sprites::ResolvedTileLayout, u32)> {
     let mut action2 =
-        openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line(
+        openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line_and_overrides(
             map,
             stations,
             towns,
@@ -4613,6 +4616,7 @@ fn resolve_newgrf_airport_layout_for_tile(
             def,
             climate,
             ctx.snow_line_height,
+            airport_tile_overrides,
         );
     action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
         newgrf_stack,
@@ -4931,6 +4935,7 @@ fn spawn_newgrf_airport_tile(
     towns: &[openttdrs_core::Town],
     catalog: &[openttdrs_core::AirportTileSpecDef],
     airport_catalog: &[openttdrs_core::NewgrfAirportSpecDef],
+    airport_tile_overrides: &[u16],
     climate: Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
     cache: Option<&mut crate::render::NewGrfAction5SpriteCache>,
@@ -4946,7 +4951,7 @@ fn spawn_newgrf_airport_tile(
     let frame = usize::from(ctx.tile.map_or(0, |tile| tile.m7));
     let mut action2 = if def.newgrf_runtime.is_some() {
         let mut action2 =
-            openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line(
+            openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line_and_overrides(
                 map,
                 stations,
                 towns,
@@ -4956,6 +4961,7 @@ fn spawn_newgrf_airport_tile(
                 def,
                 climate,
                 ctx.snow_line_height,
+                airport_tile_overrides,
             );
         action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
             newgrf_stack,
@@ -5044,6 +5050,7 @@ fn airport_tile_draws_default_foundation(
     coord: TileCoord,
     catalog: &[openttdrs_core::AirportTileSpecDef],
     airport_catalog: &[openttdrs_core::NewgrfAirportSpecDef],
+    airport_tile_overrides: &[u16],
     climate: Climate,
     snow_line_height: u8,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
@@ -5054,7 +5061,7 @@ fn airport_tile_draws_default_foundation(
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
         return true;
     };
-    let mut ctx = openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line(
+    let mut ctx = openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line_and_overrides(
         map,
         stations,
         towns,
@@ -5064,6 +5071,7 @@ fn airport_tile_draws_default_foundation(
         def,
         climate,
         snow_line_height,
+        airport_tile_overrides,
     );
     ctx.set_grf_params(openttdrs_core::stack_params_for_grfid(
         newgrf_stack,
@@ -5193,6 +5201,85 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
     towns: &[openttdrs_core::Town],
     airport_tile_catalog: &[openttdrs_core::AirportTileSpecDef],
     airport_catalog: &[openttdrs_core::NewgrfAirportSpecDef],
+    rail_type_depot_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    rail_type_underlay_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    rail_type_tunnel_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    rail_type_tunnel_portal_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    signal_sprites: Option<&mut crate::render::NewGrfSignalSpriteCache>,
+    bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    climate: Climate,
+    calendar_date: u32,
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    road_sprites: Option<&mut crate::render::NewGrfRoadSpriteCache>,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    canal_features: &[openttdrs_core::CanalFeatureDef],
+    canal_action5_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: Option<&mut Assets<Image>>,
+    road_stop_catalog: &[RoadStopSpecDef],
+    bridge_spec_catalog: &[openttdrs_core::BridgeSpecDef],
+    tramway_depot_action5: TramwayDepotAction5<'_>,
+) {
+    spawn_transport_object_tile_with_road_types_and_tramway_action5_and_airport_overrides(
+        commands,
+        assets,
+        company,
+        owner_colour,
+        ctx,
+        slope_half_ground,
+        show_pbs_reservations,
+        map,
+        dims,
+        stations,
+        towns,
+        airport_tile_catalog,
+        airport_catalog,
+        &[],
+        rail_type_depot_newgrf,
+        rail_type_underlay_newgrf,
+        rail_type_tunnel_newgrf,
+        rail_type_tunnel_portal_newgrf,
+        catenary_newgrf,
+        catenary_sprites,
+        signal_sprites,
+        bridge_decks_newgrf,
+        foundation_newgrf,
+        climate,
+        calendar_date,
+        road_catalog,
+        road_sprites,
+        newgrf_stack,
+        canal_features,
+        canal_action5_newgrf,
+        action5_sprites,
+        images,
+        road_stop_catalog,
+        bridge_spec_catalog,
+        tramway_depot_action5,
+    );
+}
+
+/// Variante de la composición que recibe los overrides `AirportTile` de la
+/// partida para restaurar el gfx NewGRF de teselas guardadas con `subst`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5_and_airport_overrides(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
+    ctx: &TileRenderContext,
+    slope_half_ground: f32,
+    show_pbs_reservations: bool,
+    map: &Map,
+    dims: (u32, u32),
+    stations: &[Station],
+    towns: &[openttdrs_core::Town],
+    airport_tile_catalog: &[openttdrs_core::AirportTileSpecDef],
+    airport_catalog: &[openttdrs_core::NewgrfAirportSpecDef],
+    airport_tile_overrides: &[u16],
     rail_type_depot_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
     rail_type_underlay_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
     rail_type_tunnel_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
@@ -5967,13 +6054,24 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
             // A newly built NewGRF airport stores the vanilla `subst` in
             // `m5`, so use the per-tile global gfx retained on its Station
             // before falling back to the vanilla AirportPiece renderer.
-            let newgrf_gfx = stations.iter().find_map(|station| {
-                station
-                    .airport_tile_gfx
-                    .iter()
-                    .find(|(coord, _)| *coord == ctx.coord)
-                    .map(|(_, gfx)| *gfx)
-            });
+            let newgrf_gfx = stations
+                .iter()
+                .find_map(|station| {
+                    station
+                        .airport_tile_gfx
+                        .iter()
+                        .find(|(coord, _)| *coord == ctx.coord)
+                        .map(|(_, gfx)| *gfx)
+                })
+                .or_else(|| Some(u16::from(m5)))
+                .map(|gfx| {
+                    if gfx < NEW_AIRPORT_TILE_OFFSET {
+                        get_translated_airport_tile_id(gfx, airport_tile_overrides)
+                    } else {
+                        gfx
+                    }
+                })
+                .filter(|gfx| *gfx >= NEW_AIRPORT_TILE_OFFSET);
 
             // `DrawNewAirportTile` acepta un TileLayout completo antes de
             // regresar al sustituto vanilla. Su suelo sustituye el rombo de
@@ -5994,6 +6092,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                     ctx,
                     airport_tile_catalog,
                     airport_catalog,
+                    airport_tile_overrides,
                     climate,
                     newgrf_stack,
                 )
@@ -6008,6 +6107,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                         ctx.coord,
                         airport_tile_catalog,
                         airport_catalog,
+                        airport_tile_overrides,
                         climate,
                         ctx.snow_line_height,
                         newgrf_stack,
@@ -6089,6 +6189,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                         ctx.coord,
                         airport_tile_catalog,
                         airport_catalog,
+                        airport_tile_overrides,
                         climate,
                         ctx.snow_line_height,
                         newgrf_stack,
@@ -6124,6 +6225,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                     towns,
                     airport_tile_catalog,
                     airport_catalog,
+                    airport_tile_overrides,
                     climate,
                     newgrf_stack,
                     action5_sprites.as_deref_mut(),
@@ -8037,6 +8139,7 @@ mod tests {
                             &[],
                             &[],
                             &catalog,
+                            &[],
                             &[],
                             Climate::Temperate,
                             &[],

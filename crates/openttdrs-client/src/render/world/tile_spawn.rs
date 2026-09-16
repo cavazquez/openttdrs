@@ -19,7 +19,8 @@ use crate::render::{
     spawn_generic_land_tile_with_objects_and_water, spawn_house_tile,
     spawn_industry_tile_with_world, spawn_rail_tile, spawn_road_tile,
     spawn_station_tile_with_world_and_road_types,
-    spawn_transport_object_tile_with_road_types_and_tramway_action5, spawn_void_tile,
+    spawn_transport_object_tile_with_road_types_and_tramway_action5_and_airport_overrides,
+    spawn_void_tile,
 };
 use crate::sprites::CompanyColour;
 use crate::state::SimWorld;
@@ -267,7 +268,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
             | TileKind::RailTunnel
             | TileKind::RoadBridge
             | TileKind::RailBridge => {
-                spawn_transport_object_tile_with_road_types_and_tramway_action5(
+                spawn_transport_object_tile_with_road_types_and_tramway_action5_and_airport_overrides(
                     commands,
                     assets,
                     Some(company),
@@ -281,6 +282,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     &sim.state.towns,
                     &sim.state.airport_tile_spec_catalog,
                     &sim.state.airport_spec_catalog,
+                    &sim.state.airport_tile_overrides,
                     &sim.state.runtime.rail_type_depot_newgrf,
                     &sim.state.runtime.rail_type_underlay_newgrf,
                     &sim.state.runtime.rail_type_tunnel_newgrf,

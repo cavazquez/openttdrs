@@ -48,7 +48,9 @@ mod world;
 pub(crate) mod world_draw_trace;
 
 pub(crate) use airport_radar_anim::{AirportStationAnim, AirportStationAnimPlugin};
-pub(crate) use animation_gate::palette_animations_should_run;
+pub(crate) use animation_gate::{
+    PaletteAnimationClock, PaletteAnimationClockPlugin, palette_animations_should_run,
+};
 pub(crate) use assets::{OverviewRenderAssets, WorldAssets};
 pub(crate) use atlas::{AtlasSprite, TileAtlas};
 pub(crate) use bubble::{BubbleEffectPlugin, BubbleSpawnQueue};

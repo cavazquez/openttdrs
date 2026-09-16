@@ -6,7 +6,7 @@
 use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
-use crate::render::{RefineryFireAnimFrames, palette_animations_should_run};
+use crate::render::{PaletteAnimationClock, RefineryFireAnimFrames, palette_animations_should_run};
 use crate::state::ClientScreen;
 
 pub(crate) struct RefineryFireAnimPlugin;
@@ -44,7 +44,7 @@ pub(crate) fn refinery_fire_frame_index(elapsed_secs: f32) -> usize {
 /// Usa reloj real: el virtual tiene `max_delta` de 1 tick de sim y puede
 /// quedar pausado sin afectar el parpadeo de paleta (como el agua).
 pub(crate) fn animate_refinery_fire(
-    time: Res<Time<Real>>,
+    clock: Res<PaletteAnimationClock>,
     frames: Option<Res<RefineryFireAnimFrames>>,
     mut last_frame: Local<Option<usize>>,
     mut q: Query<(&RefineryFireAnim, &mut Sprite)>,
@@ -52,7 +52,7 @@ pub(crate) fn animate_refinery_fire(
     let Some(frames) = frames else {
         return;
     };
-    let idx = refinery_fire_frame_index(time.elapsed_secs());
+    let idx = refinery_fire_frame_index(clock.elapsed_secs());
     if *last_frame == Some(idx) {
         return;
     }
@@ -113,9 +113,7 @@ mod tests {
     #[test]
     fn animate_refinery_fire_swaps_on_frame_change() {
         let mut world = World::new();
-        let mut time = Time::<Real>::default();
-        time.advance_by(std::time::Duration::from_millis(250));
-        world.insert_resource(time);
+        world.insert_resource(PaletteAnimationClock::from_elapsed_secs(0.25));
         world.insert_resource(frames_resource());
         let ent = world
             .spawn((RefineryFireAnim { sprite_id: 2086 }, Sprite::default()))

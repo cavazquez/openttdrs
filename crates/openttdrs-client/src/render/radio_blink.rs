@@ -7,7 +7,7 @@
 use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
-use crate::render::{RadioBlinkAnimFrames, palette_animations_should_run};
+use crate::render::{PaletteAnimationClock, RadioBlinkAnimFrames, palette_animations_should_run};
 use crate::state::ClientScreen;
 
 pub(crate) struct RadioBlinkAnimPlugin;
@@ -68,7 +68,7 @@ pub(crate) fn radio_blink_frame_index(elapsed_secs: f32) -> usize {
 }
 
 pub(crate) fn animate_radio_blink(
-    time: Res<Time<Real>>,
+    clock: Res<PaletteAnimationClock>,
     frames: Option<Res<RadioBlinkAnimFrames>>,
     mut last_frame: Local<Option<usize>>,
     mut q: Query<(&RadioBlinkAnim, &mut Sprite)>,
@@ -76,7 +76,7 @@ pub(crate) fn animate_radio_blink(
     let Some(frames) = frames else {
         return;
     };
-    let idx = radio_blink_frame_index(time.elapsed_secs());
+    let idx = radio_blink_frame_index(clock.elapsed_secs());
     if *last_frame == Some(idx) {
         return;
     }

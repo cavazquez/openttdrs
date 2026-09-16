@@ -2536,3 +2536,21 @@ sin restaurar el Z ya ordenado. La regresión cubre cabeza y trailer sin cruzar
 parents; la suite queda en 1.577 tests, 2 ignorados y Clippy estricto. La
 cobertura de callbacks/consumidores, otros combines y compositor global sigue
 parcial, por lo que no se cierran las issues madre.
+
+### #326/#329-STATION-CUSTOM-FOUNDATIONS — resolución y compositor
+
+El parser conserva los flags Action0 `0x13` de foundations custom y el runtime
+de estación invoca el Action2 de relocación con `param1=2` y
+`layout | (edge_info << 16)`, limpiando el registro temporal y leyendo el bloque
+desde `0x100`. Se cubren las dos familias nativas: foundations extendidas de
+una pieza y foundations compuestas con `StartSpriteCombine`; la continuidad
+NW/NE se aplica antes de resolver las piezas y el renderer conserva bounds
+16×16×7, offsets NFO y superficie `FOUNDATION_LEVELED`. Los children del
+combine publican fuente completa, `PromotableChild` y `SegmentedChild` para el
+clipping por banda, con fallback al foundation vanilla si falta el grupo o una
+imagen materializable.
+
+Estado: **parcial runtime**. Hay regresiones focalizadas de `core`, estación y
+compositor, además de 1.577 tests del cliente, 2 ignorados y Clippy estricto.
+Quedan pendientes otros callbacks/consumidores NewGRF, captura raster y la
+composición global; no se cierran #326/#329/#567.

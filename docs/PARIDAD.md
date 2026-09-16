@@ -6511,3 +6511,14 @@ children segmentados; pasan 1.577 tests del cliente, 2 ignorados y Clippy
 estricto. La corrección es parcial y no cierra #326/#329/#567: siguen
 pendientes otros combines, producers, callbacks/consumidores NewGRF,
 composición global y comparación de framebuffer.
+
+Corrección #326/#329/#567-STATION-CUSTOM-FOUNDATIONS (2026-09-16,
+`8f2e49cd`, `165ff353`): los cimientos custom de estaciones ferroviarias ya
+resuelven el callback Action2 con `param1=2`, `layout` y `edge_info`, incluido
+el offset de registro `0x100`. Las tablas extendida y compuesta de OpenTTD se
+reproducen en `core`; el renderer conserva el prisma nativo 16×16×7, la
+superficie nivelada y el vínculo del bloque combinado mediante children
+promovibles/segmentados con fuente completa. Si no se puede materializar el
+bloque custom, se mantiene el fallback de foundation vanilla. La corrección
+es parcial: siguen pendientes otros productores/callbacks NewGRF, captura
+raster y composición global; no se cierran #326/#329/#567.

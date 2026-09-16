@@ -9318,3 +9318,17 @@ callback cambia la longitud de la pila. La prueba de cabeza/trailer comprueba
 la resolución compartida por parent, la fuente separada del Z ordenado y la
 ausencia de cruce entre consist units; pasan 1.577 tests, 2 ignorados y Clippy
 estricto. La cobertura continúa parcial y no se cierran #326/#329/#567.
+
+Actualización #326/#329/#567-STATION-CUSTOM-FOUNDATIONS
+(`8f2e49cd`, `165ff353`, 2026-09-16): los cimientos custom de estaciones
+ferroviarias siguen el contrato de `DrawCustomStationFoundations`. `core`
+resuelve `param1=2`, `layout | edge_info << 16`, el registro `0x100` y las
+tablas nativas de piezas extendidas/compuestas; el renderer usa el prisma
+completo 16×16×7 y la superficie `FOUNDATION_LEVELED`. El bloque extendido
+abre un parent sortable; el bloque clásico conserva `StartSpriteCombine` con
+children `Promotable`/`Segmented` y fuente completa para el clipping por banda.
+La continuidad NW/NE y el fallback vanilla cuando el grupo o una pieza no se
+puede materializar quedan cubiertos por tests. Pasan 1.577 tests del cliente,
+2 ignorados, tests focalizados de core y Clippy estricto. La cobertura es
+parcial: faltan otros callbacks/consumidores NewGRF, captura raster y la
+composición global completa; no se cierran #326/#329/#567.

@@ -9003,3 +9003,18 @@ cambiar frame o preferencia. Pasan 6 pruebas dirigidas de `industry_anim` y
 Clippy estricto. La fila sigue parcial y #326/#329/#567 permanecen abiertas
 por la composición global, otros layouts, foundations/rotaciones, callbacks y
 consumidores NewGRF.
+
+### #326/#329-NEWGRF-TILE-LAYOUT-DESTINATION-TRANSPARENCY — máscara de BUILD
+
+Actualizado: 2026-09-16 (`b3615d7b`). Las secuencias `BUILD` de casas,
+industrias, objetos, estaciones, road stops/waypoints y aeropuertos reproducen
+ahora la decisión de `DrawCommonTileSeq`: cuando la categoría está en modo
+transparente, la imagen efectiva recibe `PALETTE_MODIFIER_TRANSPARENT` y
+`PALETTE_TO_TRANSPARENT` (`802`), en lugar de multiplicar el sprite por el
+alpha de categoría. Las imágenes Action1 hornean la máscara negra con
+obertura `64/255`; las referencias directas del atlas usan el mismo
+multiplicador. `OPAQUE` conserva precedencia y el `ground` sigue fuera de la
+composición de categoría. Pasan 17 pruebas de fábrica, 27 regresiones de
+TileLayout, 29 del core y Clippy estricto. La fila continúa parcial y
+#326/#329/#567 permanecen abiertas por layouts restantes,
+foundations/rotaciones, callbacks y consumidores NewGRF.

@@ -6202,3 +6202,15 @@ secuencia sortable del edificio. La sincronización se recalcula al cambiar el
 frame o la preferencia; la regresión cubre ambos caminos y pasan 6 pruebas
 dirigidas de `industry_anim` y Clippy estricto. La corrección es parcial y no
 cierra #326/#329/#567.
+
+Corrección #326/#329-NEWGRF-TILE-LAYOUT-DESTINATION-TRANSPARENCY (2026-09-16,
+`b3615d7b`): las secuencias BUILD de casas, industrias, objetos, estaciones,
+road stops/waypoints y aeropuertos usan ahora la máscara de destino nativa de
+`DrawCommonTileSeq` cuando la categoría está en modo transparente. Las imágenes
+Action1 reciben `PALETTE_MODIFIER_TRANSPARENT` y `PALETTE_TO_TRANSPARENT` (802)
+antes de entrar a la caché; las referencias directas del atlas usan un
+multiplicador negro con cobertura `64/255`. `OPAQUE` mantiene precedencia y el
+suelo sigue opaco, fuera del stream BUILD. Pasan 17 pruebas de fábrica, 27 de
+TileLayout, 29 del core y Clippy estricto. La corrección es parcial y no cierra
+#326/#329/#567: siguen pendientes layouts, foundations/rotaciones, callbacks y
+consumidores NewGRF.

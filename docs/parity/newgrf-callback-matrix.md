@@ -2289,3 +2289,13 @@ permanece opaco y sólo el BUILD animado recibe el alpha de `TO_INDUSTRIES`.
 La entidad recalcula el color al crearla y cuando cambia frame o preferencia;
 6 pruebas dirigidas y Clippy estricto pasan. La corrección sigue parcial y no
 cierra #326/#329/#567.
+
+Actualización #326/#329-NEWGRF-TILE-LAYOUT-DESTINATION-TRANSPARENCY
+(2026-09-16, `b3615d7b`): el renderer mantiene separado el ground de la
+secuencia BUILD y aplica a esta última el contrato de transparencia de
+`DrawCommonTileSeq`. En modo transparente, cada entrada no `OPAQUE` usa la
+paleta de destino 802; Action1 hornea la máscara negra con alpha `64/255` y
+las referencias directas del atlas usan el equivalente por color. La paleta
+original sólo se conserva cuando `OPAQUE` bloquea la transparencia de categoría.
+Pasan 17 pruebas de materialización, 27 regresiones de TileLayout, 29 del core
+y Clippy estricto. La corrección sigue parcial y no cierra #326/#329/#567.

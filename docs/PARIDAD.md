@@ -6269,3 +6269,15 @@ destino equivalente a `PALETTE_TO_TRANSPARENT` (802) cuando `TO_BUILDINGS`
 está transparente. No altera el `TileLayout` por entrada ni el techo de vidrio
 calibrado. Las 142 pruebas de `station`, Clippy estricto y el formato pasan;
 la corrección es parcial y no cierra #326/#329/#567.
+
+Corrección #326/#329/#567-BRIDGE-STRUCTURE-DESTINATION-TRANSPARENCY
+(2026-09-16, `eb105e5f`): las piezas estructurales de puentes vanilla y
+custom —tablero, barandilla, rampas, pilares y sus capas directas NewGRF— usan
+ahora la máscara de destino equivalente a `PALETTE_TO_TRANSPARENT` (802) cuando
+`TO_BRIDGES` está transparente. Bajo `TO_STRUCTURES`, el HQ, los hitos vanilla
+y las vistas planas de objetos NewGRF reciben el mismo tratamiento; la ruta
+`TileLayout` por entrada conserva `OPAQUE` y su materialización propia. Suelo,
+fundaciones y catenaria quedan fuera de esta máscara. Pasan 78 pruebas de
+puentes, 2 regresiones de estructuras, Clippy estricto y formato. La corrección
+es parcial y no cierra #326/#329/#567: siguen pendientes otros producers BUILD,
+callbacks/consumidores NewGRF, composición global y comparación de framebuffer.

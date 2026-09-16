@@ -9074,3 +9074,16 @@ de destino 802 en modo transparente. No modifica la decisión por entrada de
 `TileLayout` ni la calibración del techo de vidrio. Pasan las 142 pruebas de
 `station`, Clippy estricto y formato; la fila sigue parcial y #326/#329/#567
 continúan abiertas.
+
+### #326/#329/#567-BRIDGE-STRUCTURE-DESTINATION-TRANSPARENCY — puentes y objetos
+
+Actualizado: 2026-09-16 (`eb105e5f`). Las piezas estructurales vanilla y
+custom de puentes (tablero, barandilla, rampas, pilares y capas directas
+NewGRF) usan la máscara de destino 802 cuando `TO_BRIDGES` está transparente.
+El HQ, los hitos vanilla y las vistas planas de objetos NewGRF hacen lo mismo
+para `TO_STRUCTURES`; los `TileLayout` conservan su decisión por entrada y la
+precedencia de `OPAQUE`. Suelo, fundaciones y catenaria no heredan estas
+categorías. Pasan 78 pruebas de puentes, 2 de estructuras, Clippy estricto y
+formato. La fila continúa parcial y #326/#329/#567 permanecen abiertas por
+otros producers BUILD, callbacks/consumidores NewGRF, composición global y
+framebuffer.

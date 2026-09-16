@@ -2345,3 +2345,13 @@ reemplaza la secuencia final de `DrawRailTileSeq` usa la máscara de destino
 ni la calibración del techo de vidrio. Pasan las 142 pruebas de `station`,
 Clippy estricto y formato; la cobertura continúa parcial y no se cierran
 #326/#329/#567.
+
+Actualización #326/#329/#567-BRIDGE-STRUCTURE-DESTINATION-TRANSPARENCY
+(2026-09-16, `eb105e5f`): la matriz incorpora la separación nativa de las
+categorías `TO_BRIDGES` y `TO_STRUCTURES`. Tableros, rampas, barandillas,
+pilares y capas directas de puentes custom reciben la máscara de destino 802;
+HQ, hitos vanilla y vistas planas de objetos NewGRF reciben la misma máscara
+para estructuras. Los `TileLayout` siguen resolviendo `OPAQUE` y paletas por
+entrada, mientras ground, foundations y catenaria permanecen fuera del cambio.
+Pasan 78 pruebas de puente, 2 de estructuras y Clippy estricto; la cobertura
+continúa parcial y no se cierran #326/#329/#567.

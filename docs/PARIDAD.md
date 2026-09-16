@@ -6227,3 +6227,14 @@ del depósito pasan con 27 pruebas, además de las baterías TileLayout y Clippy
 estricto. Esta subbrecha queda corregida, pero no cierra #326/#329/#567:
 continúan pendientes YAPF/regiones de agua, callbacks NewGRF, composición
 global y comparación de framebuffer.
+
+Corrección #326/#329/#567-DEPOT-BUILD-DESTINATION-TRANSPARENCY (2026-09-16,
+`2bc07e00`): las fachadas BUILD de depósitos ferroviarios y viales, incluidas
+las vistas NewGRF y los reemplazos Action5 de tranvía, pasan ahora por la
+misma máscara de destino equivalente a `PALETTE_TO_TRANSPARENT` (802) cuando
+`TO_BUILDINGS` está en modo transparente. La conversión se centraliza en los
+parents de fachada; la catenaria, los overlays y todos los suelos conservan
+sus contratos independientes. Pasan 100 regresiones focalizadas de depósitos
+y Clippy estricto. La corrección es parcial y no cierra #326/#329/#567:
+quedan otros producers BUILD, callbacks/consumidores NewGRF, composición
+global y comparación de framebuffer.

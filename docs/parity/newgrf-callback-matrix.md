@@ -2310,3 +2310,12 @@ suprimiendo únicamente la estructura. Pasan 27 regresiones de ShipDepot,
 TileLayout dirigido y Clippy estricto. La corrección es parcial; otros
 criterios de #326/#329/#567 —YAPF/regiones, callbacks, consumidores y
 framebuffer— siguen pendientes.
+
+Actualización #326/#329/#567-DEPOT-BUILD-DESTINATION-TRANSPARENCY (2026-09-16,
+`2bc07e00`): las fachadas BUILD de depósitos rail y road reproducen ahora el
+contrato de `DrawRailTileSeq(..., TO_BUILDINGS, ...)`: en modo transparente,
+los parents vanilla, NewGRF y Action5 usan la máscara de destino 802. Los
+grounds, overlays y la catenaria no heredan el estado de Buildings. Pasan 100
+regresiones de depósitos y Clippy estricto; otros producers, callbacks,
+consumidores NewGRF y el framebuffer mantienen la cobertura parcial de
+#326/#329/#567.

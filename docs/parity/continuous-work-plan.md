@@ -9031,3 +9031,15 @@ modo oculto continúa eliminando sólo las capas estructurales. La regresión
 específica pasa con 27 pruebas; TileLayout y Clippy estricto también quedan
 verdes. La fila sigue parcial y no se cierran #326/#329/#567: faltan YAPF y
 regiones de agua completas, callbacks NewGRF, composición global y framebuffer.
+
+### #326/#329/#567-DEPOT-BUILD-DESTINATION-TRANSPARENCY — fachadas rail/road
+
+Actualizado: 2026-09-16 (`2bc07e00`). Las fachadas BUILD de depósitos
+ferroviarios y viales usan ahora la máscara de destino equivalente a
+`PALETTE_TO_TRANSPARENT` (`802`) cuando `TO_BUILDINGS` está transparente.
+El cambio vive en los parents compartidos de cada depósito, por lo que cubre
+sprites vanilla, grupos NewGRF y sustituciones Action5 de tranvía sin cambiar
+el ground, los overlays ni la catenaria. Pasan 100 regresiones focalizadas y
+Clippy estricto. La fila sigue parcial: otros producers BUILD,
+callbacks/consumidores NewGRF, composición global y framebuffer continúan
+pendientes; #326/#329/#567 siguen abiertas.

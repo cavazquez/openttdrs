@@ -184,12 +184,12 @@ pub fn poll_engine_previews(state: &mut crate::GameState) {
         .collect();
 
     for engine_id in engine_ids {
-        let Some((engine_kind, engine_name, engine_no_news)) =
-            engine_in_catalog(&state.engine_catalog, engine_id)
-                .map(|engine| (engine.kind, engine.name.clone(), engine.no_news()))
-        else {
+        let Some(engine) = engine_in_catalog(&state.engine_catalog, engine_id).cloned() else {
             continue;
         };
+        let engine_kind = engine.kind;
+        let engine_name = engine.name.clone();
+        let engine_no_news = engine.no_news();
         // La aceptación se conserva en la compañía. No volver a abrir una
         // oferta para el mismo motor durante el resto de la ventana anual.
         if state
@@ -223,7 +223,7 @@ pub fn poll_engine_previews(state: &mut crate::GameState) {
             offer.wait_days = 0;
         }
 
-        let company = preview_company_for(state, engine_kind, offer.asked_companies);
+        let company = preview_company_for(state, &engine, offer.asked_companies);
         if let Some(company) = company {
             if let Some(bit) = company_bit(company) {
                 offer.asked_companies |= bit;
@@ -258,19 +258,88 @@ fn company_bit(company: crate::CompanyId) -> Option<u16> {
 
 fn preview_company_for(
     state: &crate::GameState,
-    kind: VehicleKind,
+    engine: &EngineDef,
     asked_companies: u16,
 ) -> Option<crate::CompanyId> {
+    let preview_cargos = preview_cargo_types(engine);
     state.companies.iter().find_map(|company| {
         let bit = company_bit(company.id)?;
         (company.block_preview == 0
             && asked_companies & bit == 0
-            && state
-                .vehicles
-                .iter()
-                .any(|vehicle| vehicle.owner == company.id && vehicle.kind == kind))
+            && state.vehicles.iter().any(|vehicle| {
+                vehicle.owner == company.id
+                    && vehicle.kind == engine.kind
+                    && vehicle_can_carry_preview_cargo(state, vehicle)
+                    && (engine.kind == VehicleKind::Train
+                        || vehicle
+                            .cargo_type
+                            .is_some_and(|cargo| preview_cargos.contains(&cargo)))
+            }))
         .then_some(company.id)
     })
+}
+
+/// Cargos que `GetPreviewCompany` obtiene de `GetUnionOfArticulatedRefitMasks`.
+///
+/// Los trenes usan todos los cargos porque pueden completar la composición
+/// con vagones. Para el resto de tipos, el motor aporta su cargo por defecto,
+/// la máscara ya traducida a IDs globales y las listas CTT materializadas.
+/// Esta consulta deliberadamente no usa la lista de refit de la UI: el
+/// oráculo nativo no aplica aquí las reglas de selección de un depósito.
+fn preview_cargo_types(engine: &EngineDef) -> Vec<crate::CargoType> {
+    if engine.kind == VehicleKind::Train {
+        return crate::cargo::ALL_CARGO_TYPES.to_vec();
+    }
+
+    let can_carry = match engine.kind {
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => {
+            engine.capacity > 0 && engine.cargo.is_some()
+        }
+        VehicleKind::Ship | VehicleKind::Aircraft => engine.cargo.is_some(),
+        VehicleKind::Train => true,
+    };
+    if !can_carry {
+        return Vec::new();
+    }
+
+    let mut cargos = engine.cargo.into_iter().collect::<Vec<_>>();
+    for cargo in crate::cargo::ALL_CARGO_TYPES {
+        if u32::from(cargo.cargo_id()) < u32::BITS
+            && engine.refit_mask & (1_u32 << cargo.cargo_id()) != 0
+            && !cargos.contains(&cargo)
+        {
+            cargos.push(cargo);
+        }
+    }
+    for &cargo in &engine.ctt_include_cargos {
+        if !cargos.contains(&cargo) {
+            cargos.push(cargo);
+        }
+    }
+    cargos.retain(|cargo| !engine.ctt_exclude_cargos.contains(cargo));
+    cargos
+}
+
+/// Equivalente reducido de `Vehicle::GetEngine()->CanCarryCargo()` para el
+/// vehículo que hace elegible a una compañía para una preview. La consulta
+/// nativa inspecciona la propiedad del motor, no el `cargo_cap` instantáneo de
+/// la unidad; por eso el `capacity` local sólo se usa si el motor importado no
+/// está disponible para resolverlo.
+fn vehicle_can_carry_preview_cargo(state: &crate::GameState, vehicle: &crate::Vehicle) -> bool {
+    let Some(cargo) = vehicle.cargo_type else {
+        return false;
+    };
+    let engine = vehicle
+        .engine_id
+        .and_then(|id| engine_in_catalog(&state.engine_catalog, id))
+        .or_else(|| vehicle.engine_id.and_then(engine_by_id));
+    let can_carry = engine.map_or(vehicle.capacity > 0, |engine| match vehicle.kind {
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram | VehicleKind::Train => {
+            engine.capacity > 0
+        }
+        VehicleKind::Ship | VehicleKind::Aircraft => engine.cargo.is_some(),
+    });
+    can_carry && cargo.cargo_id() <= crate::cargo::MAX_CARGO_ID
 }
 
 /// Devuelve el grupo de preview de un motor, incluyendo sólo variantes que
@@ -667,6 +736,49 @@ mod tests {
             state.news.items.front().map(|item| item.reference),
             Some(crate::NewsReference::Engine(30_001))
         ));
+    }
+
+    #[test]
+    fn preview_scheduler_requires_vehicle_cargo_compatible_with_engine() {
+        let mut state = crate::GameState::new(8, 8);
+        let mut engine = engine_for_vehicle(VehicleKind::Ship, ENGINE_SHIP_OIL).clone();
+        engine.id = 30_002;
+        engine.name = "Preview tanker".into();
+        engine.intro_year = 1950;
+        state.engine_catalog.push(engine);
+
+        let mut ship = Vehicle::new(
+            1,
+            VehicleKind::Ship,
+            crate::TileCoord::new(2, 2),
+            crate::TileCoord::new(2, 2),
+        );
+        ship.cargo_type = Some(crate::CargoType::Goods);
+        state.vehicles.push(ship);
+
+        poll_engine_previews(&mut state);
+        let offer = state
+            .runtime
+            .engine_preview_offers
+            .get(&30_002)
+            .copied()
+            .expect("oferta de preview sin candidato compatible");
+        assert_eq!(offer.company, None);
+        assert_eq!(offer.asked_companies, 1);
+
+        // La misma compañía pasa a ser elegible cuando su flota tiene el
+        // cargo que el motor realmente puede transportar.
+        state.runtime.engine_preview_offers.clear();
+        state.vehicles[0].cargo_type = Some(crate::CargoType::Oil);
+        poll_engine_previews(&mut state);
+        assert_eq!(
+            state
+                .runtime
+                .engine_preview_offers
+                .get(&30_002)
+                .and_then(|offer| offer.company),
+            Some(crate::CompanyId::PLAYER)
+        );
     }
 
     #[test]

@@ -8769,6 +8769,14 @@ fn newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined() {
         2,
         "la base Action5 y RTSG_TUNNEL_PORTAL deben quedar combinados bajo el cable"
     );
+    assert_eq!(
+        world
+            .query::<&ViewportSortableSegmentedChild>()
+            .iter(&world)
+            .count(),
+        2,
+        "ambas capas de la fachada combinada deben publicar su fuente para clipping por banda"
+    );
     assert!(
         world
             .query::<&ViewportSortableChild>()

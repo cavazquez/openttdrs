@@ -6025,11 +6025,13 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5_an
                 if let Some(source_depth) = catenary_overlay_source_depth {
                     overlay_translation.z = source_depth;
                 }
+                let overlay_sprite = resolved.sprite;
+                let overlay_transform = Transform::from_translation(overlay_translation);
                 let mut overlay_entity = commands.spawn((
                     MapVisualLayer,
                     ctx.map_tile_chunk(),
-                    resolved.sprite,
-                    Transform::from_translation(overlay_translation),
+                    overlay_sprite.clone(),
+                    overlay_transform,
                 ));
                 if let (Some(parent), Some(source_depth)) =
                     (tunnel_catenary_parent, catenary_overlay_source_depth)
@@ -6054,6 +6056,11 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5_an
                             ),
                             insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 1),
                             combine_ordinal: 2,
+                        },
+                        ViewportSortableSegmentedChild,
+                        ViewportSortableSegmentedSource {
+                            sprite: overlay_sprite,
+                            transform: overlay_transform,
                         },
                     ));
                 } else if front_has_sortable_parent {

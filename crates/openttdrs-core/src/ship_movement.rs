@@ -1052,6 +1052,28 @@ pub(crate) fn ship_vehicle_trackdir(v: &Vehicle, map: Option<&Map>) -> Option<u8
     Some(ship_trackdir(track, v.direction))
 }
 
+/// Devuelve los sentidos de origen que `YapfShip` puede evaluar para el barco.
+///
+/// En agua ordinaria es un único `Trackdir`; dentro de un depósito se añaden
+/// también sus ocho bits invertidos porque `CheckShipReverse` compara la salida
+/// hacia delante con la salida hacia atrás antes de liberar la unidad.
+#[must_use]
+pub(crate) fn ship_vehicle_origin_trackdir_mask(v: &Vehicle, map: Option<&Map>) -> Option<u16> {
+    let trackdir = ship_vehicle_trackdir(v, map)?;
+    let mut mask = 1_u16 << trackdir;
+    if let Some(map) = map {
+        let depot_pos =
+            crate::depot::canonical_depot_tile_for_vehicle(map, v.pos, VehicleKind::Ship);
+        if map
+            .get(depot_pos)
+            .is_some_and(|tile| tile.kind == TileKind::ShipDepot)
+        {
+            mask |= 1_u16 << (trackdir ^ 8);
+        }
+    }
+    Some(mask)
+}
+
 #[must_use]
 const fn diagdir_to_diag_trackdir(diagdir: u8) -> u8 {
     match diagdir & 0x03 {
@@ -2415,6 +2437,30 @@ mod tests {
 
         ship.crashed = true;
         assert_eq!(ship_vehicle_trackdir(&ship, None), None);
+    }
+
+    #[test]
+    fn ship_vehicle_origin_trackdir_mask_adds_depot_reverse() {
+        let mut state = GameState::new(12, 8);
+        let depot = TileCoord::new(4, 3);
+        let opposite_section = TileCoord::new(5, 3);
+        let outside = TileCoord::new(6, 3);
+        for tile in [depot, opposite_section, outside] {
+            state.map.set_kind(tile, TileKind::Water).unwrap();
+        }
+        apply_command(&mut state, &Command::PlaceShipDepotDir(depot, 0)).unwrap();
+
+        let north = crate::ship_depot_north_tile(&state.map, depot).unwrap();
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, north, outside);
+        ship.ship_pos_valid = true;
+        ship.ship_state = SHIP_STATE_DEPOT;
+        ship.ship_track = TRACK_X;
+        ship.direction = DIR_NE;
+
+        assert_eq!(
+            ship_vehicle_origin_trackdir_mask(&ship, Some(&state.map)),
+            Some((1_u16 << 0) | (1_u16 << 8))
+        );
     }
 
     #[test]

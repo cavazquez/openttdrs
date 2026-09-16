@@ -133,7 +133,19 @@ impl ShipPathCost {
         path: &[TileCoord],
         origin_trackdir: u8,
     ) -> u32 {
-        self.path_cost_with_origin(map, from, path, Some(origin_trackdir))
+        self.path_cost_with_trackdirs(map, from, path, 1_u16 << origin_trackdir)
+    }
+
+    /// Coste acumulado usando un conjunto de `Trackdir` físicos posibles.
+    #[must_use]
+    pub fn path_cost_with_trackdirs(
+        self,
+        map: &Map,
+        from: TileCoord,
+        path: &[TileCoord],
+        origin_trackdir_mask: u16,
+    ) -> u32 {
+        self.path_cost_with_origin(map, from, path, Some(origin_trackdir_mask))
     }
 
     #[must_use]
@@ -142,7 +154,7 @@ impl ShipPathCost {
         map: &Map,
         from: TileCoord,
         path: &[TileCoord],
-        origin_trackdir: Option<u8>,
+        origin_trackdir_mask: Option<u16>,
     ) -> u32 {
         let Some(&first) = path.first() else {
             return 0;
@@ -150,8 +162,14 @@ impl ShipPathCost {
         let Some((first_entry, _)) = water_step_geometry(map, from, first) else {
             return self.fallback_path_cost(map, from, path);
         };
-        let Some(mut previous_trackdir) =
-            origin_trackdir.or_else(|| straight_trackdir_for_exit(first_entry))
+        let Some(mut previous_trackdir) = origin_trackdir_mask
+            .and_then(|mask| {
+                (0..14_u8).find(|&trackdir| {
+                    mask & (1_u16 << trackdir) != 0
+                        && trackdir_exit_diagdir(trackdir) == Some(first_entry)
+                })
+            })
+            .or_else(|| straight_trackdir_for_exit(first_entry))
         else {
             return self.fallback_path_cost(map, from, path);
         };
@@ -311,7 +329,7 @@ pub(super) fn find_ship_path(
     to: TileCoord,
     cost: ShipPathCost,
 ) -> Option<Vec<TileCoord>> {
-    find_ship_path_with_trackdirs(map, from, to, cost, None)
+    find_ship_path_with_origins(map, from, to, cost, None)
 }
 
 /// Variante naval que restringe el origen al `Trackdir` físico del barco.
@@ -324,7 +342,20 @@ pub(super) fn find_ship_path_with_trackdir(
     cost: ShipPathCost,
     origin_trackdir: u8,
 ) -> Option<Vec<TileCoord>> {
-    find_ship_path_with_trackdirs(map, from, to, cost, Some(origin_trackdir))
+    find_ship_path_with_origins(map, from, to, cost, Some(1_u16 << origin_trackdir))
+}
+
+/// Variante naval que restringe el origen a un conjunto de `Trackdir` físicos.
+#[must_use]
+#[allow(clippy::cast_possible_wrap)]
+pub(super) fn find_ship_path_with_trackdirs(
+    map: &Map,
+    from: TileCoord,
+    to: TileCoord,
+    cost: ShipPathCost,
+    origin_trackdir_mask: u16,
+) -> Option<Vec<TileCoord>> {
+    find_ship_path_with_origins(map, from, to, cost, Some(origin_trackdir_mask))
 }
 
 /// A* naval que conserva el `Trackdir` de cada nodo.
@@ -336,12 +367,12 @@ pub(super) fn find_ship_path_with_trackdir(
 /// física del barco. La variante direccional restringe el origen a un único
 /// trackdir, como `YapfShipChooseTrack`.
 #[must_use]
-fn find_ship_path_with_trackdirs(
+fn find_ship_path_with_origins(
     map: &Map,
     from: TileCoord,
     to: TileCoord,
     cost: ShipPathCost,
-    origin_trackdir: Option<u8>,
+    origin_trackdir_mask: Option<u16>,
 ) -> Option<Vec<TileCoord>> {
     if from == to {
         return Some(Vec::new());
@@ -351,9 +382,15 @@ fn find_ship_path_with_trackdirs(
     let mut parent: HashMap<ShipNodeKey, Option<ShipNodeKey>> = HashMap::new();
     let mut heap = BinaryHeap::new();
 
-    let origin_trackdirs =
-        origin_trackdir.map_or_else(|| straight_trackdirs().to_vec(), |trackdir| vec![trackdir]);
-    for trackdir in origin_trackdirs {
+    let origin_trackdir_mask = origin_trackdir_mask.unwrap_or_else(|| {
+        straight_trackdirs()
+            .into_iter()
+            .fold(0, |mask, trackdir| mask | (1_u16 << trackdir))
+    });
+    for trackdir in 0..14_u8 {
+        if origin_trackdir_mask & (1_u16 << trackdir) == 0 {
+            continue;
+        }
         let Some(exit) = trackdir_exit_diagdir(trackdir) else {
             continue;
         };
@@ -434,7 +471,7 @@ fn find_water_path_with_cost(
     ship_cost: Option<ShipPathCost>,
 ) -> Option<Vec<TileCoord>> {
     if let Some(cost) = ship_cost {
-        return find_ship_path_with_trackdirs(map, from, to, cost, None);
+        return find_ship_path_with_origins(map, from, to, cost, None);
     }
     let (mw, mh) = map.dimensions();
     let mut g_score: HashMap<TileCoord, u32> = HashMap::new();
@@ -750,6 +787,19 @@ mod tests {
                 0, // TRACKDIR_X_NE: salida opuesta, sin agua al oeste.
             )
             .is_none()
+        );
+
+        let depot_mask = (1_u16 << 8) | (1_u16 << 0);
+        assert_eq!(
+            find_ship_path_with_trackdirs(
+                &map,
+                from,
+                destination,
+                ShipPathCost::default(),
+                depot_mask,
+            ),
+            Some(vec![first, destination]),
+            "el origen de depósito debe conservar ambos sentidos del eje"
         );
     }
 }

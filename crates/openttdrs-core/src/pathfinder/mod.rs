@@ -106,6 +106,21 @@ pub fn find_ship_path_with_cost_and_trackdir(
     water::find_ship_path_with_trackdir(map, from, to, cost, origin_trackdir)
 }
 
+/// Encuentra una ruta naval desde un conjunto de `Trackdir` físicos de origen.
+///
+/// La máscara usa un bit por `Trackdir`; en particular, un barco en depósito
+/// puede pasar sus dos sentidos del eje, igual que `CheckShipReverse` nativo.
+#[must_use]
+pub fn find_ship_path_with_cost_and_trackdirs(
+    map: &Map,
+    from: TileCoord,
+    to: TileCoord,
+    cost: ShipPathCost,
+    origin_trackdir_mask: u16,
+) -> Option<Vec<TileCoord>> {
+    water::find_ship_path_with_trackdirs(map, from, to, cost, origin_trackdir_mask)
+}
+
 /// Coste acumulado de una ruta naval según las propiedades de `YapfShip`.
 #[must_use]
 pub fn ship_path_cost_for_path(
@@ -127,6 +142,18 @@ pub fn ship_path_cost_for_path_with_trackdir(
     origin_trackdir: u8,
 ) -> u32 {
     cost.path_cost_with_trackdir(map, from, path, origin_trackdir)
+}
+
+/// Coste naval de una ruta usando varios `Trackdir` físicos de origen.
+#[must_use]
+pub fn ship_path_cost_for_path_with_trackdirs(
+    map: &Map,
+    from: TileCoord,
+    path: &[TileCoord],
+    cost: ShipPathCost,
+    origin_trackdir_mask: u16,
+) -> u32 {
+    cost.path_cost_with_trackdirs(map, from, path, origin_trackdir_mask)
 }
 
 /// Variante naval que extrae las propiedades de velocidad del motor.
@@ -239,11 +266,24 @@ pub fn find_ship_path_cached_with_trackdir(
     cost: ShipPathCost,
     origin_trackdir: u8,
 ) -> Option<Vec<TileCoord>> {
-    if let Some(path) = cache.get_ship_with_trackdir(from, to, cost, Some(origin_trackdir)) {
+    find_ship_path_cached_with_trackdirs(map, cache, from, to, cost, 1_u16 << origin_trackdir)
+}
+
+/// Variante cacheada que separa un conjunto de orientaciones físicas de origen.
+#[must_use]
+pub fn find_ship_path_cached_with_trackdirs(
+    map: &Map,
+    cache: &mut PathCache,
+    from: TileCoord,
+    to: TileCoord,
+    cost: ShipPathCost,
+    origin_trackdir_mask: u16,
+) -> Option<Vec<TileCoord>> {
+    if let Some(path) = cache.get_ship_with_trackdirs(from, to, cost, origin_trackdir_mask) {
         return Some(path.clone());
     }
-    let path = find_ship_path_with_cost_and_trackdir(map, from, to, cost, origin_trackdir)?;
-    cache.insert_ship_with_trackdir(from, to, cost, Some(origin_trackdir), path.clone());
+    let path = find_ship_path_with_cost_and_trackdirs(map, from, to, cost, origin_trackdir_mask)?;
+    cache.insert_ship_with_trackdirs(from, to, cost, origin_trackdir_mask, path.clone());
     Some(path)
 }
 
@@ -874,6 +914,24 @@ mod tests {
                 .is_none()
         );
         assert!(cache.get_ship(from, to, cost).is_none());
+
+        let depot_mask = (1_u16 << 8) | (1_u16 << 0);
+        let depot_path = vec![TileCoord::new(2, 3), to];
+        cache.insert_ship_with_trackdirs(from, to, cost, depot_mask, depot_path.clone());
+        assert_eq!(
+            cache.get_ship_with_trackdirs(from, to, cost, depot_mask),
+            Some(&depot_path)
+        );
+        assert_eq!(
+            cache.get_ship_with_trackdir(from, to, cost, Some(8)),
+            Some(&path),
+            "una máscara de depósito no debe colisionar con un origen único"
+        );
+        assert!(
+            cache
+                .get_ship_with_trackdirs(from, to, cost, 1_u16 << 0)
+                .is_none()
+        );
     }
 
     #[test]

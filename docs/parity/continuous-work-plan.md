@@ -8778,3 +8778,13 @@ silenciosamente por otro anclaje que coincida con las coordenadas visibles. La
 regresión `explicit_airport_origin_does_not_reinfer_a_shifted_layout` fija la
 frontera y mantiene abiertos foundations/rotaciones del compositor, paletas y
 callbacks restantes.
+
+### #326/#329-NEWGRF-AIRPORT-NEARBY-Z — unidades de altura de `0x60`
+
+Actualizado: 2026-09-16 (`6fc377b8`). `AirportTile` conserva ahora la
+codificación nativa de `GetNearbyTileInformation`: GRF v7 y anteriores reciben
+la altura vecina en píxeles, mientras que GRF v8+ recibe niveles de tesela. La
+regresión `airport_nearby_land_info_respects_grf_version_z_units` verifica
+ambas ramas junto con los bits de tipo y pertenencia al aeropuerto. La fila
+continúa parcial por foundations/rotaciones del compositor, paletas y callbacks
+restantes.

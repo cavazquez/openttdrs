@@ -5994,3 +5994,12 @@ layout custom corrido a otra posición. La regresión
 la suite core queda en `2809 passed; 1 ignored` y Clippy estricto pasa. El
 bloque no cierra #326/#329/#567: siguen pendientes foundations/rotaciones del
 compositor, paletas y consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-AIRPORT-NEARBY-Z (2026-09-16, `6fc377b8`): la
+variable `AirportTile` `0x60` ahora codifica la altura vecina en píxeles para
+GRF v7 y anteriores, y en niveles de tesela para GRF v8+, tal como
+`GetNearbyTileInformation` de OpenTTD. La regresión
+`airport_nearby_land_info_respects_grf_version_z_units` cubre ambas ramas y
+conserva el tipo de tesela y el bit de pertenencia al aeropuerto. La suite core
+queda en `2810 passed; 1 ignored`; #326/#329/#567 siguen abiertas por los
+pendientes restantes del compositor y scopes NewGRF.

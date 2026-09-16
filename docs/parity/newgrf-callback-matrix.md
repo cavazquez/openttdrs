@@ -2111,3 +2111,11 @@ desplazado cuando el origen nativo no coincide con las teselas visibles; la
 regresión `explicit_airport_origin_does_not_reinfer_a_shifted_layout` conserva
 ese contrato. Foundations/rotaciones del compositor, paletas y delegación
 completa de `StationScope` siguen pendientes.
+
+Actualización #326/#329-NEWGRF-AIRPORT-NEARBY-Z (2026-09-16, `6fc377b8`): la
+variable `0x60` de `AirportTile` convierte `GetTileZ` a píxeles para GRF v7 y
+anteriores y conserva niveles de tesela desde GRF v8, incluyendo el tipo de
+tesela, terreno/agua y pertenencia al aeropuerto. La regresión
+`airport_nearby_land_info_respects_grf_version_z_units` fija el contrato para
+ambas versiones. Foundations/rotaciones del compositor, paletas y delegación
+completa de `StationScope` siguen pendientes.

@@ -5794,3 +5794,15 @@ rodeo de mar más largo gane a un canal corto pero penalizado. Validación: `280
 tests de core pasados, `0` fallidos y `1` ignorado, Clippy estricto del núcleo y
 del binario cliente, formato y `git diff --check` verdes. #329/#567 permanecen
 abiertas por callbacks y cachés visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-YAPF-PATHLESS-TRACK (2026-09-16, `dfe2fd92`):
+`ChooseShipTrack` ya no usa distancia Manhattan cuando todavía no existe
+`path_next`. Cada salida física candidata se evalúa con YAPF y el
+`ShipPathCost` del motor activo, incluyendo clase mar/canal, velocidad y
+penalizaciones `pf.yapf.ship_curve*`; el controlador, la caché y los saltos de
+acueducto propagan catálogo y settings. El wrapper público conserva el perfil
+default para callers legacy y la regresión naval fuerza que el coste ponderado
+elija el canal o el mar correctamente. Validación: `2805` tests de core pasados,
+`0` fallidos y `1` ignorado, Clippy estricto de core y del binario cliente,
+formato y `git diff --check` verdes. #329/#567 permanecen abiertas por
+callbacks y cachés visuales NewGRF restantes.

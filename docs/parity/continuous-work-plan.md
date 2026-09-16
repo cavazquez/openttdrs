@@ -8589,3 +8589,15 @@ rodeo marítimo más largo que vence a un canal corto y lento. Validación: `280
 tests de core pasados, `0` fallidos y `1` ignorado, Clippy estricto del núcleo y
 del binario cliente, formato y `git diff --check` verdes. #329/#567 siguen
 abiertas por callbacks y cachés visuales NewGRF.
+
+Corrección #329/#567-SHIP-YAPF-PATHLESS-TRACK (2026-09-16, `dfe2fd92`):
+`ChooseShipTrack` deja de puntuar por distancia Manhattan cuando no hay
+`path_next`; cada `Trackdir` físico pasa por YAPF con el perfil efectivo del
+motor y los settings navales `pf.yapf.ship_curve*`. La selección autoritativa,
+la caché y el fallback de acueducto reciben explícitamente catálogo y
+`PathfindingSettings`; el wrapper público conserva el perfil default para
+compatibilidad legacy. La regresión del canal frente al rodeo de mar verifica
+que la decisión usa coste ponderado. Validación: `2805` tests de core pasados,
+`0` fallidos y `1` ignorado, Clippy estricto de core y del binario cliente,
+formato y `git diff --check` verdes. #329/#567 siguen abiertas por callbacks y
+cachés visuales NewGRF.

@@ -11,7 +11,7 @@ use std::collections::BTreeSet;
 use crate::airport_class::{NewgrfAirportSpecDef, newgrf_airport_spec_def};
 use crate::airport_tile_spec::{AirportTileSpecDef, NEW_AIRPORT_TILE_OFFSET};
 use crate::house_spec::{distance_square, get_town_radius_group};
-use crate::map::{Map, Tile, TileCoord, TileKind, tile_slope_and_z, water_class};
+use crate::map::{Map, Tile, TileCoord, TileKind, is_coast_tile, tile_slope_and_z, water_class};
 use crate::newgrf_sprites::Action2EvalCtx;
 #[cfg(test)]
 use crate::station::StopKind;
@@ -415,6 +415,18 @@ fn airport_terrain_type(map: &Map, coord: TileCoord, climate: Climate, tile: Opt
 }
 
 fn tile_kind_as_ottd(map: &Map, stations: &[Station], coord: TileCoord, tile: Tile) -> u8 {
+    // `GetNearbyTileInformation` exposes shore trees as water and road
+    // waypoints as road, even though their stored tile kinds are different.
+    // Keep these fake types before the generic semantic mapping below.
+    if is_coast_tile(tile) {
+        return 6;
+    }
+    if tile.kind == TileKind::Station
+        && station_at_tile(map, stations, coord)
+            .is_some_and(|station| station.stop_kind == crate::station::StopKind::RoadWaypoint)
+    {
+        return 2;
+    }
     if tile.kind == TileKind::Station
         && station_at_tile(map, stations, coord)
             .is_some_and(|station| station.stop_kind.has_airport_facility())
@@ -992,5 +1004,35 @@ mod tests {
                 "AirportTile GRF v{version} debe codificar Z con la unidad nativa"
             );
         }
+    }
+
+    #[test]
+    fn airport_nearby_land_info_uses_common_fake_tile_types() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let shore_tree = TileCoord::new(1, 2);
+        let road_waypoint = TileCoord::new(2, 2);
+        let mut tree = map.get(shore_tree).expect("shore tree tile");
+        tree.kind = TileKind::Forest;
+        tree.m1 = crate::map::set_water_class_m1(tree.m1, crate::map::WaterClass::Sea);
+        map.set_tile(shore_tree, tree).expect("set shore tree");
+        let mut waypoint = map.get(road_waypoint).expect("road waypoint tile");
+        waypoint.kind = TileKind::Station;
+        map.set_tile(road_waypoint, waypoint)
+            .expect("set road waypoint");
+
+        let airport = Station::new_with_kind(TileCoord::new(0, 0), StopKind::Airport);
+        let road_waypoint_station = Station::new_with_kind(road_waypoint, StopKind::RoadWaypoint);
+        let stations = vec![airport, road_waypoint_station];
+
+        assert_eq!(
+            tile_kind_as_ottd(&map, &stations, shore_tree, tree),
+            6,
+            "un árbol de costa debe exponerse como MP_WATER"
+        );
+        assert_eq!(
+            tile_kind_as_ottd(&map, &stations, road_waypoint, waypoint),
+            2,
+            "un waypoint vial debe exponerse como MP_ROAD"
+        );
     }
 }

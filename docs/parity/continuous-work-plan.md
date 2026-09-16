@@ -8720,3 +8720,15 @@ suite dirigida conserva 35 pruebas de road stop; cliente completo:
 `1552 passed; 2 ignored`, Clippy estricto, formato y `git diff --check`
 verdes. El bloque no cierra #326/#329/#567: siguen pendientes layouts,
 paletas, callbacks y consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-STATION-SCOPE-FINGERPRINT (2026-09-16,
+`295bef63`): `Station` deja de omitir en la identidad de sus vistas runtime
+las variables directas `41`, `45`, `46`, `47`, `48`, `49`, `82`, `84`, `86`,
+`8A`, `F0`, `F1`, `F2`, `F3`, `F6`, `F7` y `FA`. Esas variables representan
+zona/distancia y compañía, aceptación, estado e historial de la estación,
+facilidades, aeropuerto y fecha; omitirlas permitía compartir un handle entre
+contextos cuyo Action2 podía producir píxeles distintos. La regresión
+`station_scope_variables_invalidate_fingerprint` cubre los 17 cambios y la
+suite completa del cliente pasa `1553 passed; 2 ignored`, junto con Clippy
+estricto, formato y `git diff --check`. El bloque no cierra #326/#329/#567:
+siguen pendientes layouts, paletas, callbacks y consumidores NewGRF restantes.

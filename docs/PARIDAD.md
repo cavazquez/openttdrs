@@ -5932,3 +5932,16 @@ la suite del cliente queda en `1552 passed; 2 ignored`, con 35 pruebas
 dirigidas de road stops, Clippy estricto del binario, formato y
 `git diff --check` verdes. #326/#329/#567 permanecen abiertas por layouts,
 paletas, callbacks y consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-STATION-SCOPE-FINGERPRINT (2026-09-16,
+`295bef63`): el fingerprint de las vistas runtime de `Station` incluye ahora
+las variables directas que `StationScopeResolver` prepara para la tesela, la
+estación, el aeropuerto, las facilidades y el historial: `41`, `45`, `46`,
+`47`, `48`, `49`, `82`, `84`, `86`, `8A`, `F0`, `F1`, `F2`, `F3`, `F6`, `F7` y
+`FA`. Antes dos estaciones podían reutilizar una textura del mismo spec pese
+a que su Action2 leyera uno de esos valores. La regresión
+`station_scope_variables_invalidate_fingerprint` separa los 17 casos; la
+suite del cliente queda en `1553 passed; 2 ignored`, con 142 pruebas dirigidas
+de Station, Clippy estricto del binario, formato y `git diff --check` verdes.
+#326/#329/#567 permanecen abiertas por layouts, paletas, callbacks y
+consumidores NewGRF restantes.

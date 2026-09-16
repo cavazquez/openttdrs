@@ -2057,3 +2057,17 @@ tipo, terreno, road/tram, frame, random y triggers ya cubiertos. La regresión
 para cada una; esto evita filtrar la textura de una parada entre instancias con
 el mismo spec/gfx. No cubre todavía layouts `TileSeq`, paletas especiales ni
 callbacks restantes; #326/#329/#567 continúan abiertos.
+
+### #326/#329-NEWGRF-STATION-SCOPE-FINGERPRINT — variables directas del scope
+
+Actualizado: 2026-09-16 (`295bef63`). El dominio `Station` incorpora las
+variables directas que el resolver prepara para las rutas de compra, fallback
+y tesela: `41`, `45`, `46`, `47`, `48`, `49`, `82`, `84`, `86`, `8A`, `F0`,
+`F1`, `F2`, `F3`, `F6`, `F7` y `FA`. La regresión
+`station_scope_variables_invalidate_fingerprint` cambia cada una y exige un
+fingerprint distinto, evitando alias entre estaciones con igual spec/gfx pero
+distinto pueblo, compañía, aceptación, aeropuerto, historial, facilidades o
+fecha. Las variables parametrizadas, registros, padres y estado persistente
+siguen cubiertas por `runtime_fingerprint`; no se alteran layouts `TileSeq`,
+paletas especiales ni callbacks restantes, por lo que #326/#329/#567 continúan
+abiertos.

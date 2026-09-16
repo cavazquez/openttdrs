@@ -98,12 +98,20 @@ fn buildings_hidden() -> bool {
 }
 
 #[must_use]
-fn ship_depot_structure_color(buildings_transparent: bool) -> Color {
+fn destination_mask_building_color(buildings_transparent: bool) -> Color {
     if buildings_transparent {
         tile_layout_destination_transparent_color()
     } else {
         Color::WHITE
     }
+}
+
+#[must_use]
+fn destination_mask_building_sprite(mut sprite: Sprite) -> Sprite {
+    if is_transparent(TransparencyOption::Buildings) {
+        sprite.color = destination_mask_building_color(true);
+    }
+    sprite
 }
 
 fn tint_building_sprite(mut sprite: Sprite) -> Sprite {
@@ -6514,7 +6522,6 @@ fn spawn_ship_depot_tile(
     // `GetCompanyPalette(owner)`: `PALETTE_RECOLOUR_START + colour`. En Kale
     // el owner es DarkBlue y por eso el oráculo expone 775.
     let company_palette = 775 + u32::from(owner_colour.unwrap_or_default().as_u8());
-    let buildings_transparent = is_transparent(TransparencyOption::Buildings);
 
     for (layer_i, layer) in layers.iter().enumerate() {
         let sprite_i = layer.sprite_index;
@@ -6559,17 +6566,12 @@ fn spawn_ship_depot_tile(
         // entregamos el prisma al sorter global igual que las casas vanilla.
         let source_depth = viewport_source_depth(pos.z, ctx.tx, map_width);
         pos.z = source_depth;
-        let mut sprite = sprite_from_atlas_or_company_white_colour(
+        let sprite = destination_mask_building_sprite(sprite_from_atlas_or_company_white_colour(
             company,
             owner_colour,
             &assets.ship_depot[sprite_i],
             SHIP_DEPOT_PATHS[sprite_i],
-        );
-        // `DrawWaterTileStruct` llama a `AddSortableSpriteToDraw` con
-        // `PALETTE_TO_TRANSPARENT`, que transforma el destino. No es el alpha
-        // de `with_to_alpha`: el depósito debe conservar su forma y oscurecer
-        // lo que queda detrás como el renderer 8bpp.
-        sprite.color = ship_depot_structure_color(buildings_transparent);
+        ));
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
@@ -6912,7 +6914,7 @@ fn spawn_road_depot_building_parent(
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
-        sprite,
+        destination_mask_building_sprite(sprite),
         Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
         ViewportSortableParent {
             sprite_id: layer.sprite_id,
@@ -7607,7 +7609,7 @@ fn spawn_rail_depot_building_parent(
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
-        sprite,
+        destination_mask_building_sprite(sprite),
         Transform::from_translation(position),
         ViewportSortableParent {
             sprite_id,
@@ -7909,20 +7911,20 @@ mod tests {
     use super::{
         INVALID_ROAD_TYPE_ID, ROTSG_DEPOT, TileRenderContext,
         airport_station_ground_layer_trace_offset, airport_tile_layout_is_renderable,
-        buoy_parent_bounds, buoy_trace_bounds, dock_clear_land_sprite_id,
-        dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
+        buoy_parent_bounds, buoy_trace_bounds, destination_mask_building_color,
+        dock_clear_land_sprite_id, dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
         rail_depot_build_parent_sprites, rail_depot_catenary_parent_sprite,
         rail_depot_foundation_child_offset, rail_depot_reservation_track_visible,
         rail_station_roof_glass_mask_color, road_depot_foundation_child_offset,
         road_depot_newgrf_def_for_tile, road_depot_parent_sprites,
         road_stop_foundation_child_offset, road_stop_layout_ground_slot,
         road_stop_layout_is_static, road_stop_layout_sequence_slot_range, road_stop_parent_sprites,
-        road_stop_simple_view_slot, road_stop_sorted_layer_centers, ship_depot_structure_color,
-        spawn_newgrf_airport_tile, station_catenary_pylon_parent_bounds,
-        station_catenary_wire_parent_bounds, station_catenary_wire_trace_geometry,
-        station_rail_child_offset, station_rail_foundation_world_z_delta,
-        station_rail_layer_parent_bounds, tile_layout_child_offset,
-        tile_layout_orphan_ground_center, tunnel_catenary_trace_geometry, tunnel_sortable_parents,
+        road_stop_simple_view_slot, road_stop_sorted_layer_centers, spawn_newgrf_airport_tile,
+        station_catenary_pylon_parent_bounds, station_catenary_wire_parent_bounds,
+        station_catenary_wire_trace_geometry, station_rail_child_offset,
+        station_rail_foundation_world_z_delta, station_rail_layer_parent_bounds,
+        tile_layout_child_offset, tile_layout_orphan_ground_center, tunnel_catenary_trace_geometry,
+        tunnel_sortable_parents,
     };
     use openttdrs_core::{
         Climate, DecodedSprite, Map, RoadTramType, RoadType, RoadTypeDef, TileCoord, TileKind,
@@ -8784,13 +8786,13 @@ mod tests {
     }
 
     #[test]
-    fn ship_depot_transparency_uses_destination_mask_not_building_alpha() {
-        let visible = ship_depot_structure_color(false).to_srgba();
+    fn building_transparency_uses_destination_mask_not_building_alpha() {
+        let visible = destination_mask_building_color(false).to_srgba();
         for channel in [visible.red, visible.green, visible.blue, visible.alpha] {
             assert!((channel - 1.0).abs() < f32::EPSILON);
         }
 
-        let transparent = ship_depot_structure_color(true).to_srgba();
+        let transparent = destination_mask_building_color(true).to_srgba();
         for channel in [transparent.red, transparent.green, transparent.blue] {
             assert!(channel.abs() < f32::EPSILON);
         }

@@ -8839,3 +8839,17 @@ CB153 observan líneas distintas; core queda en `2816 passed; 1 ignored`, con
 Clippy estricto, compilación de cliente y `git diff --check` verdes. Este
 bloque no cierra #326/#329/#567: foundations/rotaciones exhaustivas, paletas y
 otros callbacks/consumidores NewGRF siguen pendientes.
+
+### #326/#329-NEWGRF-CANAL-RESOLVER-SPLIT — depósito naval y bordes de agua
+
+Actualizado: 2026-09-16 (`59261ba9`). La ruta de agua conserva primero el set
+Action1 que resuelve `GetCanalSprite` y aplica después el desplazamiento de
+`GetCanalSpriteOffset` en un contexto independiente. Esto evita que callbacks
+con procedures, `last_result` o registros temporales cambien el set base de
+`CF_WATERSLOPE`, `CF_DIKES` o `CF_RIVER_EDGE`; el depósito naval comparte esa
+ruta con `DrawWaterClassGround`. La regresión
+`canal_offset_callback_does_not_change_base_action1_set` cubre el caso; pasan
+26 pruebas de depósito naval, 22 de agua, 3 de `canal_spec` y Clippy estricto.
+La corrección es una subbrecha de #326/#329/#567 y no cierra ninguna de esas
+issues: permanecen pendientes layouts, paletas, callbacks y consumidores
+NewGRF restantes.

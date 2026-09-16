@@ -2157,3 +2157,16 @@ alineados con el renderer. La regresión
 con líneas distintas. La fila sigue **parcial runtime**: foundations/rotaciones
 exhaustivas, paletas, callbacks y consumidores NewGRF restantes mantienen
 #326/#329/#567 abiertos.
+
+### #326/#329-NEWGRF-CANAL-RESOLVER-SPLIT — `CBID_CANALS_SPRITE_OFFSET`
+
+Actualizado: 2026-09-16 (`59261ba9`). La resolución de agua separa ahora las
+dos operaciones nativas: primero obtiene el grupo/base Action1 de
+`GetCanalSprite` y luego ejecuta `GetCanalSpriteOffset` con una copia del
+contexto inicial. Un callback de `CF_WATERSLOPE`, `CF_DIKES` o
+`CF_RIVER_EDGE` puede desplazar el slot, pero no alterar el grupo base por
+efectos de `last_result`, registros o procedures. Esto impacta directamente
+el ground, los diques y bordes que usa `ShipDepot`; la regresión
+`canal_offset_callback_does_not_change_base_action1_set` lo fija. La fila
+sigue parcial: no se cierran #326/#329/#567 mientras falten layouts, paletas,
+callbacks y consumidores NewGRF restantes.

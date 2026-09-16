@@ -6049,3 +6049,17 @@ ignored`; Clippy core/cliente, compilación del cliente y `git diff --check`
 verdes. Esto completa la subbrecha de propagación, pero no cierra
 #326/#329/#567: siguen pendientes foundations/rotaciones exhaustivas, paletas,
 callbacks y consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-CANAL-RESOLVER-SPLIT (2026-09-16,
+`59261ba9`): la materialización de `CF_WATERSLOPE`, `CF_DIKES` y
+`CF_RIVER_EDGE` conserva ahora el set Action1 elegido por `GetCanalSprite`
+antes de ejecutar `GetCanalSpriteOffset`. El callback usa una copia del
+contexto inicial, como el resolver independiente de OpenTTD; así un
+`last_result`, registro temporal o procedure del callback no puede cambiar el
+set base que usa el depósito naval, sus diques o los bordes del río. La
+regresión `canal_offset_callback_does_not_change_base_action1_set` reproduce
+una cadena que antes elegía otro set y verifica que sólo cambia el slot. Las
+26 pruebas dirigidas de depósito naval, 22 de agua, 3 de `canal_spec` y
+Clippy estricto pasan. Esto corrige una subbrecha de composición NewGRF; no
+cierra #326/#329/#567, que siguen abiertas por layouts, paletas, callbacks y
+consumidores restantes.

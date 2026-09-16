@@ -8557,3 +8557,14 @@ estado de depósito. Validación: `2803` tests de core pasados, `0` fallidos y `
 ignorado, Clippy estricto de core, check del cliente, formato y
 `git diff --check` verdes. #329/#567 permanecen abiertas por la decisión de
 reversa física completa, UI experta, callbacks y cachés visuales NewGRF.
+
+Corrección #329/#567-SHIP-YAPF-CURVE-UI (2026-09-16, `b6549fd5`): la ventana
+Bevy de pathfinding ofrece presets para las penalizaciones navales de 45° y
+90°, conserva la selección al sincronizar con `PathfindingSettings` y aplica
+el mismo límite nativo `0..=1000000` que usa el runtime. El catálogo inglés y
+sus pruebas directas acompañan la nueva superficie de configuración.
+Validación: `cargo check -p openttdrs-client --locked --offline`, Clippy
+estricto del binario cliente, formato y `git diff --check` verdes; el test del
+binario no llegó a enlazar dentro de la ventana controlada y no se presenta
+como exitoso. #329/#567 permanecen abiertas por reversa física completa,
+callbacks y cachés visuales NewGRF.

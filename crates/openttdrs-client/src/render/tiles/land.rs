@@ -3711,23 +3711,45 @@ fn spawn_field_fences(commands: &mut Commands, assets: &WorldAssets, ctx: &TileR
     let Some(t) = ctx.tile else {
         return;
     };
-    let bounds =
+    let trace_bounds =
         TraceSpriteBounds::new(0, 0, 0, 16, 16, 4 + field_slope_max_pixel_z(ctx.info.tileh));
-    let mut combined = false;
-    for draw in field_fence_draws(&t, ctx.info.tileh).into_iter().flatten() {
+    // `DrawClearLandFence` abre un único `StartSpriteCombine`: la primera
+    // cerca visible es el parent y las siguientes son `AddCombinedSprite`.
+    // El extent del parent no incluye el offset lateral de cada cerca; esos
+    // offsets sólo mueven la imagen, igual que en `AddSortableSpriteToDraw`.
+    let parent_bounds = tile_seq_parent_bounds(
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+        ctx.info.base_z,
+        0,
+        0,
+        0,
+        16,
+        16,
+        4 + field_slope_max_pixel_z(ctx.info.tileh),
+    );
+    let mut parent_entity = None;
+    for (draw_order, draw) in field_fence_draws(&t, ctx.info.tileh)
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
         // `StartSpriteCombine`: la primera cerca es sortable y las demás se
         // agregan al mismo objeto. La traza mantiene este orden y geometría
         // exactos para poder contrastarlos contra `DrawClearLandFence`.
         WorldDrawTrace::record_sprite_with_geometry(
             "field-fence",
-            if combined { "combined" } else { "sortable" },
+            if draw_order == 0 {
+                "sortable"
+            } else {
+                "combined"
+            },
             draw.sprite_id,
             false,
             draw.offset,
             0,
-            Some(bounds),
+            Some(trace_bounds),
         );
-        combined = true;
 
         let meta = FENCE_SPRITE_META[draw.fence_type][draw.variant];
         let off = remap_tile_offset(
@@ -3735,7 +3757,7 @@ fn spawn_field_fences(commands: &mut Commands, assets: &WorldAssets, ctx: &TileR
             draw.offset.1 as f32,
             draw.offset.2 as f32,
         ) * 0.5;
-        let pos3 = overlay_pos(
+        let mut pos3 = overlay_pos(
             Vec2::new(ctx.iso_pos.x + off.x, ctx.iso_pos.y + off.y),
             meta.xrel,
             meta.yrel,
@@ -3746,12 +3768,50 @@ fn spawn_field_fences(commands: &mut Commands, assets: &WorldAssets, ctx: &TileR
             ctx.tx_i32(),
             ctx.ty_i32(),
         );
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            assets.fences[draw.fence_type * 6 + draw.variant].sprite(),
-            Transform::from_translation(pos3),
-        ));
+        let sprite = assets.fences[draw.fence_type * 6 + draw.variant].sprite();
+        if parent_entity.is_none() {
+            let source_depth = viewport_source_depth(pos3.z, ctx.tx, ctx.ty);
+            pos3.z = source_depth;
+            parent_entity = Some(
+                commands
+                    .spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        sprite,
+                        Transform::from_translation(pos3),
+                        ViewportSortableParent {
+                            sprite_id: draw.sprite_id,
+                            bounds: parent_bounds,
+                            insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 1),
+                            source_depth,
+                        },
+                    ))
+                    .id(),
+            );
+        } else if let Some(parent) = parent_entity {
+            let source_transform = Transform::from_translation(pos3);
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite.clone(),
+                source_transform,
+                ViewportSortableChild {
+                    parent,
+                    source_depth: pos3.z,
+                },
+                ViewportSortablePromotableChild {
+                    sprite_id: draw.sprite_id,
+                    bounds: parent_bounds,
+                    insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 1),
+                    combine_ordinal: u8::try_from(draw_order).unwrap_or(u8::MAX),
+                },
+                ViewportSortableSegmentedChild,
+                ViewportSortableSegmentedSource {
+                    sprite,
+                    transform: source_transform,
+                },
+            ));
+        }
     }
 }
 

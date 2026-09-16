@@ -16179,7 +16179,10 @@ fn spawn_field_tile_draws_crop_ground_and_fences() {
         1,
         "estado 4 debe seleccionar SPR_FARMLAND_STATE_4 plano (4202)"
     );
-    for (side, expected) in ["NW", "NE", "SW", "SE"].into_iter().zip(expected_fences) {
+    for (side, expected) in ["NW", "NE", "SW", "SE"]
+        .into_iter()
+        .zip(expected_fences.iter())
+    {
         assert_eq!(
             rendered
                 .iter()
@@ -16189,6 +16192,41 @@ fn spawn_field_tile_draws_crop_ground_and_fences() {
             "la cerca {side} debe conservar el sprite que selecciona OpenTTD"
         );
     }
+    let fence_parent = world
+        .query::<(Entity, &ViewportSortableParent, &Sprite)>()
+        .iter(&world)
+        .find_map(|(entity, parent, sprite)| {
+            expected_fences[0]
+                .matches(sprite)
+                .then_some((entity, *parent))
+        })
+        .expect("la primera cerca visible debe abrir el parent combinado");
+    assert_eq!(
+        fence_parent.1.bounds,
+        ParentSpriteBounds::new(32, 32, 72, 47, 47, 75),
+        "el bloque de cercas conserva el prisma base de DrawClearLandFence"
+    );
+    let segmented_children: Vec<_> = world
+        .query::<(
+            &ViewportSortableChild,
+            &ViewportSortablePromotableChild,
+            &ViewportSortableSegmentedChild,
+            &ViewportSortableSegmentedSource,
+            &Sprite,
+        )>()
+        .iter(&world)
+        .filter(|(child, _, _, _, _)| child.parent == fence_parent.0)
+        .collect();
+    assert_eq!(
+        segmented_children.len(),
+        3,
+        "las tres cercas restantes deben conservar el bloque combinado para el sorter"
+    );
+    assert!(
+        segmented_children
+            .iter()
+            .all(|(child, _, _, source, _)| source.transform.translation.z == child.source_depth)
+    );
     let field_ground_z = world
         .query::<(&Sprite, &Transform)>()
         .iter(&world)

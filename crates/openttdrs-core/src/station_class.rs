@@ -85,7 +85,8 @@ pub struct StationSpecDef {
     /// Máscara de callbacks Action0 propiedad `0x0B`.
     #[serde(default)]
     pub callback_mask: u8,
-    /// Action0 `0x13`: flags generales del spec (bit 2 = CB141 recibe random).
+    /// Action0 `0x13`: flags generales del spec (bits 2..4 controlan
+    /// animación aleatoria y cimientos custom/extendidos).
     #[serde(default)]
     pub flags: u8,
     /// Action0 `0x16`: último frame de animación.
@@ -146,6 +147,11 @@ pub const STATION_CALLBACK_ANIMATION_SPEED_MASK: u8 = 1 << 3;
 pub const STATION_CALLBACK_SLOPE_CHECK_MASK: u8 = 1 << 4;
 /// Flag Action0 `0x13`: CB141 recibe bits aleatorios como `param1`.
 pub const STATION_FLAG_CB141_RANDOM_BITS: u8 = 1 << 2;
+/// Flag Action0 `0x13`: la estación publica cimientos propios.
+pub const STATION_FLAG_CUSTOM_FOUNDATIONS: u8 = 1 << 3;
+/// Flag Action0 `0x13`: los cimientos propios usan el bloque extendido de
+/// diez sprites en vez del bloque compuesto de ocho piezas.
+pub const STATION_FLAG_EXTENDED_FOUNDATIONS: u8 = 1 << 4;
 
 /// Disparadores de animación de estación / road stop de `OpenTTD`.
 ///
@@ -327,6 +333,50 @@ impl StationSpecDef {
             .tile_layout_for_local_id_ctx(self.newgrf_local_id, view, ctx)
     }
 
+    /// Resuelve el bloque de sprites de cimientos que `OpenTTD` solicita con
+    /// `StationResolverObject(..., param1 = 2, param2 = layout | edges << 16)`.
+    ///
+    /// El resultado empieza en el sprite indicado por el registro `0x100` y
+    /// conserva todos los sprites restantes del set Action1. El renderer usa
+    /// esos elementos para seleccionar la pieza de la pendiente o las ocho
+    /// piezas del bloque compuesto. Resolver el bloque completo es importante:
+    /// devolver sólo el primer sprite perdería el desplazamiento escrito por
+    /// `STO` y haría que las estaciones con callback de cimientos parezcan
+    /// tener un único gráfico para todas las pendientes.
+    pub fn newgrf_foundation_sprites_runtime(
+        &self,
+        layout: u8,
+        edge_info: u8,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<Vec<crate::newgrf_sprites::DecodedSprite>> {
+        if !self.has_custom_foundations() {
+            return None;
+        }
+
+        // `SpriteGroup::Resolve` parte de registros limpios. Los registros
+        // persistentes sí pertenecen al scope de la estación y se conservan.
+        ctx.temp_registers.clear();
+        ctx.registers_100.clear();
+        ctx.vars.insert(0x0C, 0); // CBID_NO_CALLBACK
+        ctx.vars.insert(0x10, 2); // foundation relocation
+        ctx.vars
+            .insert(0x18, u32::from(layout) | (u32::from(edge_info) << 16));
+
+        let views = if let Some(runtime) = self.newgrf_runtime.as_ref() {
+            runtime.views_for_local_id_u16_ctx(self.newgrf_local_id, ctx)?
+        } else {
+            self.newgrf_views.as_slice()
+        };
+        if views.is_empty() {
+            return None;
+        }
+        let offset = usize::try_from(ctx.registers_100.get(&0x100).copied().unwrap_or(0)).ok()?;
+        views
+            .get(offset..)
+            .filter(|sprites| !sprites.is_empty())
+            .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
+    }
+
     #[must_use]
     pub fn allows_platforms(&self, platforms: u8) -> bool {
         let n = platforms.clamp(1, 7);
@@ -373,6 +423,18 @@ impl StationSpecDef {
     #[must_use]
     pub const fn animation_next_frame_uses_random_bits(&self) -> bool {
         (self.flags & STATION_FLAG_CB141_RANDOM_BITS) != 0
+    }
+
+    /// El spec declaró que la estación reemplaza los cimientos vanilla.
+    #[must_use]
+    pub const fn has_custom_foundations(&self) -> bool {
+        (self.flags & STATION_FLAG_CUSTOM_FOUNDATIONS) != 0
+    }
+
+    /// El spec usa el bloque extendido de cimientos (`foundation_parts`).
+    #[must_use]
+    pub const fn has_extended_foundations(&self) -> bool {
+        (self.flags & STATION_FLAG_EXTENDED_FOUNDATIONS) != 0
     }
 
     /// El spec declaró CB `0x149` de comprobación de pendiente en Action0.
@@ -672,6 +734,53 @@ mod tests {
         assert_eq!(station_newgrf_view_index(0x0F), 15);
         assert_eq!(station_newgrf_view_index(0x12), 2);
         assert_eq!(station_newgrf_view_index(0xA5), 5);
+    }
+
+    #[test]
+    fn custom_foundation_resolution_uses_station_relocation_parameters() {
+        use crate::newgrf_sprites::{TrainSpriteAssign, TrainSpriteGraphics};
+
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.sets = vec![vec![
+            solid_sprite(10, 0, 0),
+            solid_sprite(20, 0, 0),
+            solid_sprite(30, 0, 0),
+        ]];
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 7,
+            set_id: 5,
+        });
+        gfx.action2_to_action1.insert(5, 0);
+
+        let mut spec = vanilla_station_spec_catalog().remove(0);
+        spec.flags = STATION_FLAG_CUSTOM_FOUNDATIONS | STATION_FLAG_EXTENDED_FOUNDATIONS;
+        spec.newgrf_local_id = 7;
+        spec.newgrf_runtime = Some(Box::new(gfx));
+
+        let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+        let sprites = spec
+            .newgrf_foundation_sprites_runtime(5, 2, &mut ctx)
+            .expect("custom foundation sprite block");
+        assert_eq!(sprites.len(), 3);
+        assert_eq!(sprites[1].rgba[0], 20);
+        assert_eq!(ctx.vars.get(&0x0C), Some(&0));
+        assert_eq!(ctx.vars.get(&0x10), Some(&2));
+        assert_eq!(ctx.vars.get(&0x18), Some(&(5 | (2 << 16))));
+        assert!(spec.has_custom_foundations());
+        assert!(spec.has_extended_foundations());
+    }
+
+    #[test]
+    fn foundation_flags_do_not_activate_without_custom_bit() {
+        let mut spec = vanilla_station_spec_catalog().remove(0);
+        spec.flags = STATION_FLAG_EXTENDED_FOUNDATIONS;
+        assert!(!spec.has_custom_foundations());
+        assert!(spec.has_extended_foundations());
+        let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+        assert!(
+            spec.newgrf_foundation_sprites_runtime(0, 0, &mut ctx)
+                .is_none()
+        );
     }
 
     fn solid_sprite(r: u8, g: u8, b: u8) -> crate::newgrf_sprites::DecodedSprite {

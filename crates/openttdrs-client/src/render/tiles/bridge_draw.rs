@@ -25,8 +25,9 @@ use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     MapVisualLayer, NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache, NewGrfRoadSpriteCache,
-    TileRenderContext, ViewportSortableChild, ViewportSortableParent, WorldAssets,
-    viewport_insertion_key, viewport_source_depth,
+    TileRenderContext, ViewportSortableChild, ViewportSortableParent,
+    ViewportSortablePromotableChild, ViewportSortableSegmentedChild,
+    ViewportSortableSegmentedSource, WorldAssets, viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::bridge_structure_palette::BridgeStructurePalette;
 use crate::sprites::{
@@ -1831,17 +1832,39 @@ fn spawn_layer(
     if let Some(source_depth) = child_source_depth {
         pos.z = source_depth;
     }
+    let child_transform = Transform::from_translation(pos);
+    let child_source_sprite = sprite.clone();
     let mut entity = commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
         sprite,
-        Transform::from_translation(pos),
+        child_transform,
     ));
     if let Some(parent) = combined_parent {
         entity.insert(ViewportSortableChild {
             parent,
             source_depth: child_source_depth.unwrap_or(pos.z),
         });
+        if let Some(placement) = effective_placement {
+            entity.insert((
+                ViewportSortablePromotableChild {
+                    sprite_id,
+                    bounds: bridge_parent_bounds(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        ctx.info.base_z,
+                        placement,
+                    ),
+                    insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, draw_ordinal),
+                    combine_ordinal: draw_ordinal,
+                },
+                ViewportSortableSegmentedChild,
+                ViewportSortableSegmentedSource {
+                    sprite: child_source_sprite,
+                    transform: child_transform,
+                },
+            ));
+        }
     } else if let Some(parent) = sortable_parent {
         entity.insert(parent);
     }
@@ -2009,17 +2032,39 @@ fn spawn_custom_layer(
     if let Some(source_depth) = child_source_depth {
         pos.z = source_depth;
     }
+    let child_transform = Transform::from_translation(pos);
+    let child_source_sprite = sprite.clone();
     let mut entity = commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
         sprite,
-        Transform::from_translation(pos),
+        child_transform,
     ));
     if let Some(parent) = combined_parent {
         entity.insert(ViewportSortableChild {
             parent,
             source_depth: child_source_depth.unwrap_or(pos.z),
         });
+        if let Some(placement) = effective_placement {
+            entity.insert((
+                ViewportSortablePromotableChild {
+                    sprite_id,
+                    bounds: bridge_parent_bounds(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        ctx.info.base_z,
+                        placement,
+                    ),
+                    insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, draw_ordinal),
+                    combine_ordinal: draw_ordinal,
+                },
+                ViewportSortableSegmentedChild,
+                ViewportSortableSegmentedSource {
+                    sprite: child_source_sprite,
+                    transform: child_transform,
+                },
+            ));
+        }
     } else if let Some(parent) = sortable_parent {
         entity.insert(parent);
     }

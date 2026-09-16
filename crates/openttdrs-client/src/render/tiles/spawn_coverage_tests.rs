@@ -43,8 +43,9 @@ use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{
     AirportStationAnim, CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, RenderGrid,
     TileRenderContext, ViewportSortableChild, ViewportSortableChildDepthWindows,
-    ViewportSortableParent, ViewportSortableSegmentedChild, WaterTile,
-    sort_viewport_sortable_parents, sync_viewport_sortable_children, viewport_insertion_key,
+    ViewportSortableParent, ViewportSortablePromotableChild, ViewportSortableSegmentedChild,
+    ViewportSortableSegmentedSource, WaterTile, sort_viewport_sortable_parents,
+    sync_viewport_sortable_children, viewport_insertion_key,
 };
 use crate::sprites::{
     RAIL_TB_X, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, WATER_CANAL_DIKE_SPRITE_META,
@@ -14948,6 +14949,21 @@ fn bridge_middle_keeps_road_front_combine_parent_and_child_roles() {
         front_children.len(),
         1,
         "la baranda frontal debe ser child del cable frontal"
+    );
+    let front_segmented_children: Vec<_> = world
+        .query::<(
+            &ViewportSortableChild,
+            &ViewportSortablePromotableChild,
+            &ViewportSortableSegmentedChild,
+            &ViewportSortableSegmentedSource,
+        )>()
+        .iter(&world)
+        .filter(|(child, _, _, _)| child.parent == front_parent)
+        .collect();
+    assert_eq!(
+        front_segmented_children.len(),
+        1,
+        "la baranda frontal debe conservar bounds, fuente y contrato segmentado"
     );
 }
 

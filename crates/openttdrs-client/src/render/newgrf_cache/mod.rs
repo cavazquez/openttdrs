@@ -1426,7 +1426,14 @@ pub(crate) mod vars {
     pub const HOUSE: &[u8] = &[
         0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x60, 0x61, 0x62, 0x63, 0x5F,
     ];
-    pub const ROAD_STOP: &[u8] = &[0x40, 0x41, 0x42, 0x43, 0x44, 0x49, 0x50, 0x5F];
+    /// Variables directas que `RoadStopScopeResolver` expone para la parada,
+    /// su pueblo, propietario, facilidades, animación y fecha. Omitir `45`,
+    /// `46`, `47`, `F0` o `FA` permitía que una textura runtime de una parada
+    /// se reutilizara en otra con distinto contexto aunque el Action2 leyera
+    /// uno de esos valores.
+    pub const ROAD_STOP: &[u8] = &[
+        0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x49, 0x50, 0x5F, 0xF0, 0xFA,
+    ];
     pub const STATION: &[u8] = &[0x10, 0x40, 0x42, 0x43, 0x4A, 0x5F, 0x67];
     /// Variables `AirportTileScopeResolver` que pueden cambiar la vista por
     /// posición, frame o estado de una tesela vecina. Las tablas

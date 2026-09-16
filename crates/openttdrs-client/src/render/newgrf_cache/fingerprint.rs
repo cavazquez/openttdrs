@@ -240,6 +240,27 @@ mod tests {
     }
 
     #[test]
+    fn road_stop_scope_variables_invalidate_fingerprint() {
+        let mut first = Action2EvalCtx::default();
+        first.vars.insert(0x45, 1);
+        first.vars.insert(0x46, 2);
+        first.vars.insert(0x47, 3);
+        first.vars.insert(0xF0, 4);
+        first.vars.insert(0xFA, 5);
+
+        for variable in [0x45, 0x46, 0x47, 0xF0, 0xFA] {
+            let mut changed = first.clone();
+            let value = changed.vars.get_mut(&variable).expect("variable fixture");
+            *value = value.saturating_add(1);
+            assert_ne!(
+                runtime_fingerprint(&first, vars::ROAD_STOP, false),
+                runtime_fingerprint(&changed, vars::ROAD_STOP, false),
+                "road-stop var {variable:#04X} debe separar texturas"
+            );
+        }
+    }
+
+    #[test]
     fn parent_and_relative_scopes_change_fingerprint() {
         let mut first = Action2EvalCtx::default();
         first.parent_vars.insert(0x40, 1);

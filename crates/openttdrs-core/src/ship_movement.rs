@@ -817,8 +817,14 @@ pub(crate) fn ship_track_exit_diagdir(entry: u8, track: u8) -> Option<u8> {
 /// barco puede volver a entrar en la tesela y deja que YAPF elija el mejor
 /// `Trackdir`. Como el runtime local guarda rutas por teselas, se enumeran los
 /// tres tracks que alcanzan ese lado, se descartan los vecinos desconectados y
-/// se compara la longitud de una ruta desde cada salida hasta `dest`.
-fn reverse_ship_into_trackdir(v: &mut Vehicle, map: &Map, random: Option<&mut Randomizer>) -> bool {
+/// se compara el coste completo de una ruta desde cada salida hasta `dest`.
+fn reverse_ship_into_trackdir(
+    v: &mut Vehicle,
+    map: &Map,
+    engine_catalog: &[crate::engine::EngineDef],
+    pathfinding: PathfindingSettings,
+    random: Option<&mut Randomizer>,
+) -> bool {
     let reverse_entry = (ship_exit_diagdir(v.direction, v.ship_track) + 2) & 3;
     // `YapfShip::ChooseShipTrack` no longer has a destination to score when
     // the high-level water route is lost.  In particular, a legacy `Station`
@@ -827,6 +833,10 @@ fn reverse_ship_into_trackdir(v: &mut Vehicle, map: &Map, random: Option<&mut Ra
     // without testing the neighbour or comparing its distance to `dest`.
     // Keep that fallback separate from the normal route-aware reversal.
     let route_lost = v.no_network_route_to_order || ship_station_order_to_buoy(v, Some(map));
+    let cost = crate::pathfinder::ShipPathCost::from_engine_with_settings(
+        crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v),
+        &pathfinding,
+    );
     let mut candidates = Vec::new();
     for track in [
         TRACK_X,
@@ -847,15 +857,20 @@ fn reverse_ship_into_trackdir(v: &mut Vehicle, map: &Map, random: Option<&mut Ra
             continue;
         }
 
-        let route_len = if route_lost {
+        let candidate_cost = if route_lost {
             None
-        } else if next == v.dest {
-            Some(1)
         } else {
-            crate::pathfinder::find_path(map, next, v.dest, crate::pathfinder::PathNetwork::Water)
-                .map(|path| path.len().saturating_add(1))
+            let origin_trackdir = ship_trackdir(track, subcoord.dir);
+            crate::pathfinder::find_ship_path_with_cost_and_trackdir(
+                map,
+                v.pos,
+                v.dest,
+                cost,
+                origin_trackdir,
+            )
+            .map(|path| cost.path_cost_with_trackdir(map, v.pos, &path, origin_trackdir))
         };
-        candidates.push((route_len.unwrap_or(usize::MAX), track, subcoord.dir));
+        candidates.push((candidate_cost.unwrap_or(u32::MAX), track, subcoord.dir));
     }
 
     if route_lost && !candidates.is_empty() {
@@ -890,10 +905,12 @@ fn reverse_ship_into_trackdir(v: &mut Vehicle, map: &Map, random: Option<&mut Ra
 fn reverse_ship_after_blocked_track(
     v: &mut Vehicle,
     map: Option<&Map>,
+    engine_catalog: &[crate::engine::EngineDef],
+    pathfinding: PathfindingSettings,
     random: Option<&mut Randomizer>,
 ) {
     if let Some(map) = map
-        && reverse_ship_into_trackdir(v, map, random)
+        && reverse_ship_into_trackdir(v, map, engine_catalog, pathfinding, random)
     {
         return;
     }
@@ -995,6 +1012,8 @@ fn ship_enter_aqueduct(
     map: &Map,
     old_tile: TileCoord,
     new_tile: TileCoord,
+    engine_catalog: &[crate::engine::EngineDef],
+    pathfinding: PathfindingSettings,
 ) -> Option<bool> {
     let other = crate::water_aqueduct_other_end(map, old_tile)?;
     let tile = map.get(old_tile)?;
@@ -1005,7 +1024,7 @@ fn ship_enter_aqueduct(
     if let Some(&front) = v.path.front()
         && front != other
     {
-        reverse_ship_after_blocked_track(v, Some(map), None);
+        reverse_ship_after_blocked_track(v, Some(map), engine_catalog, pathfinding, None);
         return Some(false);
     }
     if v.path.front() == Some(&other) {
@@ -1016,7 +1035,7 @@ fn ship_enter_aqueduct(
     let track = consume_cached_ship_track(v, map, other, entry_diagdir, path_next)
         .unwrap_or_else(|| choose_ship_track(map, other, entry_diagdir, path_next, v.dest));
     let Some(entry) = ship_subcoord(entry_diagdir, track) else {
-        reverse_ship_after_blocked_track(v, Some(map), None);
+        reverse_ship_after_blocked_track(v, Some(map), engine_catalog, pathfinding, None);
         return Some(false);
     };
 
@@ -1543,7 +1562,8 @@ fn ship_controller_tick_inner(
         }
 
         if let Some(map) = map
-            && let Some(teleported) = ship_enter_aqueduct(v, map, old_tile, new_tile)
+            && let Some(teleported) =
+                ship_enter_aqueduct(v, map, old_tile, new_tile, engine_catalog, pathfinding)
         {
             if !teleported {
                 return;
@@ -1552,18 +1572,36 @@ fn ship_controller_tick_inner(
         }
 
         if map.is_some_and(|m| !is_water_network_tile_at(m, new_tile)) {
-            reverse_ship_after_blocked_track(v, map, random.as_deref_mut());
+            reverse_ship_after_blocked_track(
+                v,
+                map,
+                engine_catalog,
+                pathfinding,
+                random.as_deref_mut(),
+            );
             return;
         }
         if let Some(map) = map
             && !water_tiles_connected(map, old_tile, new_tile)
         {
-            reverse_ship_after_blocked_track(v, Some(map), random.as_deref_mut());
+            reverse_ship_after_blocked_track(
+                v,
+                Some(map),
+                engine_catalog,
+                pathfinding,
+                random.as_deref_mut(),
+            );
             return;
         }
 
         let Some(diagdir) = diagdir_between_tiles(old_tile, new_tile) else {
-            reverse_ship_after_blocked_track(v, map, random.as_deref_mut());
+            reverse_ship_after_blocked_track(
+                v,
+                map,
+                engine_catalog,
+                pathfinding,
+                random.as_deref_mut(),
+            );
             return;
         };
 
@@ -1573,7 +1611,13 @@ fn ship_controller_tick_inner(
             v.path.pop_front();
         } else if !v.path.is_empty() {
             // Ruta desfasada: como `ReverseShip`, no saltar a un frente lejano.
-            reverse_ship_after_blocked_track(v, map, random.as_deref_mut());
+            reverse_ship_after_blocked_track(
+                v,
+                map,
+                engine_catalog,
+                pathfinding,
+                random.as_deref_mut(),
+            );
             return;
         }
 
@@ -1594,7 +1638,13 @@ fn ship_controller_tick_inner(
             )
         });
         let Some(entry) = ship_subcoord(diagdir, track) else {
-            reverse_ship_after_blocked_track(v, map, random.as_deref_mut());
+            reverse_ship_after_blocked_track(
+                v,
+                map,
+                engine_catalog,
+                pathfinding,
+                random.as_deref_mut(),
+            );
             return;
         };
 
@@ -2702,11 +2752,80 @@ mod tests {
         v.ship_track = TRACK_UPPER;
         v.ship_state = SHIP_STATE_TRACK_UPPER;
 
-        assert!(reverse_ship_into_trackdir(&mut v, &s.map, None));
+        assert!(reverse_ship_into_trackdir(
+            &mut v,
+            &s.map,
+            &[],
+            PathfindingSettings::default(),
+            None,
+        ));
         assert_eq!(v.direction, DIR_SE);
         assert_eq!(v.ship_track, TRACK_Y);
         assert_eq!(v.ship_state, SHIP_STATE_TRACK_Y);
         assert_eq!(v.cur_speed, 0);
+    }
+
+    #[test]
+    fn ship_reverse_on_blocked_track_uses_weighted_yapf_cost() {
+        let mut map = crate::Map::new_flat(12, 10, 0);
+        let from = TileCoord::new(5, 5);
+        let destination = TileCoord::new(8, 3);
+
+        // La salida recta hacia el este es corta pero toda de canal lento.
+        for tile in [
+            TileCoord::new(6, 5),
+            TileCoord::new(7, 5),
+            TileCoord::new(8, 5),
+            TileCoord::new(8, 4),
+        ] {
+            crate::map::make_water_tile(&mut map, tile, crate::map::WaterClass::Canal)
+                .expect("canal");
+        }
+        // La salida al norte da un rodeo más largo, pero permanece en mar.
+        for tile in [
+            TileCoord::new(5, 4),
+            TileCoord::new(5, 3),
+            TileCoord::new(5, 2),
+            TileCoord::new(6, 2),
+            TileCoord::new(7, 2),
+            TileCoord::new(8, 2),
+            destination,
+        ] {
+            crate::map::make_water_tile(&mut map, tile, crate::map::WaterClass::Sea).expect("mar");
+        }
+        crate::map::make_water_tile(&mut map, from, crate::map::WaterClass::Sea)
+            .expect("tesela actual");
+
+        let mut engine =
+            crate::engine::engine_for_vehicle(VehicleKind::Ship, ENGINE_SHIP_MPS).clone();
+        engine.id = 65_105;
+        engine.canal_speed_frac = 192;
+        let catalog = [engine];
+
+        let mut v = Vehicle::new(1, VehicleKind::Ship, from, destination);
+        v.running = true;
+        v.ship_pos_valid = true;
+        v.ship_x = from.x * 16 + 8;
+        v.ship_y = from.y * 16 + 8;
+        v.direction = DIR_NE;
+        v.ship_rotation = DIR_NE;
+        v.ship_track = TRACK_X;
+        v.ship_state = SHIP_STATE_TRACK_X;
+        v.engine_id = Some(catalog[0].id);
+
+        assert!(reverse_ship_into_trackdir(
+            &mut v,
+            &map,
+            &catalog,
+            PathfindingSettings::default(),
+            None,
+        ));
+        assert_eq!(
+            v.ship_track, TRACK_UPPER,
+            "debe preferir el rodeo de mar sobre el canal penalizado"
+        );
+        assert_eq!(v.direction, DIR_W);
+        assert_eq!(v.ship_state, SHIP_STATE_TRACK_UPPER);
     }
 
     #[test]

@@ -1010,6 +1010,58 @@ pub(crate) fn ship_trackdir(track: u8, direction: VehicleDirection) -> u8 {
     track.saturating_add(if reverse { 8 } else { 0 })
 }
 
+/// Equivalente de `Ship::GetVehicleTrackdir` para el estado que conserva el
+/// runtime Rust.
+///
+/// El orden de las ramas es deliberado: un barco en depósito usa la dirección
+/// de la sección norte, un barco en acueducto usa el rumbo diagonal y sólo una
+/// unidad sobre agua ordinaria toma `FindFirstTrack(state)` más `direction`.
+/// `None` representa el `INVALID_TRACKDIR` nativo de una unidad accidentada o
+/// que todavía no tiene una orientación utilizable.
+#[must_use]
+pub(crate) fn ship_vehicle_trackdir(v: &Vehicle, map: Option<&Map>) -> Option<u8> {
+    if v.kind != VehicleKind::Ship || v.crashed {
+        return None;
+    }
+
+    if let Some(map) = map {
+        let depot_pos =
+            crate::depot::canonical_depot_tile_for_vehicle(map, v.pos, VehicleKind::Ship);
+        if let Some(tile) = map
+            .get(depot_pos)
+            .filter(|tile| tile.kind == TileKind::ShipDepot)
+        {
+            return Some(diagdir_to_diag_trackdir(dir_to_diagdir(
+                crate::depot::ship_depot_facing(tile),
+            )));
+        }
+    }
+
+    if v.ship_state == SHIP_STATE_WORMHOLE {
+        return Some(diagdir_to_diag_trackdir(dir_to_diagdir(v.direction)));
+    }
+
+    let track = if v.ship_state & 0x3F != 0 {
+        (0..6_u8).find(|&track| v.ship_state & (1 << track) != 0)?
+    } else {
+        // `state == 0` es el valor que reciben JSON viejos y vehículos recién
+        // creados antes de su primer tick; en ambos casos el fallback nativo
+        // debe partir del rumbo, no del `ship_track` aún sin materializar.
+        track_from_diagdir(dir_to_diagdir(v.direction))
+    };
+    Some(ship_trackdir(track, v.direction))
+}
+
+#[must_use]
+const fn diagdir_to_diag_trackdir(diagdir: u8) -> u8 {
+    match diagdir & 0x03 {
+        DIAGDIR_NE => 0,
+        DIAGDIR_SE => 1,
+        DIAGDIR_SW => 8,
+        _ => 9,
+    }
+}
+
 fn choose_track_for_entry(diagdir: u8) -> u8 {
     track_from_diagdir(diagdir)
 }
@@ -2343,6 +2395,26 @@ mod tests {
         let track = choose_ship_track(&s.map, from, DIAGDIR_SW, Some(path_next), path_next);
         assert_eq!(track, TRACK_X);
         assert!(ship_subcoord(DIAGDIR_SW, track).is_some());
+    }
+
+    #[test]
+    fn ship_vehicle_trackdir_uses_native_state_and_direction() {
+        let pos = TileCoord::new(2, 2);
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, pos, TileCoord::new(4, 2));
+        ship.ship_state = SHIP_STATE_TRACK_X;
+        ship.ship_track = TRACK_X;
+        ship.direction = DIR_NE;
+        assert_eq!(ship_vehicle_trackdir(&ship, None), Some(0));
+
+        ship.direction = DIR_SW;
+        assert_eq!(ship_vehicle_trackdir(&ship, None), Some(8));
+
+        ship.ship_state = SHIP_STATE_WORMHOLE;
+        ship.direction = DIR_NW;
+        assert_eq!(ship_vehicle_trackdir(&ship, None), Some(9));
+
+        ship.crashed = true;
+        assert_eq!(ship_vehicle_trackdir(&ship, None), None);
     }
 
     #[test]

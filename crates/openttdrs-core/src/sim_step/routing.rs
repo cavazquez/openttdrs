@@ -46,6 +46,15 @@ struct GenericRouteJob {
     to: TileCoord,
     network: pathfinder::PathNetwork,
     ship_path_cost: Option<pathfinder::ShipPathCost>,
+    ship_origin_trackdir: Option<u8>,
+}
+
+#[derive(Debug)]
+struct GenericRouteResult {
+    vehicle_idx: usize,
+    path: Option<Vec<TileCoord>>,
+    ship_path_cost: Option<pathfinder::ShipPathCost>,
+    ship_origin_trackdir: Option<u8>,
 }
 
 #[derive(Debug)]
@@ -255,65 +264,111 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
                 );
                 pathfinder::ShipPathCost::from_engine_with_settings(engine, &state.pathfinding)
             });
+            let ship_origin_trackdir = (state.vehicles[i].kind == VehicleKind::Ship
+                && (state.vehicles[i].ship_pos_valid || state.vehicles[i].ship_state != 0))
+                .then(|| {
+                    crate::ship_movement::ship_vehicle_trackdir(
+                        &state.vehicles[i],
+                        Some(&state.map),
+                    )
+                })
+                .flatten();
             nonrail_jobs.push(GenericRouteJob {
                 vehicle_idx: i,
                 from: state.vehicles[i].pos,
                 to: state.vehicles[i].dest,
                 network: net,
                 ship_path_cost,
+                ship_origin_trackdir,
             });
         }
     }
 
-    let nonrail_paths: Vec<(
-        usize,
-        Option<Vec<TileCoord>>,
-        Option<pathfinder::ShipPathCost>,
-    )> = if nonrail_jobs.len() >= PARALLEL_GENERIC_ROUTE_THRESHOLD {
-        nonrail_jobs
-            .par_iter()
-            .map(|job| {
-                let path = job.ship_path_cost.map_or_else(
-                    || {
-                        pathfinder::find_path_with_wormholes(
+    let nonrail_paths: Vec<GenericRouteResult> =
+        if nonrail_jobs.len() >= PARALLEL_GENERIC_ROUTE_THRESHOLD {
+            nonrail_jobs
+                .par_iter()
+                .map(|job| {
+                    let path = job.ship_path_cost.map_or_else(
+                        || {
+                            pathfinder::find_path_with_wormholes(
+                                &state.map,
+                                job.from,
+                                job.to,
+                                job.network,
+                                wh,
+                            )
+                        },
+                        |cost| {
+                            job.ship_origin_trackdir.map_or_else(
+                                || {
+                                    pathfinder::find_ship_path_with_cost(
+                                        &state.map, job.from, job.to, cost,
+                                    )
+                                },
+                                |trackdir| {
+                                    pathfinder::find_ship_path_with_cost_and_trackdir(
+                                        &state.map, job.from, job.to, cost, trackdir,
+                                    )
+                                },
+                            )
+                        },
+                    );
+                    GenericRouteResult {
+                        vehicle_idx: job.vehicle_idx,
+                        path,
+                        ship_path_cost: job.ship_path_cost,
+                        ship_origin_trackdir: job.ship_origin_trackdir,
+                    }
+                })
+                .collect()
+        } else {
+            nonrail_jobs
+                .iter()
+                .map(|job| {
+                    let path = match job.ship_path_cost {
+                        Some(cost) => match job.ship_origin_trackdir {
+                            Some(trackdir) => pathfinder::find_ship_path_cached_with_trackdir(
+                                &state.map,
+                                &mut state.runtime.path_cache,
+                                job.from,
+                                job.to,
+                                cost,
+                                trackdir,
+                            ),
+                            None => pathfinder::find_ship_path_cached(
+                                &state.map,
+                                &mut state.runtime.path_cache,
+                                job.from,
+                                job.to,
+                                cost,
+                            ),
+                        },
+                        None => pathfinder::find_path_cached(
                             &state.map,
+                            &mut state.runtime.path_cache,
                             job.from,
                             job.to,
                             job.network,
                             wh,
-                        )
-                    },
-                    |cost| pathfinder::find_ship_path_with_cost(&state.map, job.from, job.to, cost),
-                );
-                (job.vehicle_idx, path, job.ship_path_cost)
-            })
-            .collect()
-    } else {
-        nonrail_jobs
-            .iter()
-            .map(|job| {
-                let path = match job.ship_path_cost {
-                    Some(cost) => pathfinder::find_ship_path_cached(
-                        &state.map,
-                        &mut state.runtime.path_cache,
-                        job.from,
-                        job.to,
-                        cost,
-                    ),
-                    None => pathfinder::find_path_cached(
-                        &state.map,
-                        &mut state.runtime.path_cache,
-                        job.from,
-                        job.to,
-                        job.network,
-                        wh,
-                    ),
-                };
-                (job.vehicle_idx, path, job.ship_path_cost)
-            })
-            .collect()
-    };
-    for (i, path, ship_path_cost) in nonrail_paths {
+                        ),
+                    };
+                    GenericRouteResult {
+                        vehicle_idx: job.vehicle_idx,
+                        path,
+                        ship_path_cost: job.ship_path_cost,
+                        ship_origin_trackdir: job.ship_origin_trackdir,
+                    }
+                })
+                .collect()
+        };
+    for GenericRouteResult {
+        vehicle_idx: i,
+        path,
+        ship_path_cost,
+        ship_origin_trackdir,
+    } in nonrail_paths
+    {
         // `UpdateOrderDest` conserva el amarre geométricamente más cercano como
         // fast path. Para estaciones con varios `DockingTile`, `YapfShip`
         // compara la ruta real a cada pieza: el más cercano en coordenadas no
@@ -322,7 +377,8 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
         if state.vehicles[i].kind == VehicleKind::Ship
             && ship_has_multiple_docking_candidates(state, i)
             && let Some(ship_path_cost) = ship_path_cost
-            && let Some((dest, dock_path)) = route_ship_to_available_dock(state, i, ship_path_cost)
+            && let Some((dest, dock_path)) =
+                route_ship_to_available_dock(state, i, ship_path_cost, ship_origin_trackdir)
         {
             state.vehicles[i].dest = dest;
             state.vehicles[i].path = dock_path.into_iter().collect();
@@ -441,6 +497,7 @@ fn route_ship_to_available_dock(
     state: &mut GameState,
     vehicle_idx: usize,
     ship_path_cost: pathfinder::ShipPathCost,
+    ship_origin_trackdir: Option<u8>,
 ) -> Option<(TileCoord, Vec<TileCoord>)> {
     let vehicle = &state.vehicles[vehicle_idx];
     let Some(crate::vehicle::VehicleOrder::Station { station, .. }) =
@@ -456,20 +513,41 @@ fn route_ship_to_available_dock(
         let path = if from == candidate {
             Some(Vec::new())
         } else {
-            pathfinder::find_ship_path_cached(
-                &state.map,
-                &mut state.runtime.path_cache,
-                from,
-                candidate,
-                ship_path_cost,
-            )
+            match ship_origin_trackdir {
+                Some(trackdir) => pathfinder::find_ship_path_cached_with_trackdir(
+                    &state.map,
+                    &mut state.runtime.path_cache,
+                    from,
+                    candidate,
+                    ship_path_cost,
+                    trackdir,
+                ),
+                None => pathfinder::find_ship_path_cached(
+                    &state.map,
+                    &mut state.runtime.path_cache,
+                    from,
+                    candidate,
+                    ship_path_cost,
+                ),
+            }
         };
         let Some(path) = path else {
             continue;
         };
         let key = (
-            pathfinder::ship_path_cost_for_path(&state.map, from, &path, ship_path_cost)
-                .saturating_add(ship_docking_occupancy_penalty(state, vehicle_idx, &path)),
+            match ship_origin_trackdir {
+                Some(trackdir) => pathfinder::ship_path_cost_for_path_with_trackdir(
+                    &state.map,
+                    from,
+                    &path,
+                    ship_path_cost,
+                    trackdir,
+                ),
+                None => {
+                    pathfinder::ship_path_cost_for_path(&state.map, from, &path, ship_path_cost)
+                }
+            }
+            .saturating_add(ship_docking_occupancy_penalty(state, vehicle_idx, &path)),
             path.len(),
             candidate.x.abs_diff(from.x) + candidate.y.abs_diff(from.y),
             candidate.x,

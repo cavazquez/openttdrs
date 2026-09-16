@@ -8544,3 +8544,16 @@ mapeo nativo de estado/dirección. Validación: `2802` tests de core pasados,
 `0` fallidos y `1` ignorado, Clippy estricto de core, check del cliente, formato
 y `git diff --check` verdes. #329/#567 siguen abiertos por exposición numérica
 en UI experta, reversa física y callbacks/cachés visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-YAPF-DEPOT-ORIGINS (2026-09-16, `2082de67`): la
+salida naval desde depósito conserva una máscara de dos `Trackdir` de origen:
+el sentido de la sección norte y su inverso, tal como el par
+`forward_dirs | reverse_dirs` de `CheckShipReverse` nativo. El resto de la flota
+mantiene un origen físico único. La máscara viaja por A*, coste de ruta, caché
+por tick, routing paralelo/secuencial y selección multi-muelle; las claves
+separan una máscara de depósito de cualquier origen único. Las regresiones
+cubren la ruta compatible, la no-colisión de caché y la identificación del
+estado de depósito. Validación: `2803` tests de core pasados, `0` fallidos y `1`
+ignorado, Clippy estricto de core, check del cliente, formato y
+`git diff --check` verdes. #329/#567 permanecen abiertas por la decisión de
+reversa física completa, UI experta, callbacks y cachés visuales NewGRF.

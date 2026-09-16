@@ -5748,3 +5748,17 @@ estado/dirección. Validación: `2802` tests de core pasados, `0` fallidos y `1`
 ignorado, Clippy estricto de core, check del cliente, formato y
 `git diff --check` verdes. #329/#567 siguen abiertas por exposición numérica
 en UI experta, reversa física y callbacks/cachés visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-YAPF-DEPOT-ORIGINS (2026-09-16, `2082de67`): la
+salida de un depósito naval ya no fuerza un único origen direccional. El
+controlador genera una máscara con el `Trackdir` de la sección del depósito y
+su inverso, reflejando el conjunto que `CheckShipReverse` evalúa antes de
+liberar la nave; los barcos fuera del depósito siguen usando un solo origen.
+Pathfinder, coste acumulado, caché por tick, routing secuencial/paralelo y
+selección de múltiples muelles conservan esa máscara sin colisionar con una
+entrada física individual. Las regresiones cubren la ruta desde ambos sentidos,
+el aislamiento de claves y el mapeo del estado de depósito. Validación: `2803`
+tests de core pasados, `0` fallidos y `1` ignorado, Clippy estricto de core,
+check del cliente, formato y `git diff --check` verdes. #329/#567 siguen
+abiertas por la decisión de reversa física completa, exposición numérica en UI
+experta, callbacks y cachés visuales NewGRF restantes.

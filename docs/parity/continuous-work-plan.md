@@ -8601,3 +8601,14 @@ que la decisión usa coste ponderado. Validación: `2805` tests de core pasados,
 `0` fallidos y `1` ignorado, Clippy estricto de core y del binario cliente,
 formato y `git diff --check` verdes. #329/#567 siguen abiertas por callbacks y
 cachés visuales NewGRF.
+
+Corrección #329/#567-NEWGRF-CACHE-TEARDOWN (2026-09-16, `3c64fef3`): el
+registro de salida de InGame cubre ahora las cachés `NewGrfSignalSpriteCache`
+y `NewGrfIndustrySpriteCache`, ambas creadas por `WorldRenderPlugin` y antes
+omitidas del teardown. Se añadió `clear` junto con las entradas de reset y
+remove, y el inventario ejecuta `leave_ingame` con los dos recursos para
+verificar que no sobreviven handles de sprites al cambiar de partida. La
+validación dirigida del cliente pasó, junto con Clippy estricto, formato y
+`git diff --check`. Este bloque corrige sólo la frontera de lifecycle; #329/#567
+siguen abiertos por la invalidación de consumidores restantes, callbacks y
+scopes NewGRF.

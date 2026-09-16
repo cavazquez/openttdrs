@@ -5806,3 +5806,14 @@ elija el canal o el mar correctamente. Validación: `2805` tests de core pasados
 `0` fallidos y `1` ignorado, Clippy estricto de core y del binario cliente,
 formato y `git diff --check` verdes. #329/#567 permanecen abiertas por
 callbacks y cachés visuales NewGRF restantes.
+
+Corrección #329/#567-NEWGRF-CACHE-TEARDOWN (2026-09-16, `3c64fef3`): el
+teardown de una sesión elimina ahora también las cachés de sprites NewGRF de
+señales e industrias, que ya estaban registradas como recursos del
+`WorldRenderPlugin` pero no figuraban en el reset/remove de salida. Ambas
+implementan `clear`, reciben política de reset y se eliminan al volver a
+`MainMenu`; el inventario de lifecycle y `leave_ingame_despawns_world_entities`
+lo comprueban para evitar reutilizar handles o texturas de una partida
+anterior. Validación: las dos regresiones dirigidas del cliente, Clippy
+estricto, formato y `git diff --check` verdes. #329/#567 siguen abiertas por
+la invalidación global de consumidores restantes, callbacks y scopes NewGRF.

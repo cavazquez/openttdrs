@@ -107,6 +107,20 @@ fn place_airport_small_footprint_and_hangar_buy() {
 }
 
 #[test]
+fn airport_placement_preserves_tropic_zone_through_site_clear() {
+    let mut state = GameState::new(12, 12);
+    let c = TileCoord::new(4, 4);
+    let mut tree = state.map.get(c).expect("tile");
+    tree.kind = TileKind::Forest;
+    tree.mapt = 0x41;
+    state.map.set_tile(c, tree).expect("tropical tree tile");
+
+    apply_command(&mut state, &Command::PlaceAirport(c)).expect("place airport");
+
+    assert_eq!(state.map.get(c).expect("airport tile").mapt & 0x0F, 1);
+}
+
+#[test]
 fn aircraft_purchase_keeps_secondary_mail_capacity_on_primary() {
     let mut s = GameState::new(20, 20);
     let origin = TileCoord::new(2, 2);

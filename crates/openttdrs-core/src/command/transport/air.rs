@@ -380,7 +380,9 @@ fn write_airport_tile(
 ) -> Result<(), CommandError> {
     let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     tile.kind = TileKind::Airport;
-    tile.mapt = 0x50;
+    // `SetTileType(MP_STATION)` conserva `TropicZone` en los bits bajos de
+    // MAPT; AirportTile `GetTerrainType` lo consulta en clima tropical.
+    tile.mapt = 0x50 | (tile.mapt & 0x0F);
     tile.m5 = piece as u8;
     tile.m6 = airport_m6_airport(tile.m6);
     state

@@ -16,7 +16,7 @@ use crate::newgrf_sprites::Action2EvalCtx;
 #[cfg(test)]
 use crate::station::StopKind;
 use crate::station::{Station, station_at_tile};
-use crate::world_gen::{CLEAR_GROUND_DESERT, Climate};
+use crate::world_gen::Climate;
 
 /// Construye el contexto de una tesela de aeropuerto con la estación padre.
 ///
@@ -389,27 +389,21 @@ fn airport_tile_gfx(station: &Station, map: &Map, coord: TileCoord) -> Option<u1
         .or_else(|| map.get(coord).map(|tile| u16::from(tile.m5)))
 }
 
-fn airport_terrain_type(map: &Map, coord: TileCoord, climate: Climate, tile: Option<Tile>) -> u32 {
+fn airport_terrain_type(
+    _map: &Map,
+    _coord: TileCoord,
+    climate: Climate,
+    tile: Option<Tile>,
+) -> u32 {
     if climate.uses_snow_ground() {
         return 4;
     }
     if climate.uses_desert_patches() {
-        if tile.is_some_and(|candidate| candidate.m7 & 0x20 != 0) {
-            return 1;
-        }
-        if tile.is_some_and(|candidate| {
-            candidate.kind == TileKind::Grass && candidate.m5 & 0x07 == CLEAR_GROUND_DESERT
-        }) {
-            return 1;
-        }
-        for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
-            let nearby = TileCoord::new(coord.x + dx, coord.y + dy);
-            if map.get(nearby).is_some_and(|candidate| {
-                candidate.kind == TileKind::Grass && candidate.m5 & 0x07 == CLEAR_GROUND_DESERT
-            }) {
-                return 1;
-            }
-        }
+        // `GetTerrainType` devuelve `GetTropicZone(tile)` en tropical. La
+        // zona vive en los bits bajos de MAPT; MAP7 es `GetAnimationFrame`
+        // para una tesela de aeropuerto y no puede usarse como marcador de
+        // desierto.
+        return tile.map_or(0, |candidate| u32::from(candidate.mapt & 0x03));
     }
     0
 }
@@ -1033,6 +1027,31 @@ mod tests {
             tile_kind_as_ottd(&map, &stations, road_waypoint, waypoint),
             2,
             "un waypoint vial debe exponerse como MP_ROAD"
+        );
+    }
+
+    #[test]
+    fn airport_terrain_uses_tropic_zone_in_mapt_not_animation_frame() {
+        let mut map = Map::new_flat(2, 2, 0);
+        let coord = TileCoord::new(0, 0);
+        let mut tile = map.get(coord).expect("airport tile");
+        tile.kind = TileKind::Airport;
+        tile.mapt = 0x50 | 0x02;
+        tile.m7 = 0x20;
+        map.set_tile(coord, tile).expect("set airport tile");
+
+        assert_eq!(
+            airport_terrain_type(&map, coord, Climate::SubTropical, Some(tile)),
+            2,
+            "AirportTile debe leer TROPICZONE_RAINFOREST desde MAPT"
+        );
+
+        tile.mapt = 0x50;
+        map.set_tile(coord, tile).expect("reset normal tropic zone");
+        assert_eq!(
+            airport_terrain_type(&map, coord, Climate::SubTropical, Some(tile)),
+            0,
+            "MAP7 no debe convertir un frame de animación en desierto"
         );
     }
 }

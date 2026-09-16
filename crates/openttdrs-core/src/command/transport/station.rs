@@ -470,7 +470,7 @@ pub(in crate::command) fn place_rail_station_area(
             prepare_station_site_for_placement(state, c, kind)?;
             let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
             tile.kind = TileKind::Station;
-            tile.mapt = 0x50;
+            tile.mapt = 0x50 | (tile.mapt & 0x0F);
             tile.m5 = gfx;
             tile.m3 = (tile.m3 & !0x06) | crate::default_station_catenary_flags(gfx);
             tile.m8 = crate::set_rail_type_on_tile(tile, state.current_rail_type).m8;
@@ -536,13 +536,14 @@ pub(in crate::command::transport) fn clear_station_site_tile(
     state: &mut GameState,
     c: TileCoord,
 ) -> Result<(), CommandError> {
+    let tropic_zone = state.map.get(c).map_or(0, |tile| tile.mapt & 0x0F);
     state
         .map
         .set_kind(c, TileKind::Grass)
         .map_err(|_| CommandError::OutOfBounds)?;
     state
         .map
-        .set_mapt_m5(c, 0x00, 0x00)
+        .set_mapt_m5(c, tropic_zone, 0x00)
         .map_err(|_| CommandError::OutOfBounds)?;
     state.economy.money -= CLEAR_TILE_COST;
     Ok(())
@@ -658,7 +659,7 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     prepare_station_site_for_placement(state, c, kind)?;
     let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     tile.kind = TileKind::Station;
-    tile.mapt = 0x50;
+    tile.mapt = 0x50 | (tile.mapt & 0x0F);
     tile.m5 = if stop_kind == StopKind::RailStation {
         rail_station_m5(&state.map, c, dir)
     } else {
@@ -805,7 +806,7 @@ pub(in crate::command) fn place_rail_waypoint(
     let axis_y = rail_waypoint_axis_from_trackbits(tile.m5).unwrap_or(false);
     let mut out = tile;
     out.kind = TileKind::Station;
-    out.mapt = 0x50;
+    out.mapt = 0x50 | (out.mapt & 0x0F);
     out.m5 = u8::from(axis_y);
     out.m3 = (out.m3 & !0x06) | crate::default_station_catenary_flags(out.m5);
     out.m6 = apply_station_m6(out.m6, StopKind::RailWaypoint);
@@ -896,7 +897,7 @@ pub(in crate::command) fn place_road_waypoint(
     };
     let mut out = tile;
     out.kind = TileKind::Station;
-    out.mapt = 0x50;
+    out.mapt = 0x50 | (out.mapt & 0x0F);
     out.m1 = state.active_company.0;
     out.m7 = road_owner;
     // Eje en m5 (0 = X, 1 = Y), bits de carretera en m3 para pathfinding.

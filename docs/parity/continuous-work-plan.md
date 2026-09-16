@@ -8708,3 +8708,15 @@ reproduce dos frames con píxeles distintos y exige handles distintos.
 Validación: cliente `1551 passed; 2 ignored`, Clippy del binario, formato y
 `git diff --check` verdes. #326/#329/#567 permanecen abiertas por layouts,
 paletas, callbacks y consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-ROADSTOP-SCOPE-FINGERPRINT (2026-09-16,
+`a50e729c`): el dominio `RoadStop` deja de omitir `45`, `46`, `47`, `F0` y
+`FA` al calcular la identidad de una textura runtime. Son valores directos del
+scope para zona/distancia al pueblo, compañía, facilidades y fecha; omitirlos
+permitía que paradas con el mismo `gfx` compartieran un handle pese a que su
+Action2 devolviera píxeles distintos. La regresión
+`road_stop_scope_variables_invalidate_fingerprint` cubre cada variable y la
+suite dirigida conserva 35 pruebas de road stop; cliente completo:
+`1552 passed; 2 ignored`, Clippy estricto, formato y `git diff --check`
+verdes. El bloque no cierra #326/#329/#567: siguen pendientes layouts,
+paletas, callbacks y consumidores NewGRF restantes.

@@ -2046,3 +2046,14 @@ layouts `TileSeq`, cuyos slots siguen incluyendo `gfx` y capa. La regresión
 bytes RGBA distintos. Esto cubre la identidad de la vista plana, no los
 callbacks, paletas especiales o layouts restantes; #326/#329/#567 continúan
 abiertos.
+
+### #326/#329-NEWGRF-ROADSTOP-SCOPE-FINGERPRINT — variables directas del scope
+
+Actualizado: 2026-09-16 (`a50e729c`). Las cachés planas de `RoadStop` incluyen
+ahora en su fingerprint las variables directas `45`, `46`, `47`, `F0` y `FA`
+(zona/distancia al pueblo, compañía, facilidades y fecha), además de la vista,
+tipo, terreno, road/tram, frame, random y triggers ya cubiertos. La regresión
+`road_stop_scope_variables_invalidate_fingerprint` exige una identidad distinta
+para cada una; esto evita filtrar la textura de una parada entre instancias con
+el mismo spec/gfx. No cubre todavía layouts `TileSeq`, paletas especiales ni
+callbacks restantes; #326/#329/#567 continúan abiertos.

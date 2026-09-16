@@ -5920,3 +5920,15 @@ bytes RGBA de ambos frames. Validación completa del cliente: `1551 passed; 2
 ignored`, Clippy estricto del binario, formato y `git diff --check` verdes.
 #326/#329/#567 permanecen abiertas por layouts, paletas, callbacks y
 consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-ROADSTOP-SCOPE-FINGERPRINT (2026-09-16,
+`a50e729c`): el fingerprint de las vistas runtime de `RoadStop` incluye ahora
+las variables directas `45`/`46` (zona y distancia al pueblo), `47`
+(compañía), `F0` (facilidades) y `FA` (fecha). Antes dos paradas podían
+reutilizar la primera textura del mismo spec aunque su Action2 consultara uno
+de esos valores. La regresión
+`road_stop_scope_variables_invalidate_fingerprint` separa los cinco casos;
+la suite del cliente queda en `1552 passed; 2 ignored`, con 35 pruebas
+dirigidas de road stops, Clippy estricto del binario, formato y
+`git diff --check` verdes. #326/#329/#567 permanecen abiertas por layouts,
+paletas, callbacks y consumidores NewGRF restantes.

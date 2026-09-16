@@ -1434,7 +1434,14 @@ pub(crate) mod vars {
     pub const ROAD_STOP: &[u8] = &[
         0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x49, 0x50, 0x5F, 0xF0, 0xFA,
     ];
-    pub const STATION: &[u8] = &[0x10, 0x40, 0x42, 0x43, 0x4A, 0x5F, 0x67];
+    /// Variables directas que `StationScopeResolver` prepara para la tesela,
+    /// la estación lógica, el aeropuerto, las facilidades y el historial.
+    /// Las variables parametrizadas, registros y padres se incorporan además
+    /// por `runtime_fingerprint`.
+    pub const STATION: &[u8] = &[
+        0x10, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x5F, 0x67, 0x82,
+        0x84, 0x86, 0x8A, 0xF0, 0xF1, 0xF2, 0xF3, 0xF6, 0xF7, 0xFA,
+    ];
     /// Variables `AirportTileScopeResolver` que pueden cambiar la vista por
     /// posición, frame o estado de una tesela vecina. Las tablas
     /// `parameterized_vars` se incorporan además por `runtime_fingerprint`.

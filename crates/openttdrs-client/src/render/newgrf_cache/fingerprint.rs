@@ -261,6 +261,36 @@ mod tests {
     }
 
     #[test]
+    fn station_scope_variables_invalidate_fingerprint() {
+        let mut first = Action2EvalCtx::default();
+        for (index, variable) in [
+            0x41, 0x45, 0x46, 0x47, 0x48, 0x49, 0x82, 0x84, 0x86, 0x8A, 0xF0, 0xF1, 0xF2, 0xF3,
+            0xF6, 0xF7, 0xFA,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            first
+                .vars
+                .insert(variable, u32::try_from(index + 1).unwrap_or(u32::MAX));
+        }
+
+        for variable in [
+            0x41, 0x45, 0x46, 0x47, 0x48, 0x49, 0x82, 0x84, 0x86, 0x8A, 0xF0, 0xF1, 0xF2, 0xF3,
+            0xF6, 0xF7, 0xFA,
+        ] {
+            let mut changed = first.clone();
+            let value = changed.vars.get_mut(&variable).expect("variable fixture");
+            *value = value.saturating_add(1);
+            assert_ne!(
+                runtime_fingerprint(&first, vars::STATION, false),
+                runtime_fingerprint(&changed, vars::STATION, false),
+                "station var {variable:#04X} debe separar texturas"
+            );
+        }
+    }
+
+    #[test]
     fn parent_and_relative_scopes_change_fingerprint() {
         let mut first = Action2EvalCtx::default();
         first.parent_vars.insert(0x40, 1);

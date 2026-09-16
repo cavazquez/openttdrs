@@ -93,6 +93,19 @@ pub fn find_ship_path_with_cost(
     water::find_ship_path(map, from, to, cost)
 }
 
+/// Encuentra una ruta naval iniciando únicamente desde el `Trackdir` físico
+/// actual del barco, como `YapfShipChooseTrack`.
+#[must_use]
+pub fn find_ship_path_with_cost_and_trackdir(
+    map: &Map,
+    from: TileCoord,
+    to: TileCoord,
+    cost: ShipPathCost,
+    origin_trackdir: u8,
+) -> Option<Vec<TileCoord>> {
+    water::find_ship_path_with_trackdir(map, from, to, cost, origin_trackdir)
+}
+
 /// Coste acumulado de una ruta naval según las propiedades de `YapfShip`.
 #[must_use]
 pub fn ship_path_cost_for_path(
@@ -102,6 +115,18 @@ pub fn ship_path_cost_for_path(
     cost: ShipPathCost,
 ) -> u32 {
     cost.path_cost(map, from, path)
+}
+
+/// Coste naval de una ruta usando el `Trackdir` físico de origen.
+#[must_use]
+pub fn ship_path_cost_for_path_with_trackdir(
+    map: &Map,
+    from: TileCoord,
+    path: &[TileCoord],
+    cost: ShipPathCost,
+    origin_trackdir: u8,
+) -> u32 {
+    cost.path_cost_with_trackdir(map, from, path, origin_trackdir)
 }
 
 /// Variante naval que extrae las propiedades de velocidad del motor.
@@ -201,6 +226,24 @@ pub fn find_ship_path_cached(
     }
     let path = find_ship_path_with_cost(map, from, to, cost)?;
     cache.insert_ship(from, to, cost, path.clone());
+    Some(path)
+}
+
+/// Variante cacheada que separa también la orientación física de origen.
+#[must_use]
+pub fn find_ship_path_cached_with_trackdir(
+    map: &Map,
+    cache: &mut PathCache,
+    from: TileCoord,
+    to: TileCoord,
+    cost: ShipPathCost,
+    origin_trackdir: u8,
+) -> Option<Vec<TileCoord>> {
+    if let Some(path) = cache.get_ship_with_trackdir(from, to, cost, Some(origin_trackdir)) {
+        return Some(path.clone());
+    }
+    let path = find_ship_path_with_cost_and_trackdir(map, from, to, cost, origin_trackdir)?;
+    cache.insert_ship_with_trackdir(from, to, cost, Some(origin_trackdir), path.clone());
     Some(path)
 }
 
@@ -809,6 +852,28 @@ mod tests {
                 .is_none(),
             "la caché naval debe separar penalizaciones de curva"
         );
+    }
+
+    #[test]
+    fn ship_path_cache_separates_physical_origin_trackdir() {
+        let mut cache = PathCache::default();
+        cache.begin_tick(1);
+        let from = TileCoord::new(2, 2);
+        let to = TileCoord::new(4, 2);
+        let path = vec![TileCoord::new(3, 2), to];
+        let cost = ShipPathCost::default();
+
+        cache.insert_ship_with_trackdir(from, to, cost, Some(8), path.clone());
+        assert_eq!(
+            cache.get_ship_with_trackdir(from, to, cost, Some(8)),
+            Some(&path)
+        );
+        assert!(
+            cache
+                .get_ship_with_trackdir(from, to, cost, Some(0))
+                .is_none()
+        );
+        assert!(cache.get_ship(from, to, cost).is_none());
     }
 
     #[test]

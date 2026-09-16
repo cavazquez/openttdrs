@@ -4,7 +4,22 @@ use crate::map::TileCoord;
 
 use super::{PathNetwork, water::ShipPathCost};
 
-type PathCacheKey = (i32, i32, i32, i32, u8, u8, u8, u8, u16, u32, u32);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct PathCacheKey {
+    from_x: i32,
+    from_y: i32,
+    to_x: i32,
+    to_y: i32,
+    network: u8,
+    ship_cost_present: u8,
+    ocean_speed_frac: u8,
+    canal_speed_frac: u8,
+    max_speed: u16,
+    curve45_penalty: u32,
+    curve90_penalty: u32,
+    origin_trackdir_present: u8,
+    origin_trackdir: u8,
+}
 
 /// Caché de rutas por tick (no se serializa; se invalida al avanzar la simulación).
 #[derive(Debug, Default, Clone)]
@@ -30,7 +45,7 @@ impl PathCache {
         to: TileCoord,
         network: PathNetwork,
     ) -> Option<&Vec<TileCoord>> {
-        let key = cache_key(from, to, network, None);
+        let key = cache_key(from, to, network, None, None);
         self.entries.get(&key)
     }
 
@@ -41,7 +56,18 @@ impl PathCache {
         to: TileCoord,
         cost: ShipPathCost,
     ) -> Option<&Vec<TileCoord>> {
-        let key = cache_key(from, to, PathNetwork::Water, Some(cost));
+        self.get_ship_with_trackdir(from, to, cost, None)
+    }
+
+    #[must_use]
+    pub fn get_ship_with_trackdir(
+        &self,
+        from: TileCoord,
+        to: TileCoord,
+        cost: ShipPathCost,
+        origin_trackdir: Option<u8>,
+    ) -> Option<&Vec<TileCoord>> {
+        let key = cache_key(from, to, PathNetwork::Water, Some(cost), origin_trackdir);
         self.entries.get(&key)
     }
 
@@ -56,7 +82,7 @@ impl PathCache {
             self.entries.clear();
         }
         self.entries
-            .insert(cache_key(from, to, network, None), path);
+            .insert(cache_key(from, to, network, None, None), path);
     }
 
     pub fn insert_ship(
@@ -66,11 +92,24 @@ impl PathCache {
         cost: ShipPathCost,
         path: Vec<TileCoord>,
     ) {
+        self.insert_ship_with_trackdir(from, to, cost, None, path);
+    }
+
+    pub fn insert_ship_with_trackdir(
+        &mut self,
+        from: TileCoord,
+        to: TileCoord,
+        cost: ShipPathCost,
+        origin_trackdir: Option<u8>,
+        path: Vec<TileCoord>,
+    ) {
         if self.entries.len() >= Self::MAX_ENTRIES {
             self.entries.clear();
         }
-        self.entries
-            .insert(cache_key(from, to, PathNetwork::Water, Some(cost)), path);
+        self.entries.insert(
+            cache_key(from, to, PathNetwork::Water, Some(cost), origin_trackdir),
+            path,
+        );
     }
 }
 
@@ -80,6 +119,7 @@ fn cache_key(
     to: TileCoord,
     network: PathNetwork,
     ship_cost: Option<ShipPathCost>,
+    origin_trackdir: Option<u8>,
 ) -> PathCacheKey {
     let (
         ship_cost_present,
@@ -98,12 +138,14 @@ fn cache_key(
             cost.curve90_penalty,
         )
     });
-    (
-        from.x,
-        from.y,
-        to.x,
-        to.y,
-        match network {
+    let (origin_trackdir_present, origin_trackdir) =
+        origin_trackdir.map_or((0, 0), |trackdir| (1, trackdir));
+    PathCacheKey {
+        from_x: from.x,
+        from_y: from.y,
+        to_x: to.x,
+        to_y: to.y,
+        network: match network {
             PathNetwork::Road => 0,
             PathNetwork::Rail => 1,
             PathNetwork::Water => 2,
@@ -116,5 +158,7 @@ fn cache_key(
         max_speed,
         curve45_penalty,
         curve90_penalty,
-    )
+        origin_trackdir_present,
+        origin_trackdir,
+    }
 }

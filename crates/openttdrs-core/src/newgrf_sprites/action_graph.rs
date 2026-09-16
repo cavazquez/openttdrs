@@ -1618,6 +1618,8 @@ mod tests {
             .cloned()
             .expect("source layout");
         recoloured.ground.direct_palette = 775;
+        recoloured.ground.sprite_modifiers =
+            crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR;
         graphics.tile_layouts.insert(9, recoloured);
         let layout = graphics
             .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
@@ -1699,6 +1701,7 @@ mod tests {
                 ground: TileLayoutSpriteRef {
                     action1_set: Some(0),
                     direct_palette: 775 + 4, // PALETTE_RECOLOUR_START + Red
+                    sprite_modifiers: crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
                     ..TileLayoutSpriteRef::default()
                 },
                 sequence: Vec::new(),
@@ -1731,7 +1734,8 @@ mod tests {
             .expect("source layout");
         unsupported.ground.direct_palette = crate::newgrf_sprites::TWOCC_PALETTE_BASE;
         unsupported.ground.sprite_modifiers =
-            crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT;
+            crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
+                | crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR;
         graphics.tile_layouts.insert(9, unsupported);
         let layout = graphics
             .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
@@ -1764,6 +1768,7 @@ mod tests {
                 ground: TileLayoutSpriteRef {
                     action1_set: Some(0),
                     direct_palette: 804, // PALETTE_CRASH
+                    sprite_modifiers: crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
                     ..TileLayoutSpriteRef::default()
                 },
                 sequence: Vec::new(),
@@ -1812,6 +1817,7 @@ mod tests {
                 ground: TileLayoutSpriteRef {
                     action1_set: Some(0),
                     direct_palette: 803, // PALETTE_NEWSPAPER
+                    sprite_modifiers: crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
                     ..TileLayoutSpriteRef::default()
                 },
                 sequence: Vec::new(),
@@ -1860,6 +1866,7 @@ mod tests {
                 ground: TileLayoutSpriteRef {
                     action1_set: Some(0),
                     direct_palette: 791, // PALETTE_TO_BARE_LAND
+                    sprite_modifiers: crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
                     ..TileLayoutSpriteRef::default()
                 },
                 sequence: Vec::new(),
@@ -2038,6 +2045,7 @@ mod tests {
                 ground: TileLayoutSpriteRef {
                     action1_set: Some(0),
                     direct_palette: 801, // PALETTE_TO_STRUCT_YELLOW
+                    sprite_modifiers: crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
                     ..TileLayoutSpriteRef::default()
                 },
                 sequence: Vec::new(),
@@ -2051,6 +2059,22 @@ mod tests {
         let ground = layout.ground.expect("ground");
         assert!(layout.complete);
         assert_eq!(ground.direct_palette, 801);
+        assert_eq!(
+            ground.action1_sprite().map(|decoded| decoded.rgba.clone()),
+            Some(sprite.rgba.clone())
+        );
+
+        // `SpriteLayoutPaletteTransform` ignores an explicit palette when
+        // the entry has no transparent/recolour modifier.
+        let mut ignored = graphics.tile_layouts.get(&9).cloned().unwrap();
+        ignored.ground.sprite_modifiers = 0;
+        graphics.tile_layouts.insert(9, ignored);
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("structure palette without modifier");
+        let ground = layout.ground.expect("ground without modifier");
+        assert!(layout.complete);
+        assert_eq!(ground.direct_palette, 0);
         assert_eq!(
             ground.action1_sprite().map(|decoded| decoded.rgba.clone()),
             Some(sprite.rgba)
@@ -2209,6 +2233,7 @@ mod tests {
                 ground: TileLayoutSpriteRef {
                     action1_set: Some(0),
                     direct_palette: 775 + 3,
+                    sprite_modifiers: crate::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
                     flags: 0x04,
                     registers: TileLayoutRegisterRefs {
                         palette: Some(4),

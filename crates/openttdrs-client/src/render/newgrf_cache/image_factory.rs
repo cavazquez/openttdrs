@@ -106,7 +106,14 @@ pub(crate) fn decoded_tile_layout_image_with_palette_and_twocc_map(
     default_policy: DecodedSpriteImagePolicy,
     twocc_map: Option<&DecodedSprite>,
 ) -> Image {
-    let policy = if direct_palette == PALETTE_TO_TRANSPARENT
+    // `SpriteLayoutPaletteTransform` ignores `direct_palette` when neither
+    // palette modifier is present. The core normally normalizes this to
+    // zero, but keeping the guard here also protects cache callers that hand
+    // us a resolved layout assembled by a test/importer.
+    let palette_modifier = sprite_modifiers & TILE_LAYOUT_PALETTE_MODIFIERS;
+    let policy = if palette_modifier == 0 {
+        DecodedSpriteImagePolicy::Raw
+    } else if direct_palette == PALETTE_TO_TRANSPARENT
         && sprite_modifiers & TILE_LAYOUT_PALETTE_MODIFIERS != 0
     {
         DecodedSpriteImagePolicy::Transparent
@@ -371,12 +378,25 @@ mod tests {
         let sprite = sprite_with_rgba(vec![64, 20, 8, 255]);
         let img = decoded_tile_layout_image_with_palette_and_twocc_map(
             &sprite,
-            0,
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
             801,
             DecodedSpriteImagePolicy::Raw,
             None,
         );
         assert_eq!(img.data.as_deref(), Some(&[96, 44, 4, 255][..]));
+    }
+
+    #[test]
+    fn tile_layout_ignores_direct_palette_without_palette_modifier() {
+        let sprite = sprite_with_rgba(vec![64, 20, 8, 255]);
+        let img = decoded_tile_layout_image_with_palette_and_twocc_map(
+            &sprite,
+            0,
+            801,
+            DecodedSpriteImagePolicy::Raw,
+            None,
+        );
+        assert_eq!(img.data.as_deref(), Some(&[64, 20, 8, 255][..]));
     }
 
     #[test]

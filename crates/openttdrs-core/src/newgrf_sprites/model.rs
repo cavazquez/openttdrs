@@ -597,6 +597,15 @@ fn resolve_layout_sprite_asset(
         if direct_palette == 0 {
             return Some((Some(sprite), None, 0));
         }
+        // `SpriteLayoutPaletteTransform` only consumes a palette when the
+        // image carries TRANSPARENT or RECOLOUR.  Ground sprites use the
+        // narrower `GroundSpritePaletteTransform`, which consumes only
+        // RECOLOUR.  Keeping this guard before the special palette cases is
+        // important: an explicit palette without its modifier is ignored by
+        // OpenTTD, rather than being baked into an otherwise valid sprite.
+        if layout_palette_modifier(reference, is_ground) == 0 {
+            return Some((Some(sprite), None, 0));
+        }
         if (PALETTE_RECOLOUR_START..=PALETTE_RECOLOUR_END).contains(&direct_palette) {
             let Some(colour) = u8::try_from(direct_palette - PALETTE_RECOLOUR_START).ok() else {
                 *complete = false;
@@ -713,7 +722,7 @@ fn resolve_layout_sprite_asset(
     // constant and uses PAL_NONE. Keep the atomic fallback for var10-selected,
     // custom-palette or otherwise recoloured base sprites.
     let direct_palette = resolve_layout_direct_palette(reference, ctx, complete)?;
-    if direct_palette != 0
+    if (direct_palette != 0 && layout_palette_modifier(reference, is_ground) != 0)
         || reference.flags & (0x40 | 0x08) != 0
         || reference.palette_action1_set.is_some()
     {
@@ -728,6 +737,17 @@ const fn is_structure_palette(palette: u16) -> bool {
     palette >= PALETTE_TO_STRUCT_START && palette <= PALETTE_TO_STRUCT_END
         || palette == PALETTE_TO_CHURCH_RED
         || palette == PALETTE_TO_CHURCH_CREAM
+}
+
+/// Returns the palette modifier that the corresponding native draw path
+/// would expose to `*SpritePaletteTransform`.
+const fn layout_palette_modifier(reference: &TileLayoutSpriteRef, is_ground: bool) -> u8 {
+    if is_ground {
+        reference.sprite_modifiers & TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR
+    } else {
+        reference.sprite_modifiers
+            & (TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT | TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR)
+    }
 }
 
 fn register_value(ctx: &Action2EvalCtx, index: Option<u8>) -> u32 {

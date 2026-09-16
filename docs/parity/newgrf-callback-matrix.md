@@ -2381,3 +2381,10 @@ incluyendo grupos NewGRF y sustituciones Action5. Las secuencias `TileLayout`
 no se alteran: mantienen el color intermedio hasta que `OPAQUE` y la paleta
 directa se resuelven por entrada. Pasan 135 pruebas focalizadas y Clippy
 estricto; la cobertura continúa parcial y no se cierran #326/#329/#567.
+
+Actualización #326/#329/#567-TREE-CANOPY-DESTINATION-TRANSPARENCY
+(2026-09-16, `2b5cc62f`): el pase sortable de árboles aplica la máscara de
+destino 802 para `TO_TREES` en las copas, incluyendo las capas combinadas que
+siguen al primer parent. El ground y el ajuste de media pendiente no heredan
+la transparencia. Pasan 6 regresiones focalizadas y Clippy estricto; la
+cobertura continúa parcial y no se cierran #326/#329/#567.

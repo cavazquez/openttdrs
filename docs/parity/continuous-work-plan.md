@@ -9120,3 +9120,13 @@ Los `TileLayout` conservan su color intermedio hasta resolver `OPAQUE` y la
 paleta por entrada. Pasan 135 pruebas focalizadas y Clippy estricto. La fila
 continúa parcial por otros producers BUILD, callbacks/consumidores NewGRF,
 composición global y framebuffer.
+
+### #326/#329/#567-TREE-CANOPY-DESTINATION-TRANSPARENCY — copas del bosque
+
+Actualizado: 2026-09-16 (`2b5cc62f`). Las copas de `DrawTile_Trees` usan la
+máscara de destino 802 cuando `TO_TREES` está transparente; el suelo y la
+media altura de pendiente permanecen fuera de la categoría. Las capas
+`AddCombinedSprite` conservan la decisión del parent sortable. Pasan 6
+regresiones de árboles/capas combinadas y Clippy estricto. La fila continúa
+parcial por otros producers, efectos, callbacks/consumidores NewGRF,
+composición global y framebuffer.

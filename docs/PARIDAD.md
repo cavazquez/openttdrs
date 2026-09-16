@@ -6315,3 +6315,12 @@ usar el alpha blanco genérico y reciben la máscara de destino equivalente a
 depósitos, además de Clippy estricto. La corrección es parcial y no cierra
 #326/#329/#567: siguen pendientes otros producers, callbacks/consumidores
 NewGRF, composición global y comparación de framebuffer.
+
+Corrección #326/#329/#567-TREE-CANOPY-DESTINATION-TRANSPARENCY (2026-09-16,
+`2b5cc62f`): las copas del pase `DrawTile_Trees` usan ahora la máscara de
+destino equivalente a `PALETTE_TO_TRANSPARENT` (`802`) cuando `TO_TREES` está
+transparente. El suelo y sus variantes de pendiente siguen en el pase ground;
+las capas combinadas comparten la decisión del parent sortable. Pasan 6
+regresiones de árboles/capas combinadas y Clippy estricto. La corrección es
+parcial y no cierra #326/#329/#567: quedan otros producers, efectos,
+callbacks/consumidores NewGRF, composición global y comparación de framebuffer.

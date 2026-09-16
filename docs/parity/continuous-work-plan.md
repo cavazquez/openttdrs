@@ -9021,10 +9021,10 @@ foundations/rotaciones, callbacks y consumidores NewGRF.
 
 ### #326/#329/#567-SHIP-DEPOT-DESTINATION-TRANSPARENCY — máscara de estructura
 
-Actualizado: 2026-09-16 (`b7ed43ea`). La estructura vanilla de
+Actualizado: 2026-09-16 (`b7ed43ea`, ajuste de traza `6c5b22d7`). La estructura vanilla de
 `ShipDepot` sigue ahora el camino nativo de `DrawWaterTileStruct`: cuando
-`TO_BUILDINGS` está transparente, las seis capas `TILE_SEQ_LINE` se registran
-con transparencia y usan la máscara de destino equivalente a
+`TO_BUILDINGS` está transparente, las seis capas `TILE_SEQ_LINE` se
+materializan con la máscara de destino equivalente a
 `PALETTE_TO_TRANSPARENT` (`802`), en lugar del alpha genérico de categoría.
 El ground de agua, pendientes, diques y bordes queda fuera de la máscara, y el
 modo oculto continúa eliminando sólo las capas estructurales. La regresión

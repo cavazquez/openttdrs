@@ -6216,10 +6216,11 @@ TileLayout, 29 del core y Clippy estricto. La corrección es parcial y no cierra
 consumidores NewGRF.
 
 Corrección #326/#329/#567-SHIP-DEPOT-DESTINATION-TRANSPARENCY (2026-09-16,
-`b7ed43ea`): `DrawWaterTileStruct` del depósito naval reproduce ahora la
+`b7ed43ea`, ajuste de traza `6c5b22d7`): `DrawWaterTileStruct` del depósito naval reproduce ahora la
 transparencia de destino de `AddSortableSpriteToDraw`: las seis capas
 4070..4075 usan la máscara equivalente a `PALETTE_TO_TRANSPARENT` (802) cuando
-`TO_BUILDINGS` está en modo transparente, y la traza publica ese mismo estado.
+`TO_BUILDINGS` está en modo transparente; la traza conserva el draw como no
+fallback, que es el significado de su campo correspondiente.
 El agua, los diques, los bordes y el suelo permanecen opacos; el modo oculto
 sigue suprimiendo sólo la estructura, como en `DrawWaterDepot`. Las regresiones
 del depósito pasan con 27 pruebas, además de las baterías TileLayout y Clippy

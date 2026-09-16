@@ -11,12 +11,14 @@ use std::collections::BTreeSet;
 use crate::airport_class::{NewgrfAirportSpecDef, newgrf_airport_spec_def};
 use crate::airport_tile_spec::{AirportTileSpecDef, NEW_AIRPORT_TILE_OFFSET};
 use crate::house_spec::{distance_square, get_town_radius_group};
-use crate::map::{Map, Tile, TileCoord, TileKind, is_coast_tile, tile_slope_and_z, water_class};
+use crate::map::{
+    Map, SLOPE_STEEP, Tile, TileCoord, TileKind, is_coast_tile, tile_slope_and_z, water_class,
+};
 use crate::newgrf_sprites::Action2EvalCtx;
 #[cfg(test)]
 use crate::station::StopKind;
 use crate::station::{Station, station_at_tile};
-use crate::world_gen::Climate;
+use crate::world_gen::{Climate, DEF_SNOW_LINE_HEIGHT};
 
 /// Construye el contexto de una tesela de aeropuerto con la estación padre.
 ///
@@ -93,6 +95,38 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
     current_spec: &AirportTileSpecDef,
     climate: Climate,
 ) -> Action2EvalCtx {
+    action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line(
+        map,
+        stations,
+        towns,
+        airport_catalog,
+        coord,
+        tile_catalog,
+        current_spec,
+        climate,
+        DEF_SNOW_LINE_HEIGHT,
+    )
+}
+
+/// Variante completa que usa la línea de nieve persistida del mundo.
+///
+/// Las APIs históricas conservan [`DEF_SNOW_LINE_HEIGHT`] para no romper
+/// callers que todavía no tienen un `GameState`; el renderer pasa aquí la
+/// línea efectiva para que `AirportTileScopeResolver::GetVariable(0x41)` y
+/// `GetNearbyTileInformation` sigan el mismo mundo que la simulación.
+#[must_use]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line(
+    map: &Map,
+    stations: &[Station],
+    towns: &[crate::town::Town],
+    airport_catalog: &[NewgrfAirportSpecDef],
+    coord: TileCoord,
+    tile_catalog: &[AirportTileSpecDef],
+    current_spec: &AirportTileSpecDef,
+    climate: Climate,
+    snow_line_height: u8,
+) -> Action2EvalCtx {
     let mut ctx = Action2EvalCtx::default();
     let Some(station) = station_at_tile(map, stations, coord)
         .filter(|candidate| candidate.stop_kind.has_airport_facility())
@@ -116,8 +150,10 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
     );
 
     // AirportTileScopeResolver::GetVariable(0x41).
-    ctx.vars
-        .insert(0x41, airport_terrain_type(map, coord, climate, tile));
+    ctx.vars.insert(
+        0x41,
+        airport_terrain_type_with_snow_line(map, coord, climate, tile, snow_line_height),
+    );
     let town_zone = towns
         .iter()
         .min_by_key(|town| distance_square(town.pos, coord))
@@ -170,6 +206,7 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
                     station,
                     nearby,
                     climate,
+                    snow_line_height,
                     current_spec.newgrf_grf_version,
                 ),
                 0x61 => nearby_animation_frame(map, stations, station, nearby),
@@ -312,6 +349,7 @@ fn nearby_land_info(
     source: &Station,
     nearby: TileCoord,
     climate: Climate,
+    snow_line_height: u8,
     grf_version: u8,
 ) -> u32 {
     let Some(tile) = map.get(nearby) else {
@@ -329,7 +367,8 @@ fn nearby_land_info(
     let water_bits = water_class(tile).map_or(0, |class| {
         u32::from((class.as_u8().saturating_add(1) & 0x03) << 5)
     });
-    let terrain = airport_terrain_type(map, nearby, climate, Some(tile));
+    let terrain =
+        airport_terrain_type_with_snow_line(map, nearby, climate, Some(tile), snow_line_height);
     let tile_type = u32::from(tile_kind_as_ottd(map, stations, nearby, tile));
     let same_airport = station_at_tile(map, stations, nearby).is_some_and(|candidate| {
         candidate.stop_kind.has_airport_facility()
@@ -389,23 +428,107 @@ fn airport_tile_gfx(station: &Station, map: &Map, coord: TileCoord) -> Option<u1
         .or_else(|| map.get(coord).map(|tile| u16::from(tile.m5)))
 }
 
-fn airport_terrain_type(
-    _map: &Map,
-    _coord: TileCoord,
+fn airport_terrain_type_with_snow_line(
+    map: &Map,
+    coord: TileCoord,
     climate: Climate,
     tile: Option<Tile>,
+    snow_line_height: u8,
 ) -> u32 {
-    if climate.uses_snow_ground() {
-        return 4;
-    }
-    if climate.uses_desert_patches() {
+    if climate == Climate::SubTropical {
         // `GetTerrainType` devuelve `GetTropicZone(tile)` en tropical. La
         // zona vive en los bits bajos de MAPT; MAP7 es `GetAnimationFrame`
         // para una tesela de aeropuerto y no puede usarse como marcador de
         // desierto.
         return tile.map_or(0, |candidate| u32::from(candidate.mapt & 0x03));
     }
-    0
+    if climate != Climate::SubArctic {
+        return 0;
+    }
+    let Some(tile) = tile else {
+        return 0;
+    };
+    u32::from(arctic_airport_tile_has_snow(
+        map,
+        coord,
+        tile,
+        snow_line_height,
+    ))
+    .saturating_mul(4)
+}
+
+/// Equivalente local de `GetTerrainType` para los tipos de mapa que pueden
+/// aparecer como tesela vecina de un aeropuerto.
+fn arctic_airport_tile_has_snow(
+    map: &Map,
+    coord: TileCoord,
+    tile: Tile,
+    snow_line_height: u8,
+) -> bool {
+    // Los objetos no tienen un `TileKind` dedicado en el modelo local y se
+    // conservan como fallback `Grass`; cuando el nibble crudo está presente,
+    // éste tiene prioridad para recuperar MP_OBJECT y los demás tipos.
+    let raw_type = tile.ottd_type_nibble();
+    if raw_type != 0 && raw_type != 10 {
+        return match raw_type {
+            1 => tile.m3hi & 0x0F == 12,
+            2 | 9 => tile.m7 & 0x20 != 0,
+            3 | 5 | 8 | 11 => airport_tile_max_z(map, coord) > snow_line_height,
+            4 => {
+                let m2 = u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8);
+                let ground = (m2 >> 6) & 0x07;
+                let density = (m2 >> 4) & 0x03;
+                matches!(ground, 2 | 4) && density >= 2
+            }
+            6 | 7 => tile_slope_and_z(map, coord).is_some_and(|(_, z)| z > snow_line_height),
+            _ => false,
+        };
+    }
+    match tile.kind {
+        // `MP_CLEAR`: MAP3 bit 4 marca nieve y MAP5 bits 0..1 su densidad.
+        TileKind::Grass | TileKind::CoalField => tile.m3 & 0x10 != 0 && (tile.m5 & 0x03) >= 2,
+        // `MP_RAILWAY`: RailGroundType::SnowOrDesert vive en M4 bits 0..3.
+        // El contexto AirportTile no es la mitad superior de una pendiente,
+        // por lo que HalfTileSnow no aplica aquí.
+        TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge => {
+            tile.m3hi & 0x0F == 12
+        }
+        // `MP_ROAD` y `MP_TUNNELBRIDGE` comparten el bit snow/desert de MAP7.
+        TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge => {
+            tile.m7 & 0x20 != 0
+        }
+        // `MP_TREES`: ground 2/4 y densidad 2/3. MAP2 es de 16 bits en SAV.
+        TileKind::Forest => {
+            let m2 = u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8);
+            let ground = (m2 >> 6) & 0x07;
+            let density = (m2 >> 4) & 0x03;
+            matches!(ground, 2 | 4) && density >= 2
+        }
+        // `MP_STATION`, `MP_HOUSE`, `MP_INDUSTRY` y `MP_OBJECT` suelen tener
+        // fundación: OpenTTD compara la esquina superior, no la base.
+        TileKind::Station | TileKind::Airport | TileKind::House | TileKind::Industry => {
+            airport_tile_max_z(map, coord) > snow_line_height
+        }
+        // `MP_WATER` y `MP_VOID` comparan GetTileZ, la esquina inferior.
+        TileKind::Water | TileKind::ShipDepot | TileKind::Void => {
+            tile_slope_and_z(map, coord).is_some_and(|(_, z)| z > snow_line_height)
+        }
+        // Un tipo no reconocido no puede demostrar nieve de forma segura;
+        // mantener el fallback normal es preferible a ocultar el sprite.
+        TileKind::Unknown(_) => false,
+    }
+}
+
+fn airport_tile_max_z(map: &Map, coord: TileCoord) -> u8 {
+    tile_slope_and_z(map, coord).map_or(0, |(slope, z)| {
+        z.saturating_add(if slope == 0 {
+            0
+        } else if slope & SLOPE_STEEP != 0 {
+            2
+        } else {
+            1
+        })
+    })
 }
 
 fn tile_kind_as_ottd(map: &Map, stations: &[Station], coord: TileCoord, tile: Tile) -> u8 {
@@ -1031,6 +1154,85 @@ mod tests {
     }
 
     #[test]
+    fn airport_arctic_terrain_uses_snow_line_and_station_max_z() {
+        let mut map = Map::new_flat(4, 4, 10);
+        let coord = TileCoord::new(1, 1);
+        let mut airport = map.get(coord).expect("airport tile");
+        airport.kind = TileKind::Airport;
+        airport.mapt = 0x50;
+        map.set_tile(coord, airport).expect("set airport tile");
+
+        // `GetTerrainType(MP_STATION)` compara la esquina más alta, no sólo
+        // la base nivelada. Una esquina a 11 debe superar snowline=10.
+        let raised_corner = TileCoord::new(2, 2);
+        let mut corner = map.get(raised_corner).expect("raised corner");
+        corner.height = 11;
+        map.set_tile(raised_corner, corner)
+            .expect("set raised corner");
+
+        assert_eq!(
+            airport_terrain_type_with_snow_line(&map, coord, Climate::SubArctic, Some(airport), 10,),
+            4
+        );
+        assert_eq!(
+            airport_terrain_type_with_snow_line(&map, coord, Climate::SubArctic, Some(airport), 11,),
+            0,
+            "la comparación nativa es estrictamente mayor que snowline"
+        );
+    }
+
+    #[test]
+    fn airport_arctic_terrain_uses_native_clear_transport_tree_and_water_bits() {
+        let map = Map::new_flat(8, 8, 10);
+        let coord = TileCoord::new(2, 2);
+
+        let mut clear = map.get(coord).expect("clear tile");
+        clear.mapt = 0x00;
+        clear.m3 = 0x10;
+        clear.m5 = 2;
+        assert_eq!(
+            airport_terrain_type_with_snow_line(&map, coord, Climate::SubArctic, Some(clear), 10,),
+            4
+        );
+
+        let mut rail = clear;
+        rail.kind = TileKind::Rail;
+        rail.mapt = 0x10;
+        rail.m3hi = 12;
+        assert_eq!(
+            airport_terrain_type_with_snow_line(&map, coord, Climate::SubArctic, Some(rail), 10,),
+            4
+        );
+
+        let mut road = clear;
+        road.kind = TileKind::Road;
+        road.mapt = 0x20;
+        road.m7 = 0x20;
+        assert_eq!(
+            airport_terrain_type_with_snow_line(&map, coord, Climate::SubArctic, Some(road), 10,),
+            4
+        );
+
+        let mut trees = clear;
+        trees.kind = TileKind::Forest;
+        trees.mapt = 0x40;
+        trees.m2 = (2 << 6) | (2 << 4);
+        assert_eq!(
+            airport_terrain_type_with_snow_line(&map, coord, Climate::SubArctic, Some(trees), 10,),
+            4
+        );
+
+        let mut water = clear;
+        water.kind = TileKind::Water;
+        water.mapt = 0x60;
+        assert_eq!(
+            airport_terrain_type_with_snow_line(&map, coord, Climate::SubArctic, Some(water), 10,),
+            0,
+            "agua plana usa GetTileZ y no la altura de una estación"
+        );
+    }
+
+    #[test]
     fn airport_terrain_uses_tropic_zone_in_mapt_not_animation_frame() {
         let mut map = Map::new_flat(2, 2, 0);
         let coord = TileCoord::new(0, 0);
@@ -1041,7 +1243,13 @@ mod tests {
         map.set_tile(coord, tile).expect("set airport tile");
 
         assert_eq!(
-            airport_terrain_type(&map, coord, Climate::SubTropical, Some(tile)),
+            airport_terrain_type_with_snow_line(
+                &map,
+                coord,
+                Climate::SubTropical,
+                Some(tile),
+                DEF_SNOW_LINE_HEIGHT,
+            ),
             2,
             "AirportTile debe leer TROPICZONE_RAINFOREST desde MAPT"
         );
@@ -1049,7 +1257,13 @@ mod tests {
         tile.mapt = 0x50;
         map.set_tile(coord, tile).expect("reset normal tropic zone");
         assert_eq!(
-            airport_terrain_type(&map, coord, Climate::SubTropical, Some(tile)),
+            airport_terrain_type_with_snow_line(
+                &map,
+                coord,
+                Climate::SubTropical,
+                Some(tile),
+                DEF_SNOW_LINE_HEIGHT,
+            ),
             0,
             "MAP7 no debe convertir un frame de animación en desierto"
         );

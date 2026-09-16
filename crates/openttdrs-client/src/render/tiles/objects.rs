@@ -4603,7 +4603,7 @@ fn resolve_newgrf_airport_layout_for_tile(
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) -> Option<(openttdrs_core::newgrf_sprites::ResolvedTileLayout, u32)> {
     let mut action2 =
-        openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
+        openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line(
             map,
             stations,
             towns,
@@ -4612,6 +4612,7 @@ fn resolve_newgrf_airport_layout_for_tile(
             catalog,
             def,
             climate,
+            ctx.snow_line_height,
         );
     action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
         newgrf_stack,
@@ -4945,7 +4946,7 @@ fn spawn_newgrf_airport_tile(
     let frame = usize::from(ctx.tile.map_or(0, |tile| tile.m7));
     let mut action2 = if def.newgrf_runtime.is_some() {
         let mut action2 =
-            openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
+            openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line(
                 map,
                 stations,
                 towns,
@@ -4954,6 +4955,7 @@ fn spawn_newgrf_airport_tile(
                 catalog,
                 def,
                 climate,
+                ctx.snow_line_height,
             );
         action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
             newgrf_stack,
@@ -5043,6 +5045,7 @@ fn airport_tile_draws_default_foundation(
     catalog: &[openttdrs_core::AirportTileSpecDef],
     airport_catalog: &[openttdrs_core::NewgrfAirportSpecDef],
     climate: Climate,
+    snow_line_height: u8,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) -> bool {
     if !def.has_draw_foundations_callback() {
@@ -5051,7 +5054,7 @@ fn airport_tile_draws_default_foundation(
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
         return true;
     };
-    let mut ctx = openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
+    let mut ctx = openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line(
         map,
         stations,
         towns,
@@ -5060,6 +5063,7 @@ fn airport_tile_draws_default_foundation(
         catalog,
         def,
         climate,
+        snow_line_height,
     );
     ctx.set_grf_params(openttdrs_core::stack_params_for_grfid(
         newgrf_stack,
@@ -6005,6 +6009,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                         airport_tile_catalog,
                         airport_catalog,
                         climate,
+                        ctx.snow_line_height,
                         newgrf_stack,
                     );
                 let (custom_base_z, child_parent) = if draws_foundation {
@@ -6085,6 +6090,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                         airport_tile_catalog,
                         airport_catalog,
                         climate,
+                        ctx.snow_line_height,
                         newgrf_stack,
                     );
                 if draws_foundation {

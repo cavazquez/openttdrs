@@ -1020,10 +1020,17 @@ pub struct Action2EvalCtx {
     pub registers_100: HashMap<u16, u32>,
     /// Registros persistentes (variable `7C` / operador `\2psto`).
     pub persistent_registers: HashMap<u8, u32>,
+    /// Si el scope actual implementa almacenamiento persistente. `None`
+    /// conserva el contrato histórico (storage disponible); `Some(false)`
+    /// permite representar scopes nativos que dejan `7C` sin disponibilidad.
+    pub persistent_storage_available: Option<bool>,
     /// Persistent storage belonging to the parent scope, when that scope has
     /// one.  Generic register `7D` remains object-wide; `7C` is feature
     /// specific and may use this table for vehicle parent lookups.
     pub parent_persistent_registers: HashMap<u8, u32>,
+    /// Equivalente para el scope parent. `None` conserva el comportamiento
+    /// existente para contextos que no necesitan declarar disponibilidad.
+    pub parent_persistent_storage_available: Option<bool>,
     /// Último resultado de un `VarAction2` (variable `1C`; p. ej. tras procedure `7E`).
     pub last_result: u32,
     /// Parámetros del GRF (`GRFFile::param`; variable `0x7F[param]`).

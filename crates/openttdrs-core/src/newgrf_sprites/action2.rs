@@ -39,6 +39,18 @@ fn read_action2_var(
         // Registro persistente `7C[param]`.
         0x7C => {
             let idx = term.param.unwrap_or(0);
+            let storage_available = if parent_scope {
+                ctx.parent_persistent_storage_available
+            } else {
+                ctx.persistent_storage_available
+            };
+            if storage_available == Some(false) {
+                // `ScopeResolver::GetVariable` reports an unavailable
+                // variable as unavailable, rather than as a zero-valued
+                // empty PSA. The caller then takes the Action2 default/error
+                // branch, matching AirportTileScopeResolver.
+                return None;
+            }
             let registers = if parent_scope {
                 &ctx.parent_persistent_registers
             } else {
@@ -197,6 +209,16 @@ fn apply_advanced_op(
         // associated town/engine parent.
         0x10 => {
             let idx = u8::try_from(val2 & 0xFF).unwrap_or(0);
+            let storage_available = if parent_scope {
+                ctx.parent_persistent_storage_available
+            } else {
+                ctx.persistent_storage_available
+            };
+            if storage_available == Some(false) {
+                // Scopes inheriting the base resolver have no PSA and ignore
+                // `\2psto`; the value itself still flows through the op.
+                return val1;
+            }
             let registers = if parent_scope {
                 &mut ctx.parent_persistent_registers
             } else {

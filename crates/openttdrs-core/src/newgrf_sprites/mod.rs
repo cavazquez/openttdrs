@@ -678,6 +678,50 @@ mod tests {
     }
 
     #[test]
+    fn unavailable_persistent_scope_uses_default_and_ignores_psto() {
+        let literal = |value: u32| Action2VarTerm {
+            variable: 0x1A,
+            param: None,
+            adjust: Action2VarAdjust {
+                and_mask: value,
+                ..Action2VarAdjust::default()
+            },
+        };
+        let gfx = TrainSpriteGraphics::default();
+        let unavailable_read = Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0x7C,
+                param: Some(7),
+                adjust: Action2VarAdjust::default(),
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 9,
+        };
+        let mut ctx = Action2EvalCtx::default();
+        ctx.persistent_storage_available = Some(false);
+        ctx.persistent_registers.insert(7, 0xDEAD_BEEF);
+        assert_eq!(
+            super::action2::eval_action2_var(&gfx, &unavailable_read, &mut ctx, 0),
+            9
+        );
+
+        let unavailable_write = Action2VarEntry {
+            first: literal(42),
+            ops: vec![Action2VarOp {
+                operator: 0x10, // \\2psto
+                rhs: literal(5),
+            }],
+            ranges: Vec::new(),
+            default: 0,
+        };
+        let result = super::action2::eval_action2_var(&gfx, &unavailable_write, &mut ctx, 0);
+        assert_eq!(result, 0x8000 | 42);
+        assert_eq!(ctx.persistent_registers.get(&5), None);
+        assert_eq!(ctx.persistent_registers.get(&7), Some(&0xDEAD_BEEF));
+    }
+
+    #[test]
     fn resolve_parent_and_relative_random_scopes() {
         let mut gfx = TrainSpriteGraphics::default();
         gfx.action2_random.insert(

@@ -1973,3 +1973,18 @@ fuera resoluble. `vehicle_colour_mapping_uses_prepared_consist_context` fija
 esa frontera con `var 0xB4` y la paleta `Green`; las previews ya cubiertas
 continúan usando su contexto GUI efímero. Quedan layouts, paletas especiales,
 callbacks avanzados y consumidores legacy fuera del resolver común.
+
+### #329-VEHICLE-VISUAL-EFFECT-CONTEXT — contexto completo en humo y chispas
+
+Actualizado: 2026-09-16 (`6aa97ee9`). Los call sites autoritativos de
+`TrainSmoke` preparan `Action2EvalCtx` desde la unidad y su consist, enriquecen
+badges de vía y parámetros del stack NewGRF, y reutilizan ese contexto para
+`CBID_VEHICLE_VISUAL_EFFECT` (`0x10`) y
+`CBID_VEHICLE_SPAWN_VISUAL_EFFECT` (`0x160`). CB10 ya puede observar variables
+catalog-aware como `0x40`, `0x47` y `0xB4`; CB160 conserva el RNG completo, los
+registros `0x100..0x103` y el writeback de PSA del vehículo. Los wrappers de
+core sin catálogo siguen disponibles para simulación/callers legacy y
+conservan el comportamiento anterior. La regresión
+`visual_effect_context_exposes_vehicle_variables_to_cb10` fija la diferencia
+entre ambos scopes; permanecen pendientes otros callbacks visuales y
+consumidores que todavía no migraron al resolver común.

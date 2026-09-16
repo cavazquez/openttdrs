@@ -8626,6 +8626,20 @@ pasados, `0` fallidos y `1` ignorado, Clippy estricto, formato y
 `git diff --check` verdes. #329/#567 siguen abiertos por callbacks de
 vehículos, invalidación de consumidores y scopes NewGRF restantes.
 
+Corrección #329/#567-VEHICLE-VISUAL-EFFECT-CONTEXT (2026-09-16, `6aa97ee9`):
+el renderer de humo/chispas construye una sola instantánea Action2 completa
+por unidad y la comparte entre CB10 (`0x10`) y CB160 (`0x160`). El contexto
+incluye consist, carga, badges de vía, parámetros del stack NewGRF,
+randomización, edad/velocidad y librea; el callback avanzado conserva sus
+registros `0x100..0x103` y el writeback persistente al vehículo real. Se
+mantienen wrappers reducidos para las APIs legacy, pero ya no se usan en el
+call site autoritativo. La regresión
+`visual_effect_context_exposes_vehicle_variables_to_cb10` demuestra que `var
+0xB4` modifica el tipo de efecto; las ocho pruebas de efectos visuales pasan.
+Validación completa: cliente `1544 passed; 2 ignored`, core `2806 passed; 1
+ignored`, Clippy estricto de core/cliente, formato y `git diff --check` verdes.
+#329/#567 sigue abierto por los callbacks y consumidores NewGRF restantes.
+
 Corrección #329/#567-VEHICLE-COLOUR-MAPPING-CONTEXT (2026-09-16, `8829e150`):
 los call sites reales de sprites de vehículos, incluido el rotor, pasan ahora
 el contexto Action2 completo a `CBID_VEHICLE_COLOUR_MAPPING` en lugar de

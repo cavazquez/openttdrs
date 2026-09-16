@@ -5844,3 +5844,19 @@ petróleo. Validación: `2806` tests de core pasados, `0` fallidos y `1` ignorad
 Clippy estricto, formato y `git diff --check` verdes. #329/#567 permanecen
 abiertas por callbacks de vehículos, invalidación de consumidores y scopes
 NewGRF restantes.
+
+Corrección #329/#567-VEHICLE-VISUAL-EFFECT-CONTEXT (2026-09-16, `6aa97ee9`):
+los efectos visuales de vehículos ya evalúan `CBID_VEHICLE_VISUAL_EFFECT`
+(`0x10`) y `CBID_VEHICLE_SPAWN_VISUAL_EFFECT` (`0x160`) con el contexto Action2
+completo en el renderer autoritativo: consist, carga, badges, parámetros del
+GRF, randomización, edad/velocidad y librea efectiva. La API conserva wrappers
+legacy con writeback para callers que sólo tienen el vehículo, pero la ruta de
+humo/chispas no vuelve a ejecutar CB10 con el contexto reducido ni pierde los
+registros persistentes al invocar CB160. La regresión
+`visual_effect_context_exposes_vehicle_variables_to_cb10` reproduce una
+selección dependiente de `var 0xB4`; las ocho pruebas de efectos visuales,
+incluidos offsets, cadenas, potencia ferroviaria y callback de desactivación,
+también pasan. Validación completa: cliente `1544 passed; 2 ignored`, core
+`2806 passed; 1 ignored`, Clippy estricto de core/cliente, formato y
+`git diff --check` verdes. #329/#567 siguen abiertas por callbacks y
+consumidores NewGRF todavía no cubiertos.

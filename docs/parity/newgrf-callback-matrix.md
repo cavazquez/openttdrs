@@ -1959,3 +1959,17 @@ paleta custom Action1 dentro de su set, o una paleta directa de compañía dentr
 de `775..790`, usando el registro firmado y validando sus límites. Los índices
 negativos o fuera del set conservan el fallback atómico; no se acepta todavía
 la selección de otra cadena mediante `PALETTE_VAR10`.
+
+### #329-VEHICLE-COLOUR-MAPPING-CONTEXT — contexto completo en consumidores reales
+
+Actualizado: 2026-09-16 (`8829e150`). Los call sites de render de mapa, lista,
+depósito, detalles, picking y rotor ya entregan a
+`CBID_VEHICLE_COLOUR_MAPPING` el mismo `Action2EvalCtx` catálogo-aware que
+resuelve la vista: consist, carga, `var 40/47/B4`, padre, badges, parámetros del
+GRF, randomización y generación de paleta. Antes el callback real recibía sólo
+`action2_eval_ctx_from_vehicle`, por lo que una selección basada en una
+variable de consist podía caer a `CALLBACK_FAILED` aunque la vista runtime sí
+fuera resoluble. `vehicle_colour_mapping_uses_prepared_consist_context` fija
+esa frontera con `var 0xB4` y la paleta `Green`; las previews ya cubiertas
+continúan usando su contexto GUI efímero. Quedan layouts, paletas especiales,
+callbacks avanzados y consumidores legacy fuera del resolver común.

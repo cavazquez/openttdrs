@@ -8625,3 +8625,17 @@ oferta cuando la unidad pasa a petróleo. Validación: `2806` tests de core
 pasados, `0` fallidos y `1` ignorado, Clippy estricto, formato y
 `git diff --check` verdes. #329/#567 siguen abiertos por callbacks de
 vehículos, invalidación de consumidores y scopes NewGRF restantes.
+
+Corrección #329/#567-VEHICLE-COLOUR-MAPPING-CONTEXT (2026-09-16, `8829e150`):
+los call sites reales de sprites de vehículos, incluido el rotor, pasan ahora
+el contexto Action2 completo a `CBID_VEHICLE_COLOUR_MAPPING` en lugar de
+reconstruir un contexto reducido desde una unidad aislada. Así la selección de
+paleta observa las variables de consist/carga (`var 40/47/B4`), padre, badges,
+randomización, generación visual y parámetros del GRF que ya usa el resolver
+de la vista. La regresión `vehicle_colour_mapping_uses_prepared_consist_context`
+selecciona `Green` a partir de `var 0xB4`; las cinco pruebas vecinas de
+previews/2CC/SpriteStack/rotor también pasan. Validación completa: cliente
+`1543 passed; 2 ignored`, core `2807` tests de biblioteca sin fallos, Clippy
+estricto del binario cliente, formato y `git diff --check` verdes. #329/#567
+siguen abiertas por callbacks avanzados, layouts, paletas restantes y
+consumidores legacy todavía no cubiertos.

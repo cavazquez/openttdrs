@@ -5697,6 +5697,20 @@ core, Clippy estricto de producción, check del cliente, formato y
 trackdirs físicos completos en el controlador, callbacks y cachés visuales
 NewGRF restantes.
 
+Corrección #329/#567-VEHICLE-COLOUR-MAPPING-CONTEXT (2026-09-16, `8829e150`):
+los consumidores reales de sprites de mapa, lista, depósito, detalles, picking
+y rotor dejan de evaluar `CBID_VEHICLE_COLOUR_MAPPING` (`0x2D`) con el helper
+reducido que sólo conocía la unidad aislada. Ahora reutilizan el
+`Action2EvalCtx` catálogo-aware que ya contiene consist, carga, `var 40/47/B4`,
+badges, parámetros del GRF, randomización, padre y generación de paleta. La
+regresión `vehicle_colour_mapping_uses_prepared_consist_context` hace depender
+la paleta de `var 0xB4` y verifica que la textura final usa `Green`; las
+previews GUI y los fallbacks estáticos conservan sus pruebas anteriores.
+Validación: cliente `1543` pasados y `2` ignorados, core `2807` tests de
+biblioteca sin fallos, Clippy estricto del binario cliente, formato y
+`git diff --check` verdes. #329/#567 siguen abiertos por callbacks avanzados,
+layouts, paletas restantes y otros consumidores aún no representados.
+
 Corrección #329/#567-SHIP-YAPF-PREFERRED-DIRECTION (2026-09-15, `d950cb3e`):
 el coste de cada nodo naval replica `IsPreferredShipDirection`, alternando los
 trackdirs por paridad de `TileX`/`TileY` y sumando `YAPF_TILE_LENGTH` sólo a las

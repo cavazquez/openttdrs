@@ -17,7 +17,9 @@ use crate::iso::{
 use crate::render::catenary_newgrf::{
     CatenarySpriteAnchor, catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
 };
-use crate::render::newgrf_cache::decoded_bridge_sprite_image_with_twocc_map;
+use crate::render::newgrf_cache::{
+    decoded_bridge_sprite_image_with_twocc_map, tile_layout_destination_transparent_color,
+};
 use crate::render::road_newgrf::specific_sprite_for_tile;
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
@@ -34,6 +36,15 @@ use crate::sprites::{
     catenary_tile_location_group, collect_catenary_bridge_draws,
     collect_catenary_ramp_draws_from_map,
 };
+
+#[must_use]
+fn bridge_structure_sprite_color(bridges_transparent: bool) -> Color {
+    if bridges_transparent {
+        tile_layout_destination_transparent_color()
+    } else {
+        Color::WHITE
+    }
+}
 
 use super::helpers::{
     bridge_foundation_decision, foundation_surface_at, sloped_or_flat_image,
@@ -1717,7 +1728,7 @@ fn spawn_layer(
     if sprite_id == 0 {
         return None;
     }
-    use crate::sprites::{TransparencyOption, sprite_color};
+    use crate::sprites::{TransparencyOption, is_transparent};
     let palette = bridge_structure_palette_for_sprite(bridge_type, sprite_id);
     let mut sprite = if let Some(handle) = assets.bridge_palettes.handle(sprite_id, palette) {
         Sprite {
@@ -1765,7 +1776,7 @@ fn spawn_layer(
             combined: combined_parent.is_some(),
         },
     );
-    sprite.color = sprite_color(TransparencyOption::Bridges);
+    sprite.color = bridge_structure_sprite_color(is_transparent(TransparencyOption::Bridges));
     let (w, h, xrel, yrel) = bridge_sprite_meta(sprite_id).unwrap_or((64.0, 32.0, -32.0, -16.0));
     let crop_x_shift = if let Some((axis, half)) = pillar_half {
         let Some((rect, x_shift)) = pillar_half_crop(axis, half, w, h, xrel) else {
@@ -1846,7 +1857,7 @@ fn spawn_custom_layer(
     if reference.sprite_id == 0 {
         return None;
     }
-    use crate::sprites::{TransparencyOption, sprite_color};
+    use crate::sprites::{TransparencyOption, is_transparent};
 
     let sprite_id = u32::from(reference.sprite_id);
     let (mut sprite, w, h, xrel, yrel, fallback) = if let Some(view) = view {
@@ -1949,7 +1960,7 @@ fn spawn_custom_layer(
             combined: combined_parent.is_some(),
         },
     );
-    sprite.color = sprite_color(TransparencyOption::Bridges);
+    sprite.color = bridge_structure_sprite_color(is_transparent(TransparencyOption::Bridges));
     let crop_x_shift = if let Some((axis, half)) = pillar_half {
         let (rect, x_shift) = pillar_half_crop(axis, half, w, h, xrel)?;
         sprite.rect = Some(rect);
@@ -2053,11 +2064,27 @@ mod tests {
         bridge_pillar_flags, bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta,
         bridge_ramp_ground_kind, bridge_ramp_ground_sprite_id, bridge_road_catenary_sprite_ids,
         bridge_road_catenary_trace_geometry, bridge_road_sprite_offset, bridge_span_at,
-        bridge_surface_z, catenary_under_low_bridge, custom_bridge_sprite, pillar_ground_heights,
-        pillar_half_crop, pillar_segments, road_stop_blocks_bridge_pillars,
-        roadside_detail_visible_under_bridge, vanilla_road_stop_disallowed_pillars,
+        bridge_structure_sprite_color, bridge_surface_z, catenary_under_low_bridge,
+        custom_bridge_sprite, pillar_ground_heights, pillar_half_crop, pillar_segments,
+        road_stop_blocks_bridge_pillars, roadside_detail_visible_under_bridge,
+        vanilla_road_stop_disallowed_pillars,
     };
     use crate::sprites::bridge_deck_sprite_ids;
+
+    #[test]
+    fn bridge_structure_transparency_uses_destination_mask() {
+        let visible = bridge_structure_sprite_color(false).to_srgba();
+        assert!((visible.red - 1.0).abs() < f32::EPSILON);
+        assert!((visible.green - 1.0).abs() < f32::EPSILON);
+        assert!((visible.blue - 1.0).abs() < f32::EPSILON);
+        assert!((visible.alpha - 1.0).abs() < f32::EPSILON);
+
+        let transparent = bridge_structure_sprite_color(true).to_srgba();
+        assert!(transparent.red.abs() < f32::EPSILON);
+        assert!(transparent.green.abs() < f32::EPSILON);
+        assert!(transparent.blue.abs() < f32::EPSILON);
+        assert!((transparent.alpha - (64.0 / 255.0)).abs() < f32::EPSILON);
+    }
 
     #[test]
     fn bridge_ramp_uses_ground_height_while_span_uses_deck_height() {

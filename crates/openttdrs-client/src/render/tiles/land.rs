@@ -51,6 +51,23 @@ use crate::sprites::{
     industry_gfx_uses_refinery_fire_anim, industry_palette_colour_for_instance,
 };
 
+#[must_use]
+fn structure_sprite_color(structures_transparent: bool) -> Color {
+    if structures_transparent {
+        tile_layout_destination_transparent_color()
+    } else {
+        Color::WHITE
+    }
+}
+
+#[must_use]
+fn destination_mask_structure_sprite(mut sprite: Sprite) -> Sprite {
+    if crate::sprites::is_transparent(crate::sprites::TransparencyOption::Structures) {
+        sprite.color = structure_sprite_color(true);
+    }
+    sprite
+}
+
 /// `GetTreeGround`: bits 6–8 de MAP2 (MAP2 es una palabra, no sólo `m2`).
 ///
 /// Los bosques no heredan el suelo de `MP_CLEAR`: pueden conservar costa,
@@ -2623,7 +2640,7 @@ fn spawn_company_hq_tile(
         ));
     }
 
-    use crate::sprites::{TransparencyOption, is_hidden, sprite_color};
+    use crate::sprites::{TransparencyOption, is_hidden, is_transparent};
     if is_hidden(TransparencyOption::Structures) {
         return true;
     }
@@ -2658,7 +2675,7 @@ fn spawn_company_hq_tile(
     let build_path = company_hq_asset_filename(build_id);
     let mut build_sprite =
         sprite_from_atlas_or_company_white_colour(company, owner_colour, build_image, &build_path);
-    build_sprite.color = sprite_color(TransparencyOption::Structures);
+    build_sprite.color = structure_sprite_color(is_transparent(TransparencyOption::Structures));
     let build_position = road_stop_build_sprite_center(
         ctx.iso_pos,
         ctx.tx_i32(),
@@ -3582,11 +3599,11 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
                 commands.spawn((
                     MapVisualLayer,
                     ctx.map_tile_chunk(),
-                    Sprite {
+                    destination_mask_structure_sprite(Sprite {
                         image: handle,
                         color: tint,
                         ..default()
-                    },
+                    }),
                     Transform::from_translation(pos3),
                 ));
                 return;
@@ -3630,7 +3647,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
             };
             // Owned land no es "structure" de faro/antena; no tintar si es bought land.
             if object_type != u16::from(OBJECT_TYPE_OWNED_LAND) {
-                sprite.color = tint;
+                sprite = destination_mask_structure_sprite(sprite);
             }
             let pos3 = overlay_pos(
                 ctx.iso_pos,
@@ -3897,9 +3914,9 @@ mod tests {
         field_slope_max_pixel_z, field_slope_pixel_z_in_corner, house_building_origin,
         house_building_trace_geometry, house_lift_screen_offset, industry_building_parent_bounds,
         industry_building_trace_palette, openttd_tile_hash, rough_flat_variant,
-        sort_tree_layers_like_openttd, tree_density_from_tile, tree_ground_from_tile,
-        tree_ground_sprite_id, tree_parent_bounds, tree_shore_sprite_id, tree_slope_z_offset,
-        void_ground_sprite_and_palette,
+        sort_tree_layers_like_openttd, structure_sprite_color, tree_density_from_tile,
+        tree_ground_from_tile, tree_ground_sprite_id, tree_parent_bounds, tree_shore_sprite_id,
+        tree_slope_z_offset, void_ground_sprite_and_palette,
     };
 
     fn industry_ctx_at(tx: u32, ty: u32, base_z: u8) -> TileRenderContext {
@@ -3919,6 +3936,21 @@ mod tests {
             climate: openttdrs_core::Climate::Temperate,
             snow_line_height: openttdrs_core::DEF_SNOW_LINE_HEIGHT,
         }
+    }
+
+    #[test]
+    fn structure_transparency_uses_destination_mask() {
+        let visible = structure_sprite_color(false).to_srgba();
+        assert!((visible.red - 1.0).abs() < f32::EPSILON);
+        assert!((visible.green - 1.0).abs() < f32::EPSILON);
+        assert!((visible.blue - 1.0).abs() < f32::EPSILON);
+        assert!((visible.alpha - 1.0).abs() < f32::EPSILON);
+
+        let transparent = structure_sprite_color(true).to_srgba();
+        assert!(transparent.red.abs() < f32::EPSILON);
+        assert!(transparent.green.abs() < f32::EPSILON);
+        assert!(transparent.blue.abs() < f32::EPSILON);
+        assert!((transparent.alpha - (64.0 / 255.0)).abs() < f32::EPSILON);
     }
 
     #[test]

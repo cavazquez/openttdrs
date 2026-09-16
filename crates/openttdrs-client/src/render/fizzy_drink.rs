@@ -38,7 +38,9 @@ pub(crate) fn fizzy_drink_frame_index(elapsed_secs: f32) -> usize {
 }
 
 pub(crate) fn animate_fizzy_drink(
-    time: Res<Time>,
+    // `DoPaletteAnimations` corre en el bucle de presentación de OpenTTD,
+    // no en el reloj virtual cuya velocidad controla la simulación.
+    time: Res<Time<Real>>,
     frames: Option<Res<FizzyDrinkAnimFrames>>,
     mut last_frame: Local<Option<usize>>,
     mut q: Query<(&FizzyDrinkAnim, &mut Sprite)>,
@@ -98,7 +100,7 @@ mod tests {
     #[test]
     fn animate_swaps_on_frame_change() {
         let mut world = World::new();
-        let mut time = Time::<()>::default();
+        let mut time = Time::<Real>::default();
         time.advance_by(std::time::Duration::from_millis(250));
         world.insert_resource(time);
         let set: Vec<_> = (0..FIZZY_DRINK_FRAME_COUNT as u128)

@@ -5735,3 +5735,16 @@ Validación: `2799` tests de core pasados, `0` fallidos y `1` ignorado, Clippy
 estricto de core, check del cliente, formato y `git diff --check` verdes.
 #329/#567 siguen abiertas por la exposición numérica en la UI experta,
 trackdirs físicos adicionales, callbacks y cachés visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-YAPF-ORIGIN-TRACKDIR (2026-09-16, `ba7da754`): el
+perfil naval ya puede iniciar YAPF desde el `Trackdir` físico actual, en lugar
+de probar cuatro orientaciones rectas potenciales. `Ship::GetVehicleTrackdir`
+se replica para depósitos, acueductos, vías ordinarias y unidades accidentadas;
+el routing secuencial/paralelo y la selección de múltiples muelles pasan ese
+origen al pathfinder. La caché y el coste de ruta separan también esta
+orientación, evitando reutilizar una salida calculada para otro rumbo. Las
+regresiones cubren la salida permitida/opuesta, la clave de caché y el mapeo de
+estado/dirección. Validación: `2802` tests de core pasados, `0` fallidos y `1`
+ignorado, Clippy estricto de core, check del cliente, formato y
+`git diff --check` verdes. #329/#567 siguen abiertas por exposición numérica
+en UI experta, reversa física y callbacks/cachés visuales NewGRF restantes.

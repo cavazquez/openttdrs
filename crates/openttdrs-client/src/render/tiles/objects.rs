@@ -574,7 +574,7 @@ fn spawn_dock_layer(
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
-        tint_building_sprite(sprite_from_atlas_or_company_white_colour(
+        destination_mask_building_sprite(sprite_from_atlas_or_company_white_colour(
             company,
             owner_colour,
             image,
@@ -965,7 +965,7 @@ fn spawn_airport_radar_overlay(
         MapVisualLayer,
         ctx.map_tile_chunk(),
         anim,
-        tint_building_sprite(radar.sprite()),
+        destination_mask_building_sprite(radar.sprite()),
         Transform::from_translation(frame.translation),
         Visibility::Visible,
         frame.parent,
@@ -1133,7 +1133,7 @@ fn spawn_airport_station_overlays(
         let mut entity = commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            tint_building_sprite(sprite),
+            destination_mask_building_sprite(sprite),
             Transform::from_translation(pos),
             ViewportSortableParent {
                 sprite_id,
@@ -2114,7 +2114,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                         s.color = with_to_alpha(s.color, TransparencyOption::Buildings);
                         s
                     } else {
-                        tint_building_sprite(sprite_from_atlas_or_company_white_colour(
+                        destination_mask_building_sprite(sprite_from_atlas_or_company_white_colour(
                             company,
                             owner_colour,
                             img,
@@ -2838,7 +2838,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 custom_buoy
             {
                 (
-                    tint_building_sprite(sprite),
+                    destination_mask_building_sprite(sprite),
                     canal_feature_trace_sprite_id(openttdrs_core::CF_BUOY, selected_slot),
                     overlay_pos(
                         ctx.iso_pos,
@@ -2856,7 +2856,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 let mut position = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.04, half_h);
                 position.y += VANILLA_BUOY_Y_OFFSET;
                 (
-                    tint_building_sprite(assets.buoy.sprite()),
+                    destination_mask_building_sprite(assets.buoy.sprite()),
                     SPR_BUOY,
                     position,
                 )
@@ -2931,7 +2931,9 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             ) {
                 let tower_pos =
                     tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), airport_base_z, 0.04, half_h);
-                let sprite = tint_building_sprite(assets.airport_station_gfx_sprite(m5).sprite());
+                let sprite = destination_mask_building_sprite(
+                    assets.airport_station_gfx_sprite(m5).sprite(),
+                );
                 if let Some(parent) = airport_child_parent {
                     spawn_foundation_child_sprite_at(
                         commands, sprite, ctx, tower_pos, dims.0, parent,
@@ -5136,7 +5138,7 @@ fn spawn_newgrf_airport_tile(
         ctx.tx_i32(),
         ctx.ty_i32(),
     );
-    let sprite = tint_building_sprite(Sprite {
+    let sprite = destination_mask_building_sprite(Sprite {
         image,
         color: Color::WHITE,
         ..default()

@@ -8677,3 +8677,13 @@ la vista resuelta también para sus offsets y evita la segunda evaluación del
 overlay. Validación completa: cliente `1550 passed; 2 ignored`, Clippy
 estricto, formato y `git diff --check` verdes. #326/#329/#567 permanecen
 abiertas por layouts, paletas, callbacks y consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-REUSE-RESOLVED-VIEW (2026-09-16, `779f64c5`): las
+rutas planas de casa, industria y objeto pasan la vista Action2 ya resuelta a
+sus cachés, en lugar de ejecutar el grafo una vez para la geometría y otra vez
+para la textura. Así la posición NFO, los bytes RGBA y la clave fingerprint
+pertenecen a la misma selección, incluso con procedimientos, `var 1C` o
+registros `STO`. Validación: 102 pruebas NewGRF y cliente completo
+`1550 passed; 2 ignored`, Clippy estricto, formato y `git diff --check` verdes.
+#326/#329/#567 siguen abiertas por las familias de layouts, paletas, callbacks
+y consumidores NewGRF todavía no cubiertas.

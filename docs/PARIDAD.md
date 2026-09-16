@@ -5888,3 +5888,13 @@ no vuelve a ejecutar el grafo con un contexto distinto. La regresión
 píxeles rojo/azul; la suite completa queda en `1550 passed; 2 ignored`, con
 Clippy estricto, formato y `git diff --check` verdes. #326/#329/#567 siguen
 abiertas por layouts, paletas, callbacks y consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-REUSE-RESOLVED-VIEW (2026-09-16, `779f64c5`): los
+call sites planos de casas, industrias y objetos ya no resuelven Action2 para
+obtener offsets y vuelven a resolverlo dentro de la caché para crear la
+textura. La vista materializada se calcula una vez y se entrega al helper
+`handle_for_resolved_view`, manteniendo alineados píxeles, anclas y fingerprint
+cuando intervienen `var 1C`, `STO` o procedimientos. Las 102 pruebas NewGRF y
+la suite completa del cliente (`1550 passed; 2 ignored`) pasan, junto con
+Clippy estricto, formato y `git diff --check`. #326/#329/#567 permanecen
+abiertas por layouts, paletas, callbacks y consumidores NewGRF restantes.

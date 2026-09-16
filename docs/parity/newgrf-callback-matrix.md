@@ -2014,3 +2014,13 @@ de estación reutiliza la vista resuelta para sus offsets y evita evaluarla dos
 veces. `object_runtime_cache_separates_previous_action2_result` cubre la
 regresión; el alcance no cierra layouts, paletas especiales, callbacks ni la
 invalidación global de consumidores: #326/#329/#567 continúan abiertos.
+
+### #326/#329-NEWGRF-REUSE-RESOLVED-VIEW — geometría y textura de la misma evaluación
+
+Actualizado: 2026-09-16 (`779f64c5`). Casas, industrias y objetos in-world
+resuelven ahora su vista plana una sola vez por tesela. El descriptor usado
+para offsets, bounds y posición se entrega al mismo helper que materializa el
+handle, evitando que una segunda evaluación Action2 elija otro sprite o deje
+un fingerprint inconsistente. Las 102 pruebas NewGRF verifican las rutas de
+render; el alcance no cierra layouts TileSeq, paletas especiales, callbacks ni
+la invalidación global de consumidores: #326/#329/#567 continúan abiertos.

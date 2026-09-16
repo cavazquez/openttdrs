@@ -6294,3 +6294,13 @@ fundaciones permanecen opacos. Pasan 85 pruebas filtradas de industria/casas
 y Clippy estricto. La corrección es parcial y no cierra #326/#329/#567:
 siguen pendientes otros productores, efectos, callbacks/consumidores NewGRF,
 composición global y comparación de framebuffer.
+
+Corrección #326/#329/#567-INDUSTRY-EFFECT-VISIBILITY (2026-09-16,
+`717c8587`): `EV_CHIMNEY_SMOKE`, `EV_COPPER_MINE_SMOKE` y `EV_BUBBLE` siguen
+el contrato nativo de `DoDrawVehicle`: bajo `TO_INDUSTRIES` transparente u
+oculto se mantienen vivos para conservar su ciclo, pero su `Visibility` queda
+oculta; al volver a visible reaparecen sin reiniciar la animación. Se elimina
+el alpha blanco genérico que los hacía parecer edificios transparentes. Pasan
+46 pruebas focalizadas de humo/burbujas y Clippy estricto. La corrección es
+parcial y no cierra #326/#329/#567: quedan otros efectos/producers,
+callbacks/consumidores NewGRF, composición global y comparación de framebuffer.

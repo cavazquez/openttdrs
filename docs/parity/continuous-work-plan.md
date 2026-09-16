@@ -9099,3 +9099,14 @@ ascensor después de un edificio transparente; en industrias se corta el
 cambiar preferencias. Pasan 85 pruebas dirigidas y Clippy estricto. La fila
 continúa parcial: quedan efectos de industria, otros producers BUILD,
 callbacks/consumidores NewGRF, composición global y framebuffer.
+
+### #326/#329/#567-INDUSTRY-EFFECT-VISIBILITY — humo y burbujas
+
+Actualizado: 2026-09-16 (`717c8587`). Los efectos equivalentes a
+`EV_CHIMNEY_SMOKE`, `EV_COPPER_MINE_SMOKE` y `EV_BUBBLE` se ocultan en modo
+transparente y oculto de `TO_INDUSTRIES`, igual que `DoDrawVehicle`; no reciben
+la máscara 802 ni un alpha de edificio. Las entidades conservan su estado y
+animación mientras están ocultas, para reaparecer correctamente al restablecer
+la categoría. Pasan 46 pruebas focalizadas y Clippy estricto. La fila sigue
+parcial por otros efectos/producers, callbacks/consumidores NewGRF,
+composición global y framebuffer.

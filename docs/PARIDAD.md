@@ -5971,3 +5971,15 @@ casos; la suite del cliente queda en `1554 passed; 2 ignored`, con 55 pruebas
 dirigidas de Object, Clippy estricto del binario, formato y `git diff --check`
 verdes. #326/#329/#567 permanecen abiertas por layouts, paletas, callbacks y
 consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-AIRPORT-RELATIVE-ORIGIN (2026-09-16,
+`9c0b49c6`): `AirportTile` calcula ahora la variable `0x43` desde el origen
+nativo `Station::airport.tile`, no desde `Station::pos` (que puede ser el
+hangar o el ancla ferroviaria de una estación intermodal). El comando de
+construcción conserva ese origen, el escritor STNN lo vuelve a emitir y el
+importador lo recupera; saves JSON/fixtures antiguos usan `pos` como fallback.
+Las regresiones cubren el valor relativo con anclas distintas y el round-trip
+de `airport.tile`; la suite core queda en `2808 passed; 1 ignored`, con
+Clippy, cliente, formato y `git diff --check` verdes. El bloque no cierra
+#326/#329/#567: siguen pendientes foundations/rotaciones del compositor,
+paletas y consumidores NewGRF restantes.

@@ -8756,3 +8756,14 @@ descarta deliberadamente sus bits 8..14, tal como el flujo upstream. Las
 regresiones cubren origen, clasificación ambiental y el descarte de sonido de
 speed callback. El bloque no cierra #326/#329/#567: continúan pendientes
 foundations/rotaciones del compositor, paletas base/custom y scopes completos.
+
+### #326/#329-NEWGRF-AIRPORT-RELATIVE-ORIGIN — origen de `AirportTile`
+
+Actualizado: 2026-09-16 (`9c0b49c6`). La estación conserva por separado el
+origen nativo `Station::airport.tile`, porque `Station::pos` puede apuntar al
+hangar/ancla de otra facilidad en una terminal intermodal. Construcción,
+exportación/importación STNN y `AirportTileScopeResolver` usan ahora el mismo
+origen, por lo que `var 0x43` mantiene la posición relativa del layout al
+guardar y cargar. El fallback a `pos` se conserva para JSON/fixtures antiguos.
+El alcance no cierra #326/#329/#567: quedan foundations y rotaciones del
+compositor, paletas especiales y consumidores/callbacks NewGRF no cubiertos.

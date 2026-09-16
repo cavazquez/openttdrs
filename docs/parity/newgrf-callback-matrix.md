@@ -2094,3 +2094,11 @@ la cadencia y no interpreta sus bits como sonido, igual que upstream. Las
 animaciones de estación también conservan su origen. La fila continúa parcial:
 faltan foundations de compositor, rotaciones runtime, paletas base/custom y
 la delegación completa de `StationScope`; #326/#329/#567 siguen abiertos.
+
+Actualización #326/#329-NEWGRF-AIRPORT-RELATIVE-ORIGIN (2026-09-16,
+`9c0b49c6`): la variable `AirportTile` `0x43` se calcula contra el
+`Station::airport.tile` nativo, conservado separado de `Station::pos` para
+estaciones intermodales. El origen se mantiene al construir y en el round-trip
+STNN; la carga de saves antiguos cae de forma compatible a `pos`. La regresión
+de anclas distintas evita que el hangar desplace los offsets de layouts. La
+fila sigue parcial por foundations/rotaciones, paletas y callbacks restantes.

@@ -44,10 +44,10 @@ use crate::render::newgrf_cache::{
     direct_tile_layout_rail_station_ground, direct_tile_layout_rail_station_sequence,
     direct_tile_layout_rail_waypoint_ground, direct_tile_layout_rail_waypoint_sequence,
     direct_tile_layout_road_stop_sequence, direct_tile_layout_road_waypoint_sequence,
-    runtime_fingerprint, tile_layout_entry_is_hidden, tile_layout_is_airport_renderable,
-    tile_layout_is_rail_station_renderable, tile_layout_is_rail_waypoint_renderable,
-    tile_layout_is_road_stop_renderable, tile_layout_is_road_waypoint_renderable,
-    tile_layout_sprite_color_with_palette, vars,
+    runtime_fingerprint, tile_layout_entry_is_hidden, tile_layout_ground_sprite_color,
+    tile_layout_is_airport_renderable, tile_layout_is_rail_station_renderable,
+    tile_layout_is_rail_waypoint_renderable, tile_layout_is_road_stop_renderable,
+    tile_layout_is_road_waypoint_renderable, tile_layout_sprite_color_with_palette, vars,
 };
 use crate::render::road_newgrf::{
     newgrf_road_def_for_tile, newgrf_tram_def_for_tile, road_newgrf_view_index,
@@ -1200,7 +1200,6 @@ fn spawn_airport_station_ground_layers(
         image.sprite()
     };
     let base_position = ground_tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.030, half_h);
-    let sprite = tint_building_sprite(sprite);
     if let Some(parent) = foundation_child_parent {
         spawn_foundation_child_sprite_at(commands, sprite, ctx, base_position, map_width, parent);
     } else {
@@ -1264,11 +1263,11 @@ fn spawn_airport_station_ground_layers(
             0,
             None,
         );
-        let sprite = tint_building_sprite(if layer.company_coloured {
+        let sprite = if layer.company_coloured {
             sprite_from_atlas_or_company_white_colour(company, owner_colour, image, layer.path)
         } else {
             image.sprite()
-        });
+        };
         if let Some(parent) = foundation_child_parent {
             spawn_foundation_child_sprite_at(commands, sprite, ctx, pos, map_width, parent);
         } else {
@@ -3390,6 +3389,8 @@ fn spawn_newgrf_station_layout_ground(
     let Some(ground) = layout.ground.as_ref() else {
         return true;
     };
+    let ground_color =
+        tile_layout_ground_sprite_color(ground.sprite_modifiers, ground.direct_palette);
     let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
         let handle = cache.handle_for_layout(
             def,
@@ -3402,11 +3403,11 @@ fn spawn_newgrf_station_layout_ground(
             images,
         );
         (
-            tint_building_sprite(Sprite {
+            Sprite {
                 image: handle,
-                color: Color::WHITE,
+                color: ground_color,
                 ..default()
-            }),
+            },
             f32::from(decoded.x_offs),
             f32::from(decoded.y_offs),
             f32::from(decoded.width),
@@ -3418,7 +3419,7 @@ fn spawn_newgrf_station_layout_ground(
         direct_tile_layout_rail_station_ground(ground, assets)
     } {
         (
-            tint_building_sprite(base.atlas.sprite()),
+            base.atlas.sprite_colored(ground_color),
             base.x_offs,
             base.y_offs,
             base.width,
@@ -3812,6 +3813,8 @@ fn spawn_newgrf_road_stop_layout_ground(
         // the ground sprite instead of falling back to the vanilla road.
         return true;
     };
+    let ground_color =
+        tile_layout_ground_sprite_color(ground.sprite_modifiers, ground.direct_palette);
     let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
         let Some(slot) = road_stop_layout_ground_slot(spec_id) else {
             return false;
@@ -3829,7 +3832,7 @@ fn spawn_newgrf_road_stop_layout_ground(
         (
             Sprite {
                 image: handle,
-                color: Color::WHITE,
+                color: ground_color,
                 ..default()
             },
             f32::from(decoded.x_offs),
@@ -3843,7 +3846,7 @@ fn spawn_newgrf_road_stop_layout_ground(
         direct_tile_layout_road_stop_sequence(ground, assets)
     } {
         (
-            base.atlas.sprite(),
+            base.atlas.sprite_colored(ground_color),
             base.x_offs,
             base.y_offs,
             base.width,
@@ -4697,6 +4700,8 @@ fn spawn_newgrf_airport_layout_ground(
         // `subst_id`, igual que `AirportDrawTileLayout`.
         return true;
     };
+    let ground_color =
+        tile_layout_ground_sprite_color(ground.sprite_modifiers, ground.direct_palette);
     let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
         let Some(slot) = airport_tile_layout_cache_slot(gfx, 0) else {
             return false;
@@ -4712,11 +4717,11 @@ fn spawn_newgrf_airport_layout_ground(
             images,
         );
         (
-            tint_building_sprite(Sprite {
+            Sprite {
                 image,
-                color: Color::WHITE,
+                color: ground_color,
                 ..default()
-            }),
+            },
             f32::from(decoded.x_offs),
             f32::from(decoded.y_offs),
             f32::from(decoded.width),
@@ -4724,7 +4729,7 @@ fn spawn_newgrf_airport_layout_ground(
         )
     } else if let Some(base) = direct_tile_layout_airport_ground(ground, assets) {
         (
-            tint_building_sprite(base.atlas.sprite()),
+            base.atlas.sprite_colored(ground_color),
             base.x_offs,
             base.y_offs,
             base.width,

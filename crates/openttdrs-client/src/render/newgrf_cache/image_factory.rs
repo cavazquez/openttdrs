@@ -197,6 +197,16 @@ pub(crate) fn tile_layout_sprite_color_with_palette(
     tile_layout_sprite_color(color, sprite_modifiers)
 }
 
+/// Color base de una entrada `ground` de `TileLayout`.
+///
+/// `GroundSpritePaletteTransform` no recibe la preferencia `to` de la
+/// categoría. La transparencia/invisibilidad de edificios, industrias y
+/// estructuras se aplica únicamente al stream `BUILD`; el suelo sólo
+/// conserva la semántica de su paleta/modificadores.
+pub(crate) fn tile_layout_ground_sprite_color(sprite_modifiers: u8, direct_palette: u16) -> Color {
+    tile_layout_sprite_color_with_palette(Color::WHITE, sprite_modifiers, direct_palette)
+}
+
 /// Decide si `IsInvisibilitySet` suprime una entrada de la secuencia.
 ///
 /// El filtro se aplica al stream `BUILD`, no al ground que cada feature dibuja
@@ -470,6 +480,21 @@ mod tests {
         assert!((rgba.green - 1.0).abs() < f32::EPSILON);
         assert!((rgba.blue - 1.0).abs() < f32::EPSILON);
         assert_eq!(rgba.alpha, 1.0);
+    }
+
+    #[test]
+    fn tile_layout_ground_color_is_not_category_transparent() {
+        let color = tile_layout_ground_sprite_color(
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+            0,
+        );
+        assert_eq!(color.to_srgba().alpha, 1.0);
+
+        let transparent_palette = tile_layout_ground_sprite_color(
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+            PALETTE_TO_TRANSPARENT,
+        );
+        assert_eq!(transparent_palette.to_srgba().alpha, 1.0);
     }
 
     #[test]

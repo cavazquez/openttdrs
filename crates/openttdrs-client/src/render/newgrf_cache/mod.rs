@@ -13,7 +13,8 @@ pub(crate) use fingerprint::runtime_fingerprint;
 pub(crate) use image_factory::{
     DecodedSpriteImagePolicy, decoded_bridge_sprite_image_with_twocc_map, decoded_sprite_image,
     decoded_sprite_image_with_twocc_map, decoded_tile_layout_image_with_palette_and_twocc_map,
-    tile_layout_entry_is_hidden, tile_layout_sprite_color_with_palette,
+    tile_layout_entry_is_hidden, tile_layout_ground_sprite_color,
+    tile_layout_sprite_color_with_palette,
 };
 
 /// Obtiene la tabla Action5 `0x0A` asociada a un `PaletteID` 2CC.

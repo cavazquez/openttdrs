@@ -25,8 +25,9 @@ use crate::iso::{
 use crate::render::atlas::AtlasSprite;
 use crate::render::newgrf_cache::{
     direct_tile_layout_ground, direct_tile_layout_object_sequence, direct_tile_layout_sequence,
-    runtime_fingerprint, tile_layout_entry_is_hidden, tile_layout_is_object_renderable,
-    tile_layout_is_renderable, tile_layout_sprite_color_with_palette, vars,
+    runtime_fingerprint, tile_layout_entry_is_hidden, tile_layout_ground_sprite_color,
+    tile_layout_is_object_renderable, tile_layout_is_renderable,
+    tile_layout_sprite_color_with_palette, vars,
 };
 use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
@@ -1159,6 +1160,8 @@ fn spawn_newgrf_house_layout_ground(
     let Some(ground) = layout.ground.as_ref() else {
         return true;
     };
+    let ground_color =
+        tile_layout_ground_sprite_color(ground.sprite_modifiers, ground.direct_palette);
     let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
         let handle = cache.handle_for_layout(
             def,
@@ -1172,7 +1175,7 @@ fn spawn_newgrf_house_layout_ground(
         (
             Sprite {
                 image: handle,
-                color: Color::WHITE,
+                color: ground_color,
                 ..default()
             },
             f32::from(decoded.x_offs),
@@ -1182,7 +1185,7 @@ fn spawn_newgrf_house_layout_ground(
         )
     } else if let Some(base) = direct_tile_layout_ground(ground, assets) {
         (
-            base.atlas.sprite(),
+            base.atlas.sprite_colored(ground_color),
             base.x_offs,
             base.y_offs,
             base.width,
@@ -1833,7 +1836,7 @@ pub(crate) fn spawn_industry_tile_with_world(
                 && assets
                     .refinery_fire_frames
                     .contains_key(&s.ground_sprite_id);
-            let mut sprite = if ground_fire {
+            let sprite = if ground_fire {
                 assets.refinery_fire_frames[&s.ground_sprite_id][0].sprite()
             } else if industry_gfx_uses_random_colour(gfx) {
                 sprite_from_atlas_or_industry_palette(
@@ -1846,7 +1849,8 @@ pub(crate) fn spawn_industry_tile_with_world(
             } else {
                 img.sprite()
             };
-            sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
+            // `DrawGroundSprite` no recibe `TO_INDUSTRIES`; el suelo debe
+            // permanecer opaco aun cuando el edificio esté transparente.
             let pos_g = overlay_at(s.ground_xrel, s.ground_yrel, s.ground_w, s.ground_h, 0.45);
             let entity_id = if let Some(parent) = foundation.child_parent {
                 // `DrawGroundSprite` ocurre después de `DrawFoundation`.
@@ -2046,8 +2050,10 @@ fn spawn_newgrf_industry_layout_ground(
     let Some(ground) = layout.ground.as_ref() else {
         return true;
     };
-    let tint =
-        crate::sprites::with_to_alpha(Color::WHITE, crate::sprites::TransparencyOption::Industries);
+    // `IndustryDrawTileLayout` entrega el suelo a `DrawGroundSprite`; la
+    // transparencia de la categoría sólo llega a la secuencia BUILD.
+    let ground_color =
+        tile_layout_ground_sprite_color(ground.sprite_modifiers, ground.direct_palette);
     let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
         let handle = cache.handle_for_layout(
             def,
@@ -2062,7 +2068,7 @@ fn spawn_newgrf_industry_layout_ground(
         (
             Sprite {
                 image: handle,
-                color: tint,
+                color: ground_color,
                 ..default()
             },
             f32::from(decoded.x_offs),
@@ -2072,7 +2078,7 @@ fn spawn_newgrf_industry_layout_ground(
         )
     } else if let Some(base) = direct_tile_layout_ground(ground, assets) {
         (
-            base.atlas.sprite_colored(tint),
+            base.atlas.sprite_colored(ground_color),
             base.x_offs,
             base.y_offs,
             base.width,
@@ -2706,7 +2712,6 @@ fn spawn_newgrf_object_layout_ground(
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
     cache: &mut crate::render::NewGrfObjectSpriteCache,
     images: &mut Assets<Image>,
-    tint: Color,
 ) -> bool {
     if !tile_layout_is_object_renderable(layout) {
         return false;
@@ -2714,6 +2719,8 @@ fn spawn_newgrf_object_layout_ground(
     let Some(ground) = layout.ground.as_ref() else {
         return true;
     };
+    let ground_color =
+        tile_layout_ground_sprite_color(ground.sprite_modifiers, ground.direct_palette);
     let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
         let handle = cache.handle_for_layout(
             def,
@@ -2728,7 +2735,7 @@ fn spawn_newgrf_object_layout_ground(
         (
             Sprite {
                 image: handle,
-                color: tint,
+                color: ground_color,
                 ..default()
             },
             f32::from(decoded.x_offs),
@@ -2738,7 +2745,7 @@ fn spawn_newgrf_object_layout_ground(
         )
     } else if let Some(base) = direct_tile_layout_object_sequence(ground, assets) {
         (
-            base.atlas.sprite_colored(tint),
+            base.atlas.sprite_colored(ground_color),
             base.x_offs,
             base.y_offs,
             base.width,
@@ -3332,7 +3339,6 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
                 layout,
                 cache,
                 image_store,
-                color,
             );
         }
     }

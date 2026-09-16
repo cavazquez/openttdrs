@@ -849,25 +849,22 @@ fn custom_aircraft_rotor_layers_for_engine(
         // OpenTTD's rotor resolver exposes the physical aircraft direction in
         // var 1F while the selected view index is the rotor animation state.
         ctx.vars.insert(0x1F, u32::from(physical_direction));
-        let palette_override = vehicle
-            .map_or_else(
-                || {
-                    openttdrs_core::resolve_vehicle_colour_mapping_callback_with_ctx(
-                        engine, &mut ctx,
+        let palette_override =
+            openttdrs_core::resolve_vehicle_colour_mapping_callback_with_ctx(engine, &mut ctx)
+                .map(|mapping| {
+                    mapping.palette_for_companies(
+                        primary.as_u8(),
+                        secondary.as_u8(),
+                        engine.uses_2cc,
                     )
-                },
-                |vehicle| openttdrs_core::resolve_vehicle_colour_mapping_callback(engine, vehicle),
-            )
-            .map(|mapping| {
-                mapping.palette_for_companies(primary.as_u8(), secondary.as_u8(), engine.uses_2cc)
-            })
-            .or_else(|| {
-                engine.uses_2cc.then(|| {
-                    openttdrs_core::TWOCC_PALETTE_BASE
-                        + u16::from(primary.as_u8())
-                        + u16::from(secondary.as_u8()) * 16
                 })
-            });
+                .or_else(|| {
+                    engine.uses_2cc.then(|| {
+                        openttdrs_core::TWOCC_PALETTE_BASE
+                            + u16::from(primary.as_u8())
+                            + u16::from(secondary.as_u8()) * 16
+                    })
+                });
         let layers = cache.handles_for_runtime_with_override_and_image_type(
             engine,
             frame,
@@ -1170,7 +1167,7 @@ impl TruckHandles {
                 ));
                 let overriding_local_id = overriding_engine_local_id(sim, v, eng);
                 let palette_override =
-                    openttdrs_core::resolve_vehicle_colour_mapping_callback(eng, v)
+                    openttdrs_core::resolve_vehicle_colour_mapping_callback_with_ctx(eng, &mut ctx)
                         .map(|mapping| {
                             mapping.palette_for_companies(
                                 colour.as_u8(),
@@ -1837,6 +1834,101 @@ mod tests {
                     CompanyColour::Green.as_u8(),
                 )
                 .as_slice()
+            )
+        );
+    }
+
+    #[test]
+    fn vehicle_colour_mapping_uses_prepared_consist_context() {
+        use openttdrs_core::newgrf_sprites::{
+            Action2VarAdjust, Action2VarEntry, Action2VarTerm, DecodedSprite, TrainSpriteAssign,
+            TrainSpriteGraphics,
+        };
+
+        let view = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![255, 255, 255, 255],
+            mask: vec![198],
+        };
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_TRAIN_KIRBY)
+            .expect("vanilla train")
+            .clone();
+        engine.id = 0x7F09;
+        engine.from_newgrf = true;
+        engine.newgrf_grfid = 0x434F_4C52;
+        engine.newgrf_local_id = 0;
+        engine.vehicle_callback_mask = 1 << 6;
+        engine.newgrf_runtime = Some(Box::new(TrainSpriteGraphics {
+            sets: vec![vec![view.clone()]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 0,
+                set_id: 0,
+            }],
+            // `var 0xB4` is populated by the catalogue-aware consist context,
+            // but not by the legacy vehicle-only callback helper.
+            action2_var: [(
+                0,
+                Action2VarEntry {
+                    first: Action2VarTerm {
+                        variable: 0xB4,
+                        param: None,
+                        adjust: Action2VarAdjust {
+                            and_mask: 0xFFFF,
+                            ..Default::default()
+                        },
+                    },
+                    ops: Vec::new(),
+                    ranges: Vec::new(),
+                    default: 0,
+                },
+            )]
+            .into_iter()
+            .collect(),
+            ..Default::default()
+        }));
+
+        let mut state = GameState::new(8, 8);
+        state.engine_catalog.push(engine.clone());
+        let mut vehicle = Vehicle::new(
+            900,
+            VehicleKind::Train,
+            TileCoord::new(2, 2),
+            TileCoord::new(3, 2),
+        );
+        vehicle.engine_id = Some(engine.id);
+        vehicle.direction = openttdrs_core::DIR_E;
+        vehicle.cur_speed = 781;
+        state.vehicles.push(vehicle.clone());
+        let sim = crate::state::SimWorld {
+            state,
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let handles = distinct_test_handles();
+        let mut cache = NewGrfTrainSpriteCache::default();
+        let mut images = Assets::<Image>::default();
+
+        let layer = handles
+            .for_vehicle_with_newgrf_layers(
+                &vehicle,
+                openttdrs_core::VehiclePose::from_vehicle(&vehicle),
+                None,
+                None,
+                &sim,
+                &mut cache,
+                &mut images,
+            )
+            .into_iter()
+            .next()
+            .expect("prepared-context layer");
+        assert_eq!(
+            images.get(&layer.handle).unwrap().data.as_deref(),
+            Some(
+                openttdrs_core::bake_sprite_company_palette(&view, CompanyColour::Green.as_u8())
+                    .as_slice(),
             )
         );
     }

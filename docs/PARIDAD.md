@@ -6261,3 +6261,11 @@ por entrada (`OPAQUE`). Pasan 35 pruebas de `road_stop`, 16 de
 `road_waypoint` y Clippy estricto. La corrección es parcial y no cierra
 #326/#329/#567: quedan callbacks/consumidores NewGRF, composición global y
 comparación de framebuffer.
+
+Corrección #326/#329/#567-DIRECT-STATION-NEWGRF-BUILD-TRANSPARENCY
+(2026-09-16, `7d35fc72`): la vista directa de estación ferroviaria NewGRF que
+reemplaza la secuencia final de `DrawRailTileSeq` usa ahora la máscara de
+destino equivalente a `PALETTE_TO_TRANSPARENT` (802) cuando `TO_BUILDINGS`
+está transparente. No altera el `TileLayout` por entrada ni el techo de vidrio
+calibrado. Las 142 pruebas de `station`, Clippy estricto y el formato pasan;
+la corrección es parcial y no cierra #326/#329/#567.

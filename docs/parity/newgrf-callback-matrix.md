@@ -2337,3 +2337,11 @@ contrato. El techo de vidrio conserva su máscara calibrada y ground/overlays/
 catenaria no se mezclan con `TO_BUILDINGS`. Pasan 142 pruebas filtradas por
 `station` y Clippy estricto. La cobertura continúa parcial y no se cierran
 #326/#329/#567.
+
+Actualización #326/#329/#567-DIRECT-STATION-NEWGRF-BUILD-TRANSPARENCY
+(2026-09-16, `7d35fc72`): la vista directa de estación ferroviaria NewGRF que
+reemplaza la secuencia final de `DrawRailTileSeq` usa la máscara de destino
+802 en modo transparente. No modifica la decisión por entrada de `TileLayout`
+ni la calibración del techo de vidrio. Pasan las 142 pruebas de `station`,
+Clippy estricto y formato; la cobertura continúa parcial y no se cierran
+#326/#329/#567.

@@ -9065,3 +9065,12 @@ los `TileLayout` siguen decidiendo por entrada mediante `OPAQUE`. Pasan 35
 pruebas de `road_stop`, 16 de `road_waypoint` y Clippy estricto. La fila sigue
 parcial y #326/#329/#567 permanecen abiertas por callbacks/consumidores
 NewGRF, composición global y framebuffer.
+
+### #326/#329/#567-DIRECT-STATION-NEWGRF-BUILD-TRANSPARENCY — vista plana
+
+Actualizado: 2026-09-16 (`7d35fc72`). La vista directa de estación ferroviaria
+NewGRF, que sustituye la secuencia final de `DrawRailTileSeq`, usa la máscara
+de destino 802 en modo transparente. No modifica la decisión por entrada de
+`TileLayout` ni la calibración del techo de vidrio. Pasan las 142 pruebas de
+`station`, Clippy estricto y formato; la fila sigue parcial y #326/#329/#567
+continúan abiertas.

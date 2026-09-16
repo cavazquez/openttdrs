@@ -6099,3 +6099,14 @@ cubren ambos casos y la batería AirportTile queda en 81 pruebas, con Clippy
 estricto y `git diff --check` verdes. Esto corrige una subbrecha de vecinos,
 pero no cierra #326/#329/#567: siguen pendientes layouts/rotaciones,
 paletas, callbacks y consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-AIRPORT-FACILITIES-SCOPE (2026-09-16,
+`64256c24`): el `AirportScopeResolver` usado como padre de `AirportTile`
+devuelve ahora la máscara persistida de `BaseStation::facilities` en `0xF0`.
+Esto conserva facilities adicionales de estaciones importadas aunque
+`StopKind` sólo represente la facilidad principal; las estaciones legacy con
+máscara cero siguen usando el fallback derivado de `StopKind`. La regresión
+cubre una máscara `0x09` y pasa junto con la batería AirportTile y Clippy
+estricto. La corrección sigue siendo parcial respecto de #326/#329/#567:
+quedan pendientes layouts/rotaciones, paletas, callbacks y consumidores
+NewGRF restantes.

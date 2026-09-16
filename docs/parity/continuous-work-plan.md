@@ -8892,3 +8892,14 @@ codificada igual en `0x60`. La regresión cubre suelo normal y orilla; pasan 81
 tests AirportTile y Clippy estricto. La fila continúa parcial y #326/#329/#567
 siguen abiertas por layouts/rotaciones, paletas y callbacks o consumidores
 NewGRF restantes.
+
+### #326/#329-NEWGRF-AIRPORT-FACILITIES-SCOPE — máscara padre persistida
+
+Actualizado: 2026-09-16 (`64256c24`). El `AirportScopeResolver` que alimenta
+Action2 de `AirportTile` devuelve ahora `BaseStation::facilities` persistido en
+`0xF0`, conservando combinaciones como Airport + Train en estaciones importadas.
+Cuando el campo es cero, `Station::effective_facilities()` mantiene el fallback
+legacy derivado de `StopKind`. La regresión usa una máscara `0x09` y la batería
+AirportTile junto con Clippy estricto pasa. La fila sigue parcial y #326/#329/#567
+permanecen abiertas por layouts/rotaciones, paletas y callbacks o consumidores
+NewGRF restantes.

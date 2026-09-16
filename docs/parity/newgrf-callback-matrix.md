@@ -2201,3 +2201,12 @@ agua/costa sigue al tipo efectivo, reproduciendo el caso de árbol de orilla y
 separándolo del bosque normal. La regresión cubre ambos caminos; la fila sigue
 parcial por foundations/rotaciones, paletas y consumidores/callbacks NewGRF
 restantes de #326/#329/#567.
+
+Actualización #326/#329-NEWGRF-AIRPORT-FACILITIES-SCOPE (2026-09-16,
+`64256c24`): `AirportScopeResolver::0xF0` conserva ahora la máscara
+persistida de `BaseStation::facilities` al resolver el parent de un
+`AirportTile`; no la reconstruye desde `StopKind`. Las partidas legacy con
+facilities cero mantienen el fallback efectivo. La regresión con máscara
+`0x09` pasa junto con la batería AirportTile y Clippy estricto; siguen
+pendientes la delegación StationScope completa, foundations/rotaciones,
+paletas y consumidores NewGRF de #326/#329/#567.

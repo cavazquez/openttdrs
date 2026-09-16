@@ -219,7 +219,7 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow
     // `AirportScopeResolver` expone las variables explícitas de estación
     // antes de delegar el resto a `Station::GetNewGRFVariable`.
     ctx.parent_vars
-        .insert(0xF0, station.stop_kind.facilities_mask());
+        .insert(0xF0, u32::from(station.effective_facilities()));
     ctx.parent_vars
         .insert(0xFA, station.newgrf_build_date_value());
 
@@ -1126,6 +1126,10 @@ mod tests {
 
         let mut station = Station::new_with_kind(coord, StopKind::Airport);
         station.airport_tiles = vec![coord];
+        // Una estación importada puede conservar facilidades adicionales a su
+        // `StopKind` principal; `AirportScopeResolver::0xF0` debe ver la máscara
+        // persistida de `BaseStation`, no reconstruirla desde ese enum.
+        station.facilities = (StopKind::Airport.facilities_mask() | 1) as u8;
         station.build_date = crate::station::STATION_BUILD_DATE_DEFAULT + 123;
         station.newgrf_persistent_regs.insert(7, 0xCAFE_BABE);
 
@@ -1151,11 +1155,7 @@ mod tests {
                     },
                 },
                 ops: Vec::new(),
-                ranges: vec![(
-                    8,
-                    StopKind::Airport.facilities_mask(),
-                    StopKind::Airport.facilities_mask(),
-                )],
+                ranges: vec![(8, 9, 9)],
                 default: 9,
             },
         );
@@ -1220,10 +1220,7 @@ mod tests {
             &current,
             Climate::Temperate,
         );
-        assert_eq!(
-            ctx.parent_vars.get(&0xF0),
-            Some(&StopKind::Airport.facilities_mask())
-        );
+        assert_eq!(ctx.parent_vars.get(&0xF0), Some(&9));
         assert_eq!(ctx.parent_vars.get(&0xFA), Some(&123));
         assert_eq!(ctx.parent_persistent_registers.get(&7), Some(&0xCAFE_BABE));
         assert_eq!(

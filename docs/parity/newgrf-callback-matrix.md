@@ -2002,3 +2002,15 @@ handles/píxeles y la selección direccional de estación; el subconjunto
 runtime-only pasa siete pruebas. El alcance cubre el fallback/caché de estas
 cuatro familias, no layouts TileSeq, paletas especiales, callbacks restantes ni
 la invalidación de todos los consumidores: #326/#329/#567 continúan abiertos.
+
+### #326/#329-NEWGRF-CACHE-FINGERPRINT — materialización después de Action2
+
+Actualizado: 2026-09-16 (`725950a1`). Las cachés planas de estación, industria,
+casa y objeto separan la resolución de la vista de la creación del handle. El
+fingerprint se calcula después de la cadena Action2 e incluye `last_result`
+(`var 1C`) y los registros producidos, por lo que un procedimiento o grupo
+variational no puede dejar dos píxeles distintos bajo la misma clave. La ruta
+de estación reutiliza la vista resuelta para sus offsets y evita evaluarla dos
+veces. `object_runtime_cache_separates_previous_action2_result` cubre la
+regresión; el alcance no cierra layouts, paletas especiales, callbacks ni la
+invalidación global de consumidores: #326/#329/#567 continúan abiertos.

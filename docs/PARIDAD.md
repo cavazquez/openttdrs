@@ -5876,3 +5876,15 @@ orientación; la suite dirigida runtime-only cubre siete casos. Validación
 completa: cliente `1548 passed; 2 ignored`, Clippy estricto, formato y
 `git diff --check` verdes. #326/#329/#567 permanecen abiertas por layouts,
 paletas, callbacks y consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-CACHE-FINGERPRINT (2026-09-16, `725950a1`): las
+cachés planas materializan ahora la vista Action2 una sola vez y calculan la
+identidad del handle después de resolverla. El fingerprint incluye `var 1C`
+(`last_result`) además de los registros temporales/persistentes ya soportados,
+evitando reutilizar una textura cuando una cadena de procedimientos cambia el
+resultado visual. El overlay plano de estación consume la vista ya resuelta y
+no vuelve a ejecutar el grafo con un contexto distinto. La regresión
+`object_runtime_cache_separates_previous_action2_result` comprueba handles y
+píxeles rojo/azul; la suite completa queda en `1550 passed; 2 ignored`, con
+Clippy estricto, formato y `git diff --check` verdes. #326/#329/#567 siguen
+abiertas por layouts, paletas, callbacks y consumidores NewGRF restantes.

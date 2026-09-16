@@ -8666,3 +8666,14 @@ previews/2CC/SpriteStack/rotor también pasan. Validación completa: cliente
 estricto del binario cliente, formato y `git diff --check` verdes. #329/#567
 siguen abiertas por callbacks avanzados, layouts, paletas restantes y
 consumidores legacy todavía no cubiertos.
+
+Corrección #326/#329-NEWGRF-CACHE-FINGERPRINT (2026-09-16, `725950a1`): la
+resolución y la materialización de las cuatro cachés planas se separan para
+que Action2 se evalúe una sola vez y el fingerprint se calcule con el estado
+que dejó esa resolución. Se añade `last_result` (`var 1C`) a la clave junto con
+los registros que ya se conservaban; así dos contextos que seleccionan
+variantes distintas no comparten una textura por accidente. Estación reutiliza
+la vista resuelta también para sus offsets y evita la segunda evaluación del
+overlay. Validación completa: cliente `1550 passed; 2 ignored`, Clippy
+estricto, formato y `git diff --check` verdes. #326/#329/#567 permanecen
+abiertas por layouts, paletas, callbacks y consumidores NewGRF restantes.

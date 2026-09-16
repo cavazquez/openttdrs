@@ -2119,3 +2119,10 @@ tesela, terreno/agua y pertenencia al aeropuerto. La regresión
 `airport_nearby_land_info_respects_grf_version_z_units` fija el contrato para
 ambas versiones. Foundations/rotaciones del compositor, paletas y delegación
 completa de `StationScope` siguen pendientes.
+
+Actualización #326/#329-NEWGRF-AIRPORT-NEARBY-TYPES (2026-09-16,
+`a2964c14`): `AirportTile 0x60` comparte las conversiones comunes de OpenTTD
+para árboles de costa (`MP_WATER`) y waypoints viales (`MP_ROAD`). Las
+regresiones fijan ambos tipos falsos antes de empaquetar terreno, agua, altura
+y pendiente; foundations/rotaciones del compositor, paletas y delegación
+completa de `StationScope` siguen pendientes.

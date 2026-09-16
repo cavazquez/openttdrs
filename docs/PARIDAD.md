@@ -5995,6 +5995,13 @@ la suite core queda en `2809 passed; 1 ignored` y Clippy estricto pasa. El
 bloque no cierra #326/#329/#567: siguen pendientes foundations/rotaciones del
 compositor, paletas y consumidores NewGRF restantes.
 
+Corrección #326/#329-NEWGRF-AIRPORT-NEARBY-TYPES (2026-09-16, `a2964c14`):
+`AirportTile 0x60` aplica las conversiones comunes de OpenTTD para árboles de
+costa (`MP_WATER`) y waypoints viales (`MP_ROAD`) antes de codificar la
+información vecina. Las regresiones cubren ambos tipos sin cambiar la
+representación almacenada del mapa; #326/#329/#567 continúan abiertas por la
+composición raster y los scopes NewGRF restantes.
+
 Corrección #326/#329-NEWGRF-AIRPORT-NEARBY-Z (2026-09-16, `6fc377b8`): la
 variable `AirportTile` `0x60` ahora codifica la altura vecina en píxeles para
 GRF v7 y anteriores, y en niveles de tesela para GRF v8+, tal como

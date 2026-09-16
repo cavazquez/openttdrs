@@ -8779,6 +8779,15 @@ regresión `explicit_airport_origin_does_not_reinfer_a_shifted_layout` fija la
 frontera y mantiene abiertos foundations/rotaciones del compositor, paletas y
 callbacks restantes.
 
+### #326/#329-NEWGRF-AIRPORT-NEARBY-TYPES — tipos falsos de `0x60`
+
+Actualizado: 2026-09-16 (`a2964c14`). La información de tesela vecina del
+scope `AirportTile` conserva ahora las dos conversiones de
+`GetNearbyTileInformation`: árboles de costa se exponen como `MP_WATER` y
+waypoints viales como `MP_ROAD`. La regresión cubre ambos casos; permanecen
+abiertos la composición raster, foundations/rotaciones y los scopes NewGRF no
+modelados.
+
 ### #326/#329-NEWGRF-AIRPORT-NEARBY-Z — unidades de altura de `0x60`
 
 Actualizado: 2026-09-16 (`6fc377b8`). `AirportTile` conserva ahora la

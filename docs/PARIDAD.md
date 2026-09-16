@@ -6088,3 +6088,14 @@ caminos; pasaron 80 pruebas de aeropuerto y Clippy estricto. Esto corrige la
 semántica de randomización por tesela, pero no cierra #326/#329/#567: siguen
 pendientes foundations/rotaciones completas, paletas, callbacks y
 consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-AIRPORT-TREE-SHORE-TYPE (2026-09-16,
+`06dde409`): `AirportTile 0x60` falsifica ahora `MP_WATER` sólo cuando
+`GetTreeGround() == TREE_GROUND_SHORE`, igual que `GetNearbyTileInformation`;
+un bosque con `WaterClass` válida pero suelo normal conserva `MP_TREES`. El bit
+agua/costa se deriva del tipo efectivo, por lo que los árboles de orilla
+reciben también la marca `MP_WATER` en el byte de terreno. Las regresiones
+cubren ambos casos y la batería AirportTile queda en 81 pruebas, con Clippy
+estricto y `git diff --check` verdes. Esto corrige una subbrecha de vecinos,
+pero no cierra #326/#329/#567: siguen pendientes layouts/rotaciones,
+paletas, callbacks y consumidores NewGRF restantes.

@@ -2192,3 +2192,12 @@ un save con `subst` pierda el tile NewGRF visible o seleccione otro vecino en
 un callback. La regresión de override `24→74` y las suites dirigidas pasan.
 La fila continúa parcial: #326/#329/#567 siguen abiertas por los demás
 layouts/rotaciones, paletas y consumidores/callbacks NewGRF.
+
+Actualización #326/#329-NEWGRF-AIRPORT-TREE-SHORE-TYPE (2026-09-16,
+`06dde409`): el byte `bb` de `GetNearbyTileInformation` para `AirportTile`
+ya no clasifica todo bosque con `WaterClass` válida como `MP_WATER`. La
+falsificación depende de `GetTreeGround() == TREE_GROUND_SHORE`, y el bit
+agua/costa sigue al tipo efectivo, reproduciendo el caso de árbol de orilla y
+separándolo del bosque normal. La regresión cubre ambos caminos; la fila sigue
+parcial por foundations/rotaciones, paletas y consumidores/callbacks NewGRF
+restantes de #326/#329/#567.

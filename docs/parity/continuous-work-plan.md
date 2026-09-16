@@ -8880,3 +8880,15 @@ legacy vacío para previews y callers sin `GameState`; la regresión
 dirigidos de animación/render pasan. La fila sigue parcial y #326/#329/#567
 permanecen abiertas por layouts/rotaciones completas, paletas y callbacks o
 consumidores NewGRF todavía no cubiertos.
+
+### #326/#329-NEWGRF-AIRPORT-TREE-SHORE-TYPE — tipo efectivo de árboles vecinos
+
+Actualizado: 2026-09-16 (`06dde409`). `AirportTile 0x60` reproduce ahora la
+regla común de OpenTTD: sólo un `MP_TREES` cuyo `GetTreeGround()` sea
+`TREE_GROUND_SHORE` se expone como `MP_WATER`. La clase de agua persistida por
+sí sola no convierte un bosque normal en costa. El bit agua/costa del byte de
+terreno se calcula desde el tipo efectivo, así que la costa arbórea queda
+codificada igual en `0x60`. La regresión cubre suelo normal y orilla; pasan 81
+tests AirportTile y Clippy estricto. La fila continúa parcial y #326/#329/#567
+siguen abiertas por layouts/rotaciones, paletas y callbacks o consumidores
+NewGRF restantes.

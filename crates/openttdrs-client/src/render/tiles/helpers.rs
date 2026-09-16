@@ -13,9 +13,9 @@ use crate::render::{
 };
 use crate::sprites::{foundation_gfx_for_tileh, rail_trackbits_for_render};
 use openttdrs_core::{
-    FOUNDATION_ORIGINAL_SPRITE_BASE, Map, RailFoundationSpriteDraw, TILE_PIXEL_HEIGHT, TileCoord,
-    TileKind, foundation_draw_plan, rail_foundation_draw_plan, rail_foundation_for_trackbits,
-    rail_surface_slope_and_z, tile_slope_and_z,
+    FOUNDATION_ORIGINAL_SPRITE_BASE, FoundationSpriteBounds, Map, RailFoundationSpriteDraw,
+    TILE_PIXEL_HEIGHT, TileCoord, TileKind, foundation_draw_plan, rail_foundation_draw_plan,
+    rail_foundation_for_trackbits, rail_surface_slope_and_z, tile_slope_and_z,
 };
 
 /// Sesgo en la componente Z de **solo** el agua animada (sin sprite `shore_*`).
@@ -697,6 +697,77 @@ pub(crate) fn spawn_foundation_sprite(
             ))
             .id(),
     )
+}
+
+/// Materializa una pieza de `DrawCustomStationFoundations` con el prisma
+/// completo que OpenTTD entrega a `AddSortableSpriteToDraw`.
+///
+/// Los sprites extendidos de estaciones no usan la tabla de foundations
+/// vanilla: su offset visual viene del propio `DecodedSprite`, mientras que
+/// el parent siempre ocupa `{ {}, {TILE_SIZE, TILE_SIZE, TILE_HEIGHT - 1}, {} }`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_custom_station_foundation_sprite(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    role: &'static str,
+    sprite_id: u32,
+    decoded: &openttdrs_core::DecodedSprite,
+    sprite: Sprite,
+    draw_ordinal: u8,
+    map_width: u32,
+    layer: f32,
+) -> Entity {
+    let bounds = FoundationSpriteBounds::new(0, 0, 0, 16, 16, 7);
+    let trace_bounds = TraceSpriteBounds::new(
+        i32::from(bounds.ox),
+        i32::from(bounds.oy),
+        i32::from(bounds.oz),
+        i32::from(bounds.ex),
+        i32::from(bounds.ey),
+        i32::from(bounds.ez),
+    );
+    WorldDrawTrace::record_sprite_with_geometry(
+        role,
+        "sortable",
+        sprite_id,
+        false,
+        (0, 0, 0),
+        0,
+        Some(trace_bounds),
+    );
+
+    let mut position = overlay_pos(
+        ctx.iso_pos,
+        f32::from(decoded.x_offs),
+        f32::from(decoded.y_offs),
+        f32::from(decoded.width),
+        f32::from(decoded.height),
+        ctx.info.base_z,
+        layer,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+    position.z = source_depth;
+    let xmin = ctx.tx_i32() * 16;
+    let ymin = ctx.ty_i32() * 16;
+    let zmin = i32::from(ctx.info.base_z) * i32::from(TILE_PIXEL_HEIGHT);
+    let parent_bounds = ParentSpriteBounds::new(xmin, ymin, zmin, xmin + 15, ymin + 15, zmin + 6);
+
+    commands
+        .spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+            ViewportSortableParent {
+                sprite_id,
+                bounds: parent_bounds,
+                insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, draw_ordinal),
+                source_depth,
+            },
+        ))
+        .id()
 }
 
 /// Desplazamiento visible del origen de `SpriteBounds` de una foundation.

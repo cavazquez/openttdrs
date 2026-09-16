@@ -881,8 +881,9 @@ pub use station_class::{
     all_station_class_defs, all_station_spec_defs, apply_station_build_tile_layout_callback,
     apply_station_draw_tile_layout_callback, list_station_classes, list_station_specs,
     next_free_station_class_id, next_free_station_spec_id, station_class_def,
-    station_newgrf_view_index, station_platform_info, station_spec_def, station_spec_layout,
-    vanilla_station_class_catalog, vanilla_station_spec_catalog,
+    station_custom_foundation_parts, station_newgrf_view_index, station_platform_info,
+    station_spec_def, station_spec_layout, vanilla_station_class_catalog,
+    vanilla_station_spec_catalog,
 };
 pub use subsidy::{
     SUBSIDY_MAX_DISTANCE, SUBSIDY_OFFER_MONTHS, Subsidy, delivery_income_multiplier,

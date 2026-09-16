@@ -153,6 +153,65 @@ pub const STATION_FLAG_CUSTOM_FOUNDATIONS: u8 = 1 << 3;
 /// diez sprites en vez del bloque compuesto de ocho piezas.
 pub const STATION_FLAG_EXTENDED_FOUNDATIONS: u8 = 1 << 4;
 
+/// Devuelve las piezas del cimiento custom que `DrawCustomStationFoundations`
+/// emite para una pendiente. El índice de cada pieza es relativo al sprite
+/// devuelto por `GetCustomStationFoundationRelocation`.
+///
+/// El bloque extendido selecciona una sola pieza (`foundation_parts`),
+/// mientras que el bloque clásico compone las piezas marcadas en
+/// `composite_foundation_parts`. `edge_info` usa el contrato nativo: bit 0
+/// oculta la pieza 6 y bit 1 la pieza 7 cuando el cimiento continúa fuera de
+/// la tesela por NW/NE, respectivamente. Un resultado `None` significa que
+/// `OpenTTD` vuelve al cimiento vanilla.
+#[must_use]
+pub fn station_custom_foundation_parts(
+    tileh: u8,
+    edge_info: u8,
+    extended: bool,
+) -> Option<Vec<u8>> {
+    const INVALID: u8 = u8::MAX;
+    // `station_cmd.cpp`: posiciones 0..14 son las pendientes válidas que
+    // puede recibir DrawCustomStationFoundations.
+    const EXTENDED: [u8; 15] = [
+        INVALID, INVALID, INVALID, 0, INVALID, 1, 2, 3, INVALID, 4, 5, 6, 7, 8, 9,
+    ];
+    const COMPOSITE: [u8; 15] = [
+        0b0000_0000,
+        0b1101_0001,
+        0b1110_0100,
+        0b1110_0000,
+        0b1100_1010,
+        0b1100_1001,
+        0b1100_0100,
+        0b1100_0000,
+        0b1101_0010,
+        0b1001_0001,
+        0b1110_0100,
+        0b1010_0000,
+        0b0100_1010,
+        0b0000_1001,
+        0b0100_0100,
+    ];
+
+    let index = usize::from(tileh);
+    if extended {
+        let part = *EXTENDED.get(index)?;
+        (part != INVALID).then_some(vec![part])
+    } else {
+        let mut mask = *COMPOSITE.get(index)?;
+        if edge_info & 1 != 0 {
+            mask &= !(1 << 6);
+        }
+        if edge_info & 2 != 0 {
+            mask &= !(1 << 7);
+        }
+        if mask == 0 {
+            return None;
+        }
+        Some((0..8).filter(|part| mask & (1 << part) != 0).collect())
+    }
+}
+
 /// Disparadores de animación de estación / road stop de `OpenTTD`.
 ///
 /// Action0 `0x18` almacena una máscara de estos valores, mientras CB140
@@ -734,6 +793,20 @@ mod tests {
         assert_eq!(station_newgrf_view_index(0x0F), 15);
         assert_eq!(station_newgrf_view_index(0x12), 2);
         assert_eq!(station_newgrf_view_index(0xA5), 5);
+    }
+
+    #[test]
+    fn custom_foundation_parts_match_extended_and_composite_tables() {
+        assert_eq!(station_custom_foundation_parts(3, 0, true), Some(vec![0]));
+        assert_eq!(station_custom_foundation_parts(14, 0, true), Some(vec![9]));
+        assert_eq!(station_custom_foundation_parts(4, 0, true), None);
+        assert_eq!(
+            station_custom_foundation_parts(3, 0, false),
+            Some(vec![5, 6, 7])
+        );
+        assert_eq!(station_custom_foundation_parts(3, 3, false), Some(vec![5]));
+        assert_eq!(station_custom_foundation_parts(0, 0, false), None);
+        assert_eq!(station_custom_foundation_parts(15, 0, false), None);
     }
 
     #[test]

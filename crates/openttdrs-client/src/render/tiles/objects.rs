@@ -23,9 +23,11 @@ use super::water::{
 use super::{
     catenary_under_low_bridge,
     helpers::{
-        FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, TRAM_OVERLAY_LAYER_FRAC, spawn_empty_bounding_box,
-        spawn_forced_leveled_foundation_with_child_parent, spawn_foundation_child_ground_sprite_at,
-        spawn_foundation_child_sprite_at, spawn_ground_sprite_at,
+        FLAT_WATER_LAYER_FRAC, ForcedLeveledFoundation, SHORE_LAYER_FRAC, TRAM_OVERLAY_LAYER_FRAC,
+        forced_leveled_foundation_decision_at, spawn_custom_station_foundation_sprite,
+        spawn_empty_bounding_box, spawn_forced_leveled_foundation_with_child_parent,
+        spawn_foundation_child_ground_sprite_at, spawn_foundation_child_sprite_at,
+        spawn_ground_sprite_at,
     },
     sloped_or_flat_image, spawn_ground_sprite,
 };
@@ -1761,19 +1763,50 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             // El césped inclinado previo desplazaba el andén y podía asomar
             // bajo su cimiento en las pendientes de Kale.
             let station_tb = if m5 & 1 != 0 { 0x02 } else { 0x01 };
-            let station_foundation = spawn_forced_leveled_foundation_with_child_parent(
-                commands,
+            let mut station_custom_foundation = resolve_station_custom_foundation_for_tile(
                 map,
-                dims,
-                assets,
+                stations,
                 ctx,
-                tileh,
-                "station-rail",
-                "station-rail-foundation",
-                foundation_newgrf,
-                action5_sprites.as_deref_mut(),
-                images.as_deref_mut(),
+                m5,
+                owner_colour,
+                station_catalog,
+                climate,
+                newgrf_stack,
+                world,
             );
+            let custom_station_foundation =
+                station_custom_foundation
+                    .as_mut()
+                    .and_then(|(def, view_idx, action2)| {
+                        spawn_extended_station_foundation(
+                            commands,
+                            map,
+                            dims,
+                            ctx,
+                            tileh,
+                            def,
+                            *view_idx,
+                            action2,
+                            owner_colour,
+                            station_sprites.as_deref_mut(),
+                            images.as_deref_mut(),
+                        )
+                    });
+            let station_foundation = custom_station_foundation.unwrap_or_else(|| {
+                spawn_forced_leveled_foundation_with_child_parent(
+                    commands,
+                    map,
+                    dims,
+                    assets,
+                    ctx,
+                    tileh,
+                    "station-rail",
+                    "station-rail-foundation",
+                    foundation_newgrf,
+                    action5_sprites.as_deref_mut(),
+                    images.as_deref_mut(),
+                )
+            });
             let rail_base_z = station_foundation.surface_base_z;
             let foundation_child_parent = station_foundation.child_parent;
             let rail_half_h = TILE_HALF_H;
@@ -3305,27 +3338,20 @@ fn spawn_paved_road_stop_link(
     }
 }
 
-/// Resuelve el layout `TileSeq` de la estación con el mismo contexto Action2
-/// que la vista plana. El `view_idx` sólo identifica la orientación/callback;
-/// las referencias del layout seleccionan su primer sprite Action1 y por eso
-/// no se usa como índice adicional en la textura.
+/// Materializa el contexto Action2 catalogue-aware que comparten los draws
+/// custom de una estación. Mantener esta construcción en un solo sitio evita
+/// que la vista plana, el layout y los cimientos ejecuten scopes distintos.
 #[allow(clippy::too_many_arguments)]
-fn resolve_station_layout_for_tile<'a>(
+fn station_action2_for_tile<'a>(
     map: &Map,
     stations: &[Station],
     ctx: &TileRenderContext,
-    m5: u8,
     owner_colour: Option<CompanyColour>,
     station_catalog: &'a [StationSpecDef],
     climate: Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
     world: Option<openttdrs_core::RoadStopWorldContext<'_>>,
-) -> Option<(
-    &'a StationSpecDef,
-    openttdrs_core::newgrf_sprites::ResolvedTileLayout,
-    u32,
-    usize,
-)> {
+) -> Option<(&'a StationSpecDef, openttdrs_core::Action2EvalCtx)> {
     let def = newgrf_station_def_for_tile(station_catalog, map, stations, ctx.coord)?;
     let colour_u8 = owner_colour.map(CompanyColour::as_u8).unwrap_or(0);
     let mut action2 = world.map_or_else(
@@ -3364,6 +3390,174 @@ fn resolve_station_layout_for_tile<'a>(
         newgrf_stack,
         def.newgrf_grfid,
     ));
+    Some((def, action2))
+}
+
+/// Resuelve el contrato `gfx`/Action2 que `GetCustomStationFoundationRelocation`
+/// recibe después de CB14. El contexto se conserva para la evaluación del
+/// grupo de cimientos; el callback se ejecuta sobre una copia porque su
+/// resultado no debe borrar las variables de la estación.
+#[allow(clippy::too_many_arguments)]
+fn resolve_station_custom_foundation_for_tile<'a>(
+    map: &Map,
+    stations: &[Station],
+    ctx: &TileRenderContext,
+    m5: u8,
+    owner_colour: Option<CompanyColour>,
+    station_catalog: &'a [StationSpecDef],
+    climate: Climate,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    world: Option<openttdrs_core::RoadStopWorldContext<'_>>,
+) -> Option<(&'a StationSpecDef, usize, openttdrs_core::Action2EvalCtx)> {
+    if ctx.info.tileh == 0 {
+        return None;
+    }
+    let (def, action2) = station_action2_for_tile(
+        map,
+        stations,
+        ctx,
+        owner_colour,
+        station_catalog,
+        climate,
+        newgrf_stack,
+        world,
+    )?;
+    if !def.has_custom_foundations() {
+        return None;
+    }
+    let mut callback_ctx = action2.clone();
+    let view_idx = station_newgrf_view_index_for_tile(def, m5, &mut callback_ctx);
+    Some((def, view_idx, action2))
+}
+
+/// Dibuja la variante extendida de un cimiento custom de estación.
+///
+/// El bloque compuesto clásico queda deliberadamente para la siguiente
+/// subetapa: requiere conservar todos los `AddSortableSpriteToDraw` bajo un
+/// único parent combinado. Si la resolución extendida no es materializable,
+/// el caller vuelve al `DrawFoundation(Leveled)` existente.
+#[allow(clippy::too_many_arguments)]
+fn spawn_extended_station_foundation(
+    commands: &mut Commands,
+    map: &Map,
+    dims: (u32, u32),
+    ctx: &TileRenderContext,
+    tileh: u8,
+    def: &StationSpecDef,
+    view_idx: usize,
+    action2: &mut openttdrs_core::Action2EvalCtx,
+    owner_colour: Option<CompanyColour>,
+    station_sprites: Option<&mut NewGrfStationSpriteCache>,
+    images: Option<&mut Assets<Image>>,
+) -> Option<ForcedLeveledFoundation> {
+    if !def.has_extended_foundations() {
+        return None;
+    }
+    let decision =
+        forced_leveled_foundation_decision_at(map, ctx.coord, dims, tileh, ctx.info.base_z);
+    let edge_info =
+        u8::from(!decision.nw_edge.visible) | (u8::from(!decision.ne_edge.visible) << 1);
+    let parts = openttdrs_core::station_custom_foundation_parts(tileh, edge_info, true)?;
+    let sprites = def.newgrf_foundation_sprites_runtime(
+        u8::try_from(view_idx).unwrap_or(u8::MAX),
+        edge_info,
+        action2,
+    )?;
+    if parts
+        .iter()
+        .any(|part| sprites.get(usize::from(*part)).is_none())
+    {
+        return None;
+    }
+    let station_sprites = station_sprites?;
+    let images = images?;
+
+    WorldDrawTrace::record_foundation(
+        "station-rail-custom",
+        decision.foundation,
+        decision.surface_tileh,
+        decision.surface_base_z,
+        decision.sprite_block,
+        decision.nw_edge.visible,
+        decision.ne_edge.visible,
+        (
+            decision.nw_edge.here.0,
+            decision.nw_edge.here.1,
+            decision.nw_edge.neighbour.0,
+            decision.nw_edge.neighbour.1,
+        ),
+        (
+            decision.ne_edge.here.0,
+            decision.ne_edge.here.1,
+            decision.ne_edge.neighbour.0,
+            decision.ne_edge.neighbour.1,
+        ),
+    );
+
+    let mut child_parent = None;
+    for (draw_order, part) in parts.into_iter().enumerate() {
+        let decoded = &sprites[usize::from(part)];
+        let handle = station_sprites.handle_for_foundation(
+            def,
+            u16::from(part),
+            owner_colour,
+            action2,
+            decoded,
+            images,
+        );
+        let parent = spawn_custom_station_foundation_sprite(
+            commands,
+            ctx,
+            "station-rail-foundation-custom",
+            u32::MAX.saturating_sub(u32::from(part)),
+            decoded,
+            Sprite {
+                image: handle,
+                ..default()
+            },
+            u8::try_from(draw_order).unwrap_or(u8::MAX),
+            dims.0,
+            0.36 + draw_order as f32 * 0.0005,
+        );
+        child_parent = Some(parent);
+    }
+    Some(ForcedLeveledFoundation {
+        surface_base_z: decision.surface_base_z,
+        child_parent,
+    })
+}
+
+/// Resuelve el layout `TileSeq` de la estación con el mismo contexto Action2
+/// que la vista plana. El `view_idx` sólo identifica la orientación/callback;
+/// las referencias del layout seleccionan su primer sprite Action1 y por eso
+/// no se usa como índice adicional en la textura.
+#[allow(clippy::too_many_arguments)]
+fn resolve_station_layout_for_tile<'a>(
+    map: &Map,
+    stations: &[Station],
+    ctx: &TileRenderContext,
+    m5: u8,
+    owner_colour: Option<CompanyColour>,
+    station_catalog: &'a [StationSpecDef],
+    climate: Climate,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    world: Option<openttdrs_core::RoadStopWorldContext<'_>>,
+) -> Option<(
+    &'a StationSpecDef,
+    openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    u32,
+    usize,
+)> {
+    let (def, mut action2) = station_action2_for_tile(
+        map,
+        stations,
+        ctx,
+        owner_colour,
+        station_catalog,
+        climate,
+        newgrf_stack,
+        world,
+    )?;
     let mut callback_ctx = action2.clone();
     let view_idx = station_newgrf_view_index_for_tile(def, m5, &mut callback_ctx);
     let layout = def.newgrf_tile_layout_runtime(view_idx, &mut action2)?;

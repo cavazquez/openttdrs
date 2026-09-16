@@ -98,6 +98,46 @@ impl NewGrfStationSpriteCache {
             .clone()
     }
 
+    /// Materializa una pieza de cimiento custom ya resuelta por Action2.
+    ///
+    /// Los cimientos no son una vista normal ni una entrada de `TileLayout`:
+    /// el índice que devuelve el registro `0x100` apunta dentro del bloque de
+    /// sprites del callback. Un espacio de claves propio evita que una pieza
+    /// con el mismo ordinal que una vista plana reutilice textura por error.
+    pub(crate) fn handle_for_foundation(
+        &mut self,
+        def: &StationSpecDef,
+        sprite_index: u16,
+        colour: Option<CompanyColour>,
+        ctx: &openttdrs_core::Action2EvalCtx,
+        sprite: &openttdrs_core::DecodedSprite,
+        images: &mut Assets<Image>,
+    ) -> Handle<Image> {
+        let colour_key = colour.map(CompanyColour::as_u8).unwrap_or(0xFF);
+        let fp = if def.newgrf_runtime.is_some() {
+            runtime_fingerprint(ctx, vars::STATION, false)
+        } else {
+            0
+        };
+        let key = (
+            def.id.as_u16(),
+            0x4000 | (sprite_index & 0x3FFF),
+            colour_key,
+            fp,
+            0,
+            0,
+        );
+        self.handles
+            .entry(key)
+            .or_insert_with(|| {
+                images.add(decoded_sprite_image(
+                    sprite,
+                    DecodedSpriteImagePolicy::MaskedAndRecolored { colour },
+                ))
+            })
+            .clone()
+    }
+
     /// Materializa una pieza ya resuelta de un layout `TileSeq`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_for_layout(

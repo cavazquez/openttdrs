@@ -6472,3 +6472,16 @@ Pasan 74 pruebas filtradas de puente y Clippy estricto del binario. La
 corrección es parcial y no cierra #326/#329/#567: siguen pendientes los
 overlays específicos NewGRF sin bounds reconstruidos, otros combines,
 producers, callbacks/consumidores NewGRF, composición global y framebuffer.
+
+Corrección #326/#329/#567-BRIDGE-ROAD-GROUPS-SEGMENTED (2026-09-16,
+`959a57e8`): los grupos `ROTSG_BRIDGE`, `ROTSG_OVERLAY` y
+`ROTSG_CATENARY_BACK` específicos de RoadType usan ahora las mismas cajas
+`back_bounds` de `DrawBridgeRoadBits` que sus equivalentes vanilla. Sus
+children conservan fuente completa, bounds, orden local y una identidad de
+sorting determinista en el rango separado de los sprites del baseset; la
+catenaria frontal sigue siendo el parent del bloque delantero y su baranda
+continúa como child segmentado. La regresión NewGRF verifica las tres capas
+traseras y la suite completa queda en 1.577 tests, 2 ignorados, con Clippy
+estricto del binario. La corrección es parcial y no cierra #326/#329/#567:
+siguen pendientes otros producers, combines fuera de puentes,
+callbacks/consumidores NewGRF, composición global y framebuffer.

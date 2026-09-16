@@ -2506,3 +2506,12 @@ Las regresiones verifican la estructura frontal, catenaria, tranvía y PBS; los
 grupos `ROTSG_BRIDGE/OVERLAY/CATENARY_*` específicos que siguen en el helper
 legacy requieren una etapa posterior para derivar sus bounds desde el sprite
 NewGRF. La cobertura continúa parcial y no se cierran issues madre.
+
+Actualización #326/#329/#567-BRIDGE-ROAD-GROUPS-SEGMENTED (`959a57e8`):
+`ROTSG_BRIDGE`, `ROTSG_OVERLAY` y `ROTSG_CATENARY_BACK` específicos de carretera
+se materializan como children segmentados con las `back_bounds[offset]` de
+`DrawBridgeRoadBits`. El sprite decoded conserva su fuente completa; el
+parent promovido recibe una identidad determinista derivada de RoadType,
+selector e índice de vista, separada de los IDs vanilla. La regresión verifica
+los tres grupos custom bajo el mismo parent trasero; la suite completa queda en
+1.577 tests, 2 ignorados, y la cobertura de #326/#329/#567 sigue parcial.

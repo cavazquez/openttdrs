@@ -9283,3 +9283,14 @@ la fuente completa permite recortar sólo la banda cruzada. Pasan 74 pruebas de
 puente y Clippy estricto; los grupos específicos NewGRF que todavía pasan por
 `spawn_bridge_specific_child` siguen pendientes. La fila continúa parcial y
 no se cierran #326/#329/#567.
+
+### #326/#329/#567-BRIDGE-ROAD-GROUPS-SEGMENTED — grupos específicos del puente
+
+Actualizado: 2026-09-16 (`959a57e8`). Los grupos `ROTSG_BRIDGE`,
+`ROTSG_OVERLAY` y `ROTSG_CATENARY_BACK` ya comparten la caja trasera nativa de
+`DrawBridgeRoadBits` y publican fuente completa, bounds y orden de combinación.
+La identidad del parent promovido se deriva de RoadType, selector e índice de
+vista en un rango sintético separado, porque el `DecodedSprite` no conserva el
+ID NFO original. La regresión custom cubre bridge, overlay y catenaria bajo el
+parent trasero; la suite completa pasa con 1.577 tests y 2 ignorados. La fila
+continúa parcial y no se cierran #326/#329/#567.

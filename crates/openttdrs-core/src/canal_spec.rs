@@ -54,18 +54,29 @@ pub struct CanalFeatureDef {
 }
 
 impl CanalFeatureDef {
+    /// Vistas Action1/3 re-resueltas con el contexto de la tesela.
+    ///
+    /// La colección completa se expone para que el renderer pueda conservar
+    /// la selección del grupo que devolvió `GetCanalSprite` mientras aplica,
+    /// en un resolver independiente, `GetCanalSpriteOffset` a una de sus
+    /// posiciones. Resolver cada posición por separado puede observar
+    /// registros temporales dejados por la consulta anterior.
+    pub fn newgrf_views_runtime(
+        &self,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<&[DecodedSprite]> {
+        let runtime = self.newgrf_runtime.as_ref()?;
+        let views = runtime.views_for_local_id_ctx(self.id, ctx)?;
+        (!views.is_empty()).then_some(views)
+    }
+
     /// Vista Action1/3 re-resuelta con el contexto de la tesela.
     pub fn newgrf_view_runtime(
         &self,
         idx: usize,
         ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
     ) -> Option<DecodedSprite> {
-        let runtime = self.newgrf_runtime.as_ref()?;
-        let views = runtime.views_for_local_id_ctx(self.id, ctx)?;
-        if views.is_empty() {
-            return None;
-        }
-        views.get(idx).cloned()
+        self.newgrf_views_runtime(ctx)?.get(idx).cloned()
     }
 
     /// Ejecuta `CBID_CANALS_SPRITE_OFFSET` (`0x147`) si el feature lo habilitó.

@@ -211,9 +211,16 @@ fn canal_feature_sprite_with_context_and_slot(
     action2: &mut Action2EvalCtx,
 ) -> Option<(Sprite, DecodedSprite, usize)> {
     let feature = openttdrs_core::canal_feature_def(canal_features, feature_id)?;
-    let selected_slot = feature.newgrf_sprite_offset(slot, action2);
-    let decoded = feature
-        .newgrf_view_runtime(selected_slot, action2)
+    // `GetCanalSprite` y `GetCanalSpriteOffset` construyen resolvers
+    // distintos en OpenTTD. Primero conservamos el set Action1 elegido por
+    // el sprite base; después aplicamos el callback con una copia del estado
+    // inicial, para que un `last_result`/registro temporal de la consulta del
+    // callback no altere la selección del set base.
+    let mut callback_ctx = action2.clone();
+    let runtime_views = feature.newgrf_views_runtime(action2);
+    let selected_slot = feature.newgrf_sprite_offset(slot, &mut callback_ctx);
+    let decoded = runtime_views
+        .and_then(|views| views.get(selected_slot).cloned())
         .or_else(|| feature.newgrf_views.get(selected_slot).cloned())?;
     let (Some(cache), Some(images)) = (cache.as_deref_mut(), images.as_deref_mut()) else {
         return None;
@@ -1514,8 +1521,9 @@ mod tests {
     use super::{
         SPR_CANAL_DIKES_BASE, SPR_FLAT_WATER_TILE, WateredFrom, action5_canal_sprite,
         canal_action2_context, canal_dike_slots, canal_feature_sprite,
-        canal_feature_sprite_with_context, canal_feature_trace_sprite_id, is_watered_tile,
-        lock_structure_layer, lock_water_ground_sprite, river_edge_slots, river_edge_sprite_offset,
+        canal_feature_sprite_with_context, canal_feature_sprite_with_context_and_slot,
+        canal_feature_trace_sprite_id, is_watered_tile, lock_structure_layer,
+        lock_water_ground_sprite, river_edge_slots, river_edge_sprite_offset,
         river_slope_sprite_index, shore_sprite_id,
     };
     use bevy::prelude::{Assets, Image};
@@ -2212,5 +2220,92 @@ mod tests {
         .expect("vista runtime verde");
         assert_eq!(selected_green, green);
         assert_eq!(images.len(), 2, "cada variante conserva su textura runtime");
+    }
+
+    #[test]
+    fn canal_offset_callback_does_not_change_base_action1_set() {
+        let marked = |marker: u8| DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![marker, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        let mut runtime = TrainSpriteGraphics {
+            sets: vec![
+                vec![marked(0x10), marked(0x11)],
+                vec![marked(0x20), marked(0x21)],
+            ],
+            assigns: vec![TrainSpriteAssign {
+                local_id: openttdrs_core::CF_DIKES,
+                set_id: 3,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        // The base lookup has no callback variables and follows the default
+        // branch to set 0. The callback resolver receives 0x0C=0x147, shifts
+        // the requested slot by one, then finishes through a procedure.
+        runtime.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x0C,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: 1,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(5, 1, 1)],
+                default: 4,
+            },
+        );
+        runtime.action2_var.insert(
+            5,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: 1,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        runtime.action2_to_action1.extend([(4, 0), (5, 1)]);
+
+        let mut features = openttdrs_core::vanilla_canal_feature_catalog();
+        features[usize::from(openttdrs_core::CF_DIKES)] = CanalFeatureDef {
+            id: openttdrs_core::CF_DIKES,
+            callback_mask: 1,
+            flags: 0,
+            from_newgrf: true,
+            grfid: 0xCAFE,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(runtime)),
+        };
+        let mut cache = crate::render::NewGrfAction5SpriteCache::default();
+        let mut images = Assets::<Image>::default();
+        let mut cache_ref = Some(&mut cache);
+        let mut images_ref = Some(&mut images);
+        let mut ctx = Action2EvalCtx::default();
+        let (_, selected, selected_slot) = canal_feature_sprite_with_context_and_slot(
+            &features,
+            openttdrs_core::CF_DIKES,
+            0,
+            &mut cache_ref,
+            &mut images_ref,
+            &mut ctx,
+        )
+        .expect("vista de dique con callback");
+
+        assert_eq!(selected_slot, 1, "el callback sólo desplaza el slot");
+        assert_eq!(selected.rgba, vec![0x11, 0, 0, 255]);
     }
 }

@@ -138,8 +138,8 @@ pub(crate) use company_hq::{
     company_hq_sprite_meta,
 };
 pub(crate) use company_palette::{
-    CompanyColoredSprites, CompanyColour, company_colour_name, company_colour_swatch_color,
-    company_colour_tooltip, tile_filename,
+    CompanyColoredSprites, CompanyColour, company_colour_label_text_color, company_colour_name,
+    company_colour_swatch_color, company_colour_tooltip, tile_filename,
 };
 #[allow(unused_imports)]
 pub use foundation::{

@@ -104,6 +104,37 @@ fn station_background_colour(sim: &SimWorld, station: &Station) -> Color {
     )
 }
 
+fn station_company_colour(sim: &SimWorld, station: &Station) -> Option<u8> {
+    if station.owner.0 == openttdrs_core::company::OWNER_NONE_M1
+        || station.effective_facilities() == 0
+    {
+        return None;
+    }
+    sim.state
+        .companies
+        .iter()
+        .find(|company| company.id == station.owner)
+        .map(|company| company.colour)
+}
+
+#[must_use]
+fn station_label_text_colour(sim: &SimWorld, station: &Station, signs_transparent: bool) -> Color {
+    if !signs_transparent {
+        return Color::srgb(0.05, 0.05, 0.05);
+    }
+    station_company_colour(sim, station)
+        .map(crate::sprites::company_colour_label_text_color)
+        .unwrap_or_else(|| {
+            // `COLOUR_GREY` es la ranura 14 de las 16 rampas de compañía.
+            crate::sprites::company_colour_label_text_color(14)
+        })
+}
+
+#[must_use]
+fn station_label_has_panel(signs_transparent: bool) -> bool {
+    !signs_transparent
+}
+
 pub(crate) fn spawn_station_labels(
     commands: &mut Commands,
     sim: &SimWorld,
@@ -116,6 +147,8 @@ pub(crate) fn spawn_station_labels(
     if !show {
         return;
     }
+    let signs_transparent =
+        crate::sprites::is_transparent(crate::sprites::TransparencyOption::Signs);
     let map = &sim.state.map;
     for &index in &candidates.stations {
         let Some(station) = sim.state.stations.get(index) else {
@@ -136,20 +169,22 @@ pub(crate) fn spawn_station_labels(
             small_label.chars().count() as f32 * (SMALL_FONT_SIZE * 0.602) + 5.0,
             SMALL_FONT_SIZE + 4.0,
         );
-        commands.spawn((
-            MapVisualLayer,
-            StationLabel,
-            MapLabelLod {
-                size: bg_size,
-                small_size,
-            },
-            Sprite {
-                color: station_background_colour(sim, station),
-                custom_size: Some(bg_size),
-                ..default()
-            },
-            Transform::from_translation(center.extend(LABEL_Z)),
-        ));
+        if station_label_has_panel(signs_transparent) {
+            commands.spawn((
+                MapVisualLayer,
+                StationLabel,
+                MapLabelLod {
+                    size: bg_size,
+                    small_size,
+                },
+                Sprite {
+                    color: station_background_colour(sim, station),
+                    custom_size: Some(bg_size),
+                    ..default()
+                },
+                Transform::from_translation(center.extend(LABEL_Z)),
+            ));
+        }
         commands.spawn((
             MapVisualLayer,
             StationLabel,
@@ -167,7 +202,7 @@ pub(crate) fn spawn_station_labels(
                 font_size: FontSize::Px(FONT_SIZE),
                 ..default()
             },
-            TextColor(Color::srgb(0.05, 0.05, 0.05)),
+            TextColor(station_label_text_colour(sim, station, signs_transparent)),
             Transform::from_translation(center.extend(LABEL_Z + 0.1)),
         ));
     }
@@ -232,5 +267,44 @@ mod tests {
         let mut unowned = Station::new_with_kind(TileCoord::new(2, 3), StopKind::Buoy);
         unowned.owner = CompanyId(openttdrs_core::company::OWNER_NONE_M1);
         assert!(station_label_visible(&unowned, local, true, false));
+    }
+
+    #[test]
+    fn transparent_station_labels_have_no_panel_and_use_company_text() {
+        assert!(!station_label_has_panel(true));
+        assert!(station_label_has_panel(false));
+
+        let mut state = GameState::new(8, 8);
+        let mut station = Station::new_with_kind(TileCoord::new(2, 2), StopKind::RailStation);
+        station.facilities = StopKind::RailStation.facilities_mask() as u8;
+        let company = state
+            .companies
+            .iter_mut()
+            .find(|company| company.id == station.owner)
+            .expect("jugador inicial");
+        company.colour = 4;
+        let sim = SimWorld {
+            state,
+            ..Default::default()
+        };
+        assert_eq!(
+            station_label_text_colour(&sim, &station, true),
+            crate::sprites::company_colour_label_text_color(4)
+        );
+    }
+
+    #[test]
+    fn unowned_transparent_station_labels_use_light_grey_text() {
+        let state = GameState::new(8, 8);
+        let mut station = Station::new_with_kind(TileCoord::new(2, 2), StopKind::Buoy);
+        station.owner = CompanyId(openttdrs_core::company::OWNER_NONE_M1);
+        let sim = SimWorld {
+            state,
+            ..Default::default()
+        };
+        assert_eq!(
+            station_label_text_colour(&sim, &station, true),
+            crate::sprites::company_colour_label_text_color(14)
+        );
     }
 }

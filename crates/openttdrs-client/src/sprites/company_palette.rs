@@ -98,6 +98,19 @@ pub fn company_colour_swatch_color(colour: u8) -> Color {
     Color::srgb_u8(rgb[0], rgb[1], rgb[2])
 }
 
+/// Color de texto de compañía usado por `ViewportDrawStrings` para una
+/// estación transparente (`GetColourGradient(..., SHADE_LIGHTER)`).
+///
+/// La rampa generada conserva el orden de tonos de OpenTTD: el tono 4 es el
+/// representativo de la muestra y el 5 corresponde a `SHADE_LIGHTER`.
+#[must_use]
+pub fn company_colour_label_text_color(colour: u8) -> Color {
+    let c = CompanyColour::from_u8(colour);
+    let idx = ramp_index(c.as_u8() as usize, SWATCH_SHADE + 1);
+    let rgb = COMPANY_RAMP_RGB[idx];
+    Color::srgb_u8(rgb[0], rgb[1], rgb[2])
+}
+
 /// Nombre legible del color de compañía (16 colores OpenTTD).
 const COMPANY_COLOUR_NAMES: [&str; 16] = [
     "Azul oscuro",

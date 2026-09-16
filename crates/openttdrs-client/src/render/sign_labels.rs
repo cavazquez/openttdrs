@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use openttdrs_core::{CompanyId, Sign, SignOwner};
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
+use crate::render::newgrf_cache::tile_layout_destination_transparent_color;
 use crate::render::{MapLabelCandidates, MapLabelLod, MapLabelText, MapVisualLayer};
 use crate::state::SimWorld;
 
@@ -50,6 +51,24 @@ fn label_background_colour(sim: &SimWorld, sign: &Sign) -> Option<Color> {
     ))
 }
 
+#[must_use]
+fn sign_background_sprite_color(background: Color, signs_transparent: bool) -> Color {
+    if signs_transparent {
+        tile_layout_destination_transparent_color()
+    } else {
+        background
+    }
+}
+
+#[must_use]
+fn sign_text_color(has_frame: bool, signs_transparent: bool) -> Color {
+    if !has_frame || signs_transparent {
+        Color::WHITE
+    } else {
+        Color::srgb(0.05, 0.05, 0.05)
+    }
+}
+
 pub(crate) fn spawn_sign_labels(
     commands: &mut Commands,
     sim: &SimWorld,
@@ -57,10 +76,11 @@ pub(crate) fn spawn_sign_labels(
     candidates: &MapLabelCandidates,
     show_competitors: bool,
 ) {
-    use crate::sprites::{TransparencyOption, is_hidden, text_color, with_to_alpha};
+    use crate::sprites::{TransparencyOption, is_hidden, is_transparent};
     if is_hidden(TransparencyOption::Signs) {
         return;
     }
+    let signs_transparent = is_transparent(TransparencyOption::Signs);
     for &index in &candidates.signs {
         let Some(sign) = sim.state.signs.get(index) else {
             continue;
@@ -90,7 +110,7 @@ pub(crate) fn spawn_sign_labels(
                 SignLabel,
                 lod,
                 Sprite {
-                    color: with_to_alpha(background, TransparencyOption::Signs),
+                    color: sign_background_sprite_color(background, signs_transparent),
                     custom_size: Some(Vec2::new(width, FONT_SIZE + 4.0)),
                     ..default()
                 },
@@ -111,9 +131,9 @@ pub(crate) fn spawn_sign_labels(
                 font_size: FontSize::Px(FONT_SIZE),
                 ..default()
             },
-            TextColor(text_color(
-                TransparencyOption::Signs,
-                Color::srgb(0.05, 0.05, 0.05),
+            TextColor(sign_text_color(
+                label_background_colour(sim, sign).is_some(),
+                signs_transparent,
             )),
             Transform::from_translation(center.extend(LABEL_Z + 0.1)),
         ));
@@ -148,5 +168,19 @@ mod tests {
 
         rival.owner = SignOwner::Deity;
         assert!(sign_label_visible(&rival, local, false));
+    }
+
+    #[test]
+    fn transparent_sign_frame_uses_destination_mask() {
+        let colour = sign_background_sprite_color(Color::srgb(0.8, 0.2, 0.1), true).to_srgba();
+        assert_eq!((colour.red, colour.green, colour.blue), (0.0, 0.0, 0.0));
+        assert!((colour.alpha - (64.0 / 255.0)).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn transparent_and_deity_signs_use_opaque_white_text() {
+        assert_eq!(sign_text_color(true, true), Color::WHITE);
+        assert_eq!(sign_text_color(false, false), Color::WHITE);
+        assert_eq!(sign_text_color(true, false), Color::srgb(0.05, 0.05, 0.05));
     }
 }

@@ -2023,7 +2023,10 @@ mod tests {
 
     #[test]
     fn newgrf_stack_sync_resolves_once_per_parent_without_crossing_trailers() {
-        use crate::render::ViewportSortableChild;
+        use crate::render::{
+            ViewportSortableChild, ViewportSortablePromotableChild, ViewportSortableSegmentedChild,
+            ViewportSortableSegmentedSource,
+        };
         use sync::VehicleNewGrfStackSprite;
 
         const HEAD_ID: u32 = 801;
@@ -2168,6 +2171,59 @@ mod tests {
                 head_image
             );
         }
+        let head_bounds = world
+            .entity(head_children[0])
+            .get::<ViewportSortablePromotableChild>()
+            .expect("head stack sortable metadata")
+            .bounds;
+        let head_insertion_key = world
+            .entity(head_children[0])
+            .get::<ViewportSortablePromotableChild>()
+            .expect("head stack insertion")
+            .insertion_key;
+        for (ordinal, &child) in head_children.iter().enumerate() {
+            let promotable = world
+                .entity(child)
+                .get::<ViewportSortablePromotableChild>()
+                .expect("head stack promotable child");
+            assert_eq!(promotable.bounds, head_bounds);
+            assert_eq!(promotable.insertion_key, head_insertion_key);
+            assert_eq!(
+                promotable.combine_ordinal,
+                u8::try_from(ordinal + 1).unwrap()
+            );
+            assert!(
+                world
+                    .entity(child)
+                    .contains::<ViewportSortableSegmentedChild>()
+            );
+            let actual_sprite = world
+                .entity(child)
+                .get::<Sprite>()
+                .expect("head child sprite");
+            let actual_transform = world
+                .entity(child)
+                .get::<Transform>()
+                .expect("head child transform");
+            let source = world
+                .entity(child)
+                .get::<ViewportSortableSegmentedSource>()
+                .expect("head stack source");
+            assert_eq!(source.sprite.image, actual_sprite.image);
+            assert_eq!(source.sprite.color, actual_sprite.color);
+            assert_eq!(
+                source.transform.translation.truncate(),
+                actual_transform.translation.truncate()
+            );
+            assert_eq!(
+                source.transform.translation.z,
+                world
+                    .entity(child)
+                    .get::<ViewportSortableChild>()
+                    .expect("head child sortable")
+                    .source_depth
+            );
+        }
         assert_eq!(
             *world
                 .entity(trailer_child)
@@ -2182,6 +2238,21 @@ mod tests {
                 .expect("trailer child sprite")
                 .image,
             trailer_image
+        );
+        let trailer_promotable = world
+            .entity(trailer_child)
+            .get::<ViewportSortablePromotableChild>()
+            .expect("trailer stack promotable child");
+        assert_eq!(trailer_promotable.combine_ordinal, 1);
+        assert!(
+            world
+                .entity(trailer_child)
+                .contains::<ViewportSortableSegmentedChild>()
+        );
+        assert!(
+            world
+                .entity(trailer_child)
+                .contains::<ViewportSortableSegmentedSource>()
         );
         assert_eq!(
             world

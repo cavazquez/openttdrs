@@ -4,7 +4,11 @@ use bevy::ecs::change_detection::DetectChangesMut;
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 
-use crate::render::{CompanyColoredSprites, ViewportSortableChild, ViewportSortableParent};
+use crate::render::{
+    CompanyColoredSprites, ViewportSortableChild, ViewportSortableParent,
+    ViewportSortablePromotableChild, ViewportSortableSegmentedChild,
+    ViewportSortableSegmentedSource,
+};
 use crate::simulation::SimClock;
 use crate::state::SimWorld;
 
@@ -146,6 +150,22 @@ fn set_sprite_color_if_changed(sprite: &mut Mut<Sprite>, color: Color) {
     }
 }
 
+fn set_segmented_source_if_changed(
+    source: &mut Mut<ViewportSortableSegmentedSource>,
+    next: ViewportSortableSegmentedSource,
+) {
+    // `Sprite` deliberately does not implement `PartialEq`. Las capas de
+    // vehículos sólo cambian imagen/color y el transform conserva los campos
+    // por defecto, así que comparar esos datos evita marcar la fuente en cada
+    // tick sin perder una animación o remap de la capa.
+    if source.sprite.image != next.sprite.image
+        || source.sprite.color != next.sprite.color
+        || source.transform != next.transform
+    {
+        **source = next;
+    }
+}
+
 #[must_use]
 fn aircraft_rotor_frame(v: &Vehicle, tick: u64) -> usize {
     if !v.running || v.awaiting_load_window || v.cur_speed == 0 {
@@ -157,6 +177,7 @@ fn aircraft_rotor_frame(v: &Vehicle, tick: u64) -> usize {
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn update_vehicles(
+    mut commands: Commands,
     sim: Res<SimWorld>,
     sim_clock: Res<SimClock>,
     trucks: Res<TruckHandles>,
@@ -189,11 +210,15 @@ pub(crate) fn update_vehicles(
     >,
     mut stack_layers: Query<
         (
+            Entity,
             &VehicleNewGrfStackSprite,
             &mut Transform,
             &mut Sprite,
             &mut Visibility,
             &mut ViewportSortableChild,
+            Option<&mut ViewportSortablePromotableChild>,
+            Option<&mut ViewportSortableSegmentedChild>,
+            Option<&mut ViewportSortableSegmentedSource>,
         ),
         (
             Without<VehicleSprite>,
@@ -460,7 +485,18 @@ pub(crate) fn update_vehicles(
         }
     }
 
-    for (layer, mut transform, mut sprite, mut visibility, mut child) in &mut stack_layers {
+    for (
+        entity,
+        layer,
+        mut transform,
+        mut sprite,
+        mut visibility,
+        mut child,
+        mut promotable,
+        segmented,
+        mut segmented_source,
+    ) in &mut stack_layers
+    {
         let Some(i) = vehicle_index.core.slot(layer.vehicle_id) else {
             visibility.set_if_neq(Visibility::Hidden);
             continue;
@@ -483,6 +519,12 @@ pub(crate) fn update_vehicles(
         }
         let Some(layer_data) = resolved.layers.get(layer.stack_index) else {
             visibility.set_if_neq(Visibility::Hidden);
+            if promotable.is_some() || segmented.is_some() || segmented_source.is_some() {
+                let mut entity_commands = commands.entity(entity);
+                entity_commands.remove::<ViewportSortablePromotableChild>();
+                entity_commands.remove::<ViewportSortableSegmentedChild>();
+                entity_commands.remove::<ViewportSortableSegmentedSource>();
+            }
             continue;
         };
         visibility.set_if_neq(Visibility::Visible);
@@ -497,6 +539,7 @@ pub(crate) fn update_vehicles(
         );
         let source_depth = vehicle_source_depth(v, &sim.state.map, pose, pos3);
         pos3.z = source_depth;
+        let source_transform = Transform::from_translation(pos3);
         set_vehicle_translation_if_changed(&mut transform, pos3, true);
         set_sprite_image_if_changed(&mut sprite, layer_data.handle.clone());
         set_sprite_color_if_changed(&mut sprite, vehicle_tint(v));
@@ -504,6 +547,35 @@ pub(crate) fn update_vehicles(
             parent: child.parent,
             source_depth,
         });
+        let promotable_data = ViewportSortablePromotableChild {
+            sprite_id: super::VEHICLE_SORT_SPRITE_ID,
+            bounds: vehicle_parent_bounds(v, &sim.state.map, pose),
+            insertion_key: vehicle_insertion_key(v, pose),
+            combine_ordinal: u8::try_from(layer.stack_index).unwrap_or(u8::MAX),
+        };
+        let source_data = ViewportSortableSegmentedSource {
+            sprite: (*sprite).clone(),
+            transform: source_transform,
+        };
+        if let Some(mut promotable) = promotable.take() {
+            promotable.set_if_neq(promotable_data);
+            if let Some(mut source) = segmented_source.take() {
+                set_segmented_source_if_changed(&mut source, source_data);
+            } else {
+                commands.entity(entity).insert(source_data);
+            }
+            if segmented.is_none() {
+                commands
+                    .entity(entity)
+                    .insert(ViewportSortableSegmentedChild);
+            }
+        } else {
+            commands.entity(entity).insert((
+                promotable_data,
+                ViewportSortableSegmentedChild,
+                source_data,
+            ));
+        }
     }
 
     for (shadow, mut transform, mut sprite, mut visibility, child) in &mut shadows {

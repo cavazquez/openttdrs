@@ -4,7 +4,8 @@ use openttdrs_core::prelude::*;
 
 use crate::render::{
     CompanyColoredSprites, MapDynamicVisual, MapVisualLayer, ViewportSortableChild,
-    ViewportSortableParent, viewport_source_depth,
+    ViewportSortableParent, ViewportSortablePromotableChild, ViewportSortableSegmentedChild,
+    ViewportSortableSegmentedSource, viewport_source_depth,
 };
 use crate::state::SimWorld;
 
@@ -94,6 +95,11 @@ fn spawn_newgrf_stack_children(
         );
         let source_depth = vehicle_source_depth(vehicle, &sim.state.map, pose, layer_pos);
         layer_pos.z = source_depth;
+        let source_transform = Transform::from_translation(layer_pos);
+        let sprite = Sprite {
+            image: layer.handle.clone(),
+            ..default()
+        };
         commands.spawn((
             MapVisualLayer,
             MapDynamicVisual,
@@ -101,15 +107,23 @@ fn spawn_newgrf_stack_children(
                 vehicle_id: vehicle.id,
                 stack_index,
             },
-            Sprite {
-                image: layer.handle.clone(),
-                ..default()
-            },
-            Transform::from_translation(layer_pos),
+            sprite.clone(),
+            source_transform,
             visibility,
             ViewportSortableChild {
                 parent,
                 source_depth,
+            },
+            ViewportSortablePromotableChild {
+                sprite_id: super::VEHICLE_SORT_SPRITE_ID,
+                bounds: vehicle_parent_bounds(vehicle, &sim.state.map, pose),
+                insertion_key: vehicle_insertion_key(vehicle, pose),
+                combine_ordinal: u8::try_from(stack_index).unwrap_or(u8::MAX),
+            },
+            ViewportSortableSegmentedChild,
+            ViewportSortableSegmentedSource {
+                sprite,
+                transform: source_transform,
             },
         ));
     }

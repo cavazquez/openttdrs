@@ -21,6 +21,7 @@ use crate::render::catenary_newgrf::{
     CatenarySpriteAnchor, catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
     catenary_sprite_horizontal_crop,
 };
+use crate::render::newgrf_cache::tile_layout_destination_transparent_color;
 use crate::render::road_newgrf::{
     NewGrfRoadSpriteCache, newgrf_road_def_for_tile, newgrf_tram_def_for_tile,
     road_newgrf_view_index, specific_sprite_for_tile,
@@ -37,12 +38,13 @@ use crate::sprites::{
     RAIL_GROUND_HALF_TILE_SNOW, RAIL_GROUND_HALF_TILE_WATER, RAIL_GROUND_SNOW_OR_DESERT,
     RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER,
     RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
-    ROADSIDE_TREE_META, ROADSIDE_TREES, SPR_ROADSIDE_TREE, TRAMWAY_SPRITE_BASE, catenary_hidden,
-    catenary_pylon_world_z_delta, catenary_reference_sprite_id, catenary_sprite_color,
-    catenary_transparent, catenary_tunnel_exterior_pcp, catenary_wire_world_z_delta,
-    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
-    collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface,
-    collect_signal_sprite_draws, is_road_level_crossing, is_typed_rail_track_sprite,
+    ROADSIDE_TREE_META, ROADSIDE_TREES, SPR_ROADSIDE_TREE, TRAMWAY_SPRITE_BASE, TransparencyOption,
+    catenary_hidden, catenary_pylon_world_z_delta, catenary_reference_sprite_id,
+    catenary_sprite_color, catenary_transparent, catenary_tunnel_exterior_pcp,
+    catenary_wire_world_z_delta, collect_catenary_pylons_from_map_with_pcp_override,
+    collect_catenary_wire_draws_from_map, collect_rail_pbs_reservation_draws,
+    collect_rail_sprites_for_surface, collect_signal_sprite_draws, is_hidden,
+    is_road_level_crossing, is_transparent, is_typed_rail_track_sprite,
     level_crossing_ground_sprite_id_for_type, level_crossing_has_rail_reservation,
     oneway_road_sprite_id, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
     rail_tile_is_signals, rail_trackbits_for_render, remap_rail_sprite_id, road_bits_for_render,
@@ -854,6 +856,19 @@ const ROADSIDE_DETAIL_SLOT_STEP: f32 = 0.02;
 /// fundación y antes de `DrawBridgeMiddle`. Deja los slots 0..=3 a los muros
 /// de fundación y el bloque 32..= para las piezas de puente posteriores.
 const ROADSIDE_DETAIL_PARENT_ORDINAL: u8 = 16;
+
+/// `DrawRoadDetail` pasa `PALETTE_TO_TRANSPARENT` al sorter cuando la
+/// categoría correspondiente está transparente. La composición de Bevy usa
+/// la misma máscara de destino que los demás sprites directos del mapa; el
+/// suelo de la carretera permanece fuera de este helper.
+#[must_use]
+fn roadside_detail_sprite_color(category_transparent: bool) -> Color {
+    if category_transparent {
+        tile_layout_destination_transparent_color()
+    } else {
+        Color::WHITE
+    }
+}
 
 /// Primer ordinal de los parents de `DrawRoadCatenary` sobre una carretera
 /// normal. OpenTTD emite primero la carretera y después el tranvía; cada tipo
@@ -1842,8 +1857,10 @@ pub(crate) fn spawn_road_tile(
         && show_full_detail
         && roadside == Some(3)
         && road_bits.count_ones() > 1
+        && !is_hidden(TransparencyOption::Houses)
         && roadside_detail_visible_under_bridge(map, ctx.coord, (mw, mh), false)
     {
+        let detail_color = roadside_detail_sprite_color(is_transparent(TransparencyOption::Houses));
         let lamps = ROADSIDE_LAMPS[usize::from(road_bits & 0xF)];
         for (lamp_index, &(lamp, dx, dy)) in lamps.iter().enumerate() {
             let (w, h, xrel, yrel) = ROAD_STREETLIGHT_META[lamp];
@@ -1876,7 +1893,7 @@ pub(crate) fn spawn_road_tile(
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                assets.road_streetlights[lamp].sprite(),
+                assets.road_streetlights[lamp].sprite_colored(detail_color),
                 Transform::from_translation(pos3),
                 ViewportSortableParent {
                     sprite_id: road_streetlight_sprite_id(lamp),
@@ -1898,8 +1915,10 @@ pub(crate) fn spawn_road_tile(
         && show_full_detail
         && roadside == Some(5)
         && road_bits.count_ones() > 1
+        && !is_hidden(TransparencyOption::Trees)
         && roadside_detail_visible_under_bridge(map, ctx.coord, (mw, mh), true)
     {
+        let detail_color = roadside_detail_sprite_color(is_transparent(TransparencyOption::Trees));
         let (w, h, xrel, yrel) = ROADSIDE_TREE_META;
         for (tree_index, &(dx, dy)) in ROADSIDE_TREES[usize::from(road_bits & 0xF)]
             .iter()
@@ -1934,7 +1953,7 @@ pub(crate) fn spawn_road_tile(
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                assets.roadside_tree.sprite(),
+                assets.roadside_tree.sprite_colored(detail_color),
                 Transform::from_translation(pos3),
                 ViewportSortableParent {
                     sprite_id: SPR_ROADSIDE_TREE,
@@ -3690,7 +3709,7 @@ mod tests {
         rail_upper_halftile_ground_draw, road_catenary_bits_for_render,
         road_catenary_custom_groups_are_active, road_catenary_parent_bounds,
         road_detail_world_z_delta, road_foundation_child_offset, road_tile_may_have_road,
-        roadside_detail_parent_bounds, signal_trace_geometry,
+        roadside_detail_parent_bounds, roadside_detail_sprite_color, signal_trace_geometry,
     };
     use crate::render::viewport_sort::{ParentSprite, ParentSpriteBounds};
     use crate::render::world_draw_trace::TraceSpriteBounds;
@@ -3698,6 +3717,7 @@ mod tests {
         CatenarySpriteDraw, CatenaryWireDraw, RAIL_GROUND_HALF_TILE_SNOW,
         RAIL_GROUND_HALF_TILE_WATER, RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER,
         RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, ROADSIDE_LAMPS,
+        TransparencyOption,
     };
     use openttdrs_core::{
         FOUNDATION_INCLINED_X, FOUNDATION_LEVELED, Map, Tile, TileCoord, TileKind,
@@ -3875,6 +3895,30 @@ mod tests {
             roadside_detail_parent_bounds(6, 2, 0, 0, 12.0, 10.0),
             ParentSpriteBounds::new(108, 42, 0, 109, 43, 15),
             "el árbol usa el mismo prisma 2×2×16 que DrawRoadDetail"
+        );
+    }
+
+    #[test]
+    fn roadside_details_use_native_destination_mask_when_transparent() {
+        let visible = roadside_detail_sprite_color(false).to_srgba();
+        for channel in [visible.red, visible.green, visible.blue, visible.alpha] {
+            assert!((channel - 1.0).abs() < f32::EPSILON);
+        }
+
+        let transparent = roadside_detail_sprite_color(true).to_srgba();
+        assert_eq!(
+            (transparent.red, transparent.green, transparent.blue),
+            (0.0, 0.0, 0.0)
+        );
+        assert!((transparent.alpha - 64.0 / 255.0).abs() < f32::EPSILON);
+
+        // Los dos productores comparten la máscara, pero OpenTTD les asigna
+        // categorías de preferencia distintas: faroles = casas, árboles =
+        // árboles. Mantener los símbolos en el test evita que una futura
+        // simplificación vuelva a usar una sola opción para ambos.
+        assert_ne!(
+            TransparencyOption::Houses.bit(),
+            TransparencyOption::Trees.bit()
         );
     }
 

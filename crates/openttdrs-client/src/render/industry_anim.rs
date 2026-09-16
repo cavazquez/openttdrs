@@ -10,14 +10,14 @@ use openttdrs_core::prelude::*;
 
 use crate::bevy_app::UpdateSet;
 use crate::iso::{overlay_pos, wang_hash};
+use crate::render::newgrf_cache::tile_layout_destination_transparent_color;
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{
     MapVisualLayer, TileRenderContext, ViewportSortableChild, ViewportSortableParent, WorldAssets,
     viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
-    TRANSPARENT_ALPHA, TransparencyOption, industry_effective_m4_for_draw,
-    industry_gfx_entry_for_tile, is_transparent,
+    TransparencyOption, industry_effective_m4_for_draw, industry_gfx_entry_for_tile, is_transparent,
 };
 use crate::state::{ClientScreen, SimWorld};
 
@@ -252,13 +252,15 @@ fn industry_building_frame_or_sample(
         .map(|frame| (frame, false))
 }
 
-/// El alpha de `TO_INDUSTRIES` alcanza a la capa BUILD animada, no al suelo
-/// que `DrawGroundSprite` ya emitió antes de abrir el parent sortable.
+/// `TO_INDUSTRIES` alcanza a la capa BUILD animada, no al suelo que
+/// `DrawGroundSprite` ya emitió antes de abrir el parent sortable. El sprite
+/// sortable usa la máscara equivalente a `PALETTE_TO_TRANSPARENT` del
+/// viewport nativo, no un alpha blanco genérico.
 fn industry_anim_sprite_color(ground: bool, category_transparent: bool) -> Color {
     if ground || !category_transparent {
         Color::WHITE
     } else {
-        Color::srgba(1.0, 1.0, 1.0, TRANSPARENT_ALPHA)
+        tile_layout_destination_transparent_color()
     }
 }
 
@@ -435,12 +437,13 @@ mod tests {
     }
 
     #[test]
-    fn animated_industry_transparency_only_reaches_building_layer() {
+    fn animated_industry_transparency_only_masks_building_layer() {
         assert_eq!(industry_anim_sprite_color(true, true).to_srgba().alpha, 1.0);
-        assert_eq!(
-            industry_anim_sprite_color(false, true).to_srgba().alpha,
-            crate::sprites::TRANSPARENT_ALPHA
-        );
+        let transparent = industry_anim_sprite_color(false, true).to_srgba();
+        assert!(transparent.red.abs() < f32::EPSILON);
+        assert!(transparent.green.abs() < f32::EPSILON);
+        assert!(transparent.blue.abs() < f32::EPSILON);
+        assert!((transparent.alpha - (64.0 / 255.0)).abs() < f32::EPSILON);
         assert_eq!(
             industry_anim_sprite_color(false, false).to_srgba().alpha,
             1.0

@@ -10,9 +10,10 @@ use crate::render::{
     viewport_source_depth,
 };
 use crate::sprites::{
-    DrawProcLayer, industry_draw_proc_anim_frame, industry_draw_proc_for_tile,
+    DrawProcLayer, TransparencyOption, industry_draw_proc_anim_frame, industry_draw_proc_for_tile,
     industry_draw_proc_layer_for_slot, industry_draw_proc_layer_sample_for_slot,
-    industry_draw_proc_layer_slot_count, industry_sprite_uses_fizzy_drink_anim,
+    industry_draw_proc_layer_slot_count, industry_sprite_uses_fizzy_drink_anim, is_hidden,
+    is_transparent,
 };
 use crate::state::{ClientScreen, SimWorld};
 
@@ -158,6 +159,17 @@ pub(crate) fn animate_industry_draw_proc_layers(
         return;
     };
     for (anim, mut sprite, mut transform, mut visibility, fizzy, sortable_child) in &mut q {
+        // En OpenTTD los draw-procs de industria se ejecutan después del
+        // edificio. `TO_INDUSTRIES` transparente retorna antes de ellos y la
+        // invisibilidad retorna antes de todo el edificio; las entidades
+        // persistentes deben reflejar ambos cambios de preferencias sin
+        // esperar una reconstrucción del chunk.
+        if is_hidden(TransparencyOption::Industries)
+            || is_transparent(TransparencyOption::Industries)
+        {
+            *visibility = Visibility::Hidden;
+            continue;
+        }
         let coord = TileCoord::new(anim.ctx.tx, anim.ctx.ty);
         let Some(tile) = sim.state.map.get(coord) else {
             *visibility = Visibility::Hidden;

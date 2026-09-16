@@ -52,12 +52,25 @@ use crate::sprites::{
 };
 
 #[must_use]
-fn structure_sprite_color(structures_transparent: bool) -> Color {
-    if structures_transparent {
+fn destination_mask_sprite_color(category_transparent: bool) -> Color {
+    if category_transparent {
         tile_layout_destination_transparent_color()
     } else {
         Color::WHITE
     }
+}
+
+#[must_use]
+fn structure_sprite_color(structures_transparent: bool) -> Color {
+    destination_mask_sprite_color(structures_transparent)
+}
+
+#[must_use]
+fn destination_mask_sprite(mut sprite: Sprite, category_transparent: bool) -> Sprite {
+    if category_transparent {
+        sprite.color = destination_mask_sprite_color(true);
+    }
+    sprite
 }
 
 #[must_use]
@@ -793,10 +806,11 @@ pub(crate) fn spawn_house_tile(
 
     // La invisibilidad de casas sólo afecta la parte superior. OpenTTD ya
     // dibujó `s1` y la fundación al llegar a este punto.
-    use crate::sprites::{TransparencyOption, is_hidden, sprite_color};
+    use crate::sprites::{TransparencyOption, is_hidden, is_transparent, sprite_color};
     if is_hidden(TransparencyOption::Houses) && !custom_house_layout {
         return;
     }
+    let houses_transparent = is_transparent(TransparencyOption::Houses);
     let tint = sprite_color(TransparencyOption::Houses);
     if custom_house_layout
         && let Some((def, layout, runtime_fp)) = house_layout.as_ref()
@@ -866,11 +880,14 @@ pub(crate) fn spawn_house_tile(
                 0.5,
             );
             let source_depth = viewport_source_depth(pos3.z, ctx.tx, resources.map_dims.0);
-            let sprite = Sprite {
-                image: handle,
-                color: tint,
-                ..default()
-            };
+            let sprite = destination_mask_sprite(
+                Sprite {
+                    image: handle,
+                    color: tint,
+                    ..default()
+                },
+                houses_transparent,
+            );
             WorldDrawTrace::record_sprite_with_geometry(
                 "house-building-newgrf",
                 "sortable",
@@ -947,7 +964,7 @@ pub(crate) fn spawn_house_tile(
         } else {
             img.sprite()
         };
-        sprite.color = tint;
+        sprite = destination_mask_sprite(sprite, houses_transparent);
         // `s2` es la capa que `DrawTile_Town` pasa a AddSortable: su
         // `M(...).origin` mueve el raster y el prisma. `s1` continúa en el
         // origen de tesela porque DrawGroundSprite no recibe ese struct.
@@ -986,6 +1003,11 @@ pub(crate) fn spawn_house_tile(
                 .insert(crate::render::LighthouseAnim { sprite_id: spec.s2 });
         }
         building_entity = Some(entity);
+    }
+    // `DrawTile_Town` no vuelve a ejecutar `draw_proc` cuando un edificio
+    // existente fue entregado a `AddSortableSpriteToDraw` en modo transparente.
+    if houses_transparent && spec.s2 != 0 {
+        return;
     }
     // Ascensor Large Office: solo stage final (`draw_proc == 1` en `town_land.h`).
     // Stage 2 reusa el mismo s2 (1442/4569) con `draw_proc == 0` (obra sin lift).
@@ -1614,8 +1636,9 @@ pub(crate) fn spawn_industry_tile_with_world(
     let m4 = industry_effective_m4_for_draw(gfx, m1, m3hi, 0.0, phase);
     let entry = industry_gfx_entry_for_tile(gfx, m1, m4);
     crate::sprites::log_industry_gfx_once(translated, m1, m3hi, entry);
-    use crate::sprites::{TransparencyOption, is_hidden, with_to_alpha};
+    use crate::sprites::{TransparencyOption, is_hidden, is_transparent};
     let industries_hidden = is_hidden(TransparencyOption::Industries);
+    let industries_transparent = is_transparent(TransparencyOption::Industries);
     // Chimenea de la central terminada: penacho de humo animado encima.
     if !industries_hidden && gfx == crate::render::GFX_POWERPLANT_CHIMNEY && m1 & 0x80 != 0 {
         crate::render::spawn_chimney_smoke(commands, assets, map.dimensions().0, ctx);
@@ -1790,12 +1813,14 @@ pub(crate) fn spawn_industry_tile_with_world(
                 f32::from(view.height),
                 0.5,
             );
-            let mut sprite = Sprite {
-                image: handle,
-                color: Color::WHITE,
-                ..default()
-            };
-            sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
+            let sprite = destination_mask_sprite(
+                Sprite {
+                    image: handle,
+                    color: Color::WHITE,
+                    ..default()
+                },
+                industries_transparent,
+            );
             if let Some(parent) = foundation.child_parent {
                 spawn_foundation_child_sprite_at(commands, sprite, ctx, pos3, map_width, parent);
             } else {
@@ -1938,7 +1963,7 @@ pub(crate) fn spawn_industry_tile_with_world(
             } else {
                 img.sprite()
             };
-            sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
+            sprite = destination_mask_sprite(sprite, industries_transparent);
             let mut pos3 = overlay_at(s.xrel, s.yrel, s.w, s.h, 0.5);
             // Los frames de paleta sólo reemplazan píxeles del mismo PNG:
             // conservan ancla y prisma `M(...)`, por lo que siguen siendo
@@ -1979,6 +2004,12 @@ pub(crate) fn spawn_industry_tile_with_world(
                 });
             }
         }
+    }
+    // El `DrawTile_Industry` nativo retorna después de dibujar el edificio
+    // cuando `TO_INDUSTRIES` está transparente; los overlays `draw_proc` no
+    // deben sobrevivir por fuera de ese parent sortable.
+    if industries_transparent && entry.is_some_and(|s| s.sprite_id != 0) {
+        return;
     }
     crate::render::spawn_industry_draw_proc_overlays(
         commands,

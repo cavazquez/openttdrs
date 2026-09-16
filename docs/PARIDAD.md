@@ -6119,3 +6119,15 @@ persistida sigue resolviendo animación, `0x60` y `0x62`. La prueba usa una
 estación Train + Airport con máscara `0x09`; pasan 81 tests AirportTile y
 Clippy estricto. Esto no cierra #326/#329/#567: permanecen pendientes
 layouts/rotaciones, paletas, callbacks y consumidores NewGRF.
+
+Corrección #326/#329-NEWGRF-AIRPORT-ORPHAN-CHILD-OFFSET (2026-09-16,
+`94e7bfaa`): la secuencia `TileLayout` de `AirportTile` reproduce ahora el
+camino nativo de `DrawCommonTileSeq` cuando un child aparece antes de su
+primer parent. Ese sprite se emite como `DrawGroundSprite` con sus offsets de
+pantalla firmados, no como una pieza BUILD remapeada; conserva además el
+vínculo con la foundation cuando la hay y el orden del pase ground cuando está
+en plano. La regresión combina child huérfano, parent y child normal y verifica
+posición, profundidad y relación de compositor; la batería dirigida de
+AirportTile y Clippy estricto pasan. Esto corrige una subbrecha de composición,
+pero no cierra #326/#329/#567: siguen pendientes otros productores/layouts,
+rotaciones, paletas, callbacks y consumidores NewGRF.

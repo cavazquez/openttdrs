@@ -8914,3 +8914,16 @@ principal sea ferroviario, pero cuya máscara `BaseStation::facilities` incluya
 regresión Train + Airport (`0x09`) pasa junto con los 81 tests AirportTile y
 Clippy estricto. La fila continúa parcial y #326/#329/#567 siguen abiertas por
 layouts/rotaciones, paletas, callbacks y consumidores NewGRF restantes.
+
+### #326/#329-NEWGRF-AIRPORT-ORPHAN-CHILD-OFFSET — child sin parent
+
+Actualizado: 2026-09-16 (`94e7bfaa`). El compositor Bevy de `AirportTile`
+trata ahora una entrada `TileSeq` child previa al primer parent como
+`DrawGroundSprite`, aplicando `origin.x/y` como offsets de pantalla firmados y
+usando la profundidad del pase ground. Cuando hay una foundation, la entrada
+se cuelga del parent de foundation, igual que el camino nativo; los parents y
+children posteriores mantienen su relación sortable. La regresión de cobertura
+combina child huérfano, parent y child normal; la batería dirigida y Clippy
+estricto pasan. Este bloque no cierra #326/#329/#567: continúan pendientes
+otros productores/layouts, rotaciones, paletas, callbacks y consumidores
+NewGRF.

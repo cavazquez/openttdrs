@@ -2219,3 +2219,13 @@ con máscara `0x09` conserva el scope y sus frames/consultas vecinas. La
 regresión y la batería AirportTile pasan con Clippy estricto; siguen parciales
 la delegación StationScope, foundations/rotaciones, paletas y consumidores
 NewGRF de #326/#329/#567.
+
+Actualización #326/#329-NEWGRF-AIRPORT-ORPHAN-CHILD-OFFSET (2026-09-16,
+`94e7bfaa`): `DrawCommonTileSeq` ya está reflejado en la ruta `TileLayout` de
+`AirportTile` para children sin parent. La entrada usa `DrawGroundSprite` con
+sus offsets de pantalla firmados y su profundidad ground; si el tile está sobre
+una foundation, se adjunta al parent de foundation. La regresión de composición
+verifica el offset, la profundidad y el child posterior unido al parent. La fila
+sigue **parcial runtime**: quedan otros productores/layouts, foundations y
+rotaciones exhaustivas, paletas, delegación StationScope y callbacks/consumidores
+NewGRF restantes de #326/#329/#567.

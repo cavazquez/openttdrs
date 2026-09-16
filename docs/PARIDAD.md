@@ -6522,3 +6522,22 @@ promovibles/segmentados con fuente completa. Si no se puede materializar el
 bloque custom, se mantiene el fallback de foundation vanilla. La corrección
 es parcial: siguen pendientes otros productores/callbacks NewGRF, captura
 raster y composición global; no se cierran #326/#329/#567.
+
+Corrección #326/#329/#567-TREE-CLIMATE-LAYOUTS (`72a40e20`, 2026-09-16): el
+renderer de `MP_TREES` conserva ahora el tipo global de `m3` en lugar de
+reducirlo a las 12 especies templadas. El extractor genera los sprites y
+metadatos `1576..2009`, las 196 filas climáticas de `tree_land.h` y las 32
+filas árticas adicionales que OpenTTD selecciona sobre nieve densa. La
+regresión cubre rangos temperate/ártico/tropical/toyland, densidad y nieve;
+la suite del cliente pasa con 1.580 tests, 2 ignorados y Clippy estricto.
+
+Corrección #326/#329/#567-TREE-TOYLAND-PALETTE (`bf71e943`, 2026-09-16): las
+entradas toyland con `PALETTE_TO_*` ya conservan la paleta por capa después de
+ordenar las copas y usan copias RGBA horneadas fuera del atlas. La prueba de
+spawn verifica `TREE_TOYLAND`, `0x79b`, `PALETTE_TO_YELLOW` y la textura
+recoloreada; la caché valida todas las combinaciones y las siete etapas de
+crecimiento. Pasan 1.583 tests del cliente, 2 ignorados y Clippy estricto.
+El hueco `tree_391` es un sprite 1×1 real del NFO y no lo referencia ninguna
+fila vanilla. Ambas correcciones son parciales para #326/#329/#567: no
+cierran las issues madre mientras sigan pendientes otros producers/callbacks,
+composición global y comparación de framebuffer.

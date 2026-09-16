@@ -2554,3 +2554,16 @@ Estado: **parcial runtime**. Hay regresiones focalizadas de `core`, estación y
 compositor, además de 1.577 tests del cliente, 2 ignorados y Clippy estricto.
 Quedan pendientes otros callbacks/consumidores NewGRF, captura raster y la
 composición global; no se cierran #326/#329/#567.
+
+### #326/#329/#567-TREE-CLIMATE-PALETTE — draw vanilla por clima
+
+Actualización (2026-09-16, `72a40e20`, `bf71e943`): el productor vanilla de
+`MP_TREES` conserva el tipo global de `m3`, selecciona las filas árticas,
+rainforest, cactus, subtropicales y toyland de `tree_land.h`, y aplica las
+filas árticas extra cuando la densidad de nieve es ≥2. Las entradas toyland
+con `PALETTE_TO_*` se expanden a las siete etapas y se recolorean en una
+caché RGBA por `(sprite, PaletteID)`; la traza mantiene la paleta por copa
+después del orden `StartSpriteCombine`. Las regresiones de tablas, atlas y
+spawn pasan 1.583 tests del cliente, 2 ignorados y Clippy estricto. Esto cubre
+el draw vanilla y no cierra las issues madre: quedan otros producers,
+callbacks/consumidores NewGRF, composición global y captura raster.

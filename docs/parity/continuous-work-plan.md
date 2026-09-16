@@ -9332,3 +9332,25 @@ puede materializar quedan cubiertos por tests. Pasan 1.577 tests del cliente,
 2 ignorados, tests focalizados de core y Clippy estricto. La cobertura es
 parcial: faltan otros callbacks/consumidores NewGRF, captura raster y la
 composición global completa; no se cierran #326/#329/#567.
+
+### #326/#329/#567-TREE-CLIMATE-LAYOUTS — tipos globales y nieve densa
+
+Actualizado: 2026-09-16 (`72a40e20`). `DrawTile_Trees` ya no interpreta `m3`
+como especie templada modular: usa el tipo global para seleccionar las filas
+árticas, rainforest, cactus, subtropicales y toyland de `tree_land.h`. El
+extractor porta `1576..2009`, 196 filas y los 32 reemplazos que se activan con
+densidad ≥2 sobre `SnowOrDesert`/`RoughSnow`; el atlas distribuido se regenera
+junto con sus metadatos. La cobertura es estructural vanilla y no implica
+paridad NewGRF completa; continúan pendientes otros producers, callbacks y
+la comparación raster.
+
+### #326/#329/#567-TREE-TOYLAND-PALETTE — recolor por capa
+
+Actualizado: 2026-09-16 (`bf71e943`). Las `PalSpriteID` de las filas toyland
+se expanden a las siete etapas de crecimiento y se hornean en una caché RGBA
+fuera del atlas. Cada copa conserva su paleta al pasar por el orden de
+combinación; si la copia no se puede materializar, la traza marca fallback en
+lugar de ocultarlo. La regresión de tabla, carga desde el atlas y spawn pasa
+con 1.583 tests del cliente, 2 ignorados y Clippy estricto. `tree_391` es un
+sprite 1×1 real no referenciado por la tabla vanilla. La fila sigue parcial y
+no se cierran #326/#329/#567.

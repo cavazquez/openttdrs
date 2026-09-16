@@ -6156,3 +6156,15 @@ regresión de objeto usa `0xFC` y verifica el desplazamiento `252`; la batería
 dirigida de TileLayout pasa con 23 pruebas y Clippy estricto. La corrección es
 parcial y no cierra #326/#329/#567: continúan pendientes otros layouts,
 foundations/rotaciones, paletas, callbacks y consumidores NewGRF.
+
+Corrección #326/#329-NEWGRF-TILE-LAYOUT-CONSTRUCTION-STAGE (2026-09-16,
+`3df1fe1c`): los `TileLayout` de casas e industrias aplican ahora
+`GetConstructionStageOffset` al resolver cada referencia Action1. Se respeta
+la regla nativa para sets de 1–4 sprites: las etapas intermedias reutilizan
+arte cuando el set es corto y los sets de 3/4 sprites seleccionan sus variantes
+de obra; las paletas Action1 siguen el mismo offset. Los flags `TLF_SPRITE` y
+`TLF_PALETTE` conservan prioridad para offsets registrados. Las regresiones
+cubren sets de 1, 2, 3 y 4 sprites y las etapas 0–3; pasan 29 pruebas core y 23
+de composición cliente, con Clippy estricto. La corrección es parcial y no
+cierra #326/#329/#567: siguen pendientes otros layouts, foundations/rotaciones,
+paletas, callbacks y consumidores NewGRF.

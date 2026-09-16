@@ -8941,6 +8941,19 @@ dirigidas de TileLayout, 4 de road stop, 3 de waypoint y Clippy estricto. La
 fila sigue parcial y #326/#329/#567 permanecen abiertas por layouts restantes,
 foundations/rotaciones exhaustivas, paletas, callbacks y consumidores NewGRF.
 
+### #326/#329-NEWGRF-TILE-LAYOUT-CONSTRUCTION-STAGE — etapas de construcción
+
+Actualizado: 2026-09-16 (`3df1fe1c`). La resolución runtime de casas e
+industrias ya no descarta el `stage` que calcula el mapa. Cada sprite y paleta
+Action1 de un `TileLayout` recibe la selección nativa
+`GetConstructionStageOffset`, limitada a cuatro entradas y con reutilización
+para sets de 1/2 sprites; un offset registrado por `TLF_SPRITE`/`TLF_PALETTE`
+mantiene precedencia. Las regresiones de sets de 1–4 entradas cubren las
+etapas 0–3, y las baterías core/cliente dirigidas pasan con Clippy estricto.
+La fila sigue **parcial runtime** y #326/#329/#567 permanecen abiertas por
+otros layouts, foundations/rotaciones, paletas, delegación StationScope y
+callbacks/consumidores NewGRF restantes.
+
 ### #326/#329-NEWGRF-TILE-LAYOUT-CHILD-OFFSET-SIGNEDNESS — bytes de offsets
 
 Actualizado: 2026-09-16 (`16e4c7ee`). El renderer distingue los dos contratos

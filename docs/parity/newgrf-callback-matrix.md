@@ -2250,3 +2250,14 @@ de objeto con `0xFC` confirma el valor `252`, junto con 23 pruebas dirigidas de
 TileLayout y Clippy estricto. La fila continúa **parcial runtime**: siguen
 pendientes otros layouts, foundations/rotaciones exhaustivas, paletas,
 delegación StationScope y callbacks/consumidores NewGRF de #326/#329/#567.
+
+Actualización #326/#329-NEWGRF-TILE-LAYOUT-CONSTRUCTION-STAGE (2026-09-16,
+`3df1fe1c`): casas e industrias pasan ahora su etapa de construcción al
+resolver de `TileLayout`. La selección Action1 reproduce
+`GetConstructionStageOffset` para sets de 1–4 sprites, tanto en suelo como en
+la secuencia BUILD y sus paletas; `TLF_SPRITE`/`TLF_PALETTE` conserva el camino
+de offset dinámico registrado. Las regresiones cubren las etapas 0–3 con sets
+de tamaños distintos y las baterías dirigidas de core/cliente pasan con Clippy
+estricto. La fila sigue **parcial runtime**: otros layouts,
+foundations/rotaciones, paletas, delegación StationScope y callbacks o
+consumidores NewGRF restantes mantienen abiertas #326/#329/#567.

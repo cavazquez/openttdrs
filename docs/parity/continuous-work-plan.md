@@ -8743,3 +8743,16 @@ cubierta por la clave de color/vista. La suite completa del cliente pasa
 `1554 passed; 2 ignored`, junto con 55 pruebas dirigidas de Object, Clippy
 estricto, formato y `git diff --check`. El bloque no cierra #326/#329/#567:
 siguen pendientes layouts, paletas, callbacks y consumidores NewGRF restantes.
+
+### #326/#329-NEWGRF-AIRPORT-ANIMATION-SOUNDS — sonidos espaciales de AirportTile
+
+Actualizado: 2026-09-16 (`e0e466d6`). `AirportTile` conserva los sonidos que
+devuelven CB152 al disparar una animación y CB153 al seleccionar el siguiente
+frame, incluyendo la coordenada de origen para reproducirlos como sonidos
+ambientales de tesela. La cola se propaga por construcción, `NewCargo`,
+`CargoTaken`, `AcceptanceTick` y el scheduler de `TileLoop`; las animaciones
+de estación aplican el mismo origen espacial. CB154 sólo regula la cadencia y
+descarta deliberadamente sus bits 8..14, tal como el flujo upstream. Las
+regresiones cubren origen, clasificación ambiental y el descarte de sonido de
+speed callback. El bloque no cierra #326/#329/#567: continúan pendientes
+foundations/rotaciones del compositor, paletas base/custom y scopes completos.

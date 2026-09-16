@@ -5921,6 +5921,20 @@ ignored`, Clippy estricto del binario, formato y `git diff --check` verdes.
 #326/#329/#567 permanecen abiertas por layouts, paletas, callbacks y
 consumidores NewGRF restantes.
 
+Corrección #326/#329-NEWGRF-AIRPORT-ANIMATION-SOUNDS (2026-09-16,
+`e0e466d6`): las rutas de `AirportTile` conservan ahora los bits de sonido
+`8..14` de CB152 (trigger) y CB153 (siguiente frame), junto con la coordenada
+de la tesela, y los reproducen mediante el canal espacial/ambiental cuando el
+scheduler, la carga, la aceptación, el vaciado o la construcción disparan la
+animación. CB154 (speed callback) no genera sonido, de acuerdo con el flujo
+upstream. Las animaciones de estación también conservan su origen y dejan de
+interpretar el resultado de CB142 como sonido. La suite core queda en `2807
+passed; 1 ignored`, la prueba dirigida de animación de estación en 12 casos,
+con Clippy estricto, formato, chequeo del cliente y `git diff --check` verdes.
+Esto cubre la propagación y espacialidad del sonido, no las foundations del
+compositor, rotaciones runtime, paletas base/custom ni la delegación completa
+de `StationScope`; #326/#329/#567 continúan abiertas.
+
 Corrección #326/#329-NEWGRF-ROADSTOP-SCOPE-FINGERPRINT (2026-09-16,
 `a50e729c`): el fingerprint de las vistas runtime de `RoadStop` incluye ahora
 las variables directas `45`/`46` (zona y distancia al pueblo), `47`

@@ -141,6 +141,7 @@ Esto no completa el compositor global ni los contratos parent/child de #326.
 | Canals (`05`) | `0x147` sprite offset | **almacenado** | `CanalSpecDef.callback_mask` |
 | RoadStops (`14`) | Action2 var `0x7A` | **parcial runtime** | Action0 prop `0x16` conserva índices locales de `ReadBadgeList`; GlobalVar `0x18` traduce la tabla por GRF y los contextos map-aware y de compra devuelven presencia (`1`), ausencia (`0`) o `UINT_MAX` para cada parámetro. Las propiedades bridgeable `0x13`/`0x14` se consumen antes de la lista para no perder ni la metadata ni los badges. |
 | RoadStops (`14`) | Action2 parent `TownScopeResolver` | **parcial runtime** | La ruta map-aware prefiere ahora `Station::town_id` (la asociación nativa `BaseStation::town` importada desde SAV) para `0x45`/`0x46`, el parent `TownScopeResolver` y el PSA `7C`; si falta o no existe, usa el pueblo más cercano con el desempate Manhattan/ID determinista. Las APIs legacy sin pool de pueblos conservan parent vacío y los campos/variables todavía no representados siguen pendientes. |
+
 | RoadStops (`14`) | Action0 prop `0x15` | **parcial runtime** | El parser conserva `build_cost_multiplier` y `clear_cost_multiplier` (default nativo `16`), el catálogo los aplica y `PlaceBusStop`/`PlaceTruckStop` usan `GetPrice` con las categorías bus/truck y shift `-4`; la limpieza de una parada custom usa las categorías `PR_CLEAR_STATION_BUS/TRUCK`. El fallback sin spec mantiene el precio vanilla del port. |
 | RoadStops (`14`) | Action0 props `0x13`/`0x14` | **parcial runtime** | El parser consume el `ExtendedByte` y conserva hasta seis layouts en `RoadStopSpecDef.bridgeable_info`: `0x13` fija la altura mínima y `0x14` la máscara de pilares no permitidos, con defaults cero del catálogo JSON. Los bytes que exceden los seis layouts se consumen para mantener alineada la siguiente propiedad (`0x15`/`0x16`), y el catálogo/aplicación y JSON los preservan. `PlaceRoadBridge` ya llama al chequeo por tesela y rechaza `min_height=0` o un tablero por debajo de `GetTileMaxZ + min_height`; el compositor mundial de puentes cruza `disallowed_pillars` con la tabla vanilla o custom de `BridgeSpec` (según `has_custom_pillar_flags`) por tipo, pieza y eje, conserva el fallback vanilla y omite el bloque cuando hay intersección. La persistencia y el consumidor visual de la tabla propia están cubiertos por #418/#419; los goldens de captura siguen pendientes. |
 | RoadStops (`14`) | `0x13` `CBID_STATION_AVAILABILITY` | **parcial runtime** | Máscara Action0 `0x11`, Action2/3 y call site query+execute de `PlaceBusStop`/`PlaceTruckStop`. El scope de compra sin estación/tesela ya materializa `0x40` (vista), `0x41` (tipo), `0x42=0`, `0x43/0x44` (road/tram traducidos), `0x45=TownEdge<<16`, `0x46=0`, `0x47=GetCompanyInfo` con IA/librea de la compañía activa, `0x49=0`, `0x50=1<<4`, `0xF0=0` (facilities sin entidad) y `0xFA` como fecha relativa saturada a WORD; la ruta de construcción pasa pool y fecha absoluta del calendario antes de mutar el mapa. `CALLBACK_FAILED` o booleano 8-bit no nulo permite. Vecinos, terreno real y variables de carga sólo existen después de colocar la parada y siguen en las rutas de render/animación. |
@@ -2084,3 +2085,12 @@ variables parametrizadas de vecinos, registros, padres y estado persistente
 siguen cubiertas por `runtime_fingerprint`; no se alteran layouts `TileSeq`,
 paletas especiales ni callbacks restantes, por lo que #326/#329/#567 continúan
 abiertos.
+
+Actualización #326/#329-NEWGRF-AIRPORT-ANIMATION-SOUNDS (2026-09-16,
+`e0e466d6`): CB152 y CB153 de `AirportTile` propagan sus bits `8..14` como
+sonido ambiental con la coordenada de la tesela, y las rutas de construcción,
+carga, aceptación y scheduler ya drenan esa cola espacial. CB154 conserva sólo
+la cadencia y no interpreta sus bits como sonido, igual que upstream. Las
+animaciones de estación también conservan su origen. La fila continúa parcial:
+faltan foundations de compositor, rotaciones runtime, paletas base/custom y
+la delegación completa de `StationScope`; #326/#329/#567 siguen abiertos.

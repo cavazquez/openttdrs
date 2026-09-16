@@ -2454,6 +2454,15 @@ Las animaciones ligadas a tiles no se preservan porque deben regenerarse con la
 nueva capa del mapa. Pasan 1.575 tests del cliente y la cobertura de
 #326/#329/#567 continúa parcial; no se cierran issues madre.
 
+Actualización #326/#329/#567-PALETTE-REAL-CLOCK (`8cd4cbd2`): los consumidores
+visuales del ciclo de paleta para agua y faro/estadio leen `Time<Real>`, no el
+reloj virtual de la simulación. Así la velocidad del juego no altera su
+cadencia, mientras el run condition sigue apagándolos durante pausa o con
+`FullAnimation` desactivado. Pasan 2 pruebas del faro, 5 del agua y Clippy
+estricto; siguen pendientes el contador exacto al reanudar, otros ciclos,
+paletas/producers y la composición global, por lo que no se cierran las issues
+madre.
+
 Actualización #326/#329/#567-INDUSTRY-FIZZY-REAL-CLOCK (`2a99e89f`): las
 capas de fábrica de bebidas que consumen el ciclo `fizzy_drink` ya no leen el
 reloj virtual de la simulación. El consumidor visual usa `Time<Real>`, igual

@@ -6415,3 +6415,13 @@ materializado del mapa. Pasan 1.575 tests del cliente, 11 tests de `world` y
 Clippy estricto del binario. La corrección es parcial y no cierra
 #326/#329/#567: siguen pendientes otros producers, efectos, callbacks/
 consumidores NewGRF, composición global y comparación de framebuffer.
+
+Corrección #326/#329/#567-PALETTE-REAL-CLOCK (2026-09-16, `8cd4cbd2`): los
+ciclos de paleta de agua y faro/estadio usan ahora `Time<Real>`, igual que el
+consumidor de fuego de refinería y el ciclo `fizzy_drink`. Cambiar la velocidad
+de la simulación ya no acelera ni ralentiza estos ciclos de presentación; el
+run condition de animación completa sigue respetando la pausa y la preferencia
+del usuario. Pasan 2 pruebas del faro y 5 del agua, además de Clippy estricto.
+La corrección es parcial y no cierra #326/#329/#567: quedan la cadencia exacta
+del contador de paleta al pausar, otros producers, callbacks/consumidores
+NewGRF, composición global y comparación de framebuffer.

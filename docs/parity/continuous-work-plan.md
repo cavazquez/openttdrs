@@ -9215,6 +9215,17 @@ tests del cliente, 11 tests de `world` y Clippy estricto del binario. La fila
 continúa parcial y #326/#329/#567 permanecen abiertas por otros producers,
 efectos, callbacks/consumidores NewGRF, composición global y framebuffer.
 
+### #326/#329/#567-PALETTE-REAL-CLOCK — agua y faro/estadio
+
+Actualizado: 2026-09-16 (`8cd4cbd2`). Los ciclos de agua y faro/estadio pasan
+a `Time<Real>`, el reloj de presentación apropiado para `DoPaletteAnimations`;
+la velocidad de la simulación ya no modifica su cadencia. La condición de
+animación completa continúa respetando pausa y preferencia. Pasan 2 pruebas del
+faro, 5 del agua y Clippy estricto. La fila continúa parcial y #326/#329/#567
+permanecen abiertas: falta modelar el contador nativo durante pausas y quedan
+otros ciclos, producers, callbacks/consumidores NewGRF, composición global y
+framebuffer.
+
 ### #326/#329/#567-INDUSTRY-FIZZY-REAL-CLOCK — animación de bebidas Toyland
 
 Actualizado: 2026-09-16 (`2a99e89f`). El ciclo `fizzy_drink` se actualiza con

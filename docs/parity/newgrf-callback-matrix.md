@@ -2319,3 +2319,12 @@ grounds, overlays y la catenaria no heredan el estado de Buildings. Pasan 100
 regresiones de depósitos y Clippy estricto; otros producers, callbacks,
 consumidores NewGRF y el framebuffer mantienen la cobertura parcial de
 #326/#329/#567.
+
+Actualización #326/#329/#567-STATION-AIRPORT-BUILD-DESTINATION-TRANSPARENCY
+(2026-09-16, `31aed2db`): el pase BUILD de estaciones/waypoints vanilla,
+muelles, boyas y `StationGfx` aeroportuario aplica ahora la máscara de destino
+802 en modo transparente; el fallback plano de `AirportTile` sigue el mismo
+contrato. El techo de vidrio conserva su máscara calibrada y ground/overlays/
+catenaria no se mezclan con `TO_BUILDINGS`. Pasan 142 pruebas filtradas por
+`station` y Clippy estricto. La cobertura continúa parcial y no se cierran
+#326/#329/#567.

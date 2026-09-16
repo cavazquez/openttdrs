@@ -9043,3 +9043,14 @@ el ground, los overlays ni la catenaria. Pasan 100 regresiones focalizadas y
 Clippy estricto. La fila sigue parcial: otros producers BUILD,
 callbacks/consumidores NewGRF, composición global y framebuffer continúan
 pendientes; #326/#329/#567 siguen abiertas.
+
+### #326/#329/#567-STATION-AIRPORT-BUILD-DESTINATION-TRANSPARENCY — capas BUILD
+
+Actualizado: 2026-09-16 (`31aed2db`). Las capas vanilla de estación
+ferroviaria/waypoint, muelle y boya, las capas `StationGfx` aeroportuarias y
+el fallback plano de `AirportTile` usan la máscara de destino 802 cuando
+`TO_BUILDINGS` está transparente. Se conserva aparte el techo de vidrio con
+su calibración propia; suelos, overlays y catenaria siguen opacos. Pasan 142
+pruebas filtradas por `station` y Clippy estricto. La fila sigue parcial y
+#326/#329/#567 permanecen abiertas por layouts, callbacks, consumidores
+NewGRF, composición global y framebuffer.

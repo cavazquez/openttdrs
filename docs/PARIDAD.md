@@ -6238,3 +6238,15 @@ sus contratos independientes. Pasan 100 regresiones focalizadas de depósitos
 y Clippy estricto. La corrección es parcial y no cierra #326/#329/#567:
 quedan otros producers BUILD, callbacks/consumidores NewGRF, composición
 global y comparación de framebuffer.
+
+Corrección #326/#329/#567-STATION-AIRPORT-BUILD-DESTINATION-TRANSPARENCY
+(2026-09-16, `31aed2db`): las capas BUILD vanilla de estaciones ferroviarias
+y waypoints (excepto el contrato especial del techo de vidrio), muelles y
+boyas, junto con las capas `StationGfx` de aeropuertos y el fallback plano de
+`AirportTile`, usan ahora la máscara de destino equivalente a
+`PALETTE_TO_TRANSPARENT` (802) cuando `TO_BUILDINGS` está transparente. Los
+suelos de muelle/aeropuerto, overlays de vía y catenaria permanecen fuera de
+la máscara. Pasan 142 pruebas filtradas por `station` y Clippy estricto. La
+corrección es parcial y no cierra #326/#329/#567: siguen pendientes los
+layouts restantes, callbacks/consumidores NewGRF, composición global y
+comparación de framebuffer.

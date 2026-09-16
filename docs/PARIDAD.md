@@ -6394,6 +6394,16 @@ puente, incluida la regresión de rampas y colores. La corrección es parcial y
 no cierra #326/#329/#567: siguen pendientes otros producers, callbacks/
 consumidores NewGRF, composición global y comparación de framebuffer.
 
+Corrección #326/#329/#567-INDUSTRY-FIZZY-REAL-CLOCK (2026-09-16,
+`2a99e89f`): la animación de paleta `fizzy_drink` de las industrias Toyland
+usa ahora el reloj real de presentación, como `DoPaletteAnimations` de
+OpenTTD. Antes dependía de `Time<Virtual>` y cambiaba de cadencia al variar la
+velocidad de la simulación; la pausa y el ritmo autoritativo de la industria
+siguen siendo independientes. Pasan 2 pruebas focalizadas y formato estricto.
+La corrección es parcial y no cierra #326/#329/#567: quedan otros ciclos de
+paleta, producers, callbacks/consumidores NewGRF, composición global y
+comparación de framebuffer.
+
 Corrección #326/#329/#567-DYNAMIC-VISUAL-REMAP (2026-09-16, `8f325966`): las
 entidades transitorias de vehículos, OVNIs, FX, humo de vehículos, burbujas,
 popups de ingresos y destellos de construcción ya no se destruyen al cambiar

@@ -2453,3 +2453,11 @@ los eliminan, y la flota se recrea sólo cuando no queda una instancia viva.
 Las animaciones ligadas a tiles no se preservan porque deben regenerarse con la
 nueva capa del mapa. Pasan 1.575 tests del cliente y la cobertura de
 #326/#329/#567 continúa parcial; no se cierran issues madre.
+
+Actualización #326/#329/#567-INDUSTRY-FIZZY-REAL-CLOCK (`2a99e89f`): las
+capas de fábrica de bebidas que consumen el ciclo `fizzy_drink` ya no leen el
+reloj virtual de la simulación. El consumidor visual usa `Time<Real>`, igual
+que la ruta de paleta de OpenTTD, de modo que cambiar la velocidad del juego
+no acelera ni ralentiza la animación. La cobertura de industria/callbacks,
+layouts, paletas restantes y compositor continúa parcial; no se cierran las
+issues madre.

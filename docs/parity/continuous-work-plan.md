@@ -9214,3 +9214,13 @@ animaciones dependientes de una tesela siguen dentro del rebuild. Pasan 1.575
 tests del cliente, 11 tests de `world` y Clippy estricto del binario. La fila
 continúa parcial y #326/#329/#567 permanecen abiertas por otros producers,
 efectos, callbacks/consumidores NewGRF, composición global y framebuffer.
+
+### #326/#329/#567-INDUSTRY-FIZZY-REAL-CLOCK — animación de bebidas Toyland
+
+Actualizado: 2026-09-16 (`2a99e89f`). El ciclo `fizzy_drink` se actualiza con
+`Time<Real>`, porque OpenTTD lo produce en `DoPaletteAnimations` del bucle de
+presentación y no en `Time<Virtual>`/la velocidad de la simulación. La prueba
+del sistema usa el mismo reloj real que el fuego de refinería. Pasan 2 pruebas
+focalizadas y formato estricto. La fila continúa parcial y #326/#329/#567
+permanecen abiertas por los demás ciclos, producers, callbacks/consumidores
+NewGRF, composición global y framebuffer.

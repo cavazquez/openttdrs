@@ -740,6 +740,36 @@ pub fn overlay_pos(
     )
 }
 
+/// Centro Bevy de un child que `DrawCommonTileSeq` entrega a
+/// `DrawGroundSprite` porque todavía no encontró un parent.
+///
+/// En ese camino `origin.x/y` no son coordenadas TILE_SEQ del mundo: son
+/// offsets de pantalla firmados desde el ancla de la tesela. Los offsets NFO
+/// del sprite siguen formando el centro base y el eje Y de OpenTTD se invierte
+/// al entrar en Bevy. El caller decide después si conserva la profundidad
+/// sortable para una foundation o la reemplaza por [`ground_draw_z`].
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn tile_layout_orphan_ground_center(
+    ref_pos: Vec2,
+    origin: [i8; 3],
+    width: f32,
+    height: f32,
+    x_offs: f32,
+    y_offs: f32,
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    layer_z: f32,
+) -> Vec3 {
+    let mut position = overlay_pos(
+        ref_pos, x_offs, y_offs, width, height, base_z, layer_z, tx, ty,
+    );
+    position.x += f32::from(origin[0]);
+    position.y -= f32::from(origin[1]);
+    position
+}
+
 #[cfg(test)]
 mod ground_draw_order_tests {
     use bevy::prelude::Vec2;

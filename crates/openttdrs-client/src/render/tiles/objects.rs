@@ -33,7 +33,7 @@ use crate::iso::{
     HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos, full_tile_sprite_pos_half, ground_draw_z,
     ground_tile_pos_half, overlay_pos, remap_tile_offset, road_depot_build_sprite_center,
     road_stop_build_sprite_center, shore_png_index, shore_sprite_half_h, slope_half_h,
-    slope_sprite_offset, sortable_draw_z, tile_pos_half,
+    slope_sprite_offset, sortable_draw_z, tile_layout_orphan_ground_center, tile_pos_half,
 };
 use crate::render::catenary_newgrf::{
     catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
@@ -1997,6 +1997,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     class == StationTileClass::RailWaypoint,
                     def,
                     owner_colour,
+                    foundation_child_parent,
                     *runtime_fp,
                     layout,
                     cache,
@@ -2404,6 +2405,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 stations,
                 ctx,
                 road_stop_base_z,
+                foundation_child_parent,
                 building_parent_ordinal,
                 class,
                 view_idx,
@@ -2723,6 +2725,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     *spec_id,
                     true,
                     owner_colour,
+                    foundation_child_parent,
                     *runtime_fp,
                     layout,
                     cache,
@@ -3464,6 +3467,7 @@ fn spawn_newgrf_station_layout_sequence(
     waypoint: bool,
     def: &StationSpecDef,
     owner_colour: Option<CompanyColour>,
+    foundation_child_parent: Option<Entity>,
     runtime_fp: u32,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
     cache: &mut NewGrfStationSpriteCache,
@@ -3621,25 +3625,35 @@ fn spawn_newgrf_station_layout_sequence(
                 },
             ));
         } else {
-            // El formato permite un child huérfano. OpenTTD lo entrega como
-            // sprite de suelo; conservarlo en el ancla de la tesela evita
-            // perder una pieza visible por un GRF mal formado.
-            let position = road_stop_build_sprite_center(
+            // `DrawCommonTileSeq` entrega un child sin parent a
+            // `DrawGroundSprite(image, pal, nullptr, offs_x, offs_y)`. No es
+            // una pieza BUILD: sus dos primeros bytes son offsets de pantalla
+            // y el sprite debe conservar el orden del pase ground.
+            let mut position = tile_layout_orphan_ground_center(
                 ctx.iso_pos,
+                layer.origin,
+                width,
+                height,
+                x_offs,
+                y_offs,
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 base_z,
                 layer_z,
-                origin,
-                width,
-                height,
             );
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                sprite,
-                Transform::from_translation(position),
-            ));
+            if let Some(parent) = foundation_child_parent {
+                spawn_foundation_child_sprite_at(
+                    commands, sprite, ctx, position, map_width, parent,
+                );
+            } else {
+                position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), layer_z);
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(position),
+                ));
+            }
         }
         emitted = true;
     }
@@ -3888,34 +3902,6 @@ fn newgrf_road_stop_child_center(
     )
 }
 
-/// Centro Bevy de un child que `DrawCommonTileSeq` entrega a
-/// `DrawGroundSprite` porque todavía no encontró un parent.
-///
-/// En ese camino `origin.x/y` no son coordenadas TILE_SEQ del mundo: son
-/// offsets de pantalla firmados desde el ancla de la tesela. Los offsets NFO
-/// del sprite siguen formando el centro base y el eje Y de OpenTTD se invierte
-/// al entrar en Bevy.
-#[allow(clippy::too_many_arguments)]
-fn newgrf_tile_layout_orphan_ground_center(
-    ref_pos: Vec2,
-    origin: [i8; 3],
-    width: f32,
-    height: f32,
-    x_offs: f32,
-    y_offs: f32,
-    tx: i32,
-    ty: i32,
-    base_z: u8,
-    layer_z: f32,
-) -> Vec3 {
-    let mut position = overlay_pos(
-        ref_pos, x_offs, y_offs, width, height, base_z, layer_z, tx, ty,
-    );
-    position.x += f32::from(origin[0]);
-    position.y -= f32::from(origin[1]);
-    position
-}
-
 /// Emite la secuencia BUILD de un `TileLayout` custom. Los parents usan las
 /// cajas 3D de `TILE_SEQ_LINE`; los children conservan el anclaje de pantalla
 /// al último parent, que es la semántica de `AddChildSpriteScreen` de OpenTTD.
@@ -3930,6 +3916,7 @@ fn spawn_newgrf_road_stop_layout_sequence(
     spec_id: u16,
     waypoint: bool,
     owner_colour: Option<CompanyColour>,
+    foundation_child_parent: Option<Entity>,
     runtime_fp: u32,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
     cache: &mut crate::render::NewGrfAction5SpriteCache,
@@ -4121,25 +4108,35 @@ fn spawn_newgrf_road_stop_layout_sequence(
                 },
             ));
         } else {
-            // A child before its first parent is legal in the raw format. The
-            // C++ path draws it as a ground sprite; use the tile anchor as the
-            // equivalent fallback rather than dropping the decoded texture.
-            let position = road_stop_build_sprite_center(
+            // `DrawCommonTileSeq` entrega un child sin parent a
+            // `DrawGroundSprite(image, pal, nullptr, offs_x, offs_y)`. No es
+            // una pieza BUILD: sus dos primeros bytes son offsets de pantalla
+            // y el sprite debe conservar el orden del pase ground.
+            let mut position = tile_layout_orphan_ground_center(
                 ctx.iso_pos,
+                layer.origin,
+                width,
+                height,
+                x_offs,
+                y_offs,
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 base_z,
                 layer_z,
-                origin,
-                width,
-                height,
             );
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                sprite,
-                Transform::from_translation(position),
-            ));
+            if let Some(parent) = foundation_child_parent {
+                spawn_foundation_child_sprite_at(
+                    commands, sprite, ctx, position, map_width, parent,
+                );
+            } else {
+                position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), layer_z);
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(position),
+                ));
+            }
         }
         emitted = true;
     }
@@ -4156,6 +4153,7 @@ fn spawn_road_stop_buildings(
     stations: &[Station],
     ctx: &TileRenderContext,
     base_z: u8,
+    foundation_child_parent: Option<Entity>,
     vanilla_parent_ordinal: u8,
     class: StationTileClass,
     dir: usize,
@@ -4220,6 +4218,7 @@ fn spawn_road_stop_buildings(
                 spec_id,
                 false,
                 owner_colour,
+                foundation_child_parent,
                 layout_runtime_fp,
                 &layout,
                 cache,
@@ -4926,7 +4925,7 @@ fn spawn_newgrf_airport_layout_sequence(
             // `DrawGroundSprite(image, pal, nullptr, offs_x, offs_y)`. No es
             // una pieza BUILD: sus dos primeros bytes son offsets de pantalla
             // y el sprite debe conservar el orden del pase ground.
-            let mut position = newgrf_tile_layout_orphan_ground_center(
+            let mut position = tile_layout_orphan_ground_center(
                 ctx.iso_pos,
                 layer.origin,
                 width,
@@ -7835,17 +7834,17 @@ mod tests {
         airport_station_ground_layer_trace_offset, airport_tile_layout_is_renderable,
         buoy_parent_bounds, buoy_trace_bounds, dock_clear_land_sprite_id,
         dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
-        newgrf_tile_layout_orphan_ground_center, rail_depot_build_parent_sprites,
-        rail_depot_catenary_parent_sprite, rail_depot_foundation_child_offset,
-        rail_depot_reservation_track_visible, rail_station_roof_glass_mask_color,
-        road_depot_foundation_child_offset, road_depot_newgrf_def_for_tile,
-        road_depot_parent_sprites, road_stop_foundation_child_offset, road_stop_layout_ground_slot,
+        rail_depot_build_parent_sprites, rail_depot_catenary_parent_sprite,
+        rail_depot_foundation_child_offset, rail_depot_reservation_track_visible,
+        rail_station_roof_glass_mask_color, road_depot_foundation_child_offset,
+        road_depot_newgrf_def_for_tile, road_depot_parent_sprites,
+        road_stop_foundation_child_offset, road_stop_layout_ground_slot,
         road_stop_layout_is_static, road_stop_layout_sequence_slot_range, road_stop_parent_sprites,
         road_stop_simple_view_slot, road_stop_sorted_layer_centers, spawn_newgrf_airport_tile,
         station_catenary_pylon_parent_bounds, station_catenary_wire_parent_bounds,
         station_catenary_wire_trace_geometry, station_rail_child_offset,
         station_rail_foundation_world_z_delta, station_rail_layer_parent_bounds,
-        tunnel_catenary_trace_geometry, tunnel_sortable_parents,
+        tile_layout_orphan_ground_center, tunnel_catenary_trace_geometry, tunnel_sortable_parents,
     };
     use openttdrs_core::{
         Climate, DecodedSprite, Map, RoadTramType, RoadType, RoadTypeDef, TileCoord, TileKind,
@@ -7962,7 +7961,7 @@ mod tests {
 
     #[test]
     fn newgrf_tile_layout_orphan_child_uses_ground_screen_offsets() {
-        let center = newgrf_tile_layout_orphan_ground_center(
+        let center = tile_layout_orphan_ground_center(
             Vec2::new(100.0, 200.0),
             [7, -4, i8::MIN],
             10.0,

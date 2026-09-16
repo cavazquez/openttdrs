@@ -12787,6 +12787,19 @@ fn flat_newgrf_object_tile_layout_keeps_ground_in_ground_pass() {
         coord.x,
         coord.y,
     );
+    let mut expected_orphan_position = overlay_pos(
+        crate::iso::iso(coord.x, coord.y),
+        f32::from(orphan_child.x_offs),
+        f32::from(orphan_child.y_offs),
+        f32::from(orphan_child.width),
+        f32::from(orphan_child.height),
+        0,
+        0.6,
+        coord.x,
+        coord.y,
+    );
+    expected_orphan_position.x += 5.0;
+    expected_orphan_position.y -= 6.0;
     let sprites: Vec<_> = world
         .query::<(&Sprite, &Transform)>()
         .iter(&world)
@@ -12811,7 +12824,8 @@ fn flat_newgrf_object_tile_layout_keeps_ground_in_ground_pass() {
         .iter()
         .filter_map(|(handle, translation)| {
             (images.get(handle).and_then(|image| image.data.as_deref())
-                == Some(orphan_child.rgba.as_slice()))
+                == Some(orphan_child.rgba.as_slice())
+                && translation.truncate() == expected_orphan_position.truncate())
             .then_some(translation.z)
         })
         .collect();

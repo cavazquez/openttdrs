@@ -19,7 +19,8 @@ use super::{
 };
 use crate::iso::{
     RoadStopSeqGfx, full_tile_sprite_pos, ground_draw_z, overlay_pos, remap_tile_offset,
-    road_stop_build_sprite_center, slope_sprite_offset, wang_hash,
+    road_stop_build_sprite_center, slope_sprite_offset, tile_layout_orphan_ground_center,
+    wang_hash,
 };
 use crate::render::atlas::AtlasSprite;
 use crate::render::newgrf_cache::{
@@ -2748,6 +2749,7 @@ fn spawn_newgrf_object_layout_sequence(
     ctx: &TileRenderContext,
     map_width: u32,
     surface_base_z: u8,
+    foundation_child_parent: Option<Entity>,
     def: &ObjectSpecDef,
     object_colour: u8,
     runtime_fp: u32,
@@ -2905,23 +2907,31 @@ fn spawn_newgrf_object_layout_sequence(
             // aparece antes de cualquier parent visible. No es un overlay
             // sortable independiente: debe compartir el ground pass de la
             // tesela, aunque conserve el ancla screen-space de TILE_SEQ.
-            let mut position = road_stop_build_sprite_center(
+            let mut position = tile_layout_orphan_ground_center(
                 ctx.iso_pos,
+                layer.origin,
+                width,
+                height,
+                x_offs,
+                y_offs,
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 surface_base_z,
                 layer_z,
-                seq,
-                width,
-                height,
             );
-            position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.55);
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                sprite,
-                Transform::from_translation(position),
-            ));
+            if let Some(parent) = foundation_child_parent {
+                spawn_foundation_child_sprite_at(
+                    commands, sprite, ctx, position, map_width, parent,
+                );
+            } else {
+                position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.55);
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(position),
+                ));
+            }
         }
     }
     true
@@ -3448,6 +3458,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
                     ctx,
                     map_width,
                     object_surface_base_z,
+                    object_foundation_child_parent,
                     layout_def,
                     *object_colour,
                     *runtime_fp,

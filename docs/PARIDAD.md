@@ -5817,3 +5817,16 @@ lo comprueban para evitar reutilizar handles o texturas de una partida
 anterior. Validación: las dos regresiones dirigidas del cliente, Clippy
 estricto, formato y `git diff --check` verdes. #329/#567 siguen abiertas por
 la invalidación global de consumidores restantes, callbacks y scopes NewGRF.
+
+Corrección #329/#567-ENGINE-PREVIEW-COMPANY-CARGO (2026-09-16, `2b5f24f0`):
+`GetPreviewCompany` ya no ofrece un motor a cualquier empresa que tenga un
+vehículo del mismo tipo. La selección ahora exige que el motor de la flota
+pueda transportar carga, que su cargo actual esté en el cargo por defecto, la
+`refit_mask` global o las listas CTT del motor nuevo, y conserva la excepción
+nativa de trenes (pueden completar la composición con vagones). La regresión
+`preview_scheduler_requires_vehicle_cargo_compatible_with_engine` cubre el
+rechazo de un buque de mercancías para un petrolero y su aceptación al pasar a
+petróleo. Validación: `2806` tests de core pasados, `0` fallidos y `1` ignorado,
+Clippy estricto, formato y `git diff --check` verdes. #329/#567 permanecen
+abiertas por callbacks de vehículos, invalidación de consumidores y scopes
+NewGRF restantes.

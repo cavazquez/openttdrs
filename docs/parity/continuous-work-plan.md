@@ -8612,3 +8612,16 @@ validación dirigida del cliente pasó, junto con Clippy estricto, formato y
 `git diff --check`. Este bloque corrige sólo la frontera de lifecycle; #329/#567
 siguen abiertos por la invalidación de consumidores restantes, callbacks y
 scopes NewGRF.
+
+Corrección #329/#567-ENGINE-PREVIEW-COMPANY-CARGO (2026-09-16, `2b5f24f0`):
+la selección de `GetPreviewCompany` deja de considerar suficiente que la
+empresa tenga cualquier unidad del mismo tipo. El scheduler consulta ahora la
+capacidad declarada por el motor de esa unidad y el cargo actual contra el
+conjunto de cargo por defecto, `refit_mask` traducida y listas CTT del motor en
+preview; los trenes conservan `ALL_CARGOTYPES` porque pueden añadir vagones.
+La regresión `preview_scheduler_requires_vehicle_cargo_compatible_with_engine`
+reproduce el rechazo de un buque de mercancías para un petrolero y la posterior
+oferta cuando la unidad pasa a petróleo. Validación: `2806` tests de core
+pasados, `0` fallidos y `1` ignorado, Clippy estricto, formato y
+`git diff --check` verdes. #329/#567 siguen abiertos por callbacks de
+vehículos, invalidación de consumidores y scopes NewGRF restantes.

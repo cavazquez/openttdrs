@@ -138,7 +138,9 @@ fn apply_global_atlas_frame(
 /// El número de writes es O(19), independientemente de cuántas teselas de
 /// agua haya cargadas. Todos los `Sprite` conservan su handle/índice.
 pub(crate) fn animate_water(
-    time: Res<Time>,
+    // `DoPaletteAnimations` avanza con el bucle de presentación; no debe
+    // acelerarse ni frenarse junto con `Time<Virtual>`.
+    time: Res<Time<Real>>,
     frames: Option<Res<WaterAnimFrames>>,
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut stats: Option<ResMut<WaterAnimationStats>>,
@@ -234,7 +236,7 @@ mod tests {
     #[test]
     fn animate_water_swaps_images_on_frame_change() {
         let mut world = World::new();
-        let mut time = Time::<()>::default();
+        let mut time = Time::<Real>::default();
         time.advance_by(std::time::Duration::from_millis(400));
         world.insert_resource(time);
         let (frames, layouts) = frames_resource();
@@ -257,7 +259,7 @@ mod tests {
     #[test]
     fn animate_water_without_frames_resource_is_noop() {
         let mut world = World::new();
-        world.insert_resource(Time::<()>::default());
+        world.insert_resource(Time::<Real>::default());
         world.insert_resource(Assets::<TextureAtlasLayout>::default());
 
         world.run_system_once(animate_water).unwrap();
@@ -266,7 +268,7 @@ mod tests {
     #[test]
     fn large_water_population_keeps_peak_atlas_writes_constant() {
         let mut world = World::new();
-        let mut time = Time::<()>::default();
+        let mut time = Time::<Real>::default();
         time.advance_by(std::time::Duration::from_millis(400));
         world.insert_resource(time);
         let (frames, layouts) = frames_resource();

@@ -42,7 +42,9 @@ pub(crate) fn lighthouse_frame_index(elapsed_secs: f32) -> usize {
 }
 
 pub(crate) fn animate_lighthouse(
-    time: Res<Time>,
+    // El ciclo `lighthouse` pertenece a `DoPaletteAnimations`, no al reloj
+    // virtual que escala la velocidad de la simulación.
+    time: Res<Time<Real>>,
     frames: Option<Res<LighthouseAnimFrames>>,
     mut last_frame: Local<Option<usize>>,
     mut q: Query<(&LighthouseAnim, &mut Sprite)>,
@@ -111,7 +113,7 @@ mod tests {
     #[test]
     fn animate_lighthouse_swaps_on_frame_change() {
         let mut world = World::new();
-        let mut time = Time::<()>::default();
+        let mut time = Time::<Real>::default();
         time.advance_by(std::time::Duration::from_millis(250));
         world.insert_resource(time);
         world.insert_resource(frames_resource());

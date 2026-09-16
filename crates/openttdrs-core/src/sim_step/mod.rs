@@ -530,12 +530,13 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
     state.runtime.industry_tile_dirty.extend(airport_dirty);
     let mut airport_sounds = Vec::new();
     let newgrf_airport_dirty =
-        crate::map::step_newgrf_airport_tiles_with_towns_and_airport_catalog_and_sounds(
+        crate::map::step_newgrf_airport_tiles_with_towns_and_airport_catalog_and_sounds_with_snow_line(
             &mut state.map,
             t,
             &mut state.stations,
             &state.towns,
             state.climate,
+            state.snow_line_height,
             &state.airport_tile_spec_catalog,
             &state.airport_spec_catalog,
             &mut state.newgrf_animated_airport_tiles,
@@ -1068,12 +1069,13 @@ pub(super) fn trigger_airport_animation_at(
             | crate::AirportAnimationTrigger::NewCargo
             | crate::AirportAnimationTrigger::CargoTaken
     ) {
-        crate::map::trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_with_global_rng_and_sounds(
+        crate::map::trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_with_global_rng_and_sounds_with_snow_line(
             &mut state.map,
             &mut state.stations,
             &state.towns,
             &state.cargo_spec_catalog,
             state.climate,
+            state.snow_line_height,
             &state.airport_tile_spec_catalog,
             &state.airport_spec_catalog,
             &mut state.newgrf_animated_airport_tiles,
@@ -1085,13 +1087,14 @@ pub(super) fn trigger_airport_animation_at(
             &mut airport_sounds,
         )
     } else {
-        crate::map::trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_and_sounds(
+        crate::map::trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_and_sounds_with_snow_line(
             &mut state.map,
             state.tick.get(),
             &mut state.stations,
             &state.towns,
             &state.cargo_spec_catalog,
             state.climate,
+            state.snow_line_height,
             &state.airport_tile_spec_catalog,
             &state.airport_spec_catalog,
             &mut state.newgrf_animated_airport_tiles,

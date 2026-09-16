@@ -319,13 +319,14 @@ fn place_airport_area_with_layout(
     if newgrf_def.is_some() {
         let mut airport_sounds = Vec::new();
         let dirty =
-            crate::map::trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_and_sounds(
+            crate::map::trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_and_sounds_with_snow_line(
                 &mut state.map,
                 state.tick.get(),
                 &mut state.stations,
                 &state.towns,
                 &state.cargo_spec_catalog,
                 state.climate,
+                state.snow_line_height,
                 &state.airport_tile_spec_catalog,
                 &state.airport_spec_catalog,
                 &mut state.newgrf_animated_airport_tiles,

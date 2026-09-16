@@ -291,6 +291,27 @@ mod tests {
     }
 
     #[test]
+    fn object_scope_variables_invalidate_fingerprint() {
+        let mut first = Action2EvalCtx::default();
+        for (index, variable) in [0x42, 0x47, 0x48].into_iter().enumerate() {
+            first
+                .vars
+                .insert(variable, u32::try_from(index + 1).unwrap_or(u32::MAX));
+        }
+
+        for variable in [0x42, 0x47, 0x48] {
+            let mut changed = first.clone();
+            let value = changed.vars.get_mut(&variable).expect("variable fixture");
+            *value = value.saturating_add(1);
+            assert_ne!(
+                runtime_fingerprint(&first, vars::OBJECT, false),
+                runtime_fingerprint(&changed, vars::OBJECT, false),
+                "object var {variable:#04X} debe separar texturas"
+            );
+        }
+    }
+
+    #[test]
     fn parent_and_relative_scopes_change_fingerprint() {
         let mut first = Action2EvalCtx::default();
         first.parent_vars.insert(0x40, 1);

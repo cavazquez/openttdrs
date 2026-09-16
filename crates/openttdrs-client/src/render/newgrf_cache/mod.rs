@@ -1416,11 +1416,11 @@ pub(crate) mod vars {
     /// Variables de `IndustryTileScopeResolver` y entradas básicas del
     /// `IndustriesScopeResolver` que pueden cambiar la vista runtime.
     pub const INDUSTRY: &[u8] = &[0x40, 0x41, 0x42, 0x43, 0x44, 0x5F, 0x7A];
-    /// Variables disponibles en `ObjectScopeResolver` para una tesela que ya
-    /// está en el mapa: offset, terreno, pueblo/distancias, animación,
-    /// propietario y random. Las variables de teselas vecinas siguen fuera
-    /// del fingerprint hasta completar su contexto global.
-    pub const OBJECT: &[u8] = &[0x40, 0x41, 0x43, 0x44, 0x45, 0x46, 0x5F];
+    /// Variables directas de `ObjectScopeResolver` para una tesela que ya está
+    /// en el mapa: offset, terreno, fecha/color/vista, pueblo/distancias,
+    /// animación, propietario y random. Las variables de teselas vecinas se
+    /// incorporan además por `runtime_fingerprint` cuando fueron solicitadas.
+    pub const OBJECT: &[u8] = &[0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x5F];
     /// Variables de `HouseScopeResolver` presentes en `Tile`, pueblo,
     /// conteos precalculados y vecinos de la tesela.
     pub const HOUSE: &[u8] = &[

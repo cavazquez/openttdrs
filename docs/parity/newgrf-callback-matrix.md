@@ -2299,3 +2299,14 @@ las referencias directas del atlas usan el equivalente por color. La paleta
 original sólo se conserva cuando `OPAQUE` bloquea la transparencia de categoría.
 Pasan 17 pruebas de materialización, 27 regresiones de TileLayout, 29 del core
 y Clippy estricto. La corrección sigue parcial y no cierra #326/#329/#567.
+
+Actualización #326/#329/#567-SHIP-DEPOT-DESTINATION-TRANSPARENCY (2026-09-16,
+`b7ed43ea`): la ruta vanilla de `DrawWaterTileStruct` conserva ahora el
+contrato de `AddSortableSpriteToDraw` para `TO_BUILDINGS`: las capas 4070..4075
+reciben la máscara de destino 802 cuando la categoría está transparente y la
+traza refleja el flag efectivo. El agua emitida por `DrawWaterClassGround`,
+los diques y los bordes no hereda esa máscara; `IsInvisibilitySet` sigue
+suprimiendo únicamente la estructura. Pasan 27 regresiones de ShipDepot,
+TileLayout dirigido y Clippy estricto. La corrección es parcial; otros
+criterios de #326/#329/#567 —YAPF/regiones, callbacks, consumidores y
+framebuffer— siguen pendientes.

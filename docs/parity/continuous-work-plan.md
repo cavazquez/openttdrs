@@ -9018,3 +9018,16 @@ composición de categoría. Pasan 17 pruebas de fábrica, 27 regresiones de
 TileLayout, 29 del core y Clippy estricto. La fila continúa parcial y
 #326/#329/#567 permanecen abiertas por layouts restantes,
 foundations/rotaciones, callbacks y consumidores NewGRF.
+
+### #326/#329/#567-SHIP-DEPOT-DESTINATION-TRANSPARENCY — máscara de estructura
+
+Actualizado: 2026-09-16 (`b7ed43ea`). La estructura vanilla de
+`ShipDepot` sigue ahora el camino nativo de `DrawWaterTileStruct`: cuando
+`TO_BUILDINGS` está transparente, las seis capas `TILE_SEQ_LINE` se registran
+con transparencia y usan la máscara de destino equivalente a
+`PALETTE_TO_TRANSPARENT` (`802`), en lugar del alpha genérico de categoría.
+El ground de agua, pendientes, diques y bordes queda fuera de la máscara, y el
+modo oculto continúa eliminando sólo las capas estructurales. La regresión
+específica pasa con 27 pruebas; TileLayout y Clippy estricto también quedan
+verdes. La fila sigue parcial y no se cierran #326/#329/#567: faltan YAPF y
+regiones de agua completas, callbacks NewGRF, composición global y framebuffer.

@@ -6214,3 +6214,15 @@ suelo sigue opaco, fuera del stream BUILD. Pasan 17 pruebas de fábrica, 27 de
 TileLayout, 29 del core y Clippy estricto. La corrección es parcial y no cierra
 #326/#329/#567: siguen pendientes layouts, foundations/rotaciones, callbacks y
 consumidores NewGRF.
+
+Corrección #326/#329/#567-SHIP-DEPOT-DESTINATION-TRANSPARENCY (2026-09-16,
+`b7ed43ea`): `DrawWaterTileStruct` del depósito naval reproduce ahora la
+transparencia de destino de `AddSortableSpriteToDraw`: las seis capas
+4070..4075 usan la máscara equivalente a `PALETTE_TO_TRANSPARENT` (802) cuando
+`TO_BUILDINGS` está en modo transparente, y la traza publica ese mismo estado.
+El agua, los diques, los bordes y el suelo permanecen opacos; el modo oculto
+sigue suprimiendo sólo la estructura, como en `DrawWaterDepot`. Las regresiones
+del depósito pasan con 27 pruebas, además de las baterías TileLayout y Clippy
+estricto. Esta subbrecha queda corregida, pero no cierra #326/#329/#567:
+continúan pendientes YAPF/regiones de agua, callbacks NewGRF, composición
+global y comparación de framebuffer.

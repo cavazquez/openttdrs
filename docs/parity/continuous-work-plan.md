@@ -8687,3 +8687,12 @@ registros `STO`. Validación: 102 pruebas NewGRF y cliente completo
 `1550 passed; 2 ignored`, Clippy estricto, formato y `git diff --check` verdes.
 #326/#329/#567 siguen abiertas por las familias de layouts, paletas, callbacks
 y consumidores NewGRF todavía no cubiertas.
+
+Corrección #326/#329-NEWGRF-FLAT-FINGERPRINT-CALLS (2026-09-16, `5ac3c30d`):
+road stops y aeropuertos capturan el fingerprint de sus vistas planas después
+de ejecutar Action2. La ruta de road stop mantiene la huella previa sólo para
+la secuencia TileSeq; si cae al fallback plano, recalcula con el estado final
+de esa vista. Validación: 34 pruebas de road stop, 4 de aeropuerto y cliente
+completo `1550 passed; 2 ignored`, con Clippy estricto, formato y
+`git diff --check` verdes. #326/#329/#567 siguen abiertas por layouts,
+paletas, callbacks y consumidores NewGRF restantes.

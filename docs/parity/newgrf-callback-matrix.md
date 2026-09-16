@@ -2024,3 +2024,13 @@ handle, evitando que una segunda evaluación Action2 elija otro sprite o deje
 un fingerprint inconsistente. Las 102 pruebas NewGRF verifican las rutas de
 render; el alcance no cierra layouts TileSeq, paletas especiales, callbacks ni
 la invalidación global de consumidores: #326/#329/#567 continúan abiertos.
+
+### #326/#329-NEWGRF-FLAT-FINGERPRINT-CALLS — road stop y aeropuerto
+
+Actualizado: 2026-09-16 (`5ac3c30d`). Los dos consumidores planos restantes
+calculan la identidad de caché después de resolver su vista Action2. El road
+stop separa la huella de su layout TileSeq de la del fallback plano; el
+airport tile captura el estado final de `var 1C`/registros antes de crear la
+textura. Las pruebas dirigidas de ambas familias pasan; no se alteran layouts,
+paletas especiales ni callbacks restantes, por lo que #326/#329/#567 continúan
+abiertos.

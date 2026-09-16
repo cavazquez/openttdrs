@@ -5889,6 +5889,16 @@ píxeles rojo/azul; la suite completa queda en `1550 passed; 2 ignored`, con
 Clippy estricto, formato y `git diff --check` verdes. #326/#329/#567 siguen
 abiertas por layouts, paletas, callbacks y consumidores NewGRF restantes.
 
+Corrección #326/#329-NEWGRF-FLAT-FINGERPRINT-CALLS (2026-09-16, `5ac3c30d`):
+el fallback plano de road stops y la tesela plana de aeropuerto calculan ahora
+su `runtime_fp` después de resolver la vista efectiva. El fingerprint del
+layout compuesto se conserva por separado, mientras que la textura plana ya
+incluye cualquier `var 1C` o registro escrito por su propia cadena Action2.
+Validación dirigida: 34 pruebas de road stop y 4 de aeropuerto; suite completa
+del cliente `1550 passed; 2 ignored`, Clippy estricto, formato y
+`git diff --check` verdes. #326/#329/#567 permanecen abiertas por layouts,
+paletas, callbacks y consumidores NewGRF restantes.
+
 Corrección #326/#329-NEWGRF-REUSE-RESOLVED-VIEW (2026-09-16, `779f64c5`): los
 call sites planos de casas, industrias y objetos ya no resuelven Action2 para
 obtener offsets y vuelven a resolverlo dentro de la caché para crear la

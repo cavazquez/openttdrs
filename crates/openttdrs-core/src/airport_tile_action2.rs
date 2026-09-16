@@ -174,8 +174,10 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow
         u32::from(station.newgrf_random_bits) | (u32::from(airport_tile_random_bits(tile)) << 16);
     ctx.random_bits = random;
     ctx.parent_random_bits = u32::from(station.newgrf_random_bits);
-    ctx.persistent_registers
-        .clone_from(&station.newgrf_persistent_regs);
+    // `AirportTileScopeResolver` no implementa `StorePSA` en OpenTTD. El
+    // almacenamiento `7C` sólo existe en el `AirportScopeResolver` padre;
+    // dejar vacío el mapa del tile evita que un `7C[param]` sin marker de
+    // parent lea por accidente el PSA del aeropuerto.
     ctx.parent_persistent_registers
         .clone_from(&station.newgrf_persistent_regs);
     ctx.vars.insert(
@@ -1220,6 +1222,10 @@ mod tests {
         );
         assert_eq!(ctx.parent_vars.get(&0xF0), Some(&9));
         assert_eq!(ctx.parent_vars.get(&0xFA), Some(&123));
+        assert!(
+            ctx.persistent_registers.is_empty(),
+            "AirportTile no debe exponer el PSA del AirportScope como storage propio"
+        );
         assert_eq!(ctx.parent_persistent_registers.get(&7), Some(&0xCAFE_BABE));
         assert_eq!(
             current

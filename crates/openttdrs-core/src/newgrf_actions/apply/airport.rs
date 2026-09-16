@@ -249,11 +249,12 @@ pub fn apply_newgrf_airports(state: &mut GameState, search_dirs: &[&Path]) {
 
 /// Reatacha los `AirportTile` de aeropuertos que llegaron desde un `.sav`.
 ///
-/// `STNN` sólo persiste la huella y el id global del aeropuerto; el layout
-/// `Airport` no guarda explícitamente su origen. Se prueban los anclajes
-/// derivados de cada tile real y de cada entrada del layout y se acepta sólo
-/// una huella exacta. Si el GRF/catálogo no está disponible se conserva la
-/// huella vanilla y el renderer cae a `AirportPiece` sin inventar sprites.
+/// `STNN` conserva el origen nativo `airport.tile` cuando está disponible. Ese
+/// origen es autoritativo para rehidratar el layout; sólo los saves legacy que
+/// no lo exponen prueban anclajes derivados de cada tile real y de cada entrada
+/// del layout, aceptando únicamente una huella exacta. Si el GRF/catálogo no
+/// está disponible se conserva la huella vanilla y el renderer cae a
+/// `AirportPiece` sin inventar sprites.
 pub fn rehydrate_newgrf_airport_tiles(state: &mut GameState) {
     let tile_catalog = &state.airport_tile_spec_catalog;
     let airport_catalog = &state.airport_spec_catalog;
@@ -296,28 +297,37 @@ pub fn rehydrate_newgrf_airport_tiles(state: &mut GameState) {
         // estar disponible tras recargar el GRF.
         let axis_y = rotation == 2 || rotation == 6;
         let actual = station.airport_tiles.clone();
-        let mut found = None;
-        for actual_coord in &actual {
-            for layout_tile in &layout.tiles {
-                let (dx, dy) = (i32::from(layout_tile.x), i32::from(layout_tile.y));
-                let origin = TileCoord::new(actual_coord.x - dx, actual_coord.y - dy);
-                let mapping = crate::airport::newgrf_airport_tile_gfx_with_layout(
-                    origin,
-                    def,
-                    tile_catalog,
-                    axis_y,
-                    Some(station.airport_layout),
-                    Some(rotation),
-                );
-                if airport_tile_coords_match(&mapping, &actual) {
-                    found = Some(mapping);
+        let mapping_at = |origin| {
+            let mapping = crate::airport::newgrf_airport_tile_gfx_with_layout(
+                origin,
+                def,
+                tile_catalog,
+                axis_y,
+                Some(station.airport_layout),
+                Some(rotation),
+            );
+            airport_tile_coords_match(&mapping, &actual).then_some(mapping)
+        };
+        let found = station.airport_origin.and_then(mapping_at);
+        let found = if station.airport_origin.is_none() {
+            let mut inferred = None;
+            for actual_coord in &actual {
+                for layout_tile in &layout.tiles {
+                    let (dx, dy) = (i32::from(layout_tile.x), i32::from(layout_tile.y));
+                    let origin = TileCoord::new(actual_coord.x - dx, actual_coord.y - dy);
+                    if let Some(mapping) = mapping_at(origin) {
+                        inferred = Some(mapping);
+                        break;
+                    }
+                }
+                if inferred.is_some() {
                     break;
                 }
             }
-            if found.is_some() {
-                break;
-            }
-        }
+            inferred
+        } else {
+            found
+        };
         if let Some(mapping) = found {
             station.airport_tile_gfx = mapping;
         }
@@ -545,6 +555,73 @@ mod tests {
             state.stations[0].airport_tile_gfx,
             vec![(TileCoord::new(5, 6), 24), (TileCoord::new(6, 9), 18)],
             "STNN.layout/rotation conserva los offsets E que el GRF declaró"
+        );
+    }
+
+    #[test]
+    fn explicit_airport_origin_does_not_reinfer_a_shifted_layout() {
+        let mut state = GameState::new(16, 16);
+        let mut station = Station::new_with_kind(TileCoord::new(10, 10), StopKind::Airport);
+        station.airport_newgrf_spec_id = Some(10);
+        station.airport_origin = Some(TileCoord::new(1, 1));
+        station.airport_tiles = vec![TileCoord::new(5, 5)];
+        state.stations.push(station);
+        state.airport_tile_spec_catalog = vec![AirportTileSpecDef {
+            gfx: AirportTileGfxId(74),
+            subst_id: 24,
+            from_newgrf: true,
+            callback_mask: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            newgrf_local_id: 0,
+            newgrf_grfid: 1,
+            newgrf_grf_version: 0,
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: None,
+        }];
+        state.airport_spec_catalog = vec![NewgrfAirportSpecDef {
+            id: 10,
+            class: AirportClassId::Small,
+            label: "Origen explícito".into(),
+            short_label: "Origen".into(),
+            size_x: 1,
+            size_y: 1,
+            catchment: 4,
+            noise_level: 1,
+            subst_id: AirportSpecId::Small,
+            ttd_airport_type: 1,
+            layouts: vec![AirportTileLayout {
+                rotation: 0,
+                tiles: vec![AirportLayoutTile {
+                    x: 0,
+                    y: 0,
+                    gfx: 74,
+                }],
+            }],
+            enabled: true,
+            min_year: 0,
+            max_year: u16::MAX,
+            maintenance_cost: 0,
+            associated_badges: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_grfid: 1,
+            newgrf_views: Vec::new(),
+            newgrf_purchase_views: Vec::new(),
+            newgrf_runtime: None,
+        }];
+
+        rehydrate_newgrf_airport_tiles(&mut state);
+
+        assert!(
+            state.stations[0].airport_tile_gfx.is_empty(),
+            "un origen STNN presente pero incompatible no debe desplazarse a la huella"
         );
     }
 }

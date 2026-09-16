@@ -2487,3 +2487,11 @@ detenido por el gate de pausa/animación completa. Agua, fuego de refinería,
 dependencia de `Time<Virtual>` como el salto acumulado durante una pausa. Pasan
 16 pruebas focalizadas, 1.576 tests del cliente y Clippy estricto; la cobertura
 de #326/#329/#567 continúa parcial y no se cierran issues madre.
+
+Actualización #326/#329/#567-TUNNEL-PORTAL-SEGMENTED (`c7495351`): el portal
+`RTSG_TUNNEL_PORTAL` custom que se dibuja como child de la catenaria publica
+también `ViewportSortableSegmentedChild` y `ViewportSortableSegmentedSource`.
+Así la base Action5 y el portal conservan su PNG completo para el recorte local
+de cada banda, sin perder el orden atómico del `SpriteCombine`. La regresión
+verifica las dos fuentes bajo el parent de cable; la cobertura de composición y
+callbacks/consumidores NewGRF sigue parcial y no se cierran issues madre.

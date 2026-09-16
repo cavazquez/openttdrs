@@ -9259,3 +9259,15 @@ del sistema usa el mismo reloj real que el fuego de refinería. Pasan 2 pruebas
 focalizadas y formato estricto. La fila continúa parcial y #326/#329/#567
 permanecen abiertas por los demás ciclos, producers, callbacks/consumidores
 NewGRF, composición global y framebuffer.
+
+### #326/#329/#567-TUNNEL-PORTAL-SEGMENTED — portal NewGRF por banda
+
+Actualizado: 2026-09-16 (`c7495351`). La fachada `RTSG_TUNNEL_PORTAL` custom
+que forma el `SpriteCombine` de la catenaria ferroviaria conserva ahora su
+`Sprite` y `Transform` completos en `ViewportSortableSegmentedSource`. La base
+Action5 y el portal pueden recortarse/promoverse de forma independiente en
+las bandas de `ViewportDoDraw`, mientras el vínculo child→cable sigue siendo
+atómico dentro de cada banda. La regresión NewGRF verifica dos children y dos
+fuentes segmentadas; pasan 1.577 tests del cliente, 2 ignorados y Clippy
+estricto del binario. La fila continúa parcial por otros combines, producers,
+callbacks/consumidores NewGRF, composición global y framebuffer.

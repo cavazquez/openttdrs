@@ -6448,3 +6448,14 @@ render ejecutables, 1 ignorada, 1.577 tests del cliente, 2 ignorados y Clippy
 estricto del binario. La corrección es parcial y no cierra #326/#329/#567:
 siguen pendientes otros producers/ciclos, callbacks/consumidores NewGRF,
 composición global y comparación de framebuffer.
+
+Corrección #326/#329/#567-TUNNEL-PORTAL-SEGMENTED (2026-09-16,
+`c7495351`): la fachada `RTSG_TUNNEL_PORTAL` custom que se combina con la
+catenaria ferroviaria publica ahora la fuente completa del sprite y su
+transform original, igual que la base Action5. El sorter puede recortar y
+promover ambas capas por banda nativa sin mover globalmente el PNG que debe
+permanecer en la boca del túnel. La regresión NewGRF verifica dos children y
+dos fuentes segmentadas bajo el mismo cable; pasan 1.577 tests del cliente,
+2 ignorados y Clippy estricto del binario. La corrección es parcial y no
+cierra #326/#329/#567: siguen pendientes otros combines, producers,
+callbacks/consumidores NewGRF, composición global y comparación de framebuffer.

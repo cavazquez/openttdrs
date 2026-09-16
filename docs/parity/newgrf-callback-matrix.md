@@ -2281,3 +2281,11 @@ capas ground de `StationGfx` aeroportuario. La prueba de fábrica verifica color
 opaco y máscara de transparencia de destino; las 25 pruebas dirigidas de
 TileLayout y Clippy estricto pasan. Esto sigue siendo una corrección parcial y
 no cierra #326/#329/#567.
+
+Actualización #326/#329-NEWGRF-INDUSTRY-ANIMATED-TRANSPARENCY (2026-09-16,
+`5f2408b0`): las capas de `IndustryBuildingAnim` respetan la separación
+nativa entre `DrawGroundSprite` y `AddSortableSpriteToDraw`: el suelo animado
+permanece opaco y sólo el BUILD animado recibe el alpha de `TO_INDUSTRIES`.
+La entidad recalcula el color al crearla y cuando cambia frame o preferencia;
+6 pruebas dirigidas y Clippy estricto pasan. La corrección sigue parcial y no
+cierra #326/#329/#567.

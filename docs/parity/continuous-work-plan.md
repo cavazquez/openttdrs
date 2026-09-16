@@ -8992,3 +8992,14 @@ de transparencia/invisibilidad y sus paletas. Pasan 25 pruebas dirigidas de
 TileLayout y Clippy estricto. La fila sigue parcial y #326/#329/#567 permanecen
 abiertas por composición destino, layouts restantes, foundations/rotaciones,
 callbacks y consumidores NewGRF.
+
+### #326/#329-NEWGRF-INDUSTRY-ANIMATED-TRANSPARENCY — alpha de capas animadas
+
+Actualizado: 2026-09-16 (`5f2408b0`). `IndustryBuildingAnim` separa ahora el
+color de suelo del color de BUILD: `TO_INDUSTRIES` sólo vuelve transparente la
+capa animada del edificio, mientras el suelo conserva alpha 1 como en
+`DrawGroundSprite`. El color se actualiza tanto al crear la entidad como al
+cambiar frame o preferencia. Pasan 6 pruebas dirigidas de `industry_anim` y
+Clippy estricto. La fila sigue parcial y #326/#329/#567 permanecen abiertas
+por la composición global, otros layouts, foundations/rotaciones, callbacks y
+consumidores NewGRF.

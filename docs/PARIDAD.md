@@ -6193,3 +6193,12 @@ la máscara `PALETTE_TO_TRANSPARENT` se conservan mediante sus modifiers. Pasan
 25 pruebas dirigidas de TileLayout y Clippy estricto. La corrección es parcial y
 no cierra #326/#329/#567: siguen pendientes composición destino, otros
 layouts, foundations/rotaciones, callbacks y consumidores NewGRF.
+
+Corrección #326/#329-NEWGRF-INDUSTRY-ANIMATED-TRANSPARENCY (2026-09-16,
+`5f2408b0`): `IndustryBuildingAnim` aplica ahora la transparencia de
+`TO_INDUSTRIES` sólo al sprite BUILD animado. El suelo animado conserva alpha
+1 porque OpenTTD lo entrega mediante `DrawGroundSprite` antes de abrir la
+secuencia sortable del edificio. La sincronización se recalcula al cambiar el
+frame o la preferencia; la regresión cubre ambos caminos y pasan 6 pruebas
+dirigidas de `industry_anim` y Clippy estricto. La corrección es parcial y no
+cierra #326/#329/#567.

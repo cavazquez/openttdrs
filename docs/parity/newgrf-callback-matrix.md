@@ -2444,3 +2444,12 @@ carretera/tranvía, overlays Action5/custom y reserva PBS. `TO_CATENARY` no se
 hereda de ese bit. Pasan 79 pruebas de puente, incluida la regresión de
 rampas/colores; la cobertura de #326/#329/#567 continúa parcial y no se
 cierran issues madre.
+
+Actualización #326/#329/#567-DYNAMIC-VISUAL-REMAP (`8f325966`): el contrato
+de remap separa la capa materializada de los visuales transitorios. Vehículos,
+OVNIs, FX, humo de vehículos, burbujas, popups y destellos conservan su entidad
+durante un rebuild de representación en detalle; cargas de partida y overview
+los eliminan, y la flota se recrea sólo cuando no queda una instancia viva.
+Las animaciones ligadas a tiles no se preservan porque deben regenerarse con la
+nueva capa del mapa. Pasan 1.575 tests del cliente y la cobertura de
+#326/#329/#567 continúa parcial; no se cierran issues madre.

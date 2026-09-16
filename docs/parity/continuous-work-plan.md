@@ -9201,3 +9201,16 @@ catenaria conserva su bit `TO_CATENARY` independiente. Pasan 79 pruebas de
 puente y la regresión específica de rampas/colores. La fila continúa parcial y
 #326/#329/#567 permanecen abiertas por otros producers, callbacks/consumidores
 NewGRF, composición global y comparación de framebuffer.
+
+### #326/#329/#567-DYNAMIC-VISUAL-REMAP — entidades transitorias
+
+Actualizado: 2026-09-16 (`8f325966`). Los remaps de representación conservan
+vehículos, OVNIs, FX, humo de vehículos, burbujas, popups de ingresos y
+destellos de construcción cuando el mapa sigue en detalle; una carga/cambio de
+mapa o el overview los limpia explícitamente. El spawn inicial de vehículos se
+desactiva durante un rebuild que ya tiene una flota viva, evitando duplicados;
+al regresar desde overview se vuelve a materializar una sola vez. Las
+animaciones dependientes de una tesela siguen dentro del rebuild. Pasan 1.575
+tests del cliente, 11 tests de `world` y Clippy estricto del binario. La fila
+continúa parcial y #326/#329/#567 permanecen abiertas por otros producers,
+efectos, callbacks/consumidores NewGRF, composición global y framebuffer.

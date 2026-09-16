@@ -6393,3 +6393,15 @@ decisión de `TO_CATENARY` permanece independiente. Pasan 79 pruebas de
 puente, incluida la regresión de rampas y colores. La corrección es parcial y
 no cierra #326/#329/#567: siguen pendientes otros producers, callbacks/
 consumidores NewGRF, composición global y comparación de framebuffer.
+
+Corrección #326/#329/#567-DYNAMIC-VISUAL-REMAP (2026-09-16, `8f325966`): las
+entidades transitorias de vehículos, OVNIs, FX, humo de vehículos, burbujas,
+popups de ingresos y destellos de construcción ya no se destruyen al cambiar
+la representación visual del mismo mapa. La reconstrucción evita duplicar
+vehículos; una carga de partida o el cambio al overview sí elimina esos
+visuales, y al volver al detalle crea la flota una sola vez. Las animaciones
+ligadas a una tesela continúan regenerándose porque dependen del contenido
+materializado del mapa. Pasan 1.575 tests del cliente, 11 tests de `world` y
+Clippy estricto del binario. La corrección es parcial y no cierra
+#326/#329/#567: siguen pendientes otros producers, efectos, callbacks/
+consumidores NewGRF, composición global y comparación de framebuffer.

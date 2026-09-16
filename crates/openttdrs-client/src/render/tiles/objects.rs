@@ -2024,7 +2024,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 );
             }
             if let Some((handle, pos3)) = newgrf_overlay {
-                let sprite = tint_building_sprite(Sprite {
+                let sprite = destination_mask_building_sprite(Sprite {
                     image: handle,
                     color: Color::WHITE,
                     ..default()

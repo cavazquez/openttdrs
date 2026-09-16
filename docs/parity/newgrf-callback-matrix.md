@@ -2567,3 +2567,15 @@ después del orden `StartSpriteCombine`. Las regresiones de tablas, atlas y
 spawn pasan 1.583 tests del cliente, 2 ignorados y Clippy estricto. Esto cubre
 el draw vanilla y no cierra las issues madre: quedan otros producers,
 callbacks/consumidores NewGRF, composición global y captura raster.
+
+### #326/#329/#567-AIRPORT-TILE-PSA-SCOPES — `7C` y `\2psto`
+
+Actualización (2026-09-16, `8b5eb1e6`, `0c482f3f`): el contexto de
+`AirportTile` marca el scope self sin PSA y conserva la tabla persistente sólo
+para el parent. El motor genérico devuelve “variable no disponible” para
+`7C[param]` self, aplica el default de Action2 y no escribe con `\2psto`;
+el parent mantiene su camino persistente. Las regresiones cubren la lectura,
+el writeback y el contexto real; pasan 2.824 tests de core, 1 ignorado y
+Clippy estricto. Es una corrección de contrato de scopes, no un cierre de
+paridad completa: debe auditarse el backing store propio del aeropuerto frente
+al de la estación y quedan otros callbacks/consumidores y compositor.

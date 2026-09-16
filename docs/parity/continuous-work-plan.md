@@ -9354,3 +9354,15 @@ lugar de ocultarlo. La regresión de tabla, carga desde el atlas y spawn pasa
 con 1.583 tests del cliente, 2 ignorados y Clippy estricto. `tree_391` es un
 sprite 1×1 real no referenciado por la tabla vanilla. La fila sigue parcial y
 no se cierran #326/#329/#567.
+
+### #326/#329/#567-AIRPORT-TILE-PSA-SCOPES — separación de scopes
+
+Actualizado: 2026-09-16 (`8b5eb1e6`, `0c482f3f`). `AirportTileScopeResolver`
+queda representado sin almacenamiento persistente propio: `7C` self se
+reporta como no disponible, cae al default de Action2 y `\2psto` ignora el
+writeback. El `AirportScopeResolver` parent sigue siendo el único scope con
+lectura/escritura persistente materializada. Pasan las regresiones de
+`airport_tile_action2`, 2.824 tests de core, 1 ignorado y Clippy estricto.
+La fila continúa parcial: queda revisar si el replay SAV requiere un PSA del
+aeropuerto separado del mapa persistente compartido por la estación, además
+de los demás gaps de compositor/callbacks; no se cierran las issues madre.

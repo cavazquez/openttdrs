@@ -6541,3 +6541,15 @@ El hueco `tree_391` es un sprite 1×1 real del NFO y no lo referencia ninguna
 fila vanilla. Ambas correcciones son parciales para #326/#329/#567: no
 cierran las issues madre mientras sigan pendientes otros producers/callbacks,
 composición global y comparación de framebuffer.
+
+Corrección #326/#329/#567-AIRPORT-TILE-PSA-SCOPES (`8b5eb1e6`, `0c482f3f`,
+2026-09-16): el contexto `AirportTile` ya no expone como propio el registro
+persistent `7C` del aeropuerto. El evaluador distingue disponibilidad por
+scope: un `7C` self no disponible toma el fallback de Action2 y `\2psto` no
+materializa un mapa local; el scope padre conserva la lectura/escritura del
+PSA disponible en el modelo actual. Se agregaron regresiones del evaluador y
+del contexto; pasan 2.824 tests de `openttdrs-core`, 1 ignorado y Clippy
+estricto. La corrección evita la fuga de estado, pero es parcial: aún debe
+desacoplarse, si el replay SAV lo exige, el backing store del PSA del
+aeropuerto respecto del almacenamiento compartido de la estación; no se
+cierran #326/#329/#567.

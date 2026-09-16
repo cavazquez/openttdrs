@@ -8,8 +8,8 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     EngineDef, Vehicle, VehicleAdvancedVisualEffectSpawn, VehicleVisualEffectKind,
-    extrapolate_vehicle_pose, resolve_vehicle_spawn_visual_effect_callback, slope_dz_at_subtile,
-    train_smoke_kind_for_engine, vehicle_subtile_at_with_map, vehicle_visual_effect_spec,
+    VehicleVisualEffectSpec, extrapolate_vehicle_pose, slope_dz_at_subtile,
+    train_smoke_kind_for_engine, vehicle_subtile_at_with_map,
 };
 
 use crate::audio::{PlayWorldSfx, play_vehicle_event_sound_with_default};
@@ -316,10 +316,37 @@ fn train_smoke_to_emit_with_engine(
 
 /// Igual que [`train_smoke_to_emit_with_engine`], pero consumiendo el stream
 /// global cuando el caller está dentro del tick visual autoritativo.
+#[cfg(test)]
 fn train_smoke_to_emit_with_engine_and_random(
     map: &Map,
     vehicle: &mut Vehicle,
     engine: &EngineDef,
+    head: VisualEffectHeadState,
+    smoke_amount: u8,
+    rail_type_props: &[openttdrs_core::RailTypeRuntimeProps; 4],
+    random: &mut Option<&mut openttdrs_core::linkgraph_parity::Randomizer>,
+) -> Option<TrainSmokeSet> {
+    let visual_spec = openttdrs_core::vehicle_visual_effect_spec(engine, vehicle);
+    train_smoke_to_emit_with_engine_and_random_with_spec(
+        map,
+        vehicle,
+        engine,
+        visual_spec,
+        head,
+        smoke_amount,
+        rail_type_props,
+        random,
+    )
+}
+
+/// Variante del emisor que recibe CB10 ya evaluado con el scope real del
+/// vehículo. Evita volver a ejecutar el callback con el contexto reducido.
+#[allow(clippy::too_many_arguments)]
+fn train_smoke_to_emit_with_engine_and_random_with_spec(
+    map: &Map,
+    vehicle: &mut Vehicle,
+    engine: &EngineDef,
+    visual_spec: VehicleVisualEffectSpec,
     head: VisualEffectHeadState,
     smoke_amount: u8,
     rail_type_props: &[openttdrs_core::RailTypeRuntimeProps; 4],
@@ -337,7 +364,7 @@ fn train_smoke_to_emit_with_engine_and_random(
 
     let max_speed = head.max_speed;
     let speed = head.cur_speed.min(max_speed);
-    let smoke_kind = match vehicle_visual_effect_spec(engine, vehicle).kind {
+    let smoke_kind = match visual_spec.kind {
         VehicleVisualEffectKind::Disabled => return None,
         VehicleVisualEffectKind::Steam => openttdrs_core::TrainSmokeKind::Steam,
         VehicleVisualEffectKind::Diesel => openttdrs_core::TrainSmokeKind::Diesel,
@@ -837,6 +864,49 @@ fn visual_effect_head_states(
         .collect()
 }
 
+/// Contexto Action2 compartido por CB10/CB160 en el renderer autoritativo.
+///
+/// Los callbacks visuales de `OpenTTD` se evalúan sobre el vehículo real, pero
+/// con el scope completo de vehículo: consist, carga, badges, parámetros del
+/// GRF y estado de la unidad. El helper antiguo sólo podía reconstruir los
+/// registros persistentes y los random bits, por lo que una cadena que leyera
+/// variables como `0x40`, `0x47` o `0xB4` podía elegir otro efecto.
+fn vehicle_visual_effect_context(
+    state: &openttdrs_core::GameState,
+    vehicle_id: u32,
+    engine: &EngineDef,
+) -> openttdrs_core::Action2EvalCtx {
+    let Some(vehicle) = state
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.id == vehicle_id)
+    else {
+        return openttdrs_core::Action2EvalCtx::default();
+    };
+    let primary = crate::render::vehicles::vehicle_livery_colour_for_state(state, vehicle);
+    let mut ctx = openttdrs_core::action2_eval_ctx_for_unit(
+        &state.vehicles,
+        vehicle_id,
+        state.tick,
+        &state.engine_catalog,
+        primary.as_u8(),
+    );
+    openttdrs_core::enrich_vehicle_track_badge_vars(
+        &mut ctx,
+        &state.vehicles,
+        vehicle_id,
+        &state.map,
+        &state.engine_catalog,
+        &state.runtime.rail_type_badges,
+        &state.road_type_catalog,
+    );
+    ctx.set_grf_params(openttdrs_core::stack_params_for_grfid(
+        &state.newgrf_stack,
+        engine.newgrf_grfid,
+    ));
+    ctx
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_train_smoke(
     mut sim: ResMut<SimWorld>,
@@ -869,7 +939,6 @@ fn spawn_train_smoke(
     fleet.rebuild(&state.vehicles);
     let visual_slots = visual_effect_vehicle_slots(&state.vehicles, &fleet);
     let head_states = visual_effect_head_states(map, &state.vehicles, &fleet, engine_catalog);
-    let mut random = Some(&mut state.random);
     let mut visual_sound_events = Vec::new();
     for slot in visual_slots {
         if active_count >= MAX_TRAIN_SMOKE_EFFECTS {
@@ -879,16 +948,21 @@ fn spawn_train_smoke(
         if !head.allows_visual_effect(prefs.smoke_amount) {
             continue;
         }
-        let vehicle = &mut state.vehicles[slot];
-        let engine_id = vehicle
+        let vehicle_id = state.vehicles[slot].id;
+        let engine_id = state.vehicles[slot]
             .engine_id
-            .unwrap_or_else(|| openttdrs_core::default_engine_id(vehicle.kind));
+            .unwrap_or_else(|| openttdrs_core::default_engine_id(state.vehicles[slot].kind));
         let Some(engine) = openttdrs_core::engine_in_catalog(engine_catalog, engine_id)
             .or_else(|| openttdrs_core::engine_by_id(engine_id))
         else {
             continue;
         };
-        let visual_spec = vehicle_visual_effect_spec(engine, vehicle);
+        let mut visual_ctx = vehicle_visual_effect_context(state, vehicle_id, engine);
+        let vehicle = &mut state.vehicles[slot];
+        let visual_spec =
+            openttdrs_core::vehicle_visual_effect_spec_with_ctx(engine, &mut visual_ctx);
+        openttdrs_core::writeback_vehicle_persistent_registers(vehicle, &visual_ctx);
+        let mut random = Some(&mut state.random);
         if visual_spec.advanced {
             // Un modelo avanzado todavía puede resolver a `Disabled` (por
             // ejemplo, un valor reservado del GRF). En ese caso OpenTTD no
@@ -917,8 +991,12 @@ fn spawn_train_smoke(
                 vehicle.newgrf_tick_counter,
                 0x1600_0000,
             );
-            let advanced =
-                resolve_vehicle_spawn_visual_effect_callback(engine, vehicle, random_word);
+            let advanced = openttdrs_core::resolve_vehicle_spawn_visual_effect_callback_with_ctx(
+                engine,
+                &mut visual_ctx,
+                random_word,
+            );
+            openttdrs_core::writeback_vehicle_persistent_registers(vehicle, &visual_ctx);
             let Some(advanced) = advanced else {
                 continue;
             };
@@ -959,10 +1037,11 @@ fn spawn_train_smoke(
             continue;
         }
         let set_kind = if vehicle.kind == VehicleKind::Train {
-            train_smoke_to_emit_with_engine_and_random(
+            train_smoke_to_emit_with_engine_and_random_with_spec(
                 map,
                 vehicle,
                 engine,
+                visual_spec,
                 head,
                 prefs.smoke_amount,
                 rail_type_props,
@@ -1140,6 +1219,14 @@ mod tests {
         gfx
     }
 
+    fn callback_vehicle_variable(variable: u8, mask: u32) -> TrainSpriteGraphics {
+        let mut gfx = callback_literal(0);
+        let entry = gfx.action2_var.get_mut(&2).expect("callback base");
+        entry.first.variable = variable;
+        entry.first.adjust.and_mask = mask;
+        gfx
+    }
+
     #[test]
     fn smoke_kind_matches_engine_class() {
         assert_eq!(train_smoke_kind(ENGINE_TRAIN_KIRBY), TrainSmokeKind::Steam);
@@ -1296,6 +1383,31 @@ mod tests {
         // CB10 bit 6 = VE_DISABLE_EFFECT.
         engine.newgrf_runtime = Some(Box::new(callback_literal(0x40)));
         assert!(train_smoke_to_emit_with_engine(&map, &mut vehicle, &engine, 2).is_none());
+    }
+
+    #[test]
+    fn visual_effect_context_exposes_vehicle_variables_to_cb10() {
+        let mut state = openttdrs_core::GameState::new(4, 4);
+        let vehicle = running_train(ENGINE_TRAIN_KIRBY);
+        state.vehicles.push(vehicle.clone());
+
+        let mut engine = openttdrs_core::engine_by_id(ENGINE_TRAIN_KIRBY)
+            .expect("motor vanilla ausente")
+            .clone();
+        engine.newgrf_grfid = 0x5649_5355;
+        engine.newgrf_local_id = 0;
+        engine.vehicle_callback_mask = 1;
+        // CB10 lee la velocidad real (var B4) y convierte 0x18 en tipo vapor.
+        engine.newgrf_runtime = Some(Box::new(callback_vehicle_variable(0xB4, 0xFF)));
+
+        let mut rich_ctx = vehicle_visual_effect_context(&state, vehicle.id, &engine);
+        let rich = openttdrs_core::vehicle_visual_effect_spec_with_ctx(&engine, &mut rich_ctx);
+        assert_eq!(rich.kind, VehicleVisualEffectKind::Steam);
+
+        // La vista reducida no conoce B4 y devuelve el default Action2 (0).
+        let mut reduced_vehicle = vehicle;
+        let reduced = openttdrs_core::vehicle_visual_effect_spec(&engine, &mut reduced_vehicle);
+        assert_eq!(reduced.kind, VehicleVisualEffectKind::Default);
     }
 
     #[test]

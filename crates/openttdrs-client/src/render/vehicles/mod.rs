@@ -6,7 +6,7 @@ mod spawn;
 mod sync;
 
 use bevy::prelude::{Assets, Image, Vec3};
-use openttdrs_core::{EngineDef, VehicleKind};
+use openttdrs_core::{EngineDef, GameState, VehicleKind};
 
 use crate::state::SimWorld;
 
@@ -188,11 +188,11 @@ fn vehicle_uses_newgrf_stack(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) 
 /// Devuelve la cabeza de un consist sin confiar en que los enlaces cargados
 /// desde un SAV sean acíclicos. OpenTTD aplica la librea de la cabeza a todas
 /// sus unidades, incluidos vagones y partes articuladas.
-fn vehicle_head_id(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) -> u32 {
+fn vehicle_head_id(state: &GameState, vehicle: &openttdrs_core::Vehicle) -> u32 {
     let mut current_id = vehicle.id;
     let mut seen = std::collections::HashSet::new();
     while seen.insert(current_id) {
-        let Some(current) = sim.state.vehicles.iter().find(|v| v.id == current_id) else {
+        let Some(current) = state.vehicles.iter().find(|v| v.id == current_id) else {
             break;
         };
         let Some(previous_id) = current.prev_unit else {
@@ -208,27 +208,31 @@ fn vehicle_head_id(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) -> u32 {
 /// La prioridad coincide con `GetEngineLivery`: librea explícita del grupo (o
 /// de uno de sus padres), esquema por tipo de vehículo si el default está
 /// habilitado y, por último, el color por defecto de la compañía.
-fn vehicle_livery_colours(
-    sim: &SimWorld,
+pub(crate) fn vehicle_livery_colours_for_state(
+    state: &GameState,
     vehicle: &openttdrs_core::Vehicle,
 ) -> (crate::sprites::CompanyColour, crate::sprites::CompanyColour) {
-    let fallback = crate::sprites::CompanyColour::from_u8(sim.state.company_colour);
-    let Some(company) = sim.state.companies.get(vehicle.owner.index()) else {
+    let fallback = crate::sprites::CompanyColour::from_u8(state.company_colour);
+    let Some(company) = state.companies.get(vehicle.owner.index()) else {
         return (fallback, fallback);
     };
-    let head_id = vehicle_head_id(sim, vehicle);
-    let head = sim
-        .state
+    let head_id = vehicle_head_id(state, vehicle);
+    let head = state
         .vehicles
         .iter()
         .find(|candidate| candidate.id == head_id)
         .unwrap_or(vehicle);
     let engine = vehicle
         .engine_id
-        .and_then(|id| engine_in_sim(sim, id))
+        .and_then(|id| openttdrs_core::engine_in_catalog(&state.engine_catalog, id))
+        .or_else(|| vehicle.engine_id.and_then(openttdrs_core::engine_by_id))
         .unwrap_or_else(|| vehicle.effective_engine());
     let parent_engine = (head.id != vehicle.id)
-        .then(|| head.engine_id.and_then(|id| engine_in_sim(sim, id)))
+        .then(|| {
+            head.engine_id
+                .and_then(|id| openttdrs_core::engine_in_catalog(&state.engine_catalog, id))
+                .or_else(|| head.engine_id.and_then(openttdrs_core::engine_by_id))
+        })
         .flatten();
     let scheme = openttdrs_core::vehicle_livery_scheme(vehicle, engine, parent_engine);
     let (mut primary, mut secondary) = openttdrs_core::company_livery_colours(company, scheme);
@@ -239,7 +243,7 @@ fn vehicle_livery_colours(
         if !seen.insert(id) {
             break;
         }
-        let Some(group) = sim.state.vehicle_groups.iter().find(|group| group.id == id) else {
+        let Some(group) = state.vehicle_groups.iter().find(|group| group.id == id) else {
             break;
         };
         if group.livery_in_use
@@ -260,6 +264,20 @@ fn vehicle_livery_colours(
         crate::sprites::CompanyColour::from_u8(primary),
         crate::sprites::CompanyColour::from_u8(secondary),
     )
+}
+
+fn vehicle_livery_colours(
+    sim: &SimWorld,
+    vehicle: &openttdrs_core::Vehicle,
+) -> (crate::sprites::CompanyColour, crate::sprites::CompanyColour) {
+    vehicle_livery_colours_for_state(&sim.state, vehicle)
+}
+
+pub(crate) fn vehicle_livery_colour_for_state(
+    state: &GameState,
+    vehicle: &openttdrs_core::Vehicle,
+) -> crate::sprites::CompanyColour {
+    vehicle_livery_colours_for_state(state, vehicle).0
 }
 
 /// Color primario que debe usar el renderer para una unidad.

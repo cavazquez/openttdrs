@@ -996,13 +996,34 @@ pub fn resolve_vehicle_visual_effect_spec_callback(
     engine: &EngineDef,
     vehicle: &mut Vehicle,
 ) -> Option<VehicleVisualEffectSpec> {
+    let mut ctx = action2_eval_ctx_from_vehicle(vehicle);
+    let spec = resolve_vehicle_visual_effect_spec_callback_with_ctx(engine, &mut ctx);
+    writeback_vehicle_persistent_registers(vehicle, &ctx);
+    spec
+}
+
+/// Resuelve el callback visual básico usando un contexto Action2 preparado por
+/// el caller. Esto permite que los consumidores que sí conocen el consist, el
+/// catálogo y el estado de render no vuelvan a la vista reducida de
+/// [`action2_eval_ctx_from_vehicle`].
+#[must_use]
+pub fn resolve_vehicle_visual_effect_spec_callback_with_ctx(
+    engine: &EngineDef,
+    ctx: &mut Action2EvalCtx,
+) -> Option<VehicleVisualEffectSpec> {
     if engine.newgrf_grfid == 0
         || engine.vehicle_callback_mask & (1 << 0) == 0
         || engine.newgrf_runtime.is_none()
     {
         return None;
     }
-    let result = resolve_vehicle_callback(engine, vehicle, CBID_VEHICLE_VISUAL_EFFECT, 0, 0);
+    let result = engine.newgrf_runtime.as_ref()?.resolve_callback_ctx_u16(
+        engine.newgrf_local_id,
+        CBID_VEHICLE_VISUAL_EFFECT,
+        0,
+        0,
+        ctx,
+    );
     if result == CALLBACK_FAILED || result >= 0x100 {
         return None;
     }
@@ -1058,19 +1079,32 @@ pub fn resolve_vehicle_spawn_visual_effect_callback(
     vehicle: &mut Vehicle,
     random: u32,
 ) -> Option<VehicleAdvancedVisualEffect> {
+    let mut ctx = action2_eval_ctx_from_vehicle(vehicle);
+    let result = resolve_vehicle_spawn_visual_effect_callback_with_ctx(engine, &mut ctx, random);
+    writeback_vehicle_persistent_registers(vehicle, &ctx);
+    result
+}
+
+/// Resuelve `CBID_VEHICLE_SPAWN_VISUAL_EFFECT` usando un contexto Action2 ya
+/// preparado. Los registros temporales y `0x100..0x103` quedan en `ctx`; el
+/// caller decide cuándo hacer el writeback de los registros persistentes.
+#[must_use]
+pub fn resolve_vehicle_spawn_visual_effect_callback_with_ctx(
+    engine: &EngineDef,
+    ctx: &mut Action2EvalCtx,
+    random: u32,
+) -> Option<VehicleAdvancedVisualEffect> {
     if engine.newgrf_grfid == 0 {
         return None;
     }
     let runtime = engine.newgrf_runtime.as_ref()?;
-    let mut ctx = action2_eval_ctx_from_vehicle(vehicle);
     let result = runtime.resolve_callback_ctx_u16(
         engine.newgrf_local_id,
         CBID_VEHICLE_SPAWN_VISUAL_EFFECT,
         0,
         random,
-        &mut ctx,
+        ctx,
     );
-    writeback_vehicle_persistent_registers(vehicle, &ctx);
     if result == CALLBACK_FAILED {
         return None;
     }
@@ -1159,7 +1193,21 @@ pub fn vehicle_visual_effect_spec(
     engine: &EngineDef,
     vehicle: &mut Vehicle,
 ) -> VehicleVisualEffectSpec {
-    resolve_vehicle_visual_effect_spec_callback(engine, vehicle)
+    let mut ctx = action2_eval_ctx_from_vehicle(vehicle);
+    let spec = vehicle_visual_effect_spec_with_ctx(engine, &mut ctx);
+    writeback_vehicle_persistent_registers(vehicle, &ctx);
+    spec
+}
+
+/// Obtiene la especificación visual efectiva a partir de un contexto Action2
+/// enriquecido. Mantiene el fallback Action0 de [`vehicle_visual_effect_spec`]
+/// cuando CB10 no aplica o falla.
+#[must_use]
+pub fn vehicle_visual_effect_spec_with_ctx(
+    engine: &EngineDef,
+    ctx: &mut Action2EvalCtx,
+) -> VehicleVisualEffectSpec {
+    resolve_vehicle_visual_effect_spec_callback_with_ctx(engine, ctx)
         .unwrap_or_else(|| decode_vehicle_visual_effect_spec(engine.visual_effect))
 }
 

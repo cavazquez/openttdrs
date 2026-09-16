@@ -164,7 +164,14 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
         for (variable, parameter) in requested_nearby_vars(runtime) {
             let nearby = nearby_tile(map, coord, parameter);
             let value = match variable {
-                0x60 => nearby_land_info(map, stations, station, nearby, climate),
+                0x60 => nearby_land_info(
+                    map,
+                    stations,
+                    station,
+                    nearby,
+                    climate,
+                    current_spec.newgrf_grf_version,
+                ),
                 0x61 => nearby_animation_frame(map, stations, station, nearby),
                 0x62 => airport_tile_id_at_offset(
                     map,
@@ -305,15 +312,20 @@ fn nearby_land_info(
     source: &Station,
     nearby: TileCoord,
     climate: Climate,
+    grf_version: u8,
 ) -> u32 {
     let Some(tile) = map.get(nearby) else {
         return 0;
     };
     let (tileh, raw_z) = tile_slope_and_z(map, nearby).unwrap_or((0, 0));
-    // Airport tiles currently use the post-GRF v8 encoding. Keeping the
-    // conversion in one helper makes the old v7 branch explicit when the
-    // parser starts retaining Action8's version per tile.
-    let z = raw_z;
+    // `GetNearbyTileInformation` returns pixel Z before GRF v8 and tile-level
+    // Z from GRF v8 onward. `AirportTileSpecDef` carries the Action8 version of
+    // the GRF that owns the current tile, just like Station/RoadStop scopes.
+    let z = if grf_version >= 8 {
+        raw_z
+    } else {
+        raw_z.saturating_mul(u8::try_from(crate::TILE_PIXEL_HEIGHT).unwrap_or(8))
+    };
     let water_bits = water_class(tile).map_or(0, |class| {
         u32::from((class.as_u8().saturating_add(1) & 0x03) << 5)
     });
@@ -912,5 +924,73 @@ mod tests {
                 .resolve_callback_ctx(current.newgrf_local_id, 0, 0, 0, &mut ctx),
             123
         );
+    }
+
+    #[test]
+    fn airport_nearby_land_info_respects_grf_version_z_units() {
+        fn spec_with_nearby_land_info(version: u8) -> AirportTileSpecDef {
+            let mut runtime = TrainSpriteGraphics::default();
+            runtime.action2_var.insert(
+                7,
+                Action2VarEntry {
+                    first: Action2VarTerm {
+                        variable: 0x60,
+                        param: Some(0),
+                        adjust: Action2VarAdjust {
+                            and_mask: u32::MAX,
+                            ..Default::default()
+                        },
+                    },
+                    ops: Vec::new(),
+                    ranges: Vec::new(),
+                    default: 0,
+                },
+            );
+            AirportTileSpecDef {
+                gfx: AirportTileGfxId(74),
+                subst_id: 24,
+                from_newgrf: true,
+                callback_mask: 0,
+                animation_frames: 0,
+                animation_status: 0xFF,
+                animation_speed: 2,
+                animation_triggers: 0,
+                animation_special_flags: 0,
+                newgrf_local_id: 0,
+                newgrf_grfid: 1,
+                newgrf_grf_version: version,
+                newgrf_type_tables: None,
+                associated_badges: Vec::new(),
+                newgrf_badge_translation: Vec::new(),
+                newgrf_preview: None,
+                newgrf_views: Vec::new(),
+                newgrf_runtime: Some(Box::new(runtime)),
+            }
+        }
+
+        for (version, expected_z) in [(7, 16_u32), (8, 2_u32)] {
+            let mut map = Map::new_flat(2, 2, 2);
+            let coord = TileCoord::new(0, 0);
+            let mut tile = map.get(coord).expect("airport tile");
+            tile.kind = TileKind::Airport;
+            map.set_tile(coord, tile).expect("set airport tile");
+            let mut station = Station::new_with_kind(coord, StopKind::Airport);
+            station.airport_tiles = vec![coord];
+            let current = spec_with_nearby_land_info(version);
+            let ctx = action2_eval_ctx_for_airport_tile(
+                &map,
+                &[station],
+                coord,
+                std::slice::from_ref(&current),
+                &current,
+                Climate::Temperate,
+            );
+            let expected = (5_u32 << 24) | (expected_z << 16) | (1 << 8);
+            assert_eq!(
+                ctx.parameterized_vars.get(&(0x60, 0)),
+                Some(&expected),
+                "AirportTile GRF v{version} debe codificar Z con la unidad nativa"
+            );
+        }
     }
 }

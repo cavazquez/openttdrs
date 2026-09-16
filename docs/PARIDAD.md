@@ -6485,3 +6485,16 @@ traseras y la suite completa queda en 1.577 tests, 2 ignorados, con Clippy
 estricto del binario. La corrección es parcial y no cierra #326/#329/#567:
 siguen pendientes otros producers, combines fuera de puentes,
 callbacks/consumidores NewGRF, composición global y framebuffer.
+
+Corrección #326/#329/#567-FIELD-FENCE-COMBINE-SEGMENTED (2026-09-16,
+`8605cac0`): las cercas de `DrawClearLandFence` dejan de emitirse como
+sprites independientes. La primera cerca visible abre el parent del
+`StartSpriteCombine` y las restantes conservan `PromotableChild`,
+`SegmentedChild` y la fuente completa para que el sorter pueda recortar el
+bloque por banda sin perder el orden NW→NE→SW→SE. El parent usa el prisma
+16×16×(4+pendiente) del C++ y los offsets laterales sólo afectan la imagen.
+La regresión de campos verifica los cuatro sprites, el bounds y los tres
+children segmentados; pasan 1.577 tests del cliente, 2 ignorados y Clippy
+estricto. La corrección es parcial y no cierra #326/#329/#567: siguen
+pendientes otros combines, producers, callbacks/consumidores NewGRF,
+composición global y comparación de framebuffer.

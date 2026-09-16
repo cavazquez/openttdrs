@@ -2515,3 +2515,12 @@ parent promovido recibe una identidad determinista derivada de RoadType,
 selector e índice de vista, separada de los IDs vanilla. La regresión verifica
 los tres grupos custom bajo el mismo parent trasero; la suite completa queda en
 1.577 tests, 2 ignorados, y la cobertura de #326/#329/#567 sigue parcial.
+
+Actualización #326/#329/#567-FIELD-FENCE-COMBINE-SEGMENTED (`8605cac0`):
+el bloque nativo `DrawClearLandFence` conserva ahora su primer sprite como
+parent y sus tres posibles cercas siguientes como children segmentados. Los
+bounds reproducen el extent común 16×16×(4+`GetSlopeMaxPixelZ`) y los offsets
+de esquina sólo alteran la posición visual; el orden de combinación queda
+determinista en NW→NE→SW→SE. La regresión de `MP_CLEAR` verifica los cuatro
+sprites y la fuente completa de cada child; la cobertura de composición y de
+otras familias NewGRF continúa parcial y no se cierran las issues madre.

@@ -9294,3 +9294,16 @@ vista en un rango sintético separado, porque el `DecodedSprite` no conserva el
 ID NFO original. La regresión custom cubre bridge, overlay y catenaria bajo el
 parent trasero; la suite completa pasa con 1.577 tests y 2 ignorados. La fila
 continúa parcial y no se cierran #326/#329/#567.
+
+### #326/#329/#567-FIELD-FENCE-COMBINE-SEGMENTED — cercas de campos por banda
+
+Actualizado: 2026-09-16 (`8605cac0`). `DrawClearLandFence` usa un único
+`StartSpriteCombine`: la primera cerca visible es el parent y las siguientes
+son `AddCombinedSprite`. El renderer conserva esa relación con el prisma
+base 16×16×(4+pendiente), offsets NW/NE/SW/SE y orden local; cada child
+publica `ViewportSortablePromotableChild`, `ViewportSortableSegmentedChild` y
+`ViewportSortableSegmentedSource` para que el clipping de `ViewportDoDraw` no
+separe ni desplace globalmente la imagen completa. La regresión de campo
+comprueba un parent y tres children segmentados junto con los cuatro sprites
+esperados; pasan 1.577 tests del cliente, 2 ignorados y Clippy estricto. La
+fila continúa parcial y no se cierran #326/#329/#567.

@@ -2,7 +2,10 @@
 
 use bevy::prelude::*;
 use openttdrs_core::Command;
-use openttdrs_core::{PBS_WAIT_FOREVER, PathfindingSettings};
+use openttdrs_core::{
+    DEFAULT_SHIP_CURVE45_PENALTY, DEFAULT_SHIP_CURVE90_PENALTY, MAX_SHIP_CURVE_PENALTY,
+    PBS_WAIT_FOREVER, PathfindingSettings,
+};
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -28,6 +31,8 @@ pub(crate) struct PathfindingSettingsWindowState {
 pub(crate) enum PathfindingSettingsAction {
     WaitDays(u8),
     Backoff(u8),
+    ShipCurve45(u32),
+    ShipCurve90(u32),
     ToggleReverse,
     ToggleReservePaths,
     ResetDefaults,
@@ -35,6 +40,14 @@ pub(crate) enum PathfindingSettingsAction {
 
 const WAIT_PRESETS: [u8; 5] = [2, 10, 30, 60, PBS_WAIT_FOREVER];
 const BACKOFF_PRESETS: [u8; 4] = [1, 20, 60, PBS_WAIT_FOREVER];
+const SHIP_CURVE_PRESETS: [u32; 6] = [
+    0,
+    DEFAULT_SHIP_CURVE45_PENALTY,
+    300,
+    DEFAULT_SHIP_CURVE90_PENALTY,
+    1_200,
+    5_000,
+];
 
 pub(crate) fn setup_pathfinding_settings_window(
     mut commands: Commands,
@@ -80,6 +93,31 @@ pub(crate) fn setup_pathfinding_settings_window(
             &BACKOFF_PRESETS,
             PathfindingSettingsAction::Backoff,
             backoff_label,
+        );
+        body.spawn((
+            Text::new("Coste de curvas navales (unidades YAPF)."),
+            window_text_font(asset_server, UiFontRole::Caption),
+            TextColor(Color::srgb(0.82, 0.78, 0.68)),
+            Node {
+                margin: UiRect::top(Val::Px(8.0)),
+                ..default()
+            },
+        ));
+        spawn_preset_row(
+            body,
+            asset_server,
+            "Curva 45°",
+            &SHIP_CURVE_PRESETS,
+            PathfindingSettingsAction::ShipCurve45,
+            curve_label,
+        );
+        spawn_preset_row(
+            body,
+            asset_server,
+            "Curva 90°",
+            &SHIP_CURVE_PRESETS,
+            PathfindingSettingsAction::ShipCurve90,
+            curve_label,
         );
         body.spawn((
             Node {
@@ -161,13 +199,13 @@ pub(crate) fn setup_pathfinding_settings_window(
     });
 }
 
-fn spawn_preset_row(
+fn spawn_preset_row<T: Copy>(
     body: &mut ChildSpawnerCommands,
     asset_server: &AssetServer,
     label: &str,
-    presets: &[u8],
-    action: impl Fn(u8) -> PathfindingSettingsAction,
-    value_label: fn(u8) -> String,
+    presets: &[T],
+    action: impl Fn(T) -> PathfindingSettingsAction,
+    value_label: fn(T) -> String,
 ) {
     body.spawn((Node {
         width: Val::Percent(100.0),
@@ -233,6 +271,14 @@ fn backoff_label(ticks: u8) -> String {
     }
 }
 
+fn curve_label(penalty: u32) -> String {
+    if penalty == MAX_SHIP_CURVE_PENALTY {
+        "máx".into()
+    } else {
+        penalty.to_string()
+    }
+}
+
 pub(crate) fn sync_pathfinding_settings_window(
     state: Res<PathfindingSettingsWindowState>,
     sim: Res<SimWorld>,
@@ -253,6 +299,8 @@ pub(crate) fn sync_pathfinding_settings_window(
         let active = match *action {
             PathfindingSettingsAction::WaitDays(d) => pf.wait_for_pbs_path == d,
             PathfindingSettingsAction::Backoff(b) => pf.path_backoff_interval == b,
+            PathfindingSettingsAction::ShipCurve45(penalty) => pf.ship_curve45_penalty == penalty,
+            PathfindingSettingsAction::ShipCurve90(penalty) => pf.ship_curve90_penalty == penalty,
             PathfindingSettingsAction::ToggleReverse => pf.reverse_at_signals,
             PathfindingSettingsAction::ToggleReservePaths => pf.reserve_paths,
             PathfindingSettingsAction::ResetDefaults => false,
@@ -283,6 +331,12 @@ pub(crate) fn handle_pathfinding_settings_buttons(
             }
             PathfindingSettingsAction::Backoff(b) => {
                 next.path_backoff_interval = b.max(1);
+            }
+            PathfindingSettingsAction::ShipCurve45(penalty) => {
+                next.ship_curve45_penalty = penalty.min(MAX_SHIP_CURVE_PENALTY);
+            }
+            PathfindingSettingsAction::ShipCurve90(penalty) => {
+                next.ship_curve90_penalty = penalty.min(MAX_SHIP_CURVE_PENALTY);
             }
             PathfindingSettingsAction::ToggleReverse => {
                 next.reverse_at_signals = !next.reverse_at_signals;

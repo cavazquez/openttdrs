@@ -870,6 +870,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Intervalo de look-ahead (ticks). 255 = desactivar." => {
             "Look-ahead interval (ticks). 255 = disable."
         }
+        "Coste de curvas navales (unidades YAPF)." => "Ship curve cost (YAPF units).",
+        "Curva 45°" => "45° curve",
+        "Curva 90°" => "90° curve",
         "Girar en señales" => "Turn at signals",
         "Siempre reservar" => "Always reserve",
         "Por defecto" => "Default",
@@ -2619,6 +2622,12 @@ mod tests {
             ),
             "Wait for path without reservation (days). 255 = never turn around."
         );
+        assert_eq!(
+            localized_text(Locale::En, "Coste de curvas navales (unidades YAPF)."),
+            "Ship curve cost (YAPF units)."
+        );
+        assert_eq!(localized_text(Locale::En, "Curva 45°"), "45° curve");
+        assert_eq!(localized_text(Locale::En, "Curva 90°"), "90° curve");
         for (spanish, english) in [
             ("Señales", "Signals"),
             ("Bloque", "Block"),

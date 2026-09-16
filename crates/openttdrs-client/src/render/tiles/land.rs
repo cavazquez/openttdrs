@@ -25,8 +25,9 @@ use crate::iso::{
 use crate::render::atlas::AtlasSprite;
 use crate::render::newgrf_cache::{
     direct_tile_layout_ground, direct_tile_layout_object_sequence, direct_tile_layout_sequence,
-    runtime_fingerprint, tile_layout_entry_is_hidden, tile_layout_ground_sprite_color,
-    tile_layout_is_object_renderable, tile_layout_is_renderable,
+    runtime_fingerprint, tile_layout_build_sprite_palette,
+    tile_layout_destination_transparent_color, tile_layout_entry_is_hidden,
+    tile_layout_ground_sprite_color, tile_layout_is_object_renderable, tile_layout_is_renderable,
     tile_layout_sprite_color_with_palette, vars,
 };
 use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
@@ -1245,6 +1246,8 @@ fn spawn_newgrf_house_layout_sequence(
     }
     let mut last_parent: Option<(Entity, Vec2)> = None;
     let category_hidden = crate::sprites::is_hidden(crate::sprites::TransparencyOption::Houses);
+    let category_transparent =
+        crate::sprites::is_transparent(crate::sprites::TransparencyOption::Houses);
     let mut skip_children = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
         if skip_children {
@@ -1260,6 +1263,15 @@ fn spawn_newgrf_house_layout_sequence(
             }
             continue;
         }
+        let (build_sprite_modifiers, build_palette) = tile_layout_build_sprite_palette(
+            layer.sprite_modifiers,
+            layer.direct_palette,
+            category_transparent,
+        );
+        let destination_transparent = category_transparent
+            && layer.sprite_modifiers
+                & openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE
+                == 0;
         let (sprite, width, height, x_offs, y_offs) = if let Some(decoded) = layer.action1_sprite()
         {
             let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
@@ -1267,8 +1279,8 @@ fn spawn_newgrf_house_layout_sequence(
                 def,
                 slot,
                 runtime_fp,
-                layer.sprite_modifiers,
-                layer.direct_palette,
+                build_sprite_modifiers,
+                build_palette,
                 decoded,
                 images,
             );
@@ -1278,8 +1290,8 @@ fn spawn_newgrf_house_layout_sequence(
                 image: handle,
                 color: tile_layout_sprite_color_with_palette(
                     tint,
-                    layer.sprite_modifiers,
-                    layer.direct_palette,
+                    build_sprite_modifiers,
+                    build_palette,
                 ),
                 ..default()
             };
@@ -1291,11 +1303,15 @@ fn spawn_newgrf_house_layout_sequence(
                 f32::from(decoded.y_offs),
             )
         } else if let Some(base) = direct_tile_layout_sequence(layer, assets) {
-            let color = tile_layout_sprite_color_with_palette(
-                tint,
-                layer.sprite_modifiers,
-                layer.direct_palette,
-            );
+            let color = if destination_transparent {
+                tile_layout_destination_transparent_color()
+            } else {
+                tile_layout_sprite_color_with_palette(
+                    tint,
+                    layer.sprite_modifiers,
+                    layer.direct_palette,
+                )
+            };
             (
                 base.atlas.sprite_colored(color),
                 base.width,
@@ -2136,6 +2152,8 @@ fn spawn_newgrf_industry_layout_sequence(
     }
     let tint =
         crate::sprites::with_to_alpha(Color::WHITE, crate::sprites::TransparencyOption::Industries);
+    let category_transparent =
+        crate::sprites::is_transparent(crate::sprites::TransparencyOption::Industries);
     let mut last_parent: Option<(Entity, Vec2)> = None;
     let mut skip_children = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
@@ -2155,6 +2173,15 @@ fn spawn_newgrf_industry_layout_sequence(
             }
             continue;
         }
+        let (build_sprite_modifiers, build_palette) = tile_layout_build_sprite_palette(
+            layer.sprite_modifiers,
+            layer.direct_palette,
+            category_transparent,
+        );
+        let destination_transparent = category_transparent
+            && layer.sprite_modifiers
+                & openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE
+                == 0;
         let (sprite, width, height, x_offs, y_offs) = if let Some(decoded) = layer.action1_sprite()
         {
             let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
@@ -2163,8 +2190,8 @@ fn spawn_newgrf_industry_layout_sequence(
                 slot,
                 Some(palette_colour),
                 runtime_fp,
-                layer.sprite_modifiers,
-                layer.direct_palette,
+                build_sprite_modifiers,
+                build_palette,
                 decoded,
                 images,
             );
@@ -2174,8 +2201,8 @@ fn spawn_newgrf_industry_layout_sequence(
                 image: handle,
                 color: tile_layout_sprite_color_with_palette(
                     tint,
-                    layer.sprite_modifiers,
-                    layer.direct_palette,
+                    build_sprite_modifiers,
+                    build_palette,
                 ),
                 ..default()
             };
@@ -2187,11 +2214,15 @@ fn spawn_newgrf_industry_layout_sequence(
                 f32::from(decoded.y_offs),
             )
         } else if let Some(base) = direct_tile_layout_sequence(layer, assets) {
-            let color = tile_layout_sprite_color_with_palette(
-                tint,
-                layer.sprite_modifiers,
-                layer.direct_palette,
-            );
+            let color = if destination_transparent {
+                tile_layout_destination_transparent_color()
+            } else {
+                tile_layout_sprite_color_with_palette(
+                    tint,
+                    layer.sprite_modifiers,
+                    layer.direct_palette,
+                )
+            };
             (
                 base.atlas.sprite_colored(color),
                 base.width,
@@ -2803,6 +2834,8 @@ fn spawn_newgrf_object_layout_sequence(
     }
     let mut last_parent: Option<(Entity, Vec2)> = None;
     let category_hidden = crate::sprites::is_hidden(crate::sprites::TransparencyOption::Structures);
+    let category_transparent =
+        crate::sprites::is_transparent(crate::sprites::TransparencyOption::Structures);
     let mut skip_children = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
         if skip_children {
@@ -2818,6 +2851,15 @@ fn spawn_newgrf_object_layout_sequence(
             }
             continue;
         }
+        let (build_sprite_modifiers, build_palette) = tile_layout_build_sprite_palette(
+            layer.sprite_modifiers,
+            layer.direct_palette,
+            category_transparent,
+        );
+        let destination_transparent = category_transparent
+            && layer.sprite_modifiers
+                & openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE
+                == 0;
         let (sprite, width, height, x_offs, y_offs) = if let Some(decoded) = layer.action1_sprite()
         {
             let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
@@ -2826,8 +2868,8 @@ fn spawn_newgrf_object_layout_sequence(
                 slot,
                 object_colour,
                 runtime_fp,
-                layer.sprite_modifiers,
-                layer.direct_palette,
+                build_sprite_modifiers,
+                build_palette,
                 decoded,
                 images,
             );
@@ -2837,8 +2879,8 @@ fn spawn_newgrf_object_layout_sequence(
                 image: handle,
                 color: tile_layout_sprite_color_with_palette(
                     tint,
-                    layer.sprite_modifiers,
-                    layer.direct_palette,
+                    build_sprite_modifiers,
+                    build_palette,
                 ),
                 ..default()
             };
@@ -2850,11 +2892,15 @@ fn spawn_newgrf_object_layout_sequence(
                 f32::from(decoded.y_offs),
             )
         } else if let Some(base) = direct_tile_layout_object_sequence(layer, assets) {
-            let color = tile_layout_sprite_color_with_palette(
-                tint,
-                layer.sprite_modifiers,
-                layer.direct_palette,
-            );
+            let color = if destination_transparent {
+                tile_layout_destination_transparent_color()
+            } else {
+                tile_layout_sprite_color_with_palette(
+                    tint,
+                    layer.sprite_modifiers,
+                    layer.direct_palette,
+                )
+            };
             (
                 base.atlas.sprite_colored(color),
                 base.width,

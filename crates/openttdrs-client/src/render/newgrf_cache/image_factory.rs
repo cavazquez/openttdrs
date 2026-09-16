@@ -17,6 +17,7 @@ const PALETTE_RECOLOUR_START: u16 = 775;
 const PALETTE_RECOLOUR_END: u16 = PALETTE_RECOLOUR_START + 15;
 const PALETTE_CRASH: u16 = 804;
 const PALETTE_TO_TRANSPARENT: u16 = 802;
+const PALETTE_TO_TRANSPARENT_ALPHA: f32 = 64.0 / 255.0;
 
 /// Política de bake/recolor al subir un sprite NewGRF a textura.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -195,6 +196,43 @@ pub(crate) fn tile_layout_sprite_color_with_palette(
         return Color::srgba(rgba.red, rgba.green, rgba.blue, 1.0);
     }
     tile_layout_sprite_color(color, sprite_modifiers)
+}
+
+/// Aplica al `BUILD` de `DrawCommonTileSeq` la transparencia de la categoría.
+///
+/// La ruta nativa no reduce el alpha del sprite cuando `to` es transparente:
+/// marca la imagen con `PALETTE_MODIFIER_TRANSPARENT` y fuerza la paleta 802
+/// antes de pasarla al compositor. El cache recibe este par efectivo para que
+/// una imagen Action1 pueda hornear la misma máscara de destino. `OPAQUE`
+/// conserva precedencia y evita modificar una entrada que el GRF declaró
+/// explícitamente opaca.
+#[must_use]
+pub(crate) fn tile_layout_build_sprite_palette(
+    sprite_modifiers: u8,
+    direct_palette: u16,
+    category_transparent: bool,
+) -> (u8, u16) {
+    if category_transparent
+        && sprite_modifiers & openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE
+            == 0
+    {
+        (
+            sprite_modifiers
+                | openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT,
+            PALETTE_TO_TRANSPARENT,
+        )
+    } else {
+        (sprite_modifiers, direct_palette)
+    }
+}
+
+/// Color de fallback para una referencia directa del baseset que debe usar
+/// `PALETTE_TO_TRANSPARENT`. La textura del atlas no puede sustituir su
+/// paleta al vuelo, pero un multiplicador negro con alpha `64/255` conserva
+/// la máscara de destino y la cobertura alfa original del PNG.
+#[must_use]
+pub(crate) fn tile_layout_destination_transparent_color() -> Color {
+    Color::srgba(0.0, 0.0, 0.0, PALETTE_TO_TRANSPARENT_ALPHA)
 }
 
 /// Color base de una entrada `ground` de `TileLayout`.
@@ -480,6 +518,41 @@ mod tests {
         assert!((rgba.green - 1.0).abs() < f32::EPSILON);
         assert!((rgba.blue - 1.0).abs() < f32::EPSILON);
         assert_eq!(rgba.alpha, 1.0);
+    }
+
+    #[test]
+    fn tile_layout_build_transparency_overrides_palette_unless_opaque() {
+        let (modifiers, palette) = tile_layout_build_sprite_palette(
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+            801,
+            true,
+        );
+        assert_eq!(
+            modifiers,
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR
+                | openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
+        );
+        assert_eq!(palette, PALETTE_TO_TRANSPARENT);
+
+        let (opaque_modifiers, opaque_palette) = tile_layout_build_sprite_palette(
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE,
+            801,
+            true,
+        );
+        assert_eq!(
+            opaque_modifiers,
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE
+        );
+        assert_eq!(opaque_palette, 801);
+
+        assert_eq!(tile_layout_build_sprite_palette(0, 801, false), (0, 801));
+    }
+
+    #[test]
+    fn tile_layout_destination_transparent_color_uses_native_coverage() {
+        let rgba = tile_layout_destination_transparent_color().to_srgba();
+        assert_eq!((rgba.red, rgba.green, rgba.blue), (0.0, 0.0, 0.0));
+        assert!((rgba.alpha - (64.0 / 255.0)).abs() < f32::EPSILON);
     }
 
     #[test]

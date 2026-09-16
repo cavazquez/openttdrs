@@ -44,10 +44,12 @@ use crate::render::newgrf_cache::{
     direct_tile_layout_rail_station_ground, direct_tile_layout_rail_station_sequence,
     direct_tile_layout_rail_waypoint_ground, direct_tile_layout_rail_waypoint_sequence,
     direct_tile_layout_road_stop_sequence, direct_tile_layout_road_waypoint_sequence,
-    runtime_fingerprint, tile_layout_entry_is_hidden, tile_layout_ground_sprite_color,
-    tile_layout_is_airport_renderable, tile_layout_is_rail_station_renderable,
-    tile_layout_is_rail_waypoint_renderable, tile_layout_is_road_stop_renderable,
-    tile_layout_is_road_waypoint_renderable, tile_layout_sprite_color_with_palette, vars,
+    runtime_fingerprint, tile_layout_build_sprite_palette,
+    tile_layout_destination_transparent_color, tile_layout_entry_is_hidden,
+    tile_layout_ground_sprite_color, tile_layout_is_airport_renderable,
+    tile_layout_is_rail_station_renderable, tile_layout_is_rail_waypoint_renderable,
+    tile_layout_is_road_stop_renderable, tile_layout_is_road_waypoint_renderable,
+    tile_layout_sprite_color_with_palette, vars,
 };
 use crate::render::road_newgrf::{
     newgrf_road_def_for_tile, newgrf_tram_def_for_tile, road_newgrf_view_index,
@@ -76,7 +78,7 @@ use crate::sprites::{
     catenary_pylon_world_z_delta, catenary_reference_sprite_id, catenary_sprite_color,
     catenary_tunnel_wire_sprite, catenary_wire_world_z_delta,
     collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
-    dock_tile_gfx, dock_tile_is_water_part, dock_tile_layer, is_hidden,
+    dock_tile_gfx, dock_tile_is_water_part, dock_tile_layer, is_hidden, is_transparent,
     log_unknown_station_type_once, rail_depot_build_layers, rail_depot_custom_sprite_index,
     rail_depot_seq_gfx, rail_depot_visual_type_index, rail_ghost_overlay_offset,
     rail_pbs_reservation_offset, rail_station_draw_layers,
@@ -3482,6 +3484,7 @@ fn spawn_newgrf_station_layout_sequence(
     let mut last_parent: Option<(Entity, Vec2)> = None;
     let mut emitted = false;
     let category_hidden = buildings_hidden();
+    let category_transparent = is_transparent(TransparencyOption::Buildings);
     let mut skip_children = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
         if skip_children {
@@ -3497,6 +3500,15 @@ fn spawn_newgrf_station_layout_sequence(
             }
             continue;
         }
+        let (build_sprite_modifiers, build_palette) = tile_layout_build_sprite_palette(
+            layer.sprite_modifiers,
+            layer.direct_palette,
+            category_transparent,
+        );
+        let destination_transparent = category_transparent
+            && layer.sprite_modifiers
+                & openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE
+                == 0;
         let (mut sprite, width, height, x_offs, y_offs) =
             if let Some(decoded) = layer.action1_sprite() {
                 let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
@@ -3505,8 +3517,8 @@ fn spawn_newgrf_station_layout_sequence(
                     slot,
                     owner_colour,
                     runtime_fp,
-                    layer.sprite_modifiers,
-                    layer.direct_palette,
+                    build_sprite_modifiers,
+                    build_palette,
                     decoded,
                     images,
                 );
@@ -3549,11 +3561,15 @@ fn spawn_newgrf_station_layout_sequence(
             remap_x_adj: 0.0,
         };
         let layer_z = 0.05 + index as f32 * 0.0003;
-        sprite.color = tile_layout_sprite_color_with_palette(
-            sprite.color,
-            layer.sprite_modifiers,
-            layer.direct_palette,
-        );
+        sprite.color = if destination_transparent {
+            tile_layout_destination_transparent_color()
+        } else {
+            tile_layout_sprite_color_with_palette(
+                sprite.color,
+                build_sprite_modifiers,
+                build_palette,
+            )
+        };
 
         if layer.is_parent() {
             let position = road_stop_build_sprite_center(
@@ -3964,6 +3980,7 @@ fn spawn_newgrf_road_stop_layout_sequence(
     let mut last_parent: Option<(Entity, Vec2)> = None;
     let mut emitted = false;
     let category_hidden = buildings_hidden();
+    let category_transparent = is_transparent(TransparencyOption::Buildings);
     let mut skip_children = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
         if skip_children {
@@ -3982,6 +3999,15 @@ fn spawn_newgrf_road_stop_layout_sequence(
         let Some(index) = u16::try_from(index).ok() else {
             return false;
         };
+        let (build_sprite_modifiers, build_palette) = tile_layout_build_sprite_palette(
+            layer.sprite_modifiers,
+            layer.direct_palette,
+            category_transparent,
+        );
+        let destination_transparent = category_transparent
+            && layer.sprite_modifiers
+                & openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE
+                == 0;
         let (mut sprite, width, height, x_offs, y_offs) =
             if let Some(decoded) = layer.action1_sprite() {
                 let Some(slot_base) = slot_base else {
@@ -3995,8 +4021,8 @@ fn spawn_newgrf_road_stop_layout_sequence(
                     slot,
                     runtime_fp,
                     owner_colour,
-                    layer.sprite_modifiers,
-                    layer.direct_palette,
+                    build_sprite_modifiers,
+                    build_palette,
                     decoded,
                     images,
                 );
@@ -4039,11 +4065,15 @@ fn spawn_newgrf_road_stop_layout_sequence(
             remap_x_adj: 0.0,
         };
         let layer_z = 0.05 + index as f32 * 0.0003;
-        sprite.color = tile_layout_sprite_color_with_palette(
-            sprite.color,
-            layer.sprite_modifiers,
-            layer.direct_palette,
-        );
+        sprite.color = if destination_transparent {
+            tile_layout_destination_transparent_color()
+        } else {
+            tile_layout_sprite_color_with_palette(
+                sprite.color,
+                build_sprite_modifiers,
+                build_palette,
+            )
+        };
 
         if layer.is_parent() {
             let position = road_stop_build_sprite_center(
@@ -4792,6 +4822,7 @@ fn spawn_newgrf_airport_layout_sequence(
     let mut last_parent: Option<(Entity, Vec2)> = None;
     let mut emitted = false;
     let category_hidden = buildings_hidden();
+    let category_transparent = is_transparent(TransparencyOption::Buildings);
     let mut skip_children = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
         if skip_children {
@@ -4807,6 +4838,15 @@ fn spawn_newgrf_airport_layout_sequence(
             }
             continue;
         }
+        let (build_sprite_modifiers, build_palette) = tile_layout_build_sprite_palette(
+            layer.sprite_modifiers,
+            layer.direct_palette,
+            category_transparent,
+        );
+        let destination_transparent = category_transparent
+            && layer.sprite_modifiers
+                & openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE
+                == 0;
         let (mut sprite, width, height, x_offs, y_offs) = if let Some(decoded) =
             layer.action1_sprite()
         {
@@ -4818,8 +4858,8 @@ fn spawn_newgrf_airport_layout_sequence(
                 slot,
                 runtime_fp,
                 owner_colour,
-                layer.sprite_modifiers,
-                layer.direct_palette,
+                build_sprite_modifiers,
+                build_palette,
                 decoded,
                 images,
             );
@@ -4858,11 +4898,15 @@ fn spawn_newgrf_airport_layout_sequence(
             remap_x_adj: 0.0,
         };
         let layer_z = 0.05 + index as f32 * 0.0003;
-        sprite.color = tile_layout_sprite_color_with_palette(
-            sprite.color,
-            layer.sprite_modifiers,
-            layer.direct_palette,
-        );
+        sprite.color = if destination_transparent {
+            tile_layout_destination_transparent_color()
+        } else {
+            tile_layout_sprite_color_with_palette(
+                sprite.color,
+                build_sprite_modifiers,
+                build_palette,
+            )
+        };
 
         if layer.is_parent() {
             let position = road_stop_build_sprite_center(

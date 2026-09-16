@@ -2270,3 +2270,14 @@ aplican por el solo hecho de estar presentes. BUILD sigue
 queda en `PAL_NONE`, incluidos los sprites directos del baseset. La regresión
 negativa de estructura y las pruebas de compañía/crash/newspaper/bare-land
 fijan el contrato; la fila continúa parcial y #326/#329/#567 siguen abiertas.
+
+Actualización #326/#329-NEWGRF-TILE-LAYOUT-GROUND-CATEGORY-ALPHA (2026-09-16,
+`6d66e7f7`): la matriz distingue ahora el color de suelo del color de la
+secuencia BUILD. `GroundSpritePaletteTransform` no recibe `to`, por lo que los
+grounds de casa, industria, objeto, estación, road stop/waypoint y aeropuerto
+se emiten sin alpha de categoría; sólo sus modifiers y paleta directa afectan
+la textura. El mismo contrato corrige el suelo de industria vanilla y las
+capas ground de `StationGfx` aeroportuario. La prueba de fábrica verifica color
+opaco y máscara de transparencia de destino; las 25 pruebas dirigidas de
+TileLayout y Clippy estricto pasan. Esto sigue siendo una corrección parcial y
+no cierra #326/#329/#567.

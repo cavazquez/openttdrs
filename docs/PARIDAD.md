@@ -6181,3 +6181,15 @@ imágenes Bevy; pasan 29 pruebas dirigidas de core, 14 de fábrica de imágenes 
 Clippy estricto. La corrección es parcial y no cierra #326/#329/#567: siguen
 pendientes composición destino, otros layouts, foundations/rotaciones,
 callbacks y consumidores NewGRF.
+
+Corrección #326/#329-NEWGRF-TILE-LAYOUT-GROUND-CATEGORY-ALPHA (2026-09-16,
+`6d66e7f7`): los suelos de `TileLayout` usan ahora una ruta equivalente a
+`GroundSpritePaletteTransform`, separada de la transparencia de categoría que
+OpenTTD reserva para la secuencia `BUILD`. Se corrigieron los productores de
+casa, industria, objeto, estación, road stop/waypoint y aeropuerto; además, el
+suelo de industria vanilla y las capas de suelo de `StationGfx` aeroportuario
+ya no se desvanecen al activar Buildings/Industries/Structures. Las paletas y
+la máscara `PALETTE_TO_TRANSPARENT` se conservan mediante sus modifiers. Pasan
+25 pruebas dirigidas de TileLayout y Clippy estricto. La corrección es parcial y
+no cierra #326/#329/#567: siguen pendientes composición destino, otros
+layouts, foundations/rotaciones, callbacks y consumidores NewGRF.

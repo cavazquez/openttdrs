@@ -8978,3 +8978,17 @@ resueltos. Pasan 29 pruebas de core, 14 de imagen y Clippy estricto. La fila
 continúa parcial: la composición destino de transparencia, otros layouts,
 foundations/rotaciones, callbacks y consumidores NewGRF siguen pendientes y
 #326/#329/#567 permanecen abiertas.
+
+### #326/#329-NEWGRF-TILE-LAYOUT-GROUND-CATEGORY-ALPHA — suelo fuera de `to`
+
+Actualizado: 2026-09-16 (`6d66e7f7`). Los productores de suelo de `TileLayout`
+comparten ahora una función que parte de color blanco y conserva sólo la
+paleta/modifiers de `GroundSpritePaletteTransform`; no heredan el alpha de
+Buildings, Industries o Structures. Esto cubre casas, industrias, objetos,
+estaciones, road stops/waypoints y aeropuertos. También se retiró el alpha de
+categoría que se aplicaba por error al suelo de industria vanilla y a las capas
+ground de `StationGfx` de aeropuertos. La secuencia `BUILD` mantiene sus filtros
+de transparencia/invisibilidad y sus paletas. Pasan 25 pruebas dirigidas de
+TileLayout y Clippy estricto. La fila sigue parcial y #326/#329/#567 permanecen
+abiertas por composición destino, layouts restantes, foundations/rotaciones,
+callbacks y consumidores NewGRF.

@@ -13,7 +13,10 @@ use crate::airport_tile_spec::{
     AirportTileSpecDef, NEW_AIRPORT_TILE_OFFSET, get_translated_airport_tile_id,
 };
 use crate::house_spec::{distance_square, get_town_radius_group};
-use crate::map::{Map, SLOPE_STEEP, Tile, TileCoord, TileKind, tile_slope_and_z, water_class};
+use crate::map::{
+    Map, OTTD_TILETYPE_TUNNELBRIDGE, SLOPE_STEEP, Tile, TileCoord, TileKind, tile_slope_and_z,
+    water_class,
+};
 use crate::newgrf_sprites::Action2EvalCtx;
 #[cfg(test)]
 use crate::station::StopKind;
@@ -615,9 +618,30 @@ fn tile_kind_as_ottd(map: &Map, stations: &[Station], coord: TileCoord, tile: Ti
     {
         return 5;
     }
+    // OpenTTD stores rail/road tunnels and bridges as MP_TUNNELBRIDGE, not as
+    // the transport type of the track crossing the structure. Prefer the
+    // semantic kind too, because newly built maps may not have MAPT hydrated
+    // yet.
+    if matches!(
+        tile.kind,
+        TileKind::RailTunnel | TileKind::RailBridge | TileKind::RoadTunnel | TileKind::RoadBridge
+    ) {
+        return OTTD_TILETYPE_TUNNELBRIDGE;
+    }
+    // Imported maps carry the native type in MAPT. Preserve every non-clear
+    // type (including MP_OBJECT=10) before falling back to the compact
+    // semantic model used by generated maps.
+    let raw_type = tile.ottd_type_nibble();
+    if raw_type != 0 || tile.kind == TileKind::Grass {
+        return raw_type;
+    }
     match tile.kind {
-        TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge => 1,
-        TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge => 2,
+        TileKind::Rail | TileKind::RailDepot => 1,
+        TileKind::Road | TileKind::RoadDepot => 2,
+        TileKind::RailTunnel
+        | TileKind::RailBridge
+        | TileKind::RoadTunnel
+        | TileKind::RoadBridge => OTTD_TILETYPE_TUNNELBRIDGE,
         TileKind::House => 3,
         TileKind::Forest => 4,
         TileKind::Station | TileKind::Airport => 5,
@@ -1374,6 +1398,55 @@ mod tests {
             2,
             "un waypoint vial debe exponerse como MP_ROAD"
         );
+    }
+
+    #[test]
+    fn airport_nearby_land_info_preserves_tunnel_bridge_and_raw_types() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let source_coord = TileCoord::new(0, 0);
+        let tunnel_coord = TileCoord::new(1, 1);
+        let bridge_coord = TileCoord::new(2, 1);
+        let object_coord = TileCoord::new(3, 1);
+
+        let mut tunnel = map.get(tunnel_coord).expect("tunnel tile");
+        tunnel.kind = TileKind::RailTunnel;
+        tunnel.mapt = OTTD_TILETYPE_TUNNELBRIDGE << 4;
+        map.set_tile(tunnel_coord, tunnel).expect("set tunnel");
+        let mut bridge = map.get(bridge_coord).expect("bridge tile");
+        bridge.kind = TileKind::RoadBridge;
+        bridge.mapt = OTTD_TILETYPE_TUNNELBRIDGE << 4;
+        map.set_tile(bridge_coord, bridge).expect("set bridge");
+        let mut object = map.get(object_coord).expect("object tile");
+        object.kind = TileKind::Unknown(10);
+        object.mapt = 10 << 4;
+        map.set_tile(object_coord, object).expect("set object");
+
+        let airport = Station::new_with_kind(source_coord, StopKind::Airport);
+        let stations = vec![airport];
+        assert_eq!(
+            tile_kind_as_ottd(&map, &stations, tunnel_coord, tunnel),
+            OTTD_TILETYPE_TUNNELBRIDGE
+        );
+        assert_eq!(
+            tile_kind_as_ottd(&map, &stations, bridge_coord, bridge),
+            OTTD_TILETYPE_TUNNELBRIDGE
+        );
+        assert_eq!(
+            tile_kind_as_ottd(&map, &stations, object_coord, object),
+            10,
+            "los tipos crudos importados no deben reducirse a MP_CLEAR"
+        );
+
+        let tunnel_info = nearby_land_info(
+            &map,
+            &stations,
+            &stations[0],
+            tunnel_coord,
+            Climate::Temperate,
+            DEF_SNOW_LINE_HEIGHT,
+            8,
+        );
+        assert_eq!(tunnel_info >> 24, u32::from(OTTD_TILETYPE_TUNNELBRIDGE));
     }
 
     #[test]

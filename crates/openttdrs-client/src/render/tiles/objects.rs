@@ -6524,7 +6524,7 @@ fn spawn_ship_depot_tile(
             "sortable",
             sprite_id,
             company_palette,
-            buildings_transparent,
+            false,
             // El origen de `DrawTileSeqStruct` ya queda expresado en
             // `SpriteBounds.origin` (`bounds.ox/oy`). OpenTTD no lo duplica
             // en `extra_offs_*`: ese offset de pantalla sólo corresponde a

@@ -9055,6 +9055,18 @@ pruebas filtradas por `station` y Clippy estricto. La fila sigue parcial y
 #326/#329/#567 permanecen abiertas por layouts, callbacks, consumidores
 NewGRF, composición global y framebuffer.
 
+### #326/#329/#567-PALETTE-EXACT-COUNTER — fase nativa compartida
+
+Actualizado: 2026-09-16 (`8424a54a`). El `PaletteAnimationClock` conserva el
+contador `u16` que OpenTTD incrementa `+8` en cada pasada elegible de
+`DoPaletteAnimations`; ya no transforma un tiempo de pared aproximado en
+ticks. Agua, fuego de refinería, `fizzy_drink`, faro/estadio y radio comparten
+las fases directas de `EXTR`/`EXTR2`, con truncación y ciclo inverso nativos.
+Pasan 569 pruebas render ejecutables, 1 ignorada, 1.577 tests del cliente, 2
+ignorados y Clippy estricto del binario. La fila sigue parcial y
+#326/#329/#567 permanecen abiertas por otros ciclos/producers,
+callbacks/consumidores NewGRF, composición global y comparación de framebuffer.
+
 ### #326/#329/#567-ROAD-STOP-BUILD-DESTINATION-TRANSPARENCY — paradas y waypoints
 
 Actualizado: 2026-09-16 (`4320fe6e`). El parent común de las capas BUILD de

@@ -2471,6 +2471,15 @@ no acelera ni ralentiza la animación. La cobertura de industria/callbacks,
 layouts, paletas restantes y compositor continúa parcial; no se cierran las
 issues madre.
 
+Actualización #326/#329/#567-PALETTE-EXACT-COUNTER (`8424a54a`): el renderer
+comparte el contador `u16` de `DoPaletteAnimations`, avanza `+8` por pasada
+permitida y aplica las fórmulas `EXTR`/`EXTR2` directamente. Los consumidores
+de agua, fuego de refinería, `fizzy_drink`, faro/estadio y radio ya no dependen
+de un tiempo de pared discretizado ni mantienen fases separadas. Pasan 569
+pruebas render ejecutables, 1 ignorada, 1.577 tests del cliente y Clippy
+estricto; la cobertura de #326/#329/#567 continúa parcial y no se cierran
+issues madre.
+
 Actualización #326/#329/#567-PALETTE-PAUSE-CLOCK (`ae70e27d`): el ciclo de
 presentación usa ahora `PaletteAnimationClock`, alimentado con delta real y
 detenido por el gate de pausa/animación completa. Agua, fuego de refinería,

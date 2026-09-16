@@ -6437,3 +6437,14 @@ del cliente, 2 ignorados y Clippy estricto del binario. La corrección es
 parcial y no cierra #326/#329/#567: siguen pendientes la cadencia entera exacta
 del contador nativo, otros producers/ciclos, callbacks/consumidores NewGRF,
 composición global y comparación de framebuffer.
+
+Corrección #326/#329/#567-PALETTE-EXACT-COUNTER (2026-09-16,
+`8424a54a`): el reloj de presentación deja de aproximar el ciclo con segundos
+y conserva el contador `u16` de `DoPaletteAnimations`, incrementado en `8` por
+cada pasada elegible. Las fases de agua, fuego, `fizzy_drink`, faro/estadio y
+radio usan directamente las macros nativas `EXTR`/`EXTR2`, incluida la
+truncación de 16 bits y el sentido inverso de los ciclos. Pasan 569 pruebas
+render ejecutables, 1 ignorada, 1.577 tests del cliente, 2 ignorados y Clippy
+estricto del binario. La corrección es parcial y no cierra #326/#329/#567:
+siguen pendientes otros producers/ciclos, callbacks/consumidores NewGRF,
+composición global y comparación de framebuffer.

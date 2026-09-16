@@ -8866,3 +8866,17 @@ ruta con `DrawWaterClassGround`. La regresión
 La corrección es una subbrecha de #326/#329/#567 y no cierra ninguna de esas
 issues: permanecen pendientes layouts, paletas, callbacks y consumidores
 NewGRF restantes.
+
+### #326/#329-NEWGRF-AIRPORT-TILE-OVERRIDES — traducción persistida de vecinos
+
+Actualizado: 2026-09-16 (`28c171f4`, `93751d90`, `371031db`). `AirportTile`
+aplica ahora `GetTranslatedAirportTileID` antes de devolver `0x62` para una
+tesela vecina: `m5` puede conservar el `subst` vanilla, pero el scope recibe el
+gfx global y el id local del override NewGRF correcto. La misma tabla llega a
+los callbacks de animación por eventos, `TileLoop`, avance periódico y al
+renderer Bevy para layout, sprite plano y foundation. Se conserva el fallback
+legacy vacío para previews y callers sin `GameState`; la regresión
+`airport_context_translates_vanilla_neighbour_with_tile_override` y los tests
+dirigidos de animación/render pasan. La fila sigue parcial y #326/#329/#567
+permanecen abiertas por layouts/rotaciones completas, paletas y callbacks o
+consumidores NewGRF todavía no cubiertos.

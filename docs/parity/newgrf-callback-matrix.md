@@ -2181,3 +2181,14 @@ y replay cubren ambas rutas. La fila continúa **parcial runtime**: todavía
 faltan foundations/rotaciones exhaustivas, paletas, delegación completa de
 `StationScope` y callbacks/consumidores NewGRF restantes; #326/#329/#567 siguen
 abiertas.
+
+Actualización #326/#329-NEWGRF-AIRPORT-TILE-OVERRIDES (2026-09-16,
+`28c171f4`, `93751d90`, `371031db`): `AirportTile 0x62` traduce ahora el
+`m5` vanilla mediante `airport_tile_overrides` antes de comparar GRFID e id
+local, reproduciendo `GetAirportTileIDAtOffset`. Los caminos de animación
+reciben la misma tabla desde `GameState`, y el compositor Bevy la usa al
+resolver layout, vista plana y `CBID_AIRPTILE_DRAW_FOUNDATIONS`; esto evita que
+un save con `subst` pierda el tile NewGRF visible o seleccione otro vecino en
+un callback. La regresión de override `24→74` y las suites dirigidas pasan.
+La fila continúa parcial: #326/#329/#567 siguen abiertas por los demás
+layouts/rotaciones, paletas y consumidores/callbacks NewGRF.

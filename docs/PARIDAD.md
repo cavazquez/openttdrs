@@ -5960,6 +5960,18 @@ de Station, Clippy estricto del binario, formato y `git diff --check` verdes.
 #326/#329/#567 permanecen abiertas por layouts, paletas, callbacks y
 consumidores NewGRF restantes.
 
+Corrección #326/#329-NEWGRF-AIRPORT-TILE-OVERRIDES (2026-09-16,
+`28c171f4`, `93751d90`, `371031db`): el resolver `AirportTile` aplica ahora
+`GetTranslatedAirportTileID` a los vecinos consultados por `0x62`, y la tabla
+persistida de overrides llega también a los triggers de animación, al scheduler
+y al compositor Bevy. Una tesela guardada con `m5=subst` vanilla vuelve a
+resolver su gfx NewGRF tanto en layout/vista plana/foundation como en callbacks
+de simulación. Las regresiones cubren `m5=24`, override `24→74` e id local del
+GRF; pasaron los tests dirigidos de contexto, animación y render y Clippy
+estricto. Esto corrige una subbrecha de representación persistida, pero no
+cierra #326/#329/#567: siguen pendientes layouts/rotaciones exhaustivas,
+paletas, callbacks y consumidores NewGRF restantes.
+
 Corrección #326/#329-NEWGRF-OBJECT-SCOPE-FINGERPRINT (2026-09-16,
 `0eebce78`): el fingerprint de las vistas runtime de `Object` incluye ahora
 las variables directas `42`, `47` y `48` (fecha de construcción, color y vista)

@@ -6035,3 +6035,17 @@ core queda en `2815 passed; 1 ignored`, las 33 pruebas dirigidas del cliente y
 Clippy estricto pasan. La animación/scheduler que aún usa wrappers legacy queda
 separada para una etapa posterior; #326/#329/#567 continúan abiertas por
 foundations/rotaciones completas, paletas y scopes/callbacks restantes.
+
+Corrección #326/#329-NEWGRF-AIRPORT-ANIMATION-SNOW-LINE (2026-09-16,
+`233569e5`): el contexto de `AirportTile` ya no pierde la línea de nieve al
+entrar por `TileLoop`, avance periódico, construcción o triggers de carga y
+aceptación. `GameState::snow_line_height` llega a `0x41` y a
+`GetNearbyTileInformation (0x60)` mediante variantes explícitas del scheduler y
+de los triggers con sonidos/RNG global; las APIs históricas conservan
+`DEF_SNOW_LINE_HEIGHT`. La regresión
+`airport_animation_scheduler_uses_effective_snow_line` diferencia CB152 y
+CB153 con dos líneas efectivas, y la suite core queda en `2816 passed; 1
+ignored`; Clippy core/cliente, compilación del cliente y `git diff --check`
+verdes. Esto completa la subbrecha de propagación, pero no cierra
+#326/#329/#567: siguen pendientes foundations/rotaciones exhaustivas, paletas,
+callbacks y consumidores NewGRF restantes.

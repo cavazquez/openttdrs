@@ -8825,3 +8825,17 @@ las 33 pruebas dirigidas del cliente y Clippy estricto pasan. Los callbacks
 del scheduler que todavía entran por wrappers legacy se mantienen como una
 subbrecha separada; foundations/rotaciones completas, paletas y scopes
 NewGRF restantes mantienen #326/#329/#567 abiertos.
+
+### #326/#329-NEWGRF-AIRPORT-ANIMATION-SNOW-LINE — propagación runtime
+
+Actualizado: 2026-09-16 (`233569e5`). La línea de nieve persistida de
+`GameState` llega ahora a los contextos `AirportTile` usados por `TileLoop`,
+avance periódico, construcción y triggers de `NewCargo`, `CargoTaken` y
+`AcceptanceTick`, incluidos los caminos con RNG global y sonidos. Las APIs
+legacy siguen usando `DEF_SNOW_LINE_HEIGHT`; las variantes nuevas pasan el
+valor efectivo a `0x41` y `0x60`. La regresión
+`airport_animation_scheduler_uses_effective_snow_line` comprueba que CB152 y
+CB153 observan líneas distintas; core queda en `2816 passed; 1 ignored`, con
+Clippy estricto, compilación de cliente y `git diff --check` verdes. Este
+bloque no cierra #326/#329/#567: foundations/rotaciones exhaustivas, paletas y
+otros callbacks/consumidores NewGRF siguen pendientes.

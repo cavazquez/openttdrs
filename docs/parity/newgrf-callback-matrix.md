@@ -2145,3 +2145,15 @@ nativos de nieve, densidad y ground; la ruta visual de Bevy pasa
 regresiones cubren la comparación estricta y los formatos de suelo; la fila
 sigue parcial por foundations/rotaciones completas, paletas y delegación de
 `StationScope`.
+
+Actualización #326/#329-NEWGRF-AIRPORT-ANIMATION-SNOW-LINE (2026-09-16,
+`233569e5`): los callbacks CB152/CB153 de `AirportTile` reciben ahora la línea
+de nieve efectiva también desde `TileLoop`, avance periódico, construcción y
+triggers de carga/aceptación. Las variantes con sonidos y RNG global pasan el
+valor persistido a `AirportTileScopeResolver`, mientras las APIs legacy
+mantienen el default para callers sin `GameState`; `0x41` y `0x60` quedan
+alineados con el renderer. La regresión
+`airport_animation_scheduler_uses_effective_snow_line` cubre los dos callbacks
+con líneas distintas. La fila sigue **parcial runtime**: foundations/rotaciones
+exhaustivas, paletas, callbacks y consumidores NewGRF restantes mantienen
+#326/#329/#567 abiertos.

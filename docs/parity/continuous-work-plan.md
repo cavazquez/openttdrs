@@ -9307,3 +9307,14 @@ separe ni desplace globalmente la imagen completa. La regresión de campo
 comprueba un parent y tres children segmentados junto con los cuatro sprites
 esperados; pasan 1.577 tests del cliente, 2 ignorados y Clippy estricto. La
 fila continúa parcial y no se cierran #326/#329/#567.
+
+Actualización #326/#329/#567-VEHICLE-SPRITESTACK-COMBINE-SEGMENTED
+(`76b7f9de`): el `StartSpriteCombine` de `DoDrawVehicle` queda reflejado para
+las capas 1–7 de cada `VehicleSprite` o `ConsistUnitSprite`. Cada capa usa
+`Vehicle::bounds`, el mismo `insertion_key` y su ordinal de secuencia, además
+de `ViewportSortableSegmentedSource` con la imagen/transform completos. Las
+ranuras vacías continúan ocultas y sin `PromotableChild`, incluso cuando el
+callback cambia la longitud de la pila. La prueba de cabeza/trailer comprueba
+la resolución compartida por parent, la fuente separada del Z ordenado y la
+ausencia de cruce entre consist units; pasan 1.577 tests, 2 ignorados y Clippy
+estricto. La cobertura continúa parcial y no se cierran #326/#329/#567.

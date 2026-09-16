@@ -6306,6 +6306,19 @@ y Clippy estricto. La corrección es parcial y no cierra #326/#329/#567:
 siguen pendientes otros productores, efectos, callbacks/consumidores NewGRF,
 composición global y comparación de framebuffer.
 
+Corrección #326/#329/#567-VEHICLE-SPRITESTACK-COMBINE-SEGMENTED (2026-09-16,
+`76b7f9de`): las capas 1–7 de `EngineMiscFlag::SpriteStack` dejan de ser
+children visuales sin contrato de `StartSpriteCombine`. Cada cuerpo y cada
+unidad de consist conserva su propio parent, usa el mismo `Vehicle::bounds`
+que el C++ para la promoción, mantiene el ordinal de la secuencia y publica
+la fuente completa del `Sprite`/`Transform` para clipping por banda. Las
+ranuras que el callback no resuelve se ocultan y pierden esos metadatos, por
+lo que no pueden reaparecer como capas falsas. La regresión verifica siete
+capas de cabeza, la capa del trailer y que no se crucen sus parents; pasan
+1.577 tests del cliente, 2 ignorados y Clippy estricto. La corrección es
+parcial y no cierra #326/#329/#567: siguen pendientes otros combines,
+producers, callbacks/consumidores NewGRF, composición global y framebuffer.
+
 Corrección #326/#329/#567-INDUSTRY-EFFECT-VISIBILITY (2026-09-16,
 `717c8587`): `EV_CHIMNEY_SMOKE`, `EV_COPPER_MINE_SMOKE` y `EV_BUBBLE` siguen
 el contrato nativo de `DoDrawVehicle`: bajo `TO_INDUSTRIES` transparente u

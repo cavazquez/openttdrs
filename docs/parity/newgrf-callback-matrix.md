@@ -2524,3 +2524,15 @@ de esquina sólo alteran la posición visual; el orden de combinación queda
 determinista en NW→NE→SW→SE. La regresión de `MP_CLEAR` verifica los cuatro
 sprites y la fuente completa de cada child; la cobertura de composición y de
 otras familias NewGRF continúa parcial y no se cierran las issues madre.
+
+Actualización #326/#329/#567-VEHICLE-SPRITESTACK-COMBINE-SEGMENTED
+(`76b7f9de`): `DoDrawVehicle` combina la secuencia de sprites de cada unidad,
+no el consist completo. El renderer conserva esa frontera: el cuerpo o
+trailer es el parent y las capas NewGRF 1–7 son children promovibles y
+segmentables con `Vehicle::bounds`, orden local y fuente completa. Los
+callbacks que terminan la pila dejan sus ranuras ocultas y sin metadatos de
+promoción; los callbacks que cambian imágenes u offsets actualizan la fuente
+sin restaurar el Z ya ordenado. La regresión cubre cabeza y trailer sin cruzar
+parents; la suite queda en 1.577 tests, 2 ignorados y Clippy estricto. La
+cobertura de callbacks/consumidores, otros combines y compositor global sigue
+parcial, por lo que no se cierran las issues madre.

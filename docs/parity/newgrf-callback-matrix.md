@@ -2102,3 +2102,12 @@ estaciones intermodales. El origen se mantiene al construir y en el round-trip
 STNN; la carga de saves antiguos cae de forma compatible a `pos`. La regresión
 de anclas distintas evita que el hangar desplace los offsets de layouts. La
 fila sigue parcial por foundations/rotaciones, paletas y callbacks restantes.
+
+Actualización #326/#329-NEWGRF-AIRPORT-REHYDRATE-ORIGIN (2026-09-16,
+`3df42a2e`): la carga de `AirportTile` usa el origen
+`STNN.normal.airport.tile` cuando está disponible y sólo infiere un ancla desde
+la huella para saves legacy sin ese campo. Esto evita aceptar un layout
+desplazado cuando el origen nativo no coincide con las teselas visibles; la
+regresión `explicit_airport_origin_does_not_reinfer_a_shifted_layout` conserva
+ese contrato. Foundations/rotaciones del compositor, paletas y delegación
+completa de `StationScope` siguen pendientes.

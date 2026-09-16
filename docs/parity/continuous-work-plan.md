@@ -8767,3 +8767,14 @@ origen, por lo que `var 0x43` mantiene la posición relativa del layout al
 guardar y cargar. El fallback a `pos` se conserva para JSON/fixtures antiguos.
 El alcance no cierra #326/#329/#567: quedan foundations y rotaciones del
 compositor, paletas especiales y consumidores/callbacks NewGRF no cubiertos.
+
+### #326/#329-NEWGRF-AIRPORT-REHYDRATE-ORIGIN — rehidratación desde SAV
+
+Actualizado: 2026-09-16 (`3df42a2e`). Al reatachar `AirportTile` desde un SAV,
+un `Station::airport.tile` presente se valida y se usa directamente como
+origen; la inferencia por huella sólo se conserva para representaciones legacy
+que no tienen ese campo. Un origen nativo incompatible ya no se reemplaza
+silenciosamente por otro anclaje que coincida con las coordenadas visibles. La
+regresión `explicit_airport_origin_does_not_reinfer_a_shifted_layout` fija la
+frontera y mantiene abiertos foundations/rotaciones del compositor, paletas y
+callbacks restantes.

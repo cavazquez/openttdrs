@@ -5983,3 +5983,14 @@ de `airport.tile`; la suite core queda en `2808 passed; 1 ignored`, con
 Clippy, cliente, formato y `git diff --check` verdes. El bloque no cierra
 #326/#329/#567: siguen pendientes foundations/rotaciones del compositor,
 paletas y consumidores NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-AIRPORT-REHYDRATE-ORIGIN (2026-09-16,
+`3df42a2e`): la rehidratación de `AirportTile` después de cargar un SAV usa
+`Station::airport.tile` como ancla autoritativa cuando el campo nativo está
+presente. La búsqueda por huella queda limitada a JSON/fixtures legacy que no
+lo conservan; así un origen explícito incompatible no puede producir un
+layout custom corrido a otra posición. La regresión
+`explicit_airport_origin_does_not_reinfer_a_shifted_layout` cubre esa frontera;
+la suite core queda en `2809 passed; 1 ignored` y Clippy estricto pasa. El
+bloque no cierra #326/#329/#567: siguen pendientes foundations/rotaciones del
+compositor, paletas y consumidores NewGRF restantes.

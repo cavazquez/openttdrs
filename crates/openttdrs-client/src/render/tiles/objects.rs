@@ -827,7 +827,7 @@ fn spawn_road_stop_building_parent(
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
-        sprite,
+        destination_mask_building_sprite(sprite),
         Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
         ViewportSortableParent {
             sprite_id: layer.sprite_id,
@@ -4324,7 +4324,7 @@ fn spawn_road_stop_buildings(
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                tint_building_sprite(Sprite {
+                destination_mask_building_sprite(Sprite {
                     image: handle,
                     color: Color::WHITE,
                     ..default()
@@ -4530,7 +4530,7 @@ fn spawn_road_waypoint_buildings(
         let Some(image) = assets.road_waypoint.get(asset_index) else {
             continue;
         };
-        let sprite = tint_building_sprite(sprite_from_atlas_or_company_white_colour(
+        let sprite = destination_mask_building_sprite(sprite_from_atlas_or_company_white_colour(
             company,
             owner_colour,
             image,

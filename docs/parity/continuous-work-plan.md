@@ -8903,3 +8903,14 @@ legacy derivado de `StopKind`. La regresión usa una máscara `0x09` y la bater�
 AirportTile junto con Clippy estricto pasa. La fila sigue parcial y #326/#329/#567
 permanecen abiertas por layouts/rotaciones, paletas y callbacks o consumidores
 NewGRF restantes.
+
+### #326/#329-NEWGRF-AIRPORT-FACILITIES-FILTERS — estaciones intermodales
+
+Actualizado: 2026-09-16 (`5decc184`). La entrada al contexto y las consultas
+vecinas de `AirportTile` usan `Station::effective_facilities()` para decidir
+si existe una facilidad aérea. Así una estación importada cuyo `StopKind`
+principal sea ferroviario, pero cuya máscara `BaseStation::facilities` incluya
+`FACIL_AIRPORT`, conserva sus frames y sus respuestas `0x60`/`0x62`. La
+regresión Train + Airport (`0x09`) pasa junto con los 81 tests AirportTile y
+Clippy estricto. La fila continúa parcial y #326/#329/#567 siguen abiertas por
+layouts/rotaciones, paletas, callbacks y consumidores NewGRF restantes.

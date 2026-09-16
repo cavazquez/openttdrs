@@ -2210,3 +2210,12 @@ facilities cero mantienen el fallback efectivo. La regresión con máscara
 `0x09` pasa junto con la batería AirportTile y Clippy estricto; siguen
 pendientes la delegación StationScope completa, foundations/rotaciones,
 paletas y consumidores NewGRF de #326/#329/#567.
+
+Actualización #326/#329-NEWGRF-AIRPORT-FACILITIES-FILTERS (2026-09-16,
+`5decc184`): los filtros de estación padre y vecinos de `AirportTile` respetan
+ahora `BaseStation::facilities` mediante `Station::effective_facilities()`;
+no exigen que `StopKind` sea Airport. Una estación intermodal Train + Airport
+con máscara `0x09` conserva el scope y sus frames/consultas vecinas. La
+regresión y la batería AirportTile pasan con Clippy estricto; siguen parciales
+la delegación StationScope, foundations/rotaciones, paletas y consumidores
+NewGRF de #326/#329/#567.

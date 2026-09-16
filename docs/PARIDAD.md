@@ -6110,3 +6110,12 @@ cubre una máscara `0x09` y pasa junto con la batería AirportTile y Clippy
 estricto. La corrección sigue siendo parcial respecto de #326/#329/#567:
 quedan pendientes layouts/rotaciones, paletas, callbacks y consumidores
 NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-AIRPORT-FACILITIES-FILTERS (2026-09-16,
+`5decc184`): las rutas de `AirportTile` que identifican la estación padre y
+sus teselas vecinas consultan ahora `Station::effective_facilities()`, por lo
+que una estación intermodal con `StopKind` ferroviario pero `FACIL_AIRPORT`
+persistida sigue resolviendo animación, `0x60` y `0x62`. La prueba usa una
+estación Train + Airport con máscara `0x09`; pasan 81 tests AirportTile y
+Clippy estricto. Esto no cierra #326/#329/#567: permanecen pendientes
+layouts/rotaciones, paletas, callbacks y consumidores NewGRF.

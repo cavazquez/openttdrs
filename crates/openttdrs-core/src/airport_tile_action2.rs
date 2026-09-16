@@ -164,8 +164,8 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow
     airport_tile_overrides: &[u16],
 ) -> Action2EvalCtx {
     let mut ctx = Action2EvalCtx::default();
-    let Some(station) = station_at_tile(map, stations, coord)
-        .filter(|candidate| candidate.stop_kind.has_airport_facility())
+    let Some(station) =
+        station_at_tile(map, stations, coord).filter(|candidate| candidate.has_airport_facility())
     else {
         return ctx;
     };
@@ -379,9 +379,7 @@ fn nearby_animation_frame(
     nearby: TileCoord,
 ) -> u32 {
     station_at_tile(map, stations, nearby)
-        .filter(|candidate| {
-            candidate.stop_kind.has_airport_facility() && candidate.pos == source.pos
-        })
+        .filter(|candidate| candidate.has_airport_facility() && candidate.pos == source.pos)
         .map_or(u32::MAX, |candidate| {
             if candidate.airport_tiles.contains(&nearby) || candidate.pos == nearby {
                 u32::from(map.get(nearby).map_or(0, |tile| tile.m7))
@@ -419,7 +417,7 @@ fn nearby_land_info(
         airport_terrain_type_with_snow_line(map, nearby, climate, Some(tile), snow_line_height);
     let tile_type = u32::from(tile_kind_as_ottd(map, stations, nearby, tile));
     let same_airport = station_at_tile(map, stations, nearby).is_some_and(|candidate| {
-        candidate.stop_kind.has_airport_facility()
+        candidate.has_airport_facility()
             && candidate.pos == source.pos
             && (candidate.airport_tiles.contains(&nearby) || candidate.pos == nearby)
     });
@@ -440,7 +438,7 @@ fn airport_tile_id_at_offset(
     airport_tile_overrides: &[u16],
 ) -> u32 {
     let Some(candidate) = station_at_tile(map, stations, nearby).filter(|station| {
-        station.stop_kind.has_airport_facility()
+        station.has_airport_facility()
             && station.pos == source.pos
             && (station.airport_tiles.contains(&nearby) || station.pos == nearby)
     }) else {
@@ -607,8 +605,7 @@ fn tile_kind_as_ottd(map: &Map, stations: &[Station], coord: TileCoord, tile: Ti
         return 2;
     }
     if tile.kind == TileKind::Station
-        && station_at_tile(map, stations, coord)
-            .is_some_and(|station| station.stop_kind.has_airport_facility())
+        && station_at_tile(map, stations, coord).is_some_and(Station::has_airport_facility)
     {
         return 5;
     }
@@ -1124,12 +1121,13 @@ mod tests {
         tile.kind = TileKind::Airport;
         map.set_tile(coord, tile).expect("airport tile");
 
-        let mut station = Station::new_with_kind(coord, StopKind::Airport);
+        let mut station = Station::new_with_kind(coord, StopKind::RailStation);
         station.airport_tiles = vec![coord];
-        // Una estación importada puede conservar facilidades adicionales a su
-        // `StopKind` principal; `AirportScopeResolver::0xF0` debe ver la máscara
-        // persistida de `BaseStation`, no reconstruirla desde ese enum.
-        station.facilities = (StopKind::Airport.facilities_mask() | 1) as u8;
+        // Una estación intermodal puede conservar una facilidad aérea
+        // adicional a su `StopKind` principal; los scopes deben usar la
+        // máscara persistida de `BaseStation`, no reconstruirla desde el enum.
+        station.facilities =
+            (StopKind::RailStation.facilities_mask() | StopKind::Airport.facilities_mask()) as u8;
         station.build_date = crate::station::STATION_BUILD_DATE_DEFAULT + 123;
         station.newgrf_persistent_regs.insert(7, 0xCAFE_BABE);
 

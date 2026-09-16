@@ -97,6 +97,15 @@ fn buildings_hidden() -> bool {
     is_hidden(TransparencyOption::Buildings)
 }
 
+#[must_use]
+fn ship_depot_structure_color(buildings_transparent: bool) -> Color {
+    if buildings_transparent {
+        tile_layout_destination_transparent_color()
+    } else {
+        Color::WHITE
+    }
+}
+
 fn tint_building_sprite(mut sprite: Sprite) -> Sprite {
     sprite.color = with_to_alpha(sprite.color, TransparencyOption::Buildings);
     sprite
@@ -6505,6 +6514,7 @@ fn spawn_ship_depot_tile(
     // `GetCompanyPalette(owner)`: `PALETTE_RECOLOUR_START + colour`. En Kale
     // el owner es DarkBlue y por eso el oráculo expone 775.
     let company_palette = 775 + u32::from(owner_colour.unwrap_or_default().as_u8());
+    let buildings_transparent = is_transparent(TransparencyOption::Buildings);
 
     for (layer_i, layer) in layers.iter().enumerate() {
         let sprite_i = layer.sprite_index;
@@ -6514,7 +6524,7 @@ fn spawn_ship_depot_tile(
             "sortable",
             sprite_id,
             company_palette,
-            false,
+            buildings_transparent,
             // El origen de `DrawTileSeqStruct` ya queda expresado en
             // `SpriteBounds.origin` (`bounds.ox/oy`). OpenTTD no lo duplica
             // en `extra_offs_*`: ese offset de pantalla sólo corresponde a
@@ -6549,15 +6559,21 @@ fn spawn_ship_depot_tile(
         // entregamos el prisma al sorter global igual que las casas vanilla.
         let source_depth = viewport_source_depth(pos.z, ctx.tx, map_width);
         pos.z = source_depth;
+        let mut sprite = sprite_from_atlas_or_company_white_colour(
+            company,
+            owner_colour,
+            &assets.ship_depot[sprite_i],
+            SHIP_DEPOT_PATHS[sprite_i],
+        );
+        // `DrawWaterTileStruct` llama a `AddSortableSpriteToDraw` con
+        // `PALETTE_TO_TRANSPARENT`, que transforma el destino. No es el alpha
+        // de `with_to_alpha`: el depósito debe conservar su forma y oscurecer
+        // lo que queda detrás como el renderer 8bpp.
+        sprite.color = ship_depot_structure_color(buildings_transparent);
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            tint_building_sprite(sprite_from_atlas_or_company_white_colour(
-                company,
-                owner_colour,
-                &assets.ship_depot[sprite_i],
-                SHIP_DEPOT_PATHS[sprite_i],
-            )),
+            sprite,
             Transform::from_translation(pos),
             ViewportSortableParent {
                 sprite_id,
@@ -7901,12 +7917,12 @@ mod tests {
         road_depot_newgrf_def_for_tile, road_depot_parent_sprites,
         road_stop_foundation_child_offset, road_stop_layout_ground_slot,
         road_stop_layout_is_static, road_stop_layout_sequence_slot_range, road_stop_parent_sprites,
-        road_stop_simple_view_slot, road_stop_sorted_layer_centers, spawn_newgrf_airport_tile,
-        station_catenary_pylon_parent_bounds, station_catenary_wire_parent_bounds,
-        station_catenary_wire_trace_geometry, station_rail_child_offset,
-        station_rail_foundation_world_z_delta, station_rail_layer_parent_bounds,
-        tile_layout_child_offset, tile_layout_orphan_ground_center, tunnel_catenary_trace_geometry,
-        tunnel_sortable_parents,
+        road_stop_simple_view_slot, road_stop_sorted_layer_centers, ship_depot_structure_color,
+        spawn_newgrf_airport_tile, station_catenary_pylon_parent_bounds,
+        station_catenary_wire_parent_bounds, station_catenary_wire_trace_geometry,
+        station_rail_child_offset, station_rail_foundation_world_z_delta,
+        station_rail_layer_parent_bounds, tile_layout_child_offset,
+        tile_layout_orphan_ground_center, tunnel_catenary_trace_geometry, tunnel_sortable_parents,
     };
     use openttdrs_core::{
         Climate, DecodedSprite, Map, RoadTramType, RoadType, RoadTypeDef, TileCoord, TileKind,
@@ -8765,5 +8781,19 @@ mod tests {
             ),
             (-120, 60, 0)
         );
+    }
+
+    #[test]
+    fn ship_depot_transparency_uses_destination_mask_not_building_alpha() {
+        let visible = ship_depot_structure_color(false).to_srgba();
+        for channel in [visible.red, visible.green, visible.blue, visible.alpha] {
+            assert!((channel - 1.0).abs() < f32::EPSILON);
+        }
+
+        let transparent = ship_depot_structure_color(true).to_srgba();
+        for channel in [transparent.red, transparent.green, transparent.blue] {
+            assert!(channel.abs() < f32::EPSILON);
+        }
+        assert!((transparent.alpha - (64.0 / 255.0)).abs() < f32::EPSILON);
     }
 }

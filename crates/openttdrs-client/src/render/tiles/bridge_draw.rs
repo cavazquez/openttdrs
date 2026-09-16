@@ -3409,6 +3409,8 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                         &mut images,
                     )
                 {
+                    let mut sprite = sprite;
+                    sprite.color = catenary_sprite_color();
                     spawn_bridge_specific_child(
                         commands,
                         ctx,
@@ -3436,6 +3438,8 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                         &mut images,
                     )
                 {
+                    let mut sprite = sprite;
+                    sprite.color = catenary_sprite_color();
                     custom_front_catenary = Some((sprite, view, offset));
                 }
             } else {

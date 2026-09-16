@@ -80,7 +80,7 @@ impl TransparencyMode {
 static TRANSPARENCY_OPT: AtomicU32 = AtomicU32::new(0);
 static INVISIBILITY_OPT: AtomicU32 = AtomicU32::new(0);
 
-/// Alpha de sprites/textos en modo transparente (catenaria legacy usaba 0.45).
+/// Alpha de sprites/textos que todavía usan el tinte de categoría genérico.
 pub const TRANSPARENT_ALPHA: f32 = 0.45;
 
 /// Sincroniza bitsets persistidos con el render (llamar al hidratar / cambiar prefs).
@@ -258,12 +258,22 @@ fn catenary_visibility(
 }
 
 #[must_use]
-pub fn catenary_sprite_color() -> Color {
-    if catenary_transparent() {
-        Color::srgba(1.0, 1.0, 1.0, TRANSPARENT_ALPHA)
+fn catenary_sprite_color_for_transparent(transparent: bool) -> Color {
+    if transparent {
+        // `PALETTE_TO_TRANSPARENT` (802) no conserva el RGB del sprite: el
+        // blitter oscurece el destino con cobertura 64/255. El blanco con
+        // alpha 0.45 que usaba la ruta legacy hacía que la catenaria
+        // transparentada pareciera un cable lavado, no una máscara del
+        // terreno que queda detrás.
+        Color::srgba(0.0, 0.0, 0.0, 64.0 / 255.0)
     } else {
         Color::WHITE
     }
+}
+
+#[must_use]
+pub fn catenary_sprite_color() -> Color {
+    catenary_sprite_color_for_transparent(catenary_transparent())
 }
 
 #[cfg(test)]
@@ -335,5 +345,20 @@ mod tests {
             catenary_visibility(TransparencyMode::Hidden, false, true),
             (true, true)
         );
+    }
+
+    #[test]
+    fn catenary_transparency_uses_the_destination_mask() {
+        let visible = catenary_sprite_color_for_transparent(false).to_srgba();
+        for channel in [visible.red, visible.green, visible.blue, visible.alpha] {
+            assert!((channel - 1.0).abs() < f32::EPSILON);
+        }
+
+        let transparent = catenary_sprite_color_for_transparent(true).to_srgba();
+        assert_eq!(
+            (transparent.red, transparent.green, transparent.blue),
+            (0.0, 0.0, 0.0)
+        );
+        assert!((transparent.alpha - (64.0 / 255.0)).abs() < f32::EPSILON);
     }
 }

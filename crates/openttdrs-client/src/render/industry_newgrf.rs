@@ -22,6 +22,10 @@ pub(crate) struct NewGrfIndustrySpriteCache {
 }
 
 impl NewGrfIndustrySpriteCache {
+    pub(crate) fn clear(&mut self) {
+        self.handles.clear();
+    }
+
     /// Instala la tabla Action5 `0x0A` vigente para los TileLayout de
     /// industrias. Las texturas ya horneadas dependen de ella.
     pub(crate) fn set_twocc_maps(&mut self, maps: &[Option<openttdrs_core::DecodedSprite>]) {

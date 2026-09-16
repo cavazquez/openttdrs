@@ -9,9 +9,10 @@ use crate::render::{
     ChimneySmokeFrames, CompanyColoredSprites, CopperMineSmokeFrames, EffectVehicleFrames,
     FizzyDrinkAnimFrames, LighthouseAnimFrames, LoadedMapTileChunks, MapTileSpawnViewport,
     NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache, NewGrfHouseSpriteCache,
-    NewGrfObjectSpriteCache, NewGrfRoadSpriteCache, NewGrfShoreSpriteCache,
-    NewGrfStationSpriteCache, NewGrfTrainSpriteCache, RadioBlinkAnimFrames, RefineryFireAnimFrames,
-    RemapMapVisualsPending, TileAtlas, TruckHandles, VehicleIndex, WaterAnimFrames, WorldAssets,
+    NewGrfIndustrySpriteCache, NewGrfObjectSpriteCache, NewGrfRoadSpriteCache,
+    NewGrfShoreSpriteCache, NewGrfSignalSpriteCache, NewGrfStationSpriteCache,
+    NewGrfTrainSpriteCache, RadioBlinkAnimFrames, RefineryFireAnimFrames, RemapMapVisualsPending,
+    TileAtlas, TruckHandles, VehicleIndex, WaterAnimFrames, WorldAssets,
 };
 use crate::simulation::SimClock;
 use crate::state::{EditorSession, OrderPickState};
@@ -174,6 +175,18 @@ fn clear_newgrf_object_sprites(world: &mut World) {
 
 fn clear_newgrf_house_sprites(world: &mut World) {
     if let Some(mut cache) = world.get_resource_mut::<NewGrfHouseSpriteCache>() {
+        cache.clear();
+    }
+}
+
+fn clear_newgrf_signal_sprites(world: &mut World) {
+    if let Some(mut cache) = world.get_resource_mut::<NewGrfSignalSpriteCache>() {
+        cache.clear();
+    }
+}
+
+fn clear_newgrf_industry_sprites(world: &mut World) {
+    if let Some(mut cache) = world.get_resource_mut::<NewGrfIndustrySpriteCache>() {
         cache.clear();
     }
 }
@@ -345,6 +358,14 @@ pub(super) static RESOURCE_RESETS: &[ResourceTeardown] = &[
     ResourceTeardown {
         name: "NewGrfHouseSpriteCache",
         apply: clear_newgrf_house_sprites,
+    },
+    ResourceTeardown {
+        name: "NewGrfSignalSpriteCache",
+        apply: clear_newgrf_signal_sprites,
+    },
+    ResourceTeardown {
+        name: "NewGrfIndustrySpriteCache",
+        apply: clear_newgrf_industry_sprites,
     },
     ResourceTeardown {
         name: "DestinationPickerState",
@@ -569,6 +590,14 @@ pub(super) static RESOURCE_REMOVES: &[ResourceTeardown] = &[
     ResourceTeardown {
         name: "NewGrfCatenarySpriteCache(remove)",
         apply: remove_res::<NewGrfCatenarySpriteCache>,
+    },
+    ResourceTeardown {
+        name: "NewGrfSignalSpriteCache(remove)",
+        apply: remove_res::<NewGrfSignalSpriteCache>,
+    },
+    ResourceTeardown {
+        name: "NewGrfIndustrySpriteCache(remove)",
+        apply: remove_res::<NewGrfIndustrySpriteCache>,
     },
     ResourceTeardown {
         name: "NewGrfAction5SpriteCache(remove)",

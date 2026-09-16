@@ -35,7 +35,10 @@ use super::resource_reset::{
 };
 use crate::audio::PendingSimEvents;
 use crate::render::effect_fx::FxSpawnQueue;
-use crate::render::{MapVisualLayer, PrimaryGameCamera, RemapMapVisualsPending, VehicleIndex};
+use crate::render::{
+    MapVisualLayer, NewGrfIndustrySpriteCache, NewGrfSignalSpriteCache, PrimaryGameCamera,
+    RemapMapVisualsPending, VehicleIndex,
+};
 use crate::simulation::SimClock;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
@@ -82,6 +85,8 @@ const REQUIRED_SESSION_POLICIES: &[&str] = &[
     "NewGrfObjectSpriteCache",
     "NewGrfHouseSpriteCache",
     "NewGrfCatenarySpriteCache",
+    "NewGrfSignalSpriteCache",
+    "NewGrfIndustrySpriteCache",
     "DestinationPickerState",
     "VehicleWindowState",
     "VehicleChainRegistry",
@@ -140,6 +145,8 @@ const REQUIRED_SESSION_POLICIES: &[&str] = &[
     "NewGrfObjectSpriteCache(remove)",
     "NewGrfHouseSpriteCache(remove)",
     "NewGrfCatenarySpriteCache(remove)",
+    "NewGrfSignalSpriteCache(remove)",
+    "NewGrfIndustrySpriteCache(remove)",
 ];
 
 #[test]
@@ -229,10 +236,14 @@ fn leave_ingame_despawns_world_entities() {
     world.init_resource::<NewsUiState>();
     world.init_resource::<NewsHistoryState>();
     world.init_resource::<NewGrfTrainPreviewCache>();
+    world.init_resource::<NewGrfSignalSpriteCache>();
+    world.init_resource::<NewGrfIndustrySpriteCache>();
 
     let cam = world.spawn((PrimaryGameCamera, Camera2d)).id();
     world.spawn(MapVisualLayer);
     world.run_system_once(leave_ingame).unwrap();
     assert!(world.get_entity(cam).is_err());
     assert_eq!(world.query::<&MapVisualLayer>().iter(&world).count(), 0);
+    assert!(world.get_resource::<NewGrfSignalSpriteCache>().is_none());
+    assert!(world.get_resource::<NewGrfIndustrySpriteCache>().is_none());
 }

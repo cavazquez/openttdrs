@@ -24,6 +24,10 @@ pub(crate) struct ResolvedSignalSprite {
 }
 
 impl NewGrfSignalSpriteCache {
+    pub(crate) fn clear(&mut self) {
+        self.handles.clear();
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn sprite_for(
         &mut self,

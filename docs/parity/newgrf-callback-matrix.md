@@ -2495,3 +2495,14 @@ Así la base Action5 y el portal conservan su PNG completo para el recorte local
 de cada banda, sin perder el orden atómico del `SpriteCombine`. La regresión
 verifica las dos fuentes bajo el parent de cable; la cobertura de composición y
 callbacks/consumidores NewGRF sigue parcial y no se cierran issues madre.
+
+Actualización #326/#329/#567-BRIDGE-COMBINE-SEGMENTED (`766ae4b7`, `697ea82c`):
+las capas de puente combinadas ya no quedan limitadas a `ViewportSortableChild`
+cuando su llamada nativa tiene bounds reconstruidos. La baranda frontal
+vanilla/Action0, la catenaria trasera, el deck Action5, la reserva PBS y el
+overlay de tranvía publican `PromotableChild`, `SegmentedChild` y su fuente
+completa, con la inserción del parent estructural y el orden local del bloque.
+Las regresiones verifican la estructura frontal, catenaria, tranvía y PBS; los
+grupos `ROTSG_BRIDGE/OVERLAY/CATENARY_*` específicos que siguen en el helper
+legacy requieren una etapa posterior para derivar sus bounds desde el sprite
+NewGRF. La cobertura continúa parcial y no se cierran issues madre.

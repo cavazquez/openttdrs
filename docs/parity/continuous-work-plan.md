@@ -9271,3 +9271,15 @@ atómico dentro de cada banda. La regresión NewGRF verifica dos children y dos
 fuentes segmentadas; pasan 1.577 tests del cliente, 2 ignorados y Clippy
 estricto del binario. La fila continúa parcial por otros combines, producers,
 callbacks/consumidores NewGRF, composición global y framebuffer.
+
+### #326/#329/#567-BRIDGE-COMBINE-SEGMENTED — children de puentes por banda
+
+Actualizado: 2026-09-16 (`766ae4b7`, `697ea82c`). Las capas estructurales
+frontales combinadas y los overlays de puente con geometría nativa verificable
+ahora publican bounds, orden local y `ViewportSortableSegmentedSource`. La
+corrección cubre catenaria trasera, deck Action5, reserva PBS, tranvía y la
+baranda frontal bajo catenaria; el vínculo child→parent permanece atómico y
+la fuente completa permite recortar sólo la banda cruzada. Pasan 74 pruebas de
+puente y Clippy estricto; los grupos específicos NewGRF que todavía pasan por
+`spawn_bridge_specific_child` siguen pendientes. La fila continúa parcial y
+no se cierran #326/#329/#567.

@@ -6459,3 +6459,16 @@ dos fuentes segmentadas bajo el mismo cable; pasan 1.577 tests del cliente,
 2 ignorados y Clippy estricto del binario. La corrección es parcial y no
 cierra #326/#329/#567: siguen pendientes otros combines, producers,
 callbacks/consumidores NewGRF, composición global y comparación de framebuffer.
+
+Corrección #326/#329/#567-BRIDGE-COMBINE-SEGMENTED (2026-09-16,
+`766ae4b7`, `697ea82c`): los children combinados de puentes conservan ahora
+el contrato de clipping por banda. La baranda frontal vanilla o Action0 bajo
+la catenaria, y los overlays de catenaria trasera, deck Action5, reserva PBS y
+tranvía que ya tienen bounds nativos, publican `PromotableChild`,
+`SegmentedChild` y la fuente completa del sprite/transform. El sorter puede
+promover o recortar cada capa sin romper el vínculo con el parent del puente;
+las regresiones cubren estructura frontal, catenaria trasera, tranvía y PBS.
+Pasan 74 pruebas filtradas de puente y Clippy estricto del binario. La
+corrección es parcial y no cierra #326/#329/#567: siguen pendientes los
+overlays específicos NewGRF sin bounds reconstruidos, otros combines,
+producers, callbacks/consumidores NewGRF, composición global y framebuffer.

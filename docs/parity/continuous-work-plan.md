@@ -9190,3 +9190,14 @@ regresión de modos, 3 de popups, 3 de etiquetas de vehículos y Clippy estricto
 La fila continúa parcial y #326/#329/#567 permanecen abiertas por otros
 efectos de viewport, callbacks/consumidores NewGRF, composición global y
 framebuffer.
+
+### #326/#329/#567-BRIDGE-RAMP-MIDDLE-TRANSPARENCY — rampas y vano
+
+Actualizado: 2026-09-16 (`70c8a2c5`). Las cabeceras y rampas de puente no se
+ocultan ni reciben máscara por `TO_BRIDGES`, igual que el camino nativo de
+OpenTTD; sólo el vano intermedio usa esa categoría. Deck de carretera/tranvía,
+overlays Action5/custom y reserva PBS reciben destino 802 en el vano. La
+catenaria conserva su bit `TO_CATENARY` independiente. Pasan 79 pruebas de
+puente y la regresión específica de rampas/colores. La fila continúa parcial y
+#326/#329/#567 permanecen abiertas por otros producers, callbacks/consumidores
+NewGRF, composición global y comparación de framebuffer.

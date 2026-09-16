@@ -2435,3 +2435,12 @@ reaparecer si la preferencia cambia durante su vida. Se elimina el helper de
 alpha de texto sin consumidores. Pasan 1 regresión de modos, 3 de popups, 3 de
 vehículos y Clippy estricto; la cobertura de #326/#329/#567 sigue parcial y no
 se cierran issues madre.
+
+Actualización #326/#329/#567-BRIDGE-RAMP-MIDDLE-TRANSPARENCY (`70c8a2c5`):
+el renderer separa la semántica nativa de puente entre cabeceras/rampas y
+segmentos intermedios. Las primeras quedan sólidas bajo `TO_BRIDGES`
+transparente u oculto; los segundos aplican destino 802 a deck de
+carretera/tranvía, overlays Action5/custom y reserva PBS. `TO_CATENARY` no se
+hereda de ese bit. Pasan 79 pruebas de puente, incluida la regresión de
+rampas/colores; la cobertura de #326/#329/#567 continúa parcial y no se
+cierran issues madre.

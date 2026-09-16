@@ -6382,3 +6382,14 @@ oculto continúa suprimiendo sólo los carteles de usuario, como
 Pasan 3 pruebas de carteles, 6 de estaciones y Clippy estricto. La corrección
 es parcial y no cierra #326/#329/#567: siguen pendientes otros producers,
 callbacks/consumidores NewGRF, composición global y comparación de framebuffer.
+
+Corrección #326/#329/#567-BRIDGE-RAMP-MIDDLE-TRANSPARENCY (2026-09-16,
+`70c8a2c5`): las rampas/cabeceras de puente conservan la representación sólida
+de OpenTTD aunque `TO_BRIDGES` esté transparente u oculto; esa preferencia se
+aplica sólo a la estructura del vano. En los segmentos intermedios, el deck
+de carretera/tranvía, los overlays Action5/custom y la reserva PBS usan la
+máscara de destino equivalente a `PALETTE_TO_TRANSPARENT` (`802`). La
+decisión de `TO_CATENARY` permanece independiente. Pasan 79 pruebas de
+puente, incluida la regresión de rampas y colores. La corrección es parcial y
+no cierra #326/#329/#567: siguen pendientes otros producers, callbacks/
+consumidores NewGRF, composición global y comparación de framebuffer.

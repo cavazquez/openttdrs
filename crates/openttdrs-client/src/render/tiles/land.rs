@@ -3785,11 +3785,14 @@ pub(crate) fn push_forest_tree(
     ctx: &TileRenderContext,
     map_w: u32,
 ) {
-    use crate::sprites::{TransparencyOption, is_hidden, sprite_color};
+    use crate::sprites::{TransparencyOption, is_hidden, is_transparent};
     if is_hidden(TransparencyOption::Trees) {
         return;
     }
-    let tint = sprite_color(TransparencyOption::Trees);
+    // `DrawTile_Trees` entrega cada copa a `AddSortableSpriteToDraw` con
+    // `IsTransparencySet(TO_TREES)`. La preferencia usa la máscara de
+    // destino del viewport, no el alpha blanco genérico de otros overlays.
+    let tint = destination_mask_sprite_color(is_transparent(TransparencyOption::Trees));
     let (tree_type, count, growth) = match ctx.tile {
         // MP_TREES real (nibble alto de mapt = 4): datos del save.
         Some(t) if (t.mapt >> 4) & 0xF == 4 => (

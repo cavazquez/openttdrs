@@ -18,7 +18,7 @@ use crate::iso::{road_vehicle_tile_anchor, tile_slope_and_min_z, wang_hash};
 use crate::render::effect_vehicle::{EffectSpriteSet, EffectVehicleFrames, apply_effect_frame};
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{
-    MapVisualLayer, ViewportSortableParent, palette_animations_should_run,
+    MapDynamicVisual, MapVisualLayer, ViewportSortableParent, palette_animations_should_run,
     vehicles::vehicle_draw_anchor_from_pose, viewport_insertion_key, viewport_source_depth,
 };
 use crate::settings::ClientPreferences;
@@ -787,6 +787,7 @@ fn spawn_train_smoke_effect(
     }
     commands.spawn((
         MapVisualLayer,
+        MapDynamicVisual,
         TrainSmokeEffect {
             started_tick: tick,
             origin,

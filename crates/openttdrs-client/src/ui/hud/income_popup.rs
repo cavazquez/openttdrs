@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
-use crate::render::MapVisualLayer;
+use crate::render::{MapDynamicVisual, MapVisualLayer};
 use crate::sprites::text_effects_hidden;
 use crate::state::SimWorld;
 use crate::ui::font::HudUiFont;
@@ -31,6 +31,7 @@ pub(crate) fn spawn_income_popups(
         let label = format!("+${}", popup.amount);
         commands.spawn((
             MapVisualLayer,
+            MapDynamicVisual,
             IncomePopupText {
                 lifetime: Timer::from_seconds(2.0, TimerMode::Once),
             },

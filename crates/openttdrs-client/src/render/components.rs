@@ -72,9 +72,15 @@ pub(crate) struct LighthouseAnimFrames {
 #[derive(Resource)]
 pub(crate) struct RadioBlinkAnimFrames(pub(crate) Vec<AtlasSprite>);
 
-/// Teselas de suelo, vías, vehículos, etc.: se despawnan al recargar JSON (F9).
+/// Capa visual que pertenece al mapa materializado.
 #[derive(Component)]
 pub(crate) struct MapVisualLayer;
+
+/// Visual transitorio que no debe reiniciarse al reconstruir la representación
+/// del mapa (por ejemplo, un vehículo o un efecto en vuelo). Una carga de
+/// partida lo elimina explícitamente junto con las demás capas antiguas.
+#[derive(Component)]
+pub(crate) struct MapDynamicVisual;
 
 /// Metadatos comunes a los dos nodos de cada cartel (fondo y texto).
 ///

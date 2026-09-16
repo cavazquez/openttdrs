@@ -688,6 +688,7 @@ pub(crate) fn spawn_world_layer(
     label_index: &MapLabelSpatialIndex,
     spawn_bounds: TileViewportBounds,
     include_world_extras: bool,
+    spawn_initial_vehicle_visuals: bool,
     show_pbs_reservations: bool,
     show_full_detail: bool,
     show_town_labels: bool,
@@ -708,7 +709,7 @@ pub(crate) fn spawn_world_layer(
     if include_world_extras {
         let truck_handles = TruckHandles::load(asset_server);
         let mut newgrf_train_sprites = NewGrfTrainSpriteCache::default();
-        if overview_stride.is_none() {
+        if spawn_initial_vehicle_visuals && overview_stride.is_none() {
             spawn_initial_vehicles(
                 commands,
                 sim,
@@ -943,6 +944,7 @@ pub(crate) fn setup(
         spawn_bounds,
         true,
         true,
+        true,
         show_full_detail,
         show_town_labels,
         show_station_labels,
@@ -1054,6 +1056,7 @@ pub(crate) fn spawn_intro_map_render(
         sim,
         &label_index,
         spawn_bounds,
+        false,
         false,
         true,
         true,

@@ -19,8 +19,8 @@ use crate::render::effect_vehicle::{
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{
-    MapVisualLayer, ViewportSortableParent, vehicles::vehicle_draw_anchor_from_pose,
-    viewport_insertion_key, viewport_source_depth,
+    MapDynamicVisual, MapVisualLayer, ViewportSortableParent,
+    vehicles::vehicle_draw_anchor_from_pose, viewport_insertion_key, viewport_source_depth,
 };
 use crate::simulation::SimClock;
 use crate::state::{ClientScreen, SimWorld};
@@ -431,6 +431,7 @@ fn spawn_queued_fx(
         }
         commands.spawn((
             MapVisualLayer,
+            MapDynamicVisual,
             effect,
             sprite,
             Transform::from_translation(fx_translation(

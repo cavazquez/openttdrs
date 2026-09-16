@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use crate::render::MapVisualLayer;
+use crate::render::{MapDynamicVisual, MapVisualLayer};
 
 #[derive(Component)]
 pub(crate) struct BuildPlaceFlashSprite {
@@ -24,6 +24,7 @@ pub(crate) fn spawn_build_place_flash(
     };
     commands.spawn((
         MapVisualLayer,
+        MapDynamicVisual,
         BuildPlaceFlashSprite {
             timer: Timer::from_seconds(0.38, TimerMode::Once),
         },

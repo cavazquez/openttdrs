@@ -5,8 +5,8 @@ use bevy::window::PrimaryWindow;
 
 use crate::render::vehicles::VehicleIndex;
 use crate::render::{
-    CompanyColoredSprites, MapTileChunk, MapVisualLayer, WorldAssets, chunks_in_bounds,
-    large_map_viewport_cull_enabled,
+    CompanyColoredSprites, MapDynamicVisual, MapTileChunk, MapVisualLayer, WorldAssets,
+    chunks_in_bounds, large_map_viewport_cull_enabled,
 };
 use crate::sprites::CompanyColour;
 use crate::state::SimWorld;
@@ -51,7 +51,14 @@ pub(crate) fn sync_company_colored_sprites(
 pub(crate) fn apply_remap_map_visuals(
     mut commands: Commands,
     mut pending: ResMut<RemapMapVisualsPending>,
-    q_vis: Query<Entity, With<MapVisualLayer>>,
+    q_vis: Query<
+        (
+            Entity,
+            Option<&MapDynamicVisual>,
+            Option<&crate::render::vehicles::VehicleSprite>,
+        ),
+        With<MapVisualLayer>,
+    >,
     q_chunks: Query<(Entity, &MapTileChunk), With<MapVisualLayer>>,
     mut label_entities: MapLabelEntities,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -114,6 +121,21 @@ pub(crate) fn apply_remap_map_visuals(
         last_ortho_scale: ortho_scale,
         last_overview_stride: overview_stride,
     });
+
+    // Una reconstrucción de representación no debe reiniciar la simulación
+    // visual: los vehículos, efectos y popups siguen siendo entidades vivas.
+    // La excepción es una carga/cambio de mapa (`sync_camera`) o el overview,
+    // donde esas entidades no tienen representación materializada.
+    let preserve_dynamic_visuals = !do_sync_camera && overview_stride.is_none();
+    let preserve_vehicle_visuals = preserve_dynamic_visuals
+        && q_vis
+            .iter()
+            .any(|(_, dynamic, vehicle)| dynamic.is_some() && vehicle.is_some());
+    if !preserve_dynamic_visuals {
+        for (entity, _, _) in &q_vis {
+            commands.entity(entity).despawn();
+        }
+    }
 
     let use_incremental = !full_rebuild
         && overview_stride.is_none()
@@ -238,9 +260,10 @@ pub(crate) fn apply_remap_map_visuals(
             );
         }
     } else {
-        let to_remove: Vec<Entity> = q_vis.iter().collect();
-        for e in to_remove {
-            commands.entity(e).despawn();
+        for (entity, dynamic, _) in &q_vis {
+            if dynamic.is_none() {
+                commands.entity(entity).despawn();
+            }
         }
         vehicle_index.rebuild(&sim.state.vehicles);
         if large_map_viewport_cull_enabled(mw, mh) {
@@ -260,6 +283,7 @@ pub(crate) fn apply_remap_map_visuals(
             &label_entities.spatial_index,
             spawn_bounds,
             true,
+            !preserve_vehicle_visuals,
             show_pbs,
             show_full_detail,
             show_town_labels,

@@ -7,8 +7,8 @@ use crate::bevy_app::UpdateSet;
 use crate::iso::{road_vehicle_tile_anchor, tile_slope_and_min_z, wang_hash};
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{
-    MapVisualLayer, ViewportSortableParent, WorldAssets, palette_animations_should_run,
-    viewport_insertion_key, viewport_source_depth,
+    MapDynamicVisual, MapVisualLayer, ViewportSortableParent, WorldAssets,
+    palette_animations_should_run, viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{BUBBLE_FRAMES, BUBBLE_META, TransparencyOption, is_hidden, is_transparent};
 use crate::state::{ClientScreen, SimWorld};
@@ -408,6 +408,7 @@ fn spawn_queued_bubbles(
         let translation = bubble_translation(position, state, parent.source_depth);
         commands.spawn((
             MapVisualLayer,
+            MapDynamicVisual,
             effect,
             sprite,
             Transform::from_translation(translation),

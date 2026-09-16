@@ -35,7 +35,8 @@ mod tests {
         VIEWPORT_MARGIN_TILES, VIEWPORT_REBUILD_LEAD_TILES, ortho_visible_tile_bounds,
     };
     use crate::render::{
-        MapPreviewCamera, MapTileChunk, MapVisualLayer, PrimaryGameCamera, VehicleSprite,
+        MapDynamicVisual, MapPreviewCamera, MapTileChunk, MapVisualLayer, PrimaryGameCamera,
+        VehicleSprite,
     };
     use crate::state::SimWorld;
 
@@ -86,6 +87,42 @@ mod tests {
         world
             .run_system_once(remap::apply_remap_map_visuals)
             .unwrap();
+    }
+
+    #[test]
+    fn full_visual_remap_preserves_dynamic_vehicle_without_duplicating_it() {
+        let mut app = with_assets_app();
+        let world = app.world_mut();
+        world
+            .resource_mut::<SimWorld>()
+            .state
+            .vehicles
+            .push(Vehicle::new(
+                77,
+                VehicleKind::Bus,
+                TileCoord::new(12, 12),
+                TileCoord::new(13, 12),
+            ));
+        world.run_system_once(setup).expect("setup del mapa");
+
+        let before = {
+            let mut vehicles = world.query_filtered::<Entity, With<VehicleSprite>>();
+            vehicles.iter(world).next().expect("vehículo materializado")
+        };
+        assert!(world.entity(before).contains::<MapDynamicVisual>());
+
+        world
+            .resource_mut::<RemapMapVisualsPending>()
+            .request_full();
+        world
+            .run_system_once(remap::apply_remap_map_visuals)
+            .expect("remapeo completo");
+
+        let vehicles: Vec<_> = {
+            let mut query = world.query_filtered::<Entity, With<VehicleSprite>>();
+            query.iter(world).collect()
+        };
+        assert_eq!(vehicles, vec![before], "el rebuild no duplica el vehículo");
     }
 
     #[test]
@@ -258,6 +295,16 @@ mod tests {
             .map
             .set_kind(TileCoord::new(1, 1), TileKind::Water)
             .expect("tesela del mundo previo");
+        world
+            .resource_mut::<SimWorld>()
+            .state
+            .vehicles
+            .push(Vehicle::new(
+                77,
+                VehicleKind::Bus,
+                TileCoord::new(12, 12),
+                TileCoord::new(13, 12),
+            ));
         world.run_system_once(setup).expect("setup inicial");
         let old_layers: HashSet<Entity> = {
             let mut layers = world.query_filtered::<Entity, With<MapVisualLayer>>();

@@ -58,10 +58,10 @@ pub(crate) use company_recolor::{
     sprite_from_company_or_asset,
 };
 pub(crate) use components::{
-    FizzyDrinkAnimFrames, IndustryPreviewCamera, LighthouseAnimFrames, MapLabelLod, MapLabelText,
-    MapPreviewCamera, MapSpriteBatches, MapTileChunk, MapVisualLayer, PrimaryGameCamera,
-    RadioBlinkAnimFrames, RefineryFireAnimFrames, ShoreTile, WaterAnimFrames, WaterAtlasAnimation,
-    WaterTile,
+    FizzyDrinkAnimFrames, IndustryPreviewCamera, LighthouseAnimFrames, MapDynamicVisual,
+    MapLabelLod, MapLabelText, MapPreviewCamera, MapSpriteBatches, MapTileChunk, MapVisualLayer,
+    PrimaryGameCamera, RadioBlinkAnimFrames, RefineryFireAnimFrames, ShoreTile, WaterAnimFrames,
+    WaterAtlasAnimation, WaterTile,
 };
 pub(crate) use disaster_craft::DisasterCraftPlugin;
 pub(crate) use effect_fx::EffectVehiclePlugin;

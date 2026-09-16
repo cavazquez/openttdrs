@@ -9,7 +9,8 @@ use crate::bevy_app::UpdateSet;
 use crate::iso::{road_vehicle_tile_anchor, tile_slope_and_min_z};
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{
-    MapVisualLayer, ViewportSortableParent, viewport_insertion_key, viewport_source_depth,
+    MapDynamicVisual, MapVisualLayer, ViewportSortableParent, viewport_insertion_key,
+    viewport_source_depth,
 };
 use crate::state::{ClientScreen, SimWorld};
 
@@ -384,6 +385,7 @@ fn sync_disaster_crafts(
             let parent = craft_parent(craft, position, false, map_width);
             commands.spawn((
                 MapVisualLayer,
+                MapDynamicVisual,
                 DisasterCraftSprite {
                     id: craft.id,
                     is_shadow: false,
@@ -404,6 +406,7 @@ fn sync_disaster_crafts(
             let parent = craft_parent(craft, position, true, map_width);
             commands.spawn((
                 MapVisualLayer,
+                MapDynamicVisual,
                 DisasterCraftSprite {
                     id: craft.id,
                     is_shadow: true,

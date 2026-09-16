@@ -3,8 +3,8 @@ use openttdrs_core::extrapolate_vehicle_pose;
 use openttdrs_core::prelude::*;
 
 use crate::render::{
-    CompanyColoredSprites, MapVisualLayer, ViewportSortableChild, ViewportSortableParent,
-    viewport_source_depth,
+    CompanyColoredSprites, MapDynamicVisual, MapVisualLayer, ViewportSortableChild,
+    ViewportSortableParent, viewport_source_depth,
 };
 use crate::state::SimWorld;
 
@@ -65,6 +65,7 @@ fn spawn_newgrf_stack_children(
         let Some(layer) = layers.get(stack_index) else {
             commands.spawn((
                 MapVisualLayer,
+                MapDynamicVisual,
                 super::sync::VehicleNewGrfStackSprite {
                     vehicle_id: vehicle.id,
                     stack_index,
@@ -95,6 +96,7 @@ fn spawn_newgrf_stack_children(
         layer_pos.z = source_depth;
         commands.spawn((
             MapVisualLayer,
+            MapDynamicVisual,
             super::sync::VehicleNewGrfStackSprite {
                 vehicle_id: vehicle.id,
                 stack_index,
@@ -132,6 +134,7 @@ fn spawn_aircraft_rotor_stack_children(
         let Some(layer) = layers.get(stack_index) else {
             commands.spawn((
                 MapVisualLayer,
+                MapDynamicVisual,
                 super::sync::AircraftRotorStackSprite {
                     vehicle_id: vehicle.id,
                     stack_index,
@@ -164,6 +167,7 @@ fn spawn_aircraft_rotor_stack_children(
         layer_pos.z = source_depth;
         commands.spawn((
             MapVisualLayer,
+            MapDynamicVisual,
             super::sync::AircraftRotorStackSprite {
                 vehicle_id: vehicle.id,
                 stack_index,
@@ -266,6 +270,7 @@ pub(crate) fn spawn_initial_vehicles(
         let vehicle_entity = commands
             .spawn((
                 MapVisualLayer,
+                MapDynamicVisual,
                 VehicleSprite(vehicle.id),
                 Sprite {
                     image: vehicle_image.clone(),
@@ -323,6 +328,7 @@ pub(crate) fn spawn_initial_vehicles(
             shadow_pos.z = shadow_source_depth;
             commands.spawn((
                 MapVisualLayer,
+                MapDynamicVisual,
                 AircraftShadowSprite(vehicle.id),
                 Sprite {
                     image: vehicle_image,
@@ -383,6 +389,7 @@ pub(crate) fn spawn_initial_vehicles(
                 let rotor_entity = commands
                     .spawn((
                         MapVisualLayer,
+                        MapDynamicVisual,
                         AircraftRotorSprite(vehicle.id),
                         Sprite {
                             image: rotor_image.clone(),
@@ -433,6 +440,7 @@ pub(crate) fn spawn_initial_vehicles(
         {
             commands.spawn((
                 MapVisualLayer,
+                MapDynamicVisual,
                 VehicleCargoLabel(vehicle.id),
                 Text2d::new(vehicle_cargo_label(vehicle)),
                 TextFont {
@@ -517,6 +525,7 @@ fn spawn_consist_trailer_sprites(
         let unit_entity = commands
             .spawn((
                 MapVisualLayer,
+                MapDynamicVisual,
                 ConsistUnitSprite {
                     head_id: head.id,
                     unit_index: i,

@@ -89,6 +89,10 @@ const BRIDGE_REAR_ORDINAL: u8 = 32;
 const BRIDGE_CATENARY_ORDINAL_BASE: u8 = 48;
 const BRIDGE_FRONT_ORDINAL: u8 = 64;
 const BRIDGE_PILLAR_ORDINAL_BASE: u8 = 80;
+const BRIDGE_REAR_CATENARY_CHILD_ORDINAL: u8 = 1;
+const BRIDGE_REAR_DECK_CHILD_ORDINAL: u8 = 2;
+const BRIDGE_REAR_PBS_CHILD_ORDINAL: u8 = 3;
+const BRIDGE_REAR_TRAM_CHILD_ORDINAL: u8 = 4;
 const BRIDGE_Z_START: f32 = 3.0;
 const TILE_HEIGHT_PX: f32 = 8.0;
 const TILE_HEIGHT_WORLD: i32 = 8;
@@ -625,6 +629,46 @@ fn spawn_bridge_combined_child(
     ));
 }
 
+/// Variante de [`spawn_bridge_combined_child`] para un `AddCombinedSprite`
+/// cuya caja y sprite-id ya fueron reconstruidos desde la traza nativa.
+///
+/// Estos children siguen perteneciendo al bloque del parent original, pero
+/// necesitan conservar una fuente completa para que el sorter pueda recortar
+/// sólo la banda que cruza cuando el parent cae fuera del viewport actual.
+#[allow(clippy::too_many_arguments)]
+fn spawn_bridge_segmented_child(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    map_width: u32,
+    parent: Entity,
+    sprite: Sprite,
+    position: Vec3,
+    sprite_id: u32,
+    placement: BridgeTracePlacement,
+    combine_ordinal: u8,
+) {
+    let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+    let transform = Transform::from_translation(position.with_z(source_depth));
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        sprite.clone(),
+        transform,
+        ViewportSortableChild {
+            parent,
+            source_depth,
+        },
+        ViewportSortablePromotableChild {
+            sprite_id,
+            bounds: bridge_parent_bounds(ctx.tx_i32(), ctx.ty_i32(), ctx.info.base_z, placement),
+            insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, BRIDGE_REAR_ORDINAL),
+            combine_ordinal,
+        },
+        ViewportSortableSegmentedChild,
+        ViewportSortableSegmentedSource { sprite, transform },
+    ));
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_bridge_specific_child(
     commands: &mut Commands,
@@ -744,6 +788,7 @@ fn spawn_bridge_pbs_reservation(
     let Some(sprite) = assets.pbs_rail_sprite(sprite_id) else {
         return;
     };
+    let bounds = bridge_pbs_trace_bounds(on_ramp, foundation_tileh, span.axis);
     let offset = bridge_pbs_reservation_offset(sprite_id);
     let position = full_tile_sprite_pos_half(
         ctx.tx_i32(),
@@ -755,7 +800,22 @@ fn spawn_bridge_pbs_reservation(
     let mut sprite = sprite.sprite();
     sprite.color = bridge_structure_sprite_color(bridges_transparent);
     if let Some(parent) = parent {
-        spawn_bridge_combined_child(commands, ctx, map_width, parent, sprite, position);
+        spawn_bridge_segmented_child(
+            commands,
+            ctx,
+            map_width,
+            parent,
+            sprite,
+            position,
+            sprite_id,
+            BridgeTracePlacement {
+                world_xy_delta: (0, 0),
+                world_z_delta: (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8,
+                offset: (0, 0, 0),
+                bounds,
+            },
+            BRIDGE_REAR_PBS_CHILD_ORDINAL,
+        );
     } else {
         commands.spawn((
             MapVisualLayer,
@@ -3576,8 +3636,21 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                         anchor,
                     );
                     if let Some(parent) = rear_parent {
-                        spawn_bridge_combined_child(
-                            commands, ctx, dims.0, parent, sprite, position,
+                        spawn_bridge_segmented_child(
+                            commands,
+                            ctx,
+                            dims.0,
+                            parent,
+                            sprite,
+                            position,
+                            back_id,
+                            BridgeTracePlacement {
+                                world_xy_delta: (0, 0),
+                                world_z_delta: z_delta,
+                                offset,
+                                bounds,
+                            },
+                            BRIDGE_REAR_CATENARY_CHILD_ORDINAL,
                         );
                     } else {
                         commands.spawn((
@@ -3639,18 +3712,35 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             DECK_LAYER_FRAC + 0.001,
             TILE_HALF_H,
         );
+        let sprite_id = SPR_BRIDGE_DECKS_BASE.saturating_add(u32::try_from(slot).unwrap_or(0));
+        let bounds = TraceSpriteBounds::new(0, 0, 0, 16, 16, 0);
         WorldDrawTrace::record_sprite_with_palette_and_geometry(
             "bridge-deck-overlay",
             "combined",
-            SPR_BRIDGE_DECKS_BASE.saturating_add(u32::try_from(slot).unwrap_or(0)),
+            sprite_id,
             0,
             false,
             (0, 0, 0),
             (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8,
-            Some(TraceSpriteBounds::new(0, 0, 0, 16, 16, 0)),
+            Some(bounds),
         );
         if let Some(parent) = rear_parent {
-            spawn_bridge_combined_child(commands, ctx, dims.0, parent, sprite, position);
+            spawn_bridge_segmented_child(
+                commands,
+                ctx,
+                dims.0,
+                parent,
+                sprite,
+                position,
+                sprite_id,
+                BridgeTracePlacement {
+                    world_xy_delta: (0, 0),
+                    world_z_delta: (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8,
+                    offset: (0, 0, 0),
+                    bounds,
+                },
+                BRIDGE_REAR_DECK_CHILD_ORDINAL,
+            );
         } else {
             commands.spawn((
                 MapVisualLayer,
@@ -3695,19 +3785,37 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 RAIL_ON_BRIDGE_LAYER_FRAC,
                 TILE_HALF_H,
             );
+            let sprite_id =
+                SPR_TRAMWAY_OVERLAY_BASE.saturating_add(u32::try_from(overlay_offset).unwrap_or(0));
+            let bounds = TraceSpriteBounds::new(0, 0, 0, 16, 16, 0);
             WorldDrawTrace::record_sprite_with_geometry(
                 "bridge-tram-overlay",
                 "combined",
-                SPR_TRAMWAY_OVERLAY_BASE.saturating_add(u32::try_from(overlay_offset).unwrap_or(0)),
+                sprite_id,
                 false,
                 (0, 0, 0),
                 (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8,
-                Some(TraceSpriteBounds::new(0, 0, 0, 16, 16, 0)),
+                Some(bounds),
             );
             let mut sprite = tram.sprite();
             sprite.color = bridge_transport_sprite_color(on_ramp, bridge_transparent);
             if let Some(parent) = rear_parent {
-                spawn_bridge_combined_child(commands, ctx, dims.0, parent, sprite, position);
+                spawn_bridge_segmented_child(
+                    commands,
+                    ctx,
+                    dims.0,
+                    parent,
+                    sprite,
+                    position,
+                    sprite_id,
+                    BridgeTracePlacement {
+                        world_xy_delta: (0, 0),
+                        world_z_delta: (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8,
+                        offset: (0, 0, 0),
+                        bounds,
+                    },
+                    BRIDGE_REAR_TRAM_CHILD_ORDINAL,
+                );
             } else {
                 commands.spawn((
                     MapVisualLayer,

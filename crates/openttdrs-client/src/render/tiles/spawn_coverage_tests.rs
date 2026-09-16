@@ -14900,6 +14900,7 @@ fn bridge_middle_keeps_road_front_combine_parent_and_child_roles() {
         .query::<(Entity, &ViewportSortableChild, &Sprite)>()
         .iter(&world)
         .filter(|(_, _, sprite)| expected_overlay.matches(sprite))
+        .map(|(entity, child, _)| (entity, child.parent))
         .collect();
     assert_eq!(
         attached.len(),
@@ -14908,9 +14909,26 @@ fn bridge_middle_keeps_road_front_combine_parent_and_child_roles() {
     );
     assert!(
         world
-            .entity(attached[0].1.parent)
+            .entity(attached[0].1)
             .contains::<ViewportSortableParent>(),
         "el overlay debe colgar del parent trasero combinado"
+    );
+    let segmented_overlay_count = world
+        .query::<(
+            &ViewportSortableChild,
+            &ViewportSortablePromotableChild,
+            &ViewportSortableSegmentedChild,
+            &ViewportSortableSegmentedSource,
+            &Sprite,
+        )>()
+        .iter(&world)
+        .filter(|(child, _, _, _, sprite)| {
+            child.parent == attached[0].1 && expected_overlay.matches(sprite)
+        })
+        .count();
+    assert_eq!(
+        segmented_overlay_count, 1,
+        "el overlay de tranvía debe publicar bounds y fuente para clipping por banda"
     );
 
     let catenary_back_children: Vec<_> = world
@@ -14928,6 +14946,21 @@ fn bridge_middle_keeps_road_front_combine_parent_and_child_roles() {
             .entity(child.parent)
             .contains::<ViewportSortableParent>()
     }));
+    let segmented_catenary_back_count = world
+        .query::<(
+            &ViewportSortableChild,
+            &ViewportSortablePromotableChild,
+            &ViewportSortableSegmentedChild,
+            &ViewportSortableSegmentedSource,
+            &Sprite,
+        )>()
+        .iter(&world)
+        .filter(|(_, _, _, _, sprite)| expected_catenary_back.matches(sprite))
+        .count();
+    assert_eq!(
+        segmented_catenary_back_count, 1,
+        "la catenaria trasera debe publicar bounds y fuente para clipping por banda"
+    );
 
     let catenary_front_parents: Vec<_> = world
         .query::<(Entity, &ViewportSortableParent, &Sprite)>()
@@ -15213,23 +15246,40 @@ fn bridge_pbs_overlay_stays_attached_to_the_rear_combined_parent() {
     let attached: Vec<_> = children
         .iter(&world)
         .filter(|(_, _, sprite)| expected_pbs.matches(sprite))
+        .map(|(entity, child, _)| (entity, child.parent, child.source_depth))
         .collect();
     assert_eq!(attached.len(), 1, "el overlay PBS debe dibujarse una vez");
-    let (_, child, _) = attached[0];
     assert!(
         world
-            .entity(child.parent)
+            .entity(attached[0].1)
             .contains::<ViewportSortableParent>(),
         "el overlay PBS debe colgar del parent trasero del bloque combinado"
     );
     assert_eq!(
-        child.source_depth,
+        attached[0].2,
         world
             .entity(attached[0].0)
             .get::<Transform>()
             .unwrap()
             .translation
             .z
+    );
+    let segmented_pbs_count = world
+        .query::<(
+            &ViewportSortableChild,
+            &ViewportSortablePromotableChild,
+            &ViewportSortableSegmentedChild,
+            &ViewportSortableSegmentedSource,
+            &Sprite,
+        )>()
+        .iter(&world)
+        .filter(|(child, _, _, _, sprite)| {
+            child.parent == attached[0].1 && expected_pbs.matches(sprite)
+        })
+        .count();
+    assert_eq!(
+        segmented_pbs_count, 1,
+        "la reserva PBS debe publicar bounds y fuente para clipping por banda"
     );
 }
 

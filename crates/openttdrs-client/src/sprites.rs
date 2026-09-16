@@ -218,7 +218,7 @@ pub use station::{
 #[allow(unused_imports)]
 pub use transparency::{
     TRANSPARENT_ALPHA, TransparencyMode, TransparencyOption, apply_mode_to_bits, catenary_hidden,
-    catenary_sprite_color, catenary_transparent, is_hidden, mode_from_bits,
+    catenary_sprite_color, catenary_transparent, is_hidden, is_transparent, mode_from_bits,
     set_transparency_preferences, sprite_color, text_color, with_to_alpha,
 };
 

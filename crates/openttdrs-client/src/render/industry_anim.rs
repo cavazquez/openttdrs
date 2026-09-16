@@ -15,7 +15,10 @@ use crate::render::{
     MapVisualLayer, TileRenderContext, ViewportSortableChild, ViewportSortableParent, WorldAssets,
     viewport_insertion_key, viewport_source_depth,
 };
-use crate::sprites::{industry_effective_m4_for_draw, industry_gfx_entry_for_tile};
+use crate::sprites::{
+    TRANSPARENT_ALPHA, TransparencyOption, industry_effective_m4_for_draw,
+    industry_gfx_entry_for_tile, is_transparent,
+};
 use crate::state::{ClientScreen, SimWorld};
 
 pub(crate) struct IndustryBuildingAnimPlugin;
@@ -249,6 +252,16 @@ fn industry_building_frame_or_sample(
         .map(|frame| (frame, false))
 }
 
+/// El alpha de `TO_INDUSTRIES` alcanza a la capa BUILD animada, no al suelo
+/// que `DrawGroundSprite` ya emitió antes de abrir el parent sortable.
+fn industry_anim_sprite_color(ground: bool, category_transparent: bool) -> Color {
+    if ground || !category_transparent {
+        Color::WHITE
+    } else {
+        Color::srgba(1.0, 1.0, 1.0, TRANSPARENT_ALPHA)
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_industry_anim_layer(
     commands: &mut Commands,
@@ -263,11 +276,13 @@ pub(crate) fn spawn_industry_anim_layer(
     let Some(img) = assets.industries.get(&frame.sprite_id) else {
         return;
     };
+    let sprite_color =
+        industry_anim_sprite_color(anim.ground, is_transparent(TransparencyOption::Industries));
     let mut entity = commands.spawn((
         MapVisualLayer,
         chunk,
         anim,
-        img.sprite(),
+        img.sprite_colored(sprite_color),
         Transform::from_translation(frame.translation),
         if visible {
             Visibility::Visible
@@ -363,6 +378,11 @@ pub(crate) fn animate_industry_building_layers(
             continue;
         };
         visibility.set_if_neq(Visibility::Visible);
+        let sprite_color =
+            industry_anim_sprite_color(anim.ground, is_transparent(TransparencyOption::Industries));
+        if sprite.color != sprite_color {
+            sprite.color = sprite_color;
+        }
         if !img.matches(&sprite) {
             img.apply_to(&mut sprite);
         }
@@ -412,6 +432,19 @@ mod tests {
     #[test]
     fn anim_phase_varies_by_tile() {
         assert_ne!(industry_anim_phase(0, 0, 0), industry_anim_phase(1, 0, 0));
+    }
+
+    #[test]
+    fn animated_industry_transparency_only_reaches_building_layer() {
+        assert_eq!(industry_anim_sprite_color(true, true).to_srgba().alpha, 1.0);
+        assert_eq!(
+            industry_anim_sprite_color(false, true).to_srgba().alpha,
+            crate::sprites::TRANSPARENT_ALPHA
+        );
+        assert_eq!(
+            industry_anim_sprite_color(false, false).to_srgba().alpha,
+            1.0
+        );
     }
 
     fn flat_anim(gfx: u16, ground: bool) -> IndustryBuildingAnim {

@@ -941,7 +941,12 @@ fn ship_path_step_diagdir(map: Option<&Map>, from: TileCoord, next: TileCoord) -
 /// ruta. El modelo de movimiento conserva teselas en `Vehicle::path`, mientras
 /// que `OpenTTD` conserva el mismo sufijo como `Trackdir` en orden inverso:
 /// `path.back()` es siempre la próxima entrada que se consume.
-fn sync_ship_path_cache(v: &mut Vehicle, map: Option<&Map>) {
+fn sync_ship_path_cache(
+    v: &mut Vehicle,
+    map: Option<&Map>,
+    engine_catalog: &[crate::engine::EngineDef],
+    pathfinding: PathfindingSettings,
+) {
     v.ship_path.clear();
     let mut projected = Vec::with_capacity(v.path.len());
     let mut from = v.pos;
@@ -952,7 +957,19 @@ fn sync_ship_path_cache(v: &mut Vehicle, map: Option<&Map>) {
         let path_next = v.path.get(index + 1).copied();
         let track = map.map_or_else(
             || choose_track_for_entry(entry_diagdir),
-            |m| choose_ship_track(m, next, entry_diagdir, path_next, v.dest),
+            |m| {
+                choose_ship_track_with_cost(
+                    m,
+                    next,
+                    entry_diagdir,
+                    path_next,
+                    v.dest,
+                    crate::pathfinder::ShipPathCost::from_engine_with_settings(
+                        crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v),
+                        &pathfinding,
+                    ),
+                )
+            },
         );
         let direction = ship_subcoord(entry_diagdir, track).map_or_else(
             || direction_from_tile_step(from, next),
@@ -1032,8 +1049,20 @@ fn ship_enter_aqueduct(
     }
     let path_next = v.path.front().copied();
     let entry_diagdir = tile.m5 & 0x03;
-    let track = consume_cached_ship_track(v, map, other, entry_diagdir, path_next)
-        .unwrap_or_else(|| choose_ship_track(map, other, entry_diagdir, path_next, v.dest));
+    let track =
+        consume_cached_ship_track(v, map, other, entry_diagdir, path_next).unwrap_or_else(|| {
+            choose_ship_track_with_cost(
+                map,
+                other,
+                entry_diagdir,
+                path_next,
+                v.dest,
+                crate::pathfinder::ShipPathCost::from_engine_with_settings(
+                    crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v),
+                    &pathfinding,
+                ),
+            )
+        });
     let Some(entry) = ship_subcoord(entry_diagdir, track) else {
         reverse_ship_after_blocked_track(v, Some(map), engine_catalog, pathfinding, None);
         return Some(false);
@@ -1045,7 +1074,7 @@ fn ship_enter_aqueduct(
     v.ship_state = ship_state_for_track(track);
     v.pos = other;
     apply_ship_direction_change(v, entry.dir);
-    sync_ship_path_cache(v, Some(map));
+    sync_ship_path_cache(v, Some(map), engine_catalog, pathfinding);
     Some(true)
 }
 
@@ -1166,6 +1195,24 @@ pub fn choose_ship_track(
     path_next: Option<TileCoord>,
     dest: TileCoord,
 ) -> u8 {
+    choose_ship_track_with_cost(
+        map,
+        from,
+        entry_diagdir,
+        path_next,
+        dest,
+        crate::pathfinder::ShipPathCost::default(),
+    )
+}
+
+fn choose_ship_track_with_cost(
+    map: &Map,
+    from: TileCoord,
+    entry_diagdir: u8,
+    path_next: Option<TileCoord>,
+    dest: TileCoord,
+    cost: crate::pathfinder::ShipPathCost,
+) -> u8 {
     let default = choose_track_for_entry(entry_diagdir);
     if let Some(next) = path_next
         && let Some(exit) = ship_path_step_diagdir(Some(map), from, next)
@@ -1216,9 +1263,9 @@ pub fn choose_ship_track(
         TRACK_LEFT,
         TRACK_RIGHT,
     ] {
-        if ship_subcoord(entry_diagdir, track).is_none() {
+        let Some(subcoord) = ship_subcoord(entry_diagdir, track) else {
             continue;
-        }
+        };
         let Some(exit) = ship_track_exit_diagdir(entry_diagdir, track) else {
             continue;
         };
@@ -1226,9 +1273,17 @@ pub fn choose_ship_track(
         if !water_tiles_connected(map, from, n) {
             continue;
         }
-        let cost = (n.x - dest.x).unsigned_abs() + (n.y - dest.y).unsigned_abs();
-        let bias = u32::from(track != default);
-        let score = cost.saturating_mul(2).saturating_add(bias);
+        let origin_trackdir = ship_trackdir(track, subcoord.dir);
+        let score = crate::pathfinder::find_ship_path_with_cost_and_trackdir(
+            map,
+            from,
+            dest,
+            cost,
+            origin_trackdir,
+        )
+        .map_or(u32::MAX, |path| {
+            cost.path_cost_with_trackdir(map, from, &path, origin_trackdir)
+        });
         if best.is_none_or(|(best_score, best_track)| (score, track) < (best_score, best_track)) {
             best = Some((score, track));
         }
@@ -1634,7 +1689,19 @@ fn ship_controller_tick_inner(
         let track = cached_track.unwrap_or_else(|| {
             map.map_or_else(
                 || choose_track_for_entry(diagdir),
-                |m| choose_ship_track(m, new_tile, diagdir, path_next, v.dest),
+                |m| {
+                    choose_ship_track_with_cost(
+                        m,
+                        new_tile,
+                        diagdir,
+                        path_next,
+                        v.dest,
+                        crate::pathfinder::ShipPathCost::from_engine_with_settings(
+                            crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v),
+                            &pathfinding,
+                        ),
+                    )
+                },
             )
         });
         let Some(entry) = ship_subcoord(diagdir, track) else {
@@ -1657,7 +1724,7 @@ fn ship_controller_tick_inner(
         }
         v.pos = new_tile;
         apply_ship_direction_change(v, entry.dir);
-        sync_ship_path_cache(v, map);
+        sync_ship_path_cache(v, map, engine_catalog, pathfinding);
 
         mark_station_buoy_route_lost(v, map);
 
@@ -2626,7 +2693,7 @@ mod tests {
 
         let mut ship = Vehicle::new(1, VehicleKind::Ship, pos, dest);
         ship.path = VecDeque::from([corner, dest]);
-        sync_ship_path_cache(&mut ship, Some(&s.map));
+        sync_ship_path_cache(&mut ship, Some(&s.map), &[], PathfindingSettings::default());
 
         let first_entry = diagdir_between_tiles(pos, corner).expect("entrada inicial");
         let first_track = choose_ship_track(&s.map, corner, first_entry, Some(dest), dest);
@@ -2695,7 +2762,7 @@ mod tests {
 
         let mut ship = Vehicle::new(1, VehicleKind::Ship, west_water, east_water);
         ship.path = VecDeque::from([west_ramp, east_ramp, east_water]);
-        sync_ship_path_cache(&mut ship, Some(&map));
+        sync_ship_path_cache(&mut ship, Some(&map), &[], PathfindingSettings::default());
         assert_eq!(ship.ship_path.len(), 3);
 
         let entry = diagdir_between_tiles(west_water, west_ramp).expect("entrada rampa");
@@ -2801,6 +2868,15 @@ mod tests {
         engine.id = 65_105;
         engine.canal_speed_frac = 192;
         let catalog = [engine];
+        let cost = crate::pathfinder::ShipPathCost::from_engine_with_settings(
+            &catalog[0],
+            &PathfindingSettings::default(),
+        );
+        assert_eq!(
+            choose_ship_track_with_cost(&map, from, DIAGDIR_SW, None, destination, cost),
+            TRACK_UPPER,
+            "ChooseShipTrack debe usar el coste naval, no sólo distancia"
+        );
 
         let mut v = Vehicle::new(1, VehicleKind::Ship, from, destination);
         v.running = true;

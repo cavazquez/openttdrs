@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use crate::engine::{get_advance_distance, get_advance_speed, ship_speed_for_tile_with_speed};
 use crate::linkgraph_parity::Randomizer;
 use crate::map::{Map, TILE_PIXEL_HEIGHT, TileCoord, TileKind};
+use crate::pathfinding_settings::PathfindingSettings;
 use crate::vehicle::{
     DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, Vehicle, VehicleDirection,
     VehicleKind, VehicleOrder, direction_from_tile_step,
@@ -574,24 +575,54 @@ fn mark_ship_depot_arrival(v: &mut Vehicle, map: Option<&Map>) {
     v.cur_speed = 0;
 }
 
-/// Decide si el primer tramo de la ruta naval usa la salida opuesta del
+/// Decide si `YapfShip::CheckShipReverse` prefiere la salida opuesta del
 /// depósito.
 ///
-/// `YapfShip::CheckShipReverse` compara las dos `Trackdir` de la sección
-/// norte antes de que `CheckShipStayInDepot` libere el barco. El runtime local
-/// conserva la ruta como teselas, por lo que el primer vecino es la
-/// representación equivalente: si apunta exactamente contra la orientación
-/// de la boca, hay que invertir el rumbo físico antes de abandonar el centro.
+/// El oráculo no mira sólo el primer vecino: ejecuta YAPF dos veces sobre la
+/// misma red, una con el `Trackdir` que sale hacia delante y otra con su
+/// inverso, y compara el coste de la mejor ruta. El port conserva el path como
+/// teselas, por eso aquí repetimos esa selección con el mismo perfil de motor
+/// y los mismos settings de curva que usó el routing.
 #[must_use]
-fn ship_should_reverse_on_depot_exit(v: &Vehicle, tile: crate::map::Tile) -> bool {
-    let Some(&next) = v.path.front() else {
+fn ship_should_reverse_on_depot_exit(
+    v: &Vehicle,
+    map: &Map,
+    engine_catalog: &[crate::engine::EngineDef],
+    pathfinding: PathfindingSettings,
+) -> bool {
+    let Some(forward_trackdir) = ship_vehicle_trackdir(v, Some(map)) else {
         return false;
     };
-    if (next.x - v.pos.x).abs() + (next.y - v.pos.y).abs() != 1 {
-        return false;
+    let reverse_trackdir = forward_trackdir ^ 8;
+    let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
+    let cost = crate::pathfinder::ShipPathCost::from_engine_with_settings(engine, &pathfinding);
+    let forward_path = crate::pathfinder::find_ship_path_with_cost_and_trackdir(
+        map,
+        v.pos,
+        v.dest,
+        cost,
+        forward_trackdir,
+    );
+    let reverse_path = crate::pathfinder::find_ship_path_with_cost_and_trackdir(
+        map,
+        v.pos,
+        v.dest,
+        cost,
+        reverse_trackdir,
+    );
+
+    match (forward_path, reverse_path) {
+        (Some(forward), Some(reverse)) => {
+            let forward_cost = cost.path_cost_with_trackdir(map, v.pos, &forward, forward_trackdir);
+            let reverse_cost = cost.path_cost_with_trackdir(map, v.pos, &reverse, reverse_trackdir);
+            // El desempate de la cola YAPF conserva primero el origen forward
+            // (0/1 frente a 8/9), por lo que sólo una ventaja estricta activa
+            // la reversa.
+            reverse_cost < forward_cost
+        }
+        (None, Some(_)) => true,
+        (Some(_) | None, None) => false,
     }
-    let facing = crate::depot::ship_depot_facing(tile);
-    direction_from_tile_step(v.pos, next) == crate::vehicle::reverse_direction(facing)
 }
 
 /// Replica `CheckShipStayInDepot` para el estado que sí puede observar el port.
@@ -605,6 +636,7 @@ fn ship_stay_in_or_leave_depot(
     v: &mut Vehicle,
     map: &Map,
     engine_catalog: &[crate::engine::EngineDef],
+    pathfinding: PathfindingSettings,
 ) -> bool {
     if matches!(v.ship_state, 0 | SHIP_STATE_DEPOT) {
         let depot_pos =
@@ -666,7 +698,7 @@ fn ship_stay_in_or_leave_depot(
         return true;
     }
 
-    let facing = if ship_should_reverse_on_depot_exit(v, tile) {
+    let facing = if ship_should_reverse_on_depot_exit(v, map, engine_catalog, pathfinding) {
         crate::vehicle::reverse_direction(crate::depot::ship_depot_facing(tile))
     } else {
         crate::depot::ship_depot_facing(tile)
@@ -1380,7 +1412,7 @@ pub fn ship_controller_tick_with_catalog(
     map: Option<&Map>,
     engine_catalog: &[crate::engine::EngineDef],
 ) {
-    ship_controller_tick_inner(v, map, engine_catalog, None);
+    ship_controller_tick_inner(v, map, engine_catalog, PathfindingSettings::default(), None);
 }
 
 /// Variante del controlador que comparte el `Randomizer` global de la
@@ -1393,7 +1425,24 @@ pub fn ship_controller_tick_with_catalog_and_rng(
     engine_catalog: &[crate::engine::EngineDef],
     rng: &mut Randomizer,
 ) {
-    ship_controller_tick_inner(v, map, engine_catalog, Some(rng));
+    ship_controller_tick_inner(
+        v,
+        map,
+        engine_catalog,
+        PathfindingSettings::default(),
+        Some(rng),
+    );
+}
+
+/// Variante autoritativa que comparte los settings `pf.*` de la partida.
+pub fn ship_controller_tick_with_catalog_and_rng_and_pathfinding(
+    v: &mut Vehicle,
+    map: Option<&Map>,
+    engine_catalog: &[crate::engine::EngineDef],
+    pathfinding: PathfindingSettings,
+    rng: &mut Randomizer,
+) {
+    ship_controller_tick_inner(v, map, engine_catalog, pathfinding, Some(rng));
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1401,6 +1450,7 @@ fn ship_controller_tick_inner(
     v: &mut Vehicle,
     map: Option<&Map>,
     engine_catalog: &[crate::engine::EngineDef],
+    pathfinding: PathfindingSettings,
     mut random: Option<&mut Randomizer>,
 ) {
     if v.kind != VehicleKind::Ship {
@@ -1426,7 +1476,7 @@ fn ship_controller_tick_inner(
     }
 
     if let Some(map) = map
-        && ship_stay_in_or_leave_depot(v, map, engine_catalog)
+        && ship_stay_in_or_leave_depot(v, map, engine_catalog, pathfinding)
     {
         return;
     }
@@ -1897,6 +1947,57 @@ mod tests {
         assert_eq!(v.ship_rotation, DIR_SW);
         assert_eq!(v.ship_track, TRACK_X);
         assert_eq!(v.ship_state, SHIP_STATE_TRACK_X);
+    }
+
+    #[test]
+    fn ship_depot_reverse_compares_both_yapf_origins() {
+        let depot = TileCoord::new(5, 5);
+        let destination = TileCoord::new(7, 1);
+        let forward_branch = [
+            TileCoord::new(4, 5),
+            TileCoord::new(4, 4),
+            TileCoord::new(4, 3),
+            TileCoord::new(4, 2),
+            TileCoord::new(4, 1),
+            TileCoord::new(5, 1),
+            TileCoord::new(6, 1),
+            destination,
+        ];
+        let reverse_branch = [
+            TileCoord::new(6, 5),
+            TileCoord::new(7, 5),
+            TileCoord::new(7, 4),
+            TileCoord::new(7, 3),
+            TileCoord::new(7, 2),
+            destination,
+        ];
+        // Construir el depósito en la misma red, conservando la rama larga al
+        // oeste y la rama corta al este para que sólo la comparación de YAPF
+        // pueda justificar la reversa.
+        let mut state = GameState::new(12, 8);
+        for tile in std::iter::once(depot)
+            .chain(forward_branch.into_iter())
+            .chain(reverse_branch)
+        {
+            state.map.set_kind(tile, TileKind::Water).unwrap();
+        }
+        apply_command(&mut state, &Command::PlaceShipDepotDir(depot, 0)).unwrap();
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, depot, destination);
+        ship.ship_pos_valid = true;
+        ship.ship_x = depot.x * 16 + 8;
+        ship.ship_y = depot.y * 16 + 8;
+        ship.ship_state = SHIP_STATE_DEPOT;
+        ship.ship_track = TRACK_X;
+        // El path deliberadamente apunta hacia delante. La decisión correcta
+        // debe ignorar ese primer vecino y comparar la ruta opuesta completa.
+        ship.path.push_back(TileCoord::new(4, 5));
+
+        assert!(ship_should_reverse_on_depot_exit(
+            &ship,
+            &state.map,
+            &state.engine_catalog,
+            PathfindingSettings::default(),
+        ));
     }
 
     #[test]

@@ -522,10 +522,11 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             // de los timers cuando YAPF genera una ruta perdida. Las APIs
             // genéricas de `Vehicle::step` no reciben `GameState`, por eso
             // esta rama inyecta el RNG sólo en el tick autoritativo.
-            crate::ship_movement::ship_controller_tick_with_catalog_and_rng(
+            crate::ship_movement::ship_controller_tick_with_catalog_and_rng_and_pathfinding(
                 &mut state.vehicles[i],
                 Some(&state.map),
                 &state.engine_catalog,
+                state.pathfinding,
                 &mut state.random,
             );
         } else {

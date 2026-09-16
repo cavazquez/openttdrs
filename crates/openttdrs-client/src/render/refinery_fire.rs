@@ -6,7 +6,10 @@
 use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
-use crate::render::{PaletteAnimationClock, RefineryFireAnimFrames, palette_animations_should_run};
+use crate::render::{
+    PaletteAnimationClock, RefineryFireAnimFrames, palette_animation_phase_reverse,
+    palette_animations_should_run,
+};
 use crate::state::ClientScreen;
 
 pub(crate) struct RefineryFireAnimPlugin;
@@ -32,17 +35,12 @@ pub(crate) struct RefineryFireAnim {
 /// Pasos del ciclo `EPV_CYCLES_OIL_REFINERY`.
 pub(crate) const REFINERY_FIRE_FRAME_COUNT: usize = 7;
 
-/// OpenTTD: `EXTR2(512, 7)` sobre contador +8/tick ≈ un paso cada ~120 ms.
-const REFINERY_FRAME_SECS: f32 = 0.12;
-
-/// Frame global del ciclo en `elapsed_secs` (puro, testeable).
+/// OpenTTD: `EXTR2(512, 7)` sobre el contador global +8 por pasada.
 #[must_use]
-pub(crate) fn refinery_fire_frame_index(elapsed_secs: f32) -> usize {
-    (elapsed_secs / REFINERY_FRAME_SECS) as usize % REFINERY_FIRE_FRAME_COUNT
+pub(crate) const fn refinery_fire_frame_index(counter: u16) -> usize {
+    palette_animation_phase_reverse(counter, 512, REFINERY_FIRE_FRAME_COUNT as u16)
 }
 
-/// Usa reloj real: el virtual tiene `max_delta` de 1 tick de sim y puede
-/// quedar pausado sin afectar el parpadeo de paleta (como el agua).
 pub(crate) fn animate_refinery_fire(
     clock: Res<PaletteAnimationClock>,
     frames: Option<Res<RefineryFireAnimFrames>>,
@@ -52,7 +50,7 @@ pub(crate) fn animate_refinery_fire(
     let Some(frames) = frames else {
         return;
     };
-    let idx = refinery_fire_frame_index(clock.elapsed_secs());
+    let idx = refinery_fire_frame_index(clock.counter());
     if *last_frame == Some(idx) {
         return;
     }
@@ -102,18 +100,15 @@ mod tests {
 
     #[test]
     fn frame_index_cycles() {
-        assert_eq!(refinery_fire_frame_index(0.0), 0);
-        assert_eq!(refinery_fire_frame_index(0.13), 1);
-        assert_eq!(
-            refinery_fire_frame_index(REFINERY_FIRE_FRAME_COUNT as f32 * 0.12 + 0.01),
-            0
-        );
+        assert_eq!(refinery_fire_frame_index(0), 6);
+        assert_eq!(refinery_fire_frame_index(64), 3);
+        assert_eq!(refinery_fire_frame_index(112), 0);
     }
 
     #[test]
     fn animate_refinery_fire_swaps_on_frame_change() {
         let mut world = World::new();
-        world.insert_resource(PaletteAnimationClock::from_elapsed_secs(0.25));
+        world.insert_resource(PaletteAnimationClock::from_counter(64));
         world.insert_resource(frames_resource());
         let ent = world
             .spawn((RefineryFireAnim { sprite_id: 2086 }, Sprite::default()))
@@ -122,7 +117,7 @@ mod tests {
         world.run_system_once(animate_refinery_fire).unwrap();
 
         let frames = world.resource::<RefineryFireAnimFrames>();
-        let idx = refinery_fire_frame_index(0.25);
+        let idx = refinery_fire_frame_index(64);
         let expected = frames.by_sprite[&2086][idx].clone();
         assert!(expected.matches(world.get::<Sprite>(ent).unwrap()));
     }

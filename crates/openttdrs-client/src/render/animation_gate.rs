@@ -2,32 +2,51 @@
 
 use bevy::prelude::*;
 
-use crate::bevy_app::UpdateSet;
 use crate::settings::ClientPreferences;
 use crate::state::{SimRunState, sim_is_paused};
 
 /// Reloj acumulado del bucle `DoPaletteAnimations` de OpenTTD.
 ///
-/// Se alimenta con tiempo real para no depender de la velocidad de la
-/// simulación, pero el sistema que lo avanza queda bajo el mismo gate que la
-/// animación completa. Así una pausa no consume tiempo de presentación.
+/// OpenTTD suma ocho unidades por pasada elegible del bucle principal. Se
+/// conserva sólo el `u16` que consumen las macros `EXTR`/`EXTR2`; así el cliente
+/// comparte fase exacta entre todos los ciclos y una pausa no consume tiempo
+/// de presentación.
 #[derive(Resource, Debug, Clone, Copy, Default)]
 pub(crate) struct PaletteAnimationClock {
-    elapsed_secs: f32,
+    counter: u16,
 }
 
 impl PaletteAnimationClock {
     #[cfg(test)]
-    pub(crate) fn from_elapsed_secs(elapsed_secs: f32) -> Self {
-        Self {
-            elapsed_secs: elapsed_secs.max(0.0),
-        }
+    pub(crate) const fn from_counter(counter: u16) -> Self {
+        Self { counter }
     }
 
     #[must_use]
-    pub(crate) const fn elapsed_secs(self) -> f32 {
-        self.elapsed_secs
+    pub(crate) const fn counter(self) -> u16 {
+        self.counter
     }
+}
+
+/// Paso de `palette_animation_counter` en `DoPaletteAnimations`.
+pub(crate) const PALETTE_ANIMATION_COUNTER_STEP: u16 = 8;
+
+/// Equivalente a `EXTR(p, q)` de `palette.cpp`, incluida la truncación `u16`.
+#[must_use]
+pub(crate) const fn palette_animation_phase(counter: u16, multiplier: u16, phases: u16) -> usize {
+    let wrapped = counter.wrapping_mul(multiplier);
+    (((wrapped as u32) * (phases as u32)) >> 16) as usize
+}
+
+/// Equivalente a `EXTR2(p, q)` de `palette.cpp`.
+#[must_use]
+pub(crate) const fn palette_animation_phase_reverse(
+    counter: u16,
+    multiplier: u16,
+    phases: u16,
+) -> usize {
+    let wrapped = (!counter).wrapping_mul(multiplier);
+    (((wrapped as u32) * (phases as u32)) >> 16) as usize
 }
 
 pub(crate) struct PaletteAnimationClockPlugin;
@@ -36,18 +55,13 @@ impl Plugin for PaletteAnimationClockPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PaletteAnimationClock>().add_systems(
             PreUpdate,
-            advance_palette_animation_clock
-                .in_set(UpdateSet::Visuals)
-                .run_if(palette_animations_should_run),
+            advance_palette_animation_clock.run_if(palette_animations_should_run),
         );
     }
 }
 
-fn advance_palette_animation_clock(
-    time: Res<Time<Real>>,
-    mut clock: ResMut<PaletteAnimationClock>,
-) {
-    clock.elapsed_secs += time.delta_secs().max(0.0);
+fn advance_palette_animation_clock(mut clock: ResMut<PaletteAnimationClock>) {
+    clock.counter = clock.counter.wrapping_add(PALETTE_ANIMATION_COUNTER_STEP);
 }
 
 /// `true` si deben correr ciclos de paleta (agua, refinería, fizzy, etc.).
@@ -116,24 +130,24 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(ClientPreferences::default());
         world.insert_resource(State::new(SimRunState::Paused));
-        world.insert_resource(PaletteAnimationClock::from_elapsed_secs(1.0));
-        let mut time = Time::<Real>::default();
-        time.advance_by(std::time::Duration::from_millis(500));
-        world.insert_resource(time);
+        world.insert_resource(PaletteAnimationClock::from_counter(1_000));
 
         let mut schedule = Schedule::default();
         schedule.add_systems(advance_palette_animation_clock.run_if(palette_animations_should_run));
         schedule.run(&mut world);
-        assert_eq!(
-            world.resource::<PaletteAnimationClock>().elapsed_secs(),
-            1.0
-        );
+        assert_eq!(world.resource::<PaletteAnimationClock>().counter(), 1_000);
 
         world.insert_resource(State::new(SimRunState::Running));
         schedule.run(&mut world);
-        assert_eq!(
-            world.resource::<PaletteAnimationClock>().elapsed_secs(),
-            1.5
-        );
+        assert_eq!(world.resource::<PaletteAnimationClock>().counter(), 1_008);
+    }
+
+    #[test]
+    fn palette_phase_matches_openttd_extr_and_extr2() {
+        assert_eq!(palette_animation_phase(0, 256, 4), 0);
+        assert_eq!(palette_animation_phase(64, 256, 4), 1);
+        assert_eq!(palette_animation_phase_reverse(0, 512, 5), 4);
+        assert_eq!(palette_animation_phase_reverse(64, 512, 5), 2);
+        assert_eq!(palette_animation_phase_reverse(64, 512, 7), 3);
     }
 }

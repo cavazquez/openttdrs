@@ -28,10 +28,8 @@ impl Plugin for RadioBlinkAnimPlugin {
 #[derive(Component, Clone, Copy)]
 pub(crate) struct RadioBlinkAnim;
 
-/// OpenTTD avanza el contador global ocho unidades por tick de 30 ms.
+/// OpenTTD avanza el contador global ocho unidades por pasada elegible.
 pub(crate) const RADIO_BLINK_FRAME_COUNT: usize = 4;
-const RADIO_BLINK_TICK_SECS: f32 = 0.03;
-const RADIO_COUNTER_STEP: u16 = 8;
 
 /// Valor rojo que `palette.cpp` escribe para una posición del contador.
 #[must_use]
@@ -47,9 +45,7 @@ const fn radio_palette_value(index: u8) -> u8 {
 
 /// Índice del frame RGBA equivalente al ciclo de `RadioTowerBlink`.
 #[must_use]
-pub(crate) fn radio_blink_frame_index(elapsed_secs: f32) -> usize {
-    let ticks = (elapsed_secs.max(0.0) / RADIO_BLINK_TICK_SECS).floor() as u64;
-    let counter = ticks.wrapping_mul(u64::from(RADIO_COUNTER_STEP)) as u16;
+pub(crate) const fn radio_blink_frame_index(counter: u16) -> usize {
     let first = ((counter >> 1) & 0x7f) as u8;
     let values = (
         radio_palette_value(first),
@@ -76,7 +72,7 @@ pub(crate) fn animate_radio_blink(
     let Some(frames) = frames else {
         return;
     };
-    let idx = radio_blink_frame_index(clock.elapsed_secs());
+    let idx = radio_blink_frame_index(clock.counter());
     if *last_frame == Some(idx) {
         return;
     }
@@ -92,11 +88,12 @@ pub(crate) fn animate_radio_blink(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::render::animation_gate::PALETTE_ANIMATION_COUNTER_STEP;
 
     #[test]
     fn frame_index_matches_the_four_palette_states() {
-        let at_tick = |tick: u32| tick as f32 * RADIO_BLINK_TICK_SECS + 0.0001;
-        assert_eq!(radio_blink_frame_index(0.0), 0);
+        let at_tick = |tick: u16| tick.wrapping_mul(PALETTE_ANIMATION_COUNTER_STEP);
+        assert_eq!(radio_blink_frame_index(0), 0);
         assert_eq!(radio_blink_frame_index(at_tick(3)), 1);
         assert_eq!(radio_blink_frame_index(at_tick(16)), 2);
         assert_eq!(radio_blink_frame_index(at_tick(19)), 3);
@@ -104,6 +101,6 @@ mod tests {
 
     #[test]
     fn frame_index_is_bounded_for_long_elapsed_time() {
-        assert!(radio_blink_frame_index(10_000.0) < RADIO_BLINK_FRAME_COUNT);
+        assert!(radio_blink_frame_index(u16::MAX) < RADIO_BLINK_FRAME_COUNT);
     }
 }

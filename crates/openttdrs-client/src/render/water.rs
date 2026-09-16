@@ -9,7 +9,7 @@ use bevy::prelude::*;
 use crate::bevy_app::UpdateSet;
 use crate::render::{
     AtlasSprite, PaletteAnimationClock, WaterAnimFrames, WaterAtlasAnimation, WorldAssets,
-    palette_animations_should_run,
+    palette_animation_phase, palette_animations_should_run,
 };
 use crate::state::ClientScreen;
 
@@ -35,23 +35,12 @@ impl Plugin for WaterAnimationPlugin {
     }
 }
 
-/// Cadencia del loop de paleta de OpenTTD. En cada paso el contador suma 8.
-const PALETTE_TICK_SECS: f32 = 0.03;
-const PALETTE_COUNTER_STEP: u16 = 8;
-
-/// Equivalente a `EXTR(p, q)` de `palette.cpp`, incluida la truncación u16.
-#[must_use]
-const fn palette_phase(counter: u16, multiplier: u16, phases: u16) -> usize {
-    let wrapped = counter.wrapping_mul(multiplier);
-    ((wrapped as u32 * phases as u32) >> 16) as usize
-}
-
 /// Fases `(dark, glitter)` para un valor del contador de `DoPaletteAnimations`.
 #[must_use]
 pub(crate) const fn water_palette_phases(counter: u16) -> (usize, usize) {
     (
-        palette_phase(counter, 320, crate::sprites::DARK_WATER_FRAME_COUNT as u16),
-        palette_phase(
+        palette_animation_phase(counter, 320, crate::sprites::DARK_WATER_FRAME_COUNT as u16),
+        palette_animation_phase(
             counter,
             128,
             crate::sprites::GLITTER_WATER_FRAME_COUNT as u16,
@@ -59,11 +48,9 @@ pub(crate) const fn water_palette_phases(counter: u16) -> (usize, usize) {
     )
 }
 
-/// Fases independientes en el instante indicado, usando el tick real de paleta.
+/// Fases independientes para el contador global de `DoPaletteAnimations`.
 #[must_use]
-pub(crate) fn water_frame_indices(elapsed_secs: f32) -> (usize, usize) {
-    let ticks = (elapsed_secs.max(0.0) / PALETTE_TICK_SECS).floor() as u64;
-    let counter = (ticks.wrapping_mul(u64::from(PALETTE_COUNTER_STEP))) as u16;
+pub(crate) const fn water_frame_indices(counter: u16) -> (usize, usize) {
     water_palette_phases(counter)
 }
 
@@ -148,7 +135,7 @@ pub(crate) fn animate_water(
     let Some(frames) = frames else {
         return;
     };
-    let phases = water_frame_indices(clock.elapsed_secs());
+    let phases = water_frame_indices(clock.counter());
     if *last_frame == Some(phases) {
         return;
     }
@@ -226,19 +213,19 @@ mod tests {
 
     #[test]
     fn elapsed_time_advances_the_two_counters_independently() {
-        assert_eq!(water_frame_indices(0.0), (0, 0));
-        assert_eq!(water_frame_indices(0.15), (0, 1));
-        assert_eq!(water_frame_indices(0.18), (1, 1));
-        assert_eq!(water_frame_indices(1.92), (2, 0));
+        assert_eq!(water_frame_indices(0), (0, 0));
+        assert_eq!(water_frame_indices(40), (0, 1));
+        assert_eq!(water_frame_indices(48), (1, 1));
+        assert_eq!(water_frame_indices(512), (2, 0));
     }
 
     #[test]
     fn animate_water_swaps_images_on_frame_change() {
         let mut world = World::new();
-        world.insert_resource(PaletteAnimationClock::from_elapsed_secs(0.4));
+        world.insert_resource(PaletteAnimationClock::from_counter(104));
         let (frames, layouts) = frames_resource();
         let expected_idx = {
-            let phases = water_frame_indices(0.4);
+            let phases = water_frame_indices(104);
             combined_frame_index(phases.0, phases.1)
         };
         let expected_rect = frames.water.as_ref().unwrap().frame_rects[expected_idx];
@@ -265,7 +252,7 @@ mod tests {
     #[test]
     fn large_water_population_keeps_peak_atlas_writes_constant() {
         let mut world = World::new();
-        world.insert_resource(PaletteAnimationClock::from_elapsed_secs(0.4));
+        world.insert_resource(PaletteAnimationClock::from_counter(104));
         let (frames, layouts) = frames_resource();
         world.insert_resource(frames);
         world.insert_resource(layouts);

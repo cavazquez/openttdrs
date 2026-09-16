@@ -3,7 +3,10 @@
 use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
-use crate::render::{FizzyDrinkAnimFrames, PaletteAnimationClock, palette_animations_should_run};
+use crate::render::{
+    FizzyDrinkAnimFrames, PaletteAnimationClock, palette_animation_phase_reverse,
+    palette_animations_should_run,
+};
 use crate::state::ClientScreen;
 
 pub(crate) struct FizzyDrinkAnimPlugin;
@@ -29,12 +32,9 @@ pub(crate) struct FizzyDrinkAnim {
 /// Pasos del ciclo `EPV_CYCLES_FIZZY_DRINK`.
 pub(crate) const FIZZY_DRINK_FRAME_COUNT: usize = 5;
 
-/// `EXTR2(512, 5)` — mismo ritmo base que refinería (~120 ms/paso).
-const FIZZY_FRAME_SECS: f32 = 0.12;
-
 #[must_use]
-pub(crate) fn fizzy_drink_frame_index(elapsed_secs: f32) -> usize {
-    (elapsed_secs / FIZZY_FRAME_SECS) as usize % FIZZY_DRINK_FRAME_COUNT
+pub(crate) const fn fizzy_drink_frame_index(counter: u16) -> usize {
+    palette_animation_phase_reverse(counter, 512, FIZZY_DRINK_FRAME_COUNT as u16)
 }
 
 pub(crate) fn animate_fizzy_drink(
@@ -46,7 +46,7 @@ pub(crate) fn animate_fizzy_drink(
     let Some(frames) = frames else {
         return;
     };
-    let idx = fizzy_drink_frame_index(clock.elapsed_secs());
+    let idx = fizzy_drink_frame_index(clock.counter());
     if *last_frame == Some(idx) {
         return;
     }
@@ -87,18 +87,15 @@ mod tests {
 
     #[test]
     fn frame_index_cycles() {
-        assert_eq!(fizzy_drink_frame_index(0.0), 0);
-        assert_eq!(fizzy_drink_frame_index(0.13), 1);
-        assert_eq!(
-            fizzy_drink_frame_index(FIZZY_DRINK_FRAME_COUNT as f32 * 0.12 + 0.01),
-            0
-        );
+        assert_eq!(fizzy_drink_frame_index(0), 4);
+        assert_eq!(fizzy_drink_frame_index(64), 2);
+        assert_eq!(fizzy_drink_frame_index(104), 0);
     }
 
     #[test]
     fn animate_swaps_on_frame_change() {
         let mut world = World::new();
-        world.insert_resource(PaletteAnimationClock::from_elapsed_secs(0.25));
+        world.insert_resource(PaletteAnimationClock::from_counter(64));
         let set: Vec<_> = (0..FIZZY_DRINK_FRAME_COUNT as u128)
             .map(weak_sprite)
             .collect();
@@ -112,7 +109,7 @@ mod tests {
         world.run_system_once(animate_fizzy_drink).unwrap();
 
         let frames = world.resource::<FizzyDrinkAnimFrames>();
-        let idx = fizzy_drink_frame_index(0.25);
+        let idx = fizzy_drink_frame_index(64);
         let expected = frames.by_sprite[&4764][idx].clone();
         assert!(expected.matches(world.get::<Sprite>(ent).unwrap()));
     }

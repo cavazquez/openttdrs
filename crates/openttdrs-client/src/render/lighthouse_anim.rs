@@ -6,7 +6,10 @@
 use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
-use crate::render::{LighthouseAnimFrames, PaletteAnimationClock, palette_animations_should_run};
+use crate::render::{
+    LighthouseAnimFrames, PaletteAnimationClock, palette_animation_phase,
+    palette_animations_should_run,
+};
 use crate::state::ClientScreen;
 
 pub(crate) struct LighthouseAnimPlugin;
@@ -32,13 +35,10 @@ pub(crate) struct LighthouseAnim {
 /// Pasos del ciclo `EPV_CYCLES_LIGHTHOUSE`.
 pub(crate) const LIGHTHOUSE_FRAME_COUNT: usize = 4;
 
-/// OpenTTD: `EXTR2(512, 4)` sobre contador +8/tick ≈ un paso cada ~120 ms.
-const LIGHTHOUSE_FRAME_SECS: f32 = 0.12;
-
-/// Frame global del ciclo en `elapsed_secs` (puro, testeable).
+/// OpenTTD: `EXTR(256, 4)` sobre el contador global +8 por pasada.
 #[must_use]
-pub(crate) fn lighthouse_frame_index(elapsed_secs: f32) -> usize {
-    (elapsed_secs / LIGHTHOUSE_FRAME_SECS) as usize % LIGHTHOUSE_FRAME_COUNT
+pub(crate) const fn lighthouse_frame_index(counter: u16) -> usize {
+    palette_animation_phase(counter, 256, LIGHTHOUSE_FRAME_COUNT as u16)
 }
 
 pub(crate) fn animate_lighthouse(
@@ -50,7 +50,7 @@ pub(crate) fn animate_lighthouse(
     let Some(frames) = frames else {
         return;
     };
-    let idx = lighthouse_frame_index(clock.elapsed_secs());
+    let idx = lighthouse_frame_index(clock.counter());
     if *last_frame == Some(idx) {
         return;
     }
@@ -100,18 +100,16 @@ mod tests {
 
     #[test]
     fn frame_index_cycles() {
-        assert_eq!(lighthouse_frame_index(0.0), 0);
-        assert_eq!(lighthouse_frame_index(0.13), 1);
-        assert_eq!(
-            lighthouse_frame_index(LIGHTHOUSE_FRAME_COUNT as f32 * 0.12 + 0.01),
-            0
-        );
+        assert_eq!(lighthouse_frame_index(0), 0);
+        assert_eq!(lighthouse_frame_index(64), 1);
+        assert_eq!(lighthouse_frame_index(128), 2);
+        assert_eq!(lighthouse_frame_index(192), 3);
     }
 
     #[test]
     fn animate_lighthouse_swaps_on_frame_change() {
         let mut world = World::new();
-        world.insert_resource(PaletteAnimationClock::from_elapsed_secs(0.25));
+        world.insert_resource(PaletteAnimationClock::from_counter(64));
         world.insert_resource(frames_resource());
         let ent = world
             .spawn((LighthouseAnim { sprite_id: 2602 }, Sprite::default()))
@@ -120,7 +118,7 @@ mod tests {
         world.run_system_once(animate_lighthouse).unwrap();
 
         let frames = world.resource::<LighthouseAnimFrames>();
-        let idx = lighthouse_frame_index(0.25);
+        let idx = lighthouse_frame_index(64);
         let expected = frames.by_sprite[&2602][idx].clone();
         assert!(expected.matches(world.get::<Sprite>(ent).unwrap()));
     }

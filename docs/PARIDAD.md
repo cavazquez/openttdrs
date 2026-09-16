@@ -6250,3 +6250,14 @@ la máscara. Pasan 142 pruebas filtradas por `station` y Clippy estricto. La
 corrección es parcial y no cierra #326/#329/#567: siguen pendientes los
 layouts restantes, callbacks/consumidores NewGRF, composición global y
 comparación de framebuffer.
+
+Corrección #326/#329/#567-ROAD-STOP-BUILD-DESTINATION-TRANSPARENCY
+(2026-09-16, `4320fe6e`): las capas BUILD vanilla de paradas bus/camión,
+incluidas las variantes drive-through y Action5, pasan por el parent común
+con la máscara de destino equivalente a `PALETTE_TO_TRANSPARENT` (802) cuando
+`TO_BUILDINGS` está transparente. La vista plana custom y los children de
+waypoint reciben la misma máscara; el `TileLayout` custom conserva su decisión
+por entrada (`OPAQUE`). Pasan 35 pruebas de `road_stop`, 16 de
+`road_waypoint` y Clippy estricto. La corrección es parcial y no cierra
+#326/#329/#567: quedan callbacks/consumidores NewGRF, composición global y
+comparación de framebuffer.

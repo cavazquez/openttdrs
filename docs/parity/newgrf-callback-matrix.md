@@ -2320,6 +2320,15 @@ regresiones de depósitos y Clippy estricto; otros producers, callbacks,
 consumidores NewGRF y el framebuffer mantienen la cobertura parcial de
 #326/#329/#567.
 
+Actualización #326/#329/#567-ROAD-STOP-BUILD-DESTINATION-TRANSPARENCY
+(2026-09-16, `4320fe6e`): las capas BUILD de paradas bus/camión vanilla,
+drive-through y Action5 usan el parent común con máscara de destino 802 en
+modo transparente. La vista plana custom y los children de waypoint siguen
+el mismo contrato; el `TileLayout` mantiene la decisión por entrada y la
+precedencia `OPAQUE`. Pasan 35 pruebas de `road_stop`, 16 de `road_waypoint`
+y Clippy estricto. La cobertura continúa parcial y no se cierran
+#326/#329/#567.
+
 Actualización #326/#329/#567-STATION-AIRPORT-BUILD-DESTINATION-TRANSPARENCY
 (2026-09-16, `31aed2db`): el pase BUILD de estaciones/waypoints vanilla,
 muelles, boyas y `StationGfx` aeroportuario aplica ahora la máscara de destino

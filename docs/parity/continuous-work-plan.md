@@ -9054,3 +9054,14 @@ su calibración propia; suelos, overlays y catenaria siguen opacos. Pasan 142
 pruebas filtradas por `station` y Clippy estricto. La fila sigue parcial y
 #326/#329/#567 permanecen abiertas por layouts, callbacks, consumidores
 NewGRF, composición global y framebuffer.
+
+### #326/#329/#567-ROAD-STOP-BUILD-DESTINATION-TRANSPARENCY — paradas y waypoints
+
+Actualizado: 2026-09-16 (`4320fe6e`). El parent común de las capas BUILD de
+paradas bus/camión cubre ahora las variantes vanilla, drive-through y Action5
+con la máscara de destino 802 cuando `TO_BUILDINGS` está transparente. La
+vista plana custom y los children de waypoint conservan el mismo contrato;
+los `TileLayout` siguen decidiendo por entrada mediante `OPAQUE`. Pasan 35
+pruebas de `road_stop`, 16 de `road_waypoint` y Clippy estricto. La fila sigue
+parcial y #326/#329/#567 permanecen abiertas por callbacks/consumidores
+NewGRF, composición global y framebuffer.

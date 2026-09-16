@@ -125,9 +125,12 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
             get_town_radius_group(town, coord)
         });
     ctx.vars.insert(0x42, u32::from(town_zone as u8));
-    // `GetRelativePosition(tile, st->airport.tile)` = 00yxYYXX.
-    let dx = coord.x.wrapping_sub(station.pos.x).to_le_bytes()[0];
-    let dy = coord.y.wrapping_sub(station.pos.y).to_le_bytes()[0];
+    // `GetRelativePosition(tile, st->airport.tile)` = 00yxYYXX. `pos` puede
+    // ser el hangar/ancla de la estación combinada; el origen del aeropuerto
+    // es el tile que recibió el comando y se conserva por separado.
+    let airport_origin = station.airport_origin.unwrap_or(station.pos);
+    let dx = coord.x.wrapping_sub(airport_origin.x).to_le_bytes()[0];
+    let dy = coord.y.wrapping_sub(airport_origin.y).to_le_bytes()[0];
     ctx.vars.insert(
         0x43,
         (u32::from(dy & 0x0F) << 20)
@@ -615,6 +618,50 @@ mod tests {
         assert_eq!(ctx.parameterized_vars.get(&(0x7A, 1)), Some(&u32::MAX));
         let selected = current.newgrf_view_runtime(0, &mut ctx);
         assert_eq!(selected.as_ref().map(|sprite| sprite.rgba[0]), Some(255));
+    }
+
+    #[test]
+    fn airport_context_uses_airport_origin_for_relative_position() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let coord = TileCoord::new(3, 4);
+        let mut tile = map.get(coord).expect("airport tile");
+        tile.kind = TileKind::Airport;
+        map.set_tile(coord, tile).expect("set airport tile");
+
+        let mut station = Station::new_with_kind(TileCoord::new(6, 6), StopKind::Airport);
+        station.airport_origin = Some(TileCoord::new(1, 2));
+        station.airport_tiles = vec![coord];
+        let current = AirportTileSpecDef {
+            gfx: AirportTileGfxId(74),
+            subst_id: 24,
+            from_newgrf: true,
+            callback_mask: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            newgrf_local_id: 0,
+            newgrf_grfid: 0,
+            newgrf_grf_version: 0,
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: None,
+        };
+
+        let ctx = action2_eval_ctx_for_airport_tile(
+            &map,
+            &[station],
+            coord,
+            std::slice::from_ref(&current),
+            &current,
+            Climate::Temperate,
+        );
+        let expected = (2_u32 << 20) | (2_u32 << 16) | (2_u32 << 8) | 2;
+        assert_eq!(ctx.vars.get(&0x43), Some(&expected));
     }
 
     #[test]

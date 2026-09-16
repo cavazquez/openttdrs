@@ -881,7 +881,12 @@ fn airport_wire_footprint(st: &Station, fallback_tile: u32, map_w: u32) -> (u32,
     let max = rest.iter().copied().fold(min, |best, coord| {
         TileCoord::new(best.x.max(coord.x), best.y.max(coord.y))
     });
-    let tile = coord_to_linear_index(min, map_w).unwrap_or(fallback_tile);
+    // `airport.tile` es el origen del comando, no necesariamente la primera
+    // tesela visible ni `Station::pos` (que puede ser el hangar). Mantener la
+    // caja derivada de la huella, pero escribir el origen explícito cuando la
+    // partida lo conserva, evita desplazar `var 0x43` al rehidratar NewGRF.
+    let wire_origin = st.airport_origin.unwrap_or(min);
+    let tile = coord_to_linear_index(wire_origin, map_w).unwrap_or(fallback_tile);
     let width = u8::try_from(max.x.saturating_sub(min.x).saturating_add(1)).unwrap_or(u8::MAX);
     let height = u8::try_from(max.y.saturating_sub(min.y).saturating_add(1)).unwrap_or(u8::MAX);
     (tile, width, height)
@@ -2233,6 +2238,7 @@ mod tests {
         let mut airport = Station::new_with_kind(TileCoord::new(7, 7), StopKind::Airport);
         airport.owner = crate::company::CompanyId::NONE;
         airport.ottd_station_id = Some(10);
+        airport.airport_origin = Some(TileCoord::new(6, 6));
         airport.airport_newgrf_spec_id = Some(10);
         airport.airport_layout = 3;
         airport.airport_rotation = 6;
@@ -2267,8 +2273,14 @@ mod tests {
         );
         assert_eq!(
             record_get(normal, "airport.tile").and_then(SlValue::as_u64),
-            Some(84)
+            Some(102)
         );
+        let decoded = crate::sav::entities::stations_from_chunks(
+            &crate::sav::chunks::parse_chunks(&chunk).expect("parse STNN"),
+            16,
+            352,
+        );
+        assert_eq!(decoded[0].airport_origin, Some(TileCoord::new(6, 6)));
         assert_eq!(
             record_get(normal, "airport.w").and_then(SlValue::as_u64),
             Some(2)

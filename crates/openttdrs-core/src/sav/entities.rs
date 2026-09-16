@@ -85,6 +85,10 @@ pub struct SavStation {
     /// del `Vec`); necesario para correlacionar con oráculos/trazas externas.
     pub station_id: u32,
     pub pos: TileCoord,
+    /// `Station::airport.tile`, conservado separado de `BaseStation::xy`.
+    /// Puede diferir de `pos` en estaciones intermodales cuyo ancla es otra
+    /// facilidad (por ejemplo, el hangar o una plataforma ferroviaria).
+    pub airport_origin: Option<TileCoord>,
     /// `BaseStation::owner` serializado como `Owner` (`0..MAX_COMPANIES` para
     /// compañías, `0x10` para `OWNER_NONE`/estaciones neutrales).
     pub owner: u8,
@@ -337,6 +341,36 @@ pub(crate) fn station_index_from_chunks(
         );
     }
     out
+}
+
+/// Extrae el origen nativo `Station::airport.tile` de `STNN` por `StationID`.
+///
+/// `airport.tile` no es necesariamente `BaseStation::xy`: el segundo es el
+/// ancla de la entidad lógica y el primero es el origen que recibe el comando
+/// de construcción. Mantener la lectura separada del índice evita ampliar el
+/// contrato usado por el decodificador de órdenes.
+#[must_use]
+pub(crate) fn station_airport_origins_from_chunks(
+    chunks: &[RawChunk],
+    map_w: u32,
+    save_version: u16,
+) -> HashMap<u32, TileCoord> {
+    let Some(stnn) = find_chunk(chunks, "STNN") else {
+        return HashMap::new();
+    };
+    table_rows(stnn, save_version)
+        .into_iter()
+        .filter_map(|(station_id, record)| {
+            let normal = nested_struct(&record, "normal");
+            let airport_tile = normal
+                .and_then(|n| record_get(n, "airport.tile"))
+                .or_else(|| record_get(&record, "airport.tile"))
+                .and_then(SlValue::as_u64)
+                .filter(|&tile| tile != u64::from(u32::MAX))?;
+            let origin = coord_from_linear_index(airport_tile, map_w)?;
+            Some((station_id, origin))
+        })
+        .collect()
 }
 
 /// Extrae el historial `Station::had_vehicle_of_type` del registro `STNN`.
@@ -636,6 +670,7 @@ pub(crate) fn stations_from_chunks(
     let had_vehicle_flags = station_had_vehicle_flags_from_chunks(chunks, save_version);
     let last_vehicle_types = station_last_vehicle_types_from_chunks(chunks, save_version);
     let station_activity_ages = station_activity_ages_from_chunks(chunks, save_version);
+    let airport_origins = station_airport_origins_from_chunks(chunks, map_w, save_version);
     let mut indexed: Vec<_> = station_index_from_chunks(chunks, map_w, save_version)
         .into_iter()
         .filter(|(_, st)| !st.is_waypoint)
@@ -648,6 +683,7 @@ pub(crate) fn stations_from_chunks(
         .map(|(station_id, st)| SavStation {
             station_id,
             pos: st.pos,
+            airport_origin: airport_origins.get(&station_id).copied(),
             owner: st.owner,
             name: st.name,
             facilities: st.facilities,

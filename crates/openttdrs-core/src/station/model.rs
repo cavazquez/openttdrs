@@ -369,6 +369,14 @@ pub struct Station {
     /// Teselas del aeropuerto (helipuerto = `[pos]`; small = footprint completo).
     #[serde(default)]
     pub airport_tiles: Vec<TileCoord>,
+    /// Origen `Airport::tile` usado por layouts y scopes `AirportTile`.
+    ///
+    /// No siempre coincide con `Station::pos`: al construir un aeropuerto
+    /// la estación puede anclarse en el hangar, mientras que `OpenTTD` conserva
+    /// el tile base que recibió el comando. Los saves JSON anteriores no lo
+    /// tenían y usan `pos` como fallback compatible.
+    #[serde(default)]
+    pub airport_origin: Option<TileCoord>,
     /// Gfx `AirportTile` efectivo por tesela de un aeropuerto `NewGRF`.
     ///
     /// `airport_tiles` conserva la huella y el byte `m5` conserva únicamente
@@ -589,6 +597,7 @@ impl Station {
             road_stop_status: default_road_stop_status(),
             company_time_since_pickup: vec![(CompanyId::PLAYER, CargoTimeSincePickup::default())],
             airport_tiles: Vec::new(),
+            airport_origin: None,
             airport_tile_gfx: Vec::new(),
             airport_spec: crate::airport_class::AirportSpecId::Heliport,
             airport_newgrf_spec_id: None,

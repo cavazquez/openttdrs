@@ -1804,6 +1804,7 @@ impl GameState {
                 let spec = airport_spec;
                 let axis_y = airport_axis_y_from_saved_footprint(spec, st.airport_w, st.airport_h);
                 station.airport_spec = spec;
+                station.airport_origin = st.airport_origin;
                 // `STNN.airport_type` keeps the global id for custom
                 // `AirportSpec` entries (vanilla occupies 0..=9). Preserve it
                 // so the active NewGRF catalog can rehydrate per-tile
@@ -3248,6 +3249,7 @@ mod tests {
         sav.stations.push(SavStation {
             station_id: 7,
             pos: oilrig,
+            airport_origin: None,
             owner: crate::company::CompanyId::NONE.0,
             name: Some("Plataforma".to_string()),
             facilities: FACIL_AIRPORT | FACIL_DOCK,
@@ -3308,6 +3310,7 @@ mod tests {
         sav.stations.push(SavStation {
             station_id: u32::from(station_id),
             pos: first_land,
+            airport_origin: None,
             owner: crate::company::CompanyId::PLAYER.0,
             name: Some("Muelle importado".into()),
             facilities: FACIL_DOCK,
@@ -3377,6 +3380,7 @@ mod tests {
         sav.stations.push(SavStation {
             station_id: u32::from(station_id),
             pos: anchor,
+            airport_origin: None,
             owner: crate::company::CompanyId::PLAYER.0,
             name: Some("Intermodal con muelles".into()),
             facilities: FACIL_TRAIN | FACIL_DOCK,
@@ -3435,6 +3439,7 @@ mod tests {
         sav.stations.push(SavStation {
             station_id: 7,
             pos: station_pos,
+            airport_origin: None,
             owner: crate::company::CompanyId::NONE.0,
             name: Some("Neutral Dock".into()),
             facilities: FACIL_DOCK,
@@ -3503,6 +3508,7 @@ mod tests {
         sav.stations.push(SavStation {
             station_id: 7,
             pos: tile_pos,
+            airport_origin: None,
             owner: crate::company::CompanyId::PLAYER.0,
             name: Some("Parada importada".into()),
             facilities: FACIL_BUS_STOP,
@@ -3568,6 +3574,7 @@ mod tests {
             SavStation {
                 station_id: 0,
                 pos: source,
+                airport_origin: None,
                 owner: crate::company::CompanyId::PLAYER.0,
                 name: Some("Origen".to_string()),
                 facilities: FACIL_TRAIN,
@@ -3594,6 +3601,7 @@ mod tests {
             SavStation {
                 station_id: 1,
                 pos: destination,
+                airport_origin: None,
                 owner: crate::company::CompanyId::PLAYER.0,
                 name: Some("Destino".to_string()),
                 facilities: FACIL_TRAIN,
@@ -3682,6 +3690,7 @@ mod tests {
         sav.stations.push(SavStation {
             station_id: 0,
             pos: station_pos,
+            airport_origin: None,
             owner: crate::company::CompanyId::PLAYER.0,
             name: Some("Global".to_string()),
             facilities: FACIL_TRAIN,
@@ -3866,6 +3875,7 @@ mod tests {
                 SavStation {
                     station_id: 0,
                     pos: crate::TileCoord::new(3, 3),
+                    airport_origin: None,
                     owner: crate::company::CompanyId::PLAYER.0,
                     name: Some("Estación Norte".into()),
                     facilities: 0x01,
@@ -3888,6 +3898,7 @@ mod tests {
                 SavStation {
                     station_id: 1,
                     pos: crate::TileCoord::new(10, 10),
+                    airport_origin: None,
                     owner: crate::company::CompanyId(1).0,
                     name: Some("Intermodal".into()),
                     facilities: FACIL_TRAIN | FACIL_BUS_STOP | FACIL_AIRPORT,

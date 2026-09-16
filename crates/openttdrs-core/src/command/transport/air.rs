@@ -305,6 +305,7 @@ fn place_airport_area_with_layout(
     st.owner = state.active_company;
     st.build_date = crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date);
     st.airport_tiles = tiles;
+    st.airport_origin = Some(origin);
     st.airport_tile_gfx = airport_tile_gfx;
     st.airport_spec = place_spec;
     st.airport_newgrf_spec_id = newgrf_id.filter(|_| newgrf_def.is_some());

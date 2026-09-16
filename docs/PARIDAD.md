@@ -6282,6 +6282,17 @@ puentes, 2 regresiones de estructuras, Clippy estricto y formato. La corrección
 es parcial y no cierra #326/#329/#567: siguen pendientes otros producers BUILD,
 callbacks/consumidores NewGRF, composición global y comparación de framebuffer.
 
+Corrección #326/#329/#567-TEXT-EFFECT-VISIBILITY (2026-09-16, `8b92e5ab`):
+los popups de ingresos y la etiqueta de carga de diagnóstico respetan ahora
+`TO_TEXT` como `DrawTextEffects`: transparente y oculto omiten el dibujo
+completo, en lugar de aplicar alpha blanco. Las entidades conservan duración,
+movimiento y estado mientras están invisibles, y reaparecen sin reiniciarse al
+volver a visible. También se elimina el helper de alpha de texto que quedó
+sin consumidores. Pasan 1 regresión de modos, 3 de popups y 3 de etiquetas de
+vehículos, además de Clippy estricto. La corrección es parcial y no cierra
+#326/#329/#567: falta completar otros efectos de viewport y la comparación de
+framebuffer.
+
 Corrección #326/#329/#567-HOUSE-INDUSTRY-DESTINATION-TRANSPARENCY (2026-09-16,
 `811d453c`): las capas BUILD planas vanilla y las vistas directas NewGRF de
 casas e industrias usan ahora la máscara de destino equivalente a

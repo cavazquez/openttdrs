@@ -9178,3 +9178,15 @@ nativo separado. Pasan 3 pruebas de carteles, 6 de estaciones y Clippy
 estricto. La fila continúa parcial y #326/#329/#567 permanecen abiertas por
 otros producers, callbacks/consumidores NewGRF, composición global y
 framebuffer.
+
+### #326/#329/#567-TEXT-EFFECT-VISIBILITY — popups y texto de diagnóstico
+
+Actualizado: 2026-09-16 (`8b92e5ab`). Los popups de ingresos y las etiquetas de
+carga de diagnóstico siguen el contrato de `DrawTextEffects`: `TO_TEXT`
+transparente u oculto suprime el dibujo completo, sin alpha blanco. El ciclo
+de vida, la posición y el avance de la animación continúan mientras la entidad
+está oculta, para reaparecer sin reinicio al volver a visible. Pasan 1
+regresión de modos, 3 de popups, 3 de etiquetas de vehículos y Clippy estricto.
+La fila continúa parcial y #326/#329/#567 permanecen abiertas por otros
+efectos de viewport, callbacks/consumidores NewGRF, composición global y
+framebuffer.

@@ -2426,3 +2426,12 @@ igual que `ViewportAddKdtreeSigns`; no se mezclan los labels de pueblos, que
 siguen fuera de `TO_SIGNS`. Pasan 3 pruebas de carteles, 6 de estaciones y
 Clippy estricto; la cobertura de #326/#329/#567 continúa parcial y no se
 cierran issues madre.
+
+Actualización #326/#329/#567-TEXT-EFFECT-VISIBILITY (`8b92e5ab`): los popups
+de ingresos y el texto de carga de diagnóstico quedan alineados con
+`DrawTextEffects`: `TO_TEXT` transparente u oculto no los pinta ni los vuelve
+un sprite con alpha, pero conserva sus timers, movimiento y estado para
+reaparecer si la preferencia cambia durante su vida. Se elimina el helper de
+alpha de texto sin consumidores. Pasan 1 regresión de modos, 3 de popups, 3 de
+vehículos y Clippy estricto; la cobertura de #326/#329/#567 sigue parcial y no
+se cierran issues madre.

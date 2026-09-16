@@ -234,7 +234,7 @@ def collect_required_paths() -> list[tuple[str, str]]:
         add(p, "transport_object")
     for sid in sorted(house_sprite_ids()):
         add(f"assets/opengfx/tiles/{house_sprite_filename(sid)}", "house")
-    for i in range(133):  # 19 especies × 7 etapas (gen_tree_draw_data.py)
+    for i in range(434):  # rango completo 1576..2009 (gen_tree_draw_data.py)
         add(f"assets/opengfx/tiles/tree_{i:02d}.png", "forest")
     for state in range(9):  # 9 estados × 19 pendientes (gen_field_draw_data.py)
         for off in range(19):

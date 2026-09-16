@@ -188,7 +188,8 @@ pub(crate) struct WorldAssets {
     /// compañía) aplicada fuera del atlas RGBA.
     pub(crate) house_palettes: HousePaletteSprites,
     pub(crate) houses: HashMap<u32, AtlasSprite>,
-    /// `tree_{NN}.png` (NN = sprite − 1576): 19 especies × 7 etapas.
+    /// `tree_{NN}.png` (NN = sprite − 1576): todos los climas y las filas
+    /// extra árticas de nieve densa, con 7 etapas por sprite base.
     pub(crate) trees: Vec<AtlasSprite>,
     /// `field_{estado}_{offset:02}.png`: índice = estado × 19 +
     /// `SlopeToSpriteOffset` (0..18).

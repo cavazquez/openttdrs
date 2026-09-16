@@ -3826,6 +3826,36 @@ fn sort_tree_layers_like_openttd(layers: &mut [(usize, u8, u8)]) {
     layers.sort_by_key(|(_, dx, dy)| u16::from(*dx) + u16::from(*dy));
 }
 
+/// Resuelve la fila de `_tree_layout_sprite` exactamente como `DrawTile_Trees`.
+///
+/// Los tipos se almacenan en `m3` como un índice global, no como un índice
+/// relativo al clima. En nieve densa OpenTTD reemplaza las filas árticas
+/// normales por las 32 filas adicionales al final de la tabla.
+const fn tree_layout_index(
+    tree_type: u8,
+    variant: usize,
+    ground: TreeGround,
+    density: usize,
+) -> Option<usize> {
+    const TREE_SUB_ARCTIC: usize = 0x0C;
+    const TREE_RAINFOREST: usize = 0x14;
+    const TREE_EXTRA_LAYOUT_BASE: usize = 164;
+
+    let mut index = tree_type as usize * 4 + variant;
+    if matches!(ground, TreeGround::SnowDesert | TreeGround::RoughSnow)
+        && density >= 2
+        && index >= TREE_SUB_ARCTIC * 4
+        && index < TREE_RAINFOREST * 4
+    {
+        index += TREE_EXTRA_LAYOUT_BASE - TREE_SUB_ARCTIC * 4;
+    }
+    if index < TREE_LAYOUT_SPRITE.len() {
+        Some(index)
+    } else {
+        None
+    }
+}
+
 /// `DrawTile_Trees` eleva el objeto a media altura de la pendiente. La
 /// posición de terreno (`base_z`) sola deja árboles y sus bounds cuatro píxeles
 /// demasiado abajo en una pendiente normal (u ocho en una empinada).
@@ -3853,17 +3883,31 @@ pub(crate) fn push_forest_tree(
     // `IsTransparencySet(TO_TREES)`. La preferencia usa la máscara de
     // destino del viewport, no el alpha blanco genérico de otros overlays.
     let tint = destination_mask_sprite_color(is_transparent(TransparencyOption::Trees));
-    let (tree_type, count, growth) = match ctx.tile {
+    let (tree_type, count, growth, ground, density) = match ctx.tile {
         // MP_TREES real (nibble alto de mapt = 4): datos del save.
         Some(t) if (t.mapt >> 4) & 0xF == 4 => (
-            u32::from(t.m3) % 12,
+            t.m3,
             usize::from((t.m5 >> 6) & 0x3) + 1,
             usize::from(t.m5 & 0x7).min(6),
+            tree_ground_from_tile(t),
+            tree_density_from_tile(t),
         ),
         // Mapas generados sin datos: variedad determinista equivalente.
         _ => {
             let h = wang_hash(ctx.tx, ctx.ty, 0xCAFE);
-            (h % 12, (h >> 8) as usize % 2 + 1, 3)
+            let tree_type = match ctx.climate {
+                Climate::Temperate => (h % 12) as u8,
+                Climate::SubArctic => 0x0C + (h % 8) as u8,
+                Climate::SubTropical => 0x1C + (h % 4) as u8,
+                Climate::Toyland => 0x20 + (h % 9) as u8,
+            };
+            (
+                tree_type,
+                (h >> 8) as usize % 2 + 1,
+                3,
+                TreeGround::Grass,
+                3,
+            )
         }
     };
 
@@ -3873,7 +3917,13 @@ pub(crate) fn push_forest_tree(
     let variant = (tmp & 0x3) as usize;
     let layout = ((tmp >> 2) & 0x3) as usize;
 
-    let row = &TREE_LAYOUT_SPRITE[tree_type as usize * 4 + variant];
+    let Some(layout_index) = tree_layout_index(tree_type, variant, ground, density) else {
+        // OpenTTD asserts this invariant; a malformed save must not panic the
+        // Bevy render schedule. The ground remains visible and the bad forest
+        // is omitted until the tile is repaired by gameplay.
+        return;
+    };
+    let row = &TREE_LAYOUT_SPRITE[layout_index];
     let mut layers = Vec::with_capacity(count);
     for i in 0..count {
         let stage = if i == count - 1 { growth } else { 3 };
@@ -4009,8 +4059,8 @@ mod tests {
         house_building_trace_geometry, house_lift_screen_offset, industry_building_parent_bounds,
         industry_building_trace_palette, openttd_tile_hash, rough_flat_variant,
         sort_tree_layers_like_openttd, structure_sprite_color, tree_density_from_tile,
-        tree_ground_from_tile, tree_ground_sprite_id, tree_parent_bounds, tree_shore_sprite_id,
-        tree_slope_z_offset, void_ground_sprite_and_palette,
+        tree_ground_from_tile, tree_ground_sprite_id, tree_layout_index, tree_parent_bounds,
+        tree_shore_sprite_id, tree_slope_z_offset, void_ground_sprite_and_palette,
     };
 
     fn industry_ctx_at(tx: u32, ty: u32, base_z: u8) -> TileRenderContext {
@@ -4102,6 +4152,53 @@ mod tests {
         sort_tree_layers_like_openttd(&mut layers);
 
         assert_eq!(layers, [(1611, 1, 8), (1700, 1, 8), (1593, 9, 3)]);
+    }
+
+    #[test]
+    fn tree_layout_selector_keeps_global_climate_ranges() {
+        assert_eq!(tree_layout_index(0x00, 0, TreeGround::Grass, 0), Some(0));
+        assert_eq!(tree_layout_index(0x0C, 0, TreeGround::Grass, 0), Some(48));
+        assert_eq!(tree_layout_index(0x14, 0, TreeGround::Grass, 0), Some(80));
+        assert_eq!(tree_layout_index(0x1C, 0, TreeGround::Grass, 0), Some(112));
+        assert_eq!(tree_layout_index(0x20, 3, TreeGround::Grass, 0), Some(131));
+        assert_eq!(tree_layout_index(0xFF, 0, TreeGround::Grass, 0), None);
+    }
+
+    #[test]
+    fn tree_layout_selector_uses_extra_arctic_rows_on_snow() {
+        assert_eq!(
+            tree_layout_index(0x0C, 0, TreeGround::SnowDesert, 1),
+            Some(48)
+        );
+        assert_eq!(
+            tree_layout_index(0x0C, 0, TreeGround::SnowDesert, 2),
+            Some(164)
+        );
+        assert_eq!(
+            tree_layout_index(0x13, 3, TreeGround::RoughSnow, 3),
+            Some(195)
+        );
+        // Las filas tropicales no participan del reemplazo ártico.
+        assert_eq!(
+            tree_layout_index(0x14, 0, TreeGround::SnowDesert, 3),
+            Some(80)
+        );
+    }
+
+    #[test]
+    fn generated_tree_tables_cover_climates_growth_and_toyland_palettes() {
+        use crate::sprites::{TREE_LAYOUT_PALETTE, TREE_LAYOUT_SPRITE, TREE_SPRITE_COUNT};
+
+        assert_eq!(TREE_SPRITE_COUNT, 434);
+        assert_eq!(TREE_LAYOUT_SPRITE.len(), 196);
+        assert_eq!(TREE_LAYOUT_PALETTE.len(), 196);
+        for row in TREE_LAYOUT_SPRITE {
+            for sprite in row {
+                assert!(usize::from(sprite) + 6 < TREE_SPRITE_COUNT);
+            }
+        }
+        assert_eq!(TREE_LAYOUT_PALETTE[128], [779, 776, 785, 786]);
+        assert_eq!(TREE_LAYOUT_PALETTE[163], [789, 779, 790, 0]);
     }
 
     #[test]

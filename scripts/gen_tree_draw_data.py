@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Genera sprites y datos de dibujo de árboles (MP_TREES, clima templado).
+"""Genera sprites y datos de dibujo de árboles (MP_TREES, todos los climas).
 
-1. Recorta `tree_{i:02d}.png` para los sprites 1576..1708 (19 especies × 7
-   etapas) desde los sheets OpenGFX ya decodificados, con la misma lógica de
-   `descargar_graficos.sh` (`crop_by_id`).
-2. Porta `_tree_layout_xy` y las filas templadas (0..47) de
-   `_tree_layout_sprite` de OpenTTD `table/tree_land.h`.
+1. Recorta `tree_{i:02d}.png` para todo el rango de sprites usado por
+   `_tree_layout_sprite` (1576..2009) desde los sheets OpenGFX ya decodificados,
+   con la misma lógica de `descargar_graficos.sh` (`crop_by_id`).
+2. Porta `_tree_layout_xy` y las 196 filas de `_tree_layout_sprite` de
+   `table/tree_land.h`, incluidas las variantes climáticas y las filas extra
+   que usa el dibujo ártico sobre nieve.
 3. Emite `crates/openttdrs-client/src/sprites/tree_draw_data_generated.rs`
    con metadatos w/h/xrel/yrel por sprite (vía NFO).
 
@@ -21,8 +22,25 @@ from gen_field_draw_data import Cropper, REPO, TILES_DIR
 from nfo_sprite_meta import detect_graphics_mode, parse_sprite_offs, sprite_dims_from_assets
 
 SPR_TREES_BASE = 1576
-TREE_SPRITE_COUNT = 133  # 19 especies × 7 etapas (0x628..0x6A6+6)
-TEMPERATE_LAYOUT_ROWS = 48  # 12 tipos (m3) × 4 variantes
+# La fila más alta usa 0x7d3 y el último estadio suma seis sprites.
+TREE_SPRITE_COUNT = 0x7D3 + 6 - SPR_TREES_BASE + 1
+TREE_LAYOUT_ROWS = 164 + (79 - 48 + 1)
+
+TREE_PALETTE_IDS = {
+    "PAL_NONE": 0,
+    "PALETTE_TO_PALE_GREEN": 776,
+    "PALETTE_TO_PINK": 777,
+    "PALETTE_TO_YELLOW": 778,
+    "PALETTE_TO_RED": 779,
+    "PALETTE_TO_GREEN": 781,
+    "PALETTE_TO_CREAM": 784,
+    "PALETTE_TO_MAUVE": 785,
+    "PALETTE_TO_PURPLE": 786,
+    "PALETTE_TO_ORANGE": 787,
+    "PALETTE_TO_BROWN": 788,
+    "PALETTE_TO_GREY": 789,
+    "PALETTE_TO_WHITE": 790,
+}
 
 TREE_LAND_H = REPO / "reference" / "openttd-upstream" / "src" / "table" / "tree_land.h"
 OUT_RS = REPO / "crates/openttdrs-client/src/sprites/tree_draw_data_generated.rs"
@@ -51,23 +69,32 @@ def parse_layout_xy(text: str) -> list[list[tuple[int, int]]]:
     return rows
 
 
-def parse_layout_sprite(text: str) -> list[list[int]]:
+def parse_layout_sprite(text: str) -> tuple[list[list[int]], list[list[int]]]:
     m = re.search(r"_tree_layout_sprite\[[^\]]*\]\[4\] = \{(.*?)\n\};", text, re.S)
     if not m:
         sys.exit("no se encontró _tree_layout_sprite")
     rows = []
+    palettes = []
     for line in m.group(1).splitlines():
-        ids = re.findall(r"\{\s*0x([0-9a-fA-F]+),\s*PAL_NONE\s*\}", line)
-        if len(ids) == 4:
-            rows.append([int(s, 16) - SPR_TREES_BASE for s in ids])
-    if len(rows) < TEMPERATE_LAYOUT_ROWS:
-        sys.exit(f"_tree_layout_sprite: esperaba ≥{TEMPERATE_LAYOUT_ROWS} filas, hay {len(rows)}")
-    rows = rows[:TEMPERATE_LAYOUT_ROWS]
+        cells = re.findall(
+            r"\{\s*0x([0-9a-fA-F]+),\s*([A-Z0-9_]+)\s*\}", line
+        )
+        if len(cells) == 4:
+            rows.append([int(sprite, 16) - SPR_TREES_BASE for sprite, _ in cells])
+            palette_row = []
+            for _, palette in cells:
+                try:
+                    palette_row.append(TREE_PALETTE_IDS[palette])
+                except KeyError:
+                    sys.exit(f"paleta de árbol no soportada: {palette}")
+            palettes.append(palette_row)
+    if len(rows) != TREE_LAYOUT_ROWS:
+        sys.exit(f"_tree_layout_sprite: esperaba {TREE_LAYOUT_ROWS} filas, hay {len(rows)}")
     for r in rows:
         for v in r:
             if not 0 <= v < TREE_SPRITE_COUNT:
                 sys.exit(f"índice de sprite fuera de rango: {v}")
-    return rows
+    return rows, palettes
 
 
 def main() -> None:
@@ -76,7 +103,7 @@ def main() -> None:
 
     text = TREE_LAND_H.read_text(encoding="utf-8")
     layout_xy = parse_layout_xy(text)
-    layout_sprite = parse_layout_sprite(text)
+    layout_sprite, layout_palette = parse_layout_sprite(text)
 
     nfo = parse_sprite_offs(REPO)
     metas = []
@@ -89,8 +116,8 @@ def main() -> None:
     lines = [
         "// Generado por scripts/gen_tree_draw_data.py — NO EDITAR A MANO.",
         "//",
-        "// Sprites de árboles templados de OpenTTD (SPR_TREES_BASE=1576, 19 especies",
-        "// × 7 etapas) + tablas de layout de `table/tree_land.h`.",
+        "// Sprites vanilla de árboles de OpenTTD (rango 1576..2009) + tablas",
+        "// climáticas de `table/tree_land.h`.",
         "#![cfg_attr(rustfmt, rustfmt_skip)]",
         "",
         "/// Metadatos NFO de un sprite de árbol (`tree_{NN}.png`, NN = id − 1576).",
@@ -119,16 +146,28 @@ def main() -> None:
         lines.append(f"    [{cells}],")
     lines.append("];")
     lines.append("")
-    lines.append("/// `_tree_layout_sprite` filas templadas: índice = tipo (m3) × 4 + variante.")
+    lines.append("/// `_tree_layout_sprite`: índice = tipo (m3) × 4 + variante.")
     lines.append("/// Valor = índice png base de la especie (sumar etapa 0..6).")
     lines.append(
-        f"pub static TREE_LAYOUT_SPRITE: [[u16; 4]; {TEMPERATE_LAYOUT_ROWS}] = ["
+        f"pub static TREE_LAYOUT_SPRITE: [[u16; 4]; {TREE_LAYOUT_ROWS}] = ["
     )
     for row in layout_sprite:
         cells = ", ".join(str(v) for v in row)
         lines.append(f"    [{cells}],")
     lines.append("];")
     lines.append("")
+
+    lines.append(
+        f"/// Paleta declarada por `PalSpriteID` para cada entrada del layout ({TREE_LAYOUT_ROWS} filas)."
+    )
+    lines.append("#[allow(dead_code)]")
+    lines.append(
+        f"pub static TREE_LAYOUT_PALETTE: [[u16; 4]; {TREE_LAYOUT_ROWS}] = ["
+    )
+    for row in layout_palette:
+        cells = ", ".join(str(value) for value in row)
+        lines.append(f"    [{cells}],")
+    lines.append("];")
 
     OUT_RS.write_text("\n".join(lines), encoding="utf-8")
     print(f"Escrito {OUT_RS}")

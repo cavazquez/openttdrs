@@ -1055,9 +1055,9 @@ for sid, src_name in (
 # =============================================================================
 # ÁRBOLES (MP_TREES)
 # =============================================================================
-# Templado completo: 19 especies × 7 etapas (SPR_TREES_BASE=1576..1708).
-# `_tree_layout_sprite` (tree_land.h) referencia las 19 especies.
-tree_ids = list(range(1576, 1709))
+# Todos los climas: sprites base 1576..2009, incluidas las filas extra
+# árticas que `_tree_layout_sprite` usa sobre nieve densa.
+tree_ids = list(range(1576, 2010))
 for i, sid in enumerate(tree_ids):
     crop_by_id(sid, f"tree_{i:02d}.png")
 

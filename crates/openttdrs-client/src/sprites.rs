@@ -266,10 +266,12 @@ pub struct HouseDrawSpec {
 /// comunes 3924/3981 se resuelven como aliases de `terrain_bare`/`grass`.
 pub use house_draw_data_generated::HOUSE_DRAW_DATA;
 
-/// Árboles templados (`tree_land.h`): sprites, layout y metadatos NFO.
+/// Árboles de todos los climas (`tree_land.h`): sprites, layout, paletas y
+/// metadatos NFO.
 /// Regenerar: `python3 scripts/gen_tree_draw_data.py`.
+#[allow(unused_imports)]
 pub use tree_draw_data_generated::{
-    TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY, TREE_SPRITE_COUNT, TREE_SPRITE_META,
+    TREE_LAYOUT_PALETTE, TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY, TREE_SPRITE_COUNT, TREE_SPRITE_META,
 };
 
 /// Campos de cultivo y cercas (`clear_land.h`).

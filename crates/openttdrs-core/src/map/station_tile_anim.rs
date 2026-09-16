@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::hash::BuildHasher;
 
 use crate::airport::{AirportPiece, airport_station_gfx_animation_frames};
+use crate::airport_tile_action2::airport_tile_random_bits;
 use crate::airport_tile_spec::{
     AirportAnimationTrigger, AirportTileSpecDef, NEW_AIRPORT_TILE_OFFSET,
 };
@@ -193,7 +194,7 @@ fn airport_animation_random_bits(station: &Station, map: &Map, coord: TileCoord,
     let x = coord.x.cast_unsigned();
     let y = coord.y.cast_unsigned();
     let tick = u32::try_from(tick).unwrap_or(u32::MAX);
-    let tile_random = u32::from(map.get(coord).map_or(0, |tile| tile.m3));
+    let tile_random = u32::from(airport_tile_random_bits(map.get(coord)));
     u32::from(station.newgrf_random_bits)
         | (tile_random << 16)
             ^ x.wrapping_mul(0x9E37_79B9)
@@ -3221,6 +3222,26 @@ mod tests {
         map.set_tile(pos, tile).unwrap();
         assert!(step_airport_tiles(&mut map, 3, &[]).is_empty());
         assert_eq!(map.get(pos).unwrap().m7, 0);
+    }
+
+    #[test]
+    fn airport_animation_random_ignores_station_map3_low_nibble() {
+        let coord = TileCoord::new(1, 1);
+        let station = Station::new_with_kind(coord, StopKind::Airport);
+        let mut first = Map::new_flat(3, 3, 0);
+        let mut first_tile = first.get(coord).expect("tile");
+        first_tile.kind = TileKind::Airport;
+        first_tile.m3 = 0xA1;
+        first.set_tile(coord, first_tile).expect("first tile");
+        let mut second = first.clone();
+        let mut second_tile = second.get(coord).expect("tile");
+        second_tile.m3 = 0xAF;
+        second.set_tile(coord, second_tile).expect("second tile");
+
+        assert_eq!(
+            airport_animation_random_bits(&station, &first, coord, 17),
+            airport_animation_random_bits(&station, &second, coord, 17),
+        );
     }
 
     #[test]

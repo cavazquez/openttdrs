@@ -134,8 +134,8 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow
         return ctx;
     };
     let tile = map.get(coord);
-    let random = u32::from(station.newgrf_random_bits)
-        | (u32::from(tile.map_or(0, |candidate| candidate.m3)) << 16);
+    let random =
+        u32::from(station.newgrf_random_bits) | (u32::from(airport_tile_random_bits(tile)) << 16);
     ctx.random_bits = random;
     ctx.parent_random_bits = u32::from(station.newgrf_random_bits);
     ctx.persistent_registers
@@ -242,6 +242,17 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow
         }
     }
     ctx
+}
+
+/// Devuelve los bits aleatorios propios de una tesela `MP_STATION`.
+///
+/// `GetStationTileRandomBits` de `OpenTTD` no expone todo `MAP3`: conserva
+/// únicamente `MAP3[4..7]`. Los cuatro bits bajos pertenecen a otros campos
+/// de la codificación de la estación y no deben contaminar `var 5F` ni los
+/// grupos Action2 random.
+#[must_use]
+pub(crate) fn airport_tile_random_bits(tile: Option<Tile>) -> u8 {
+    tile.map_or(0, |candidate| (candidate.m3 >> 4) & 0x0F)
 }
 
 fn requested_nearby_vars(
@@ -759,6 +770,53 @@ mod tests {
         assert_eq!(ctx.parameterized_vars.get(&(0x7A, 1)), Some(&u32::MAX));
         let selected = current.newgrf_view_runtime(0, &mut ctx);
         assert_eq!(selected.as_ref().map(|sprite| sprite.rgba[0]), Some(255));
+    }
+
+    #[test]
+    fn airport_context_uses_only_station_tile_random_nibble() {
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(3, 3, 0);
+        let mut tile = map.get(coord).expect("airport tile");
+        tile.kind = TileKind::Airport;
+        // MAP3 low nibble belongs to other station fields; only A is random.
+        tile.m3 = 0xA7;
+        map.set_tile(coord, tile).expect("set airport tile");
+
+        let mut station = Station::new_with_kind(coord, StopKind::Airport);
+        station.airport_tiles = vec![coord];
+        station.newgrf_random_bits = 0x55AA;
+        let current = AirportTileSpecDef {
+            gfx: AirportTileGfxId(74),
+            subst_id: 24,
+            from_newgrf: true,
+            callback_mask: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            newgrf_local_id: 0,
+            newgrf_grfid: 0,
+            newgrf_grf_version: 0,
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: None,
+        };
+
+        let ctx = action2_eval_ctx_for_airport_tile(
+            &map,
+            &[station],
+            coord,
+            std::slice::from_ref(&current),
+            &current,
+            Climate::Temperate,
+        );
+
+        assert_eq!(ctx.random_bits, 0x000A_55AA);
+        assert_eq!(ctx.parent_random_bits, 0x55AA);
     }
 
     #[test]

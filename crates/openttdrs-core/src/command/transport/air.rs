@@ -316,8 +316,9 @@ fn place_airport_area_with_layout(
     // Catchment: `station_catchment_radius` lee `airport_spec` en cobertura.
     state.stations.push(st);
     if newgrf_def.is_some() {
+        let mut airport_sounds = Vec::new();
         let dirty =
-            crate::map::trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog(
+            crate::map::trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_and_sounds(
                 &mut state.map,
                 state.tick.get(),
                 &mut state.stations,
@@ -331,8 +332,10 @@ fn place_airport_area_with_layout(
                 station_anchor,
                 crate::AirportAnimationTrigger::Built,
                 None,
+                &mut airport_sounds,
             );
         state.runtime.industry_tile_dirty.extend(dirty);
+        crate::map::play_station_animation_sounds(state, airport_sounds);
     }
     Ok(())
 }

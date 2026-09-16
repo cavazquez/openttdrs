@@ -9947,7 +9947,7 @@ fn newgrf_airport_tile_layout_emits_ground_sortable_parent_and_child() {
             sequence: vec![
                 TileLayoutSpriteRef {
                     action1_set: Some(2),
-                    origin: [7, -4, i8::MIN],
+                    origin: [7, 4, i8::MIN],
                     ..Default::default()
                 },
                 TileLayoutSpriteRef {
@@ -9958,7 +9958,7 @@ fn newgrf_airport_tile_layout_emits_ground_sortable_parent_and_child() {
                 },
                 TileLayoutSpriteRef {
                     action1_set: Some(2),
-                    origin: [7, -4, i8::MIN],
+                    origin: [7, 4, i8::MIN],
                     ..Default::default()
                 },
             ],
@@ -10127,7 +10127,7 @@ fn newgrf_airport_tile_layout_emits_ground_sortable_parent_and_child() {
         coord.y,
     );
     expected_orphan_position.x += 7.0;
-    expected_orphan_position.y += 4.0;
+    expected_orphan_position.y -= 4.0;
     let child_candidates: Vec<_> = world
         .query::<(&Sprite, &Transform)>()
         .iter(&world)
@@ -12713,7 +12713,9 @@ fn flat_newgrf_object_tile_layout_keeps_ground_in_ground_pass() {
             },
             sequence: vec![TileLayoutSpriteRef {
                 action1_set: Some(1),
-                origin: [5, 6, i8::MIN],
+                // NewGRF DrawCommonTileSeq consumes child offsets as bytes;
+                // -4 is the raw unsigned value 0xFC.
+                origin: [5, -4, i8::MIN],
                 ..Default::default()
             }],
         },
@@ -12799,7 +12801,7 @@ fn flat_newgrf_object_tile_layout_keeps_ground_in_ground_pass() {
         coord.y,
     );
     expected_orphan_position.x += 5.0;
-    expected_orphan_position.y -= 6.0;
+    expected_orphan_position.y -= 252.0;
     let sprites: Vec<_> = world
         .query::<(&Sprite, &Transform)>()
         .iter(&world)

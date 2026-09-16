@@ -19,8 +19,8 @@ use super::{
 };
 use crate::iso::{
     RoadStopSeqGfx, full_tile_sprite_pos, ground_draw_z, overlay_pos, remap_tile_offset,
-    road_stop_build_sprite_center, slope_sprite_offset, tile_layout_orphan_ground_center,
-    wang_hash,
+    road_stop_build_sprite_center, slope_sprite_offset, tile_layout_child_offset,
+    tile_layout_orphan_ground_center, wang_hash,
 };
 use crate::render::atlas::AtlasSprite;
 use crate::render::newgrf_cache::{
@@ -790,6 +790,7 @@ pub(crate) fn spawn_house_tile(
             ctx,
             resources.map_dims.0,
             foundation_surface_base_z,
+            forced_foundation.and_then(|foundation| foundation.child_parent),
             def,
             *runtime_fp,
             layout,
@@ -1228,6 +1229,7 @@ fn spawn_newgrf_house_layout_sequence(
     ctx: &TileRenderContext,
     map_width: u32,
     surface_base_z: u8,
+    foundation_child_parent: Option<Entity>,
     def: &openttdrs_core::HouseSpecDef,
     runtime_fp: u32,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
@@ -1366,6 +1368,7 @@ fn spawn_newgrf_house_layout_sequence(
                 ctx.ty_i32(),
                 surface_base_z,
                 layer_z,
+                true,
             );
             let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
             commands.spawn((
@@ -1379,22 +1382,32 @@ fn spawn_newgrf_house_layout_sequence(
                 },
             ));
         } else {
-            let position = road_stop_build_sprite_center(
+            let mut position = tile_layout_orphan_ground_center(
                 ctx.iso_pos,
+                layer.origin,
+                width,
+                height,
+                x_offs,
+                y_offs,
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 surface_base_z,
                 layer_z,
-                seq,
-                width,
-                height,
+                true,
             );
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                sprite,
-                Transform::from_translation(position),
-            ));
+            if let Some(parent) = foundation_child_parent {
+                spawn_foundation_child_sprite_at(
+                    commands, sprite, ctx, position, map_width, parent,
+                );
+            } else {
+                position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), layer_z);
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(position),
+                ));
+            }
         }
     }
     true
@@ -1693,6 +1706,7 @@ pub(crate) fn spawn_industry_tile_with_world(
             ctx,
             map_width,
             foundation.surface_base_z,
+            foundation.child_parent,
             def,
             palette_colour,
             *runtime_fp,
@@ -2103,6 +2117,7 @@ fn spawn_newgrf_industry_layout_sequence(
     ctx: &TileRenderContext,
     map_width: u32,
     surface_base_z: u8,
+    foundation_child_parent: Option<Entity>,
     def: &openttdrs_core::IndustryTileSpecDef,
     palette_colour: CompanyColour,
     runtime_fp: u32,
@@ -2246,6 +2261,7 @@ fn spawn_newgrf_industry_layout_sequence(
                 ctx.ty_i32(),
                 surface_base_z,
                 layer_z,
+                true,
             );
             let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
             commands.spawn((
@@ -2259,24 +2275,36 @@ fn spawn_newgrf_industry_layout_sequence(
                 },
             ));
         } else {
-            // Un child huérfano es inválido según el contrato, pero conservar
-            // el sprite en el ancla de la tesela evita perderlo por completo.
-            let position = road_stop_build_sprite_center(
+            // `DrawCommonTileSeq` entrega un child sin parent a
+            // `DrawGroundSprite(image, pal, nullptr, offs_x, offs_y)`. No es
+            // una pieza BUILD: sus dos primeros bytes son offsets de pantalla
+            // y el sprite debe conservar el orden del pase ground.
+            let mut position = tile_layout_orphan_ground_center(
                 ctx.iso_pos,
+                layer.origin,
+                width,
+                height,
+                x_offs,
+                y_offs,
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 surface_base_z,
                 layer_z,
-                seq,
-                width,
-                height,
+                true,
             );
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                sprite,
-                Transform::from_translation(position),
-            ));
+            if let Some(parent) = foundation_child_parent {
+                spawn_foundation_child_sprite_at(
+                    commands, sprite, ctx, position, map_width, parent,
+                );
+            } else {
+                position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), layer_z);
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(position),
+                ));
+            }
         }
     }
     true
@@ -2316,8 +2344,13 @@ fn object_tile_seq_child_center(
     ty: i32,
     base_z: u8,
     layer_z: f32,
+    child_offsets_unsigned: bool,
 ) -> Vec3 {
-    let top_left = parent_top_left + Vec2::new(f32::from(origin[0]), -f32::from(origin[1]));
+    let top_left = parent_top_left
+        + Vec2::new(
+            tile_layout_child_offset(origin[0], child_offsets_unsigned),
+            -tile_layout_child_offset(origin[1], child_offsets_unsigned),
+        );
     Vec3::new(
         top_left.x + width / 2.0,
         top_left.y - height / 2.0,
@@ -2890,6 +2923,7 @@ fn spawn_newgrf_object_layout_sequence(
                 ctx.ty_i32(),
                 surface_base_z,
                 layer_z,
+                true,
             );
             let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
             commands.spawn((
@@ -2918,6 +2952,7 @@ fn spawn_newgrf_object_layout_sequence(
                 ctx.ty_i32(),
                 surface_base_z,
                 layer_z,
+                true,
             );
             if let Some(parent) = foundation_child_parent {
                 spawn_foundation_child_sprite_at(

@@ -33,7 +33,8 @@ use crate::iso::{
     HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos, full_tile_sprite_pos_half, ground_draw_z,
     ground_tile_pos_half, overlay_pos, remap_tile_offset, road_depot_build_sprite_center,
     road_stop_build_sprite_center, shore_png_index, shore_sprite_half_h, slope_half_h,
-    slope_sprite_offset, sortable_draw_z, tile_layout_orphan_ground_center, tile_pos_half,
+    slope_sprite_offset, sortable_draw_z, tile_layout_child_offset,
+    tile_layout_orphan_ground_center, tile_pos_half,
 };
 use crate::render::catenary_newgrf::{
     catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
@@ -3612,6 +3613,7 @@ fn spawn_newgrf_station_layout_sequence(
                 ctx.ty_i32(),
                 base_z,
                 layer_z,
+                false,
             );
             let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
             commands.spawn((
@@ -3640,6 +3642,7 @@ fn spawn_newgrf_station_layout_sequence(
                 ctx.ty_i32(),
                 base_z,
                 layer_z,
+                false,
             );
             if let Some(parent) = foundation_child_parent {
                 spawn_foundation_child_sprite_at(
@@ -3893,8 +3896,13 @@ fn newgrf_road_stop_child_center(
     ty: i32,
     base_z: u8,
     layer_z: f32,
+    child_offsets_unsigned: bool,
 ) -> Vec3 {
-    let child_top_left = parent_top_left + Vec2::new(f32::from(origin[0]), -f32::from(origin[1]));
+    let child_top_left = parent_top_left
+        + Vec2::new(
+            tile_layout_child_offset(origin[0], child_offsets_unsigned),
+            -tile_layout_child_offset(origin[1], child_offsets_unsigned),
+        );
     Vec3::new(
         child_top_left.x + width / 2.0,
         child_top_left.y - height / 2.0,
@@ -4095,6 +4103,7 @@ fn spawn_newgrf_road_stop_layout_sequence(
                 ctx.ty_i32(),
                 base_z,
                 layer_z,
+                false,
             );
             let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
             commands.spawn((
@@ -4123,6 +4132,7 @@ fn spawn_newgrf_road_stop_layout_sequence(
                 ctx.ty_i32(),
                 base_z,
                 layer_z,
+                false,
             );
             if let Some(parent) = foundation_child_parent {
                 spawn_foundation_child_sprite_at(
@@ -4908,6 +4918,7 @@ fn spawn_newgrf_airport_layout_sequence(
                 ctx.ty_i32(),
                 base_z,
                 layer_z,
+                true,
             );
             let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
             commands.spawn((
@@ -4936,6 +4947,7 @@ fn spawn_newgrf_airport_layout_sequence(
                 ctx.ty_i32(),
                 base_z,
                 layer_z,
+                true,
             );
             if let Some(parent) = foundation_child_parent {
                 spawn_foundation_child_sprite_at(
@@ -7844,7 +7856,8 @@ mod tests {
         station_catenary_pylon_parent_bounds, station_catenary_wire_parent_bounds,
         station_catenary_wire_trace_geometry, station_rail_child_offset,
         station_rail_foundation_world_z_delta, station_rail_layer_parent_bounds,
-        tile_layout_orphan_ground_center, tunnel_catenary_trace_geometry, tunnel_sortable_parents,
+        tile_layout_child_offset, tile_layout_orphan_ground_center, tunnel_catenary_trace_geometry,
+        tunnel_sortable_parents,
     };
     use openttdrs_core::{
         Climate, DecodedSprite, Map, RoadTramType, RoadType, RoadTypeDef, TileCoord, TileKind,
@@ -7951,12 +7964,19 @@ mod tests {
             4,
             0,
             0.05,
+            false,
         );
         // OpenTTD child offsets are pixels from the previous sprite's
         // top-left; Y is inverted when entering Bevy's screen coordinates.
         assert_eq!(center.x, 109.0);
         assert_eq!(center.y, 184.0);
         assert_eq!(center.z, crate::iso::sortable_draw_z(3, 4, 0, 0.05));
+    }
+
+    #[test]
+    fn newgrf_tile_layout_child_offset_preserves_raw_unsigned_byte() {
+        assert_eq!(tile_layout_child_offset(-4, true), 252.0);
+        assert_eq!(tile_layout_child_offset(-4, false), -4.0);
     }
 
     #[test]
@@ -7972,6 +7992,7 @@ mod tests {
             4,
             0,
             0.05,
+            false,
         );
         let base = super::overlay_pos(
             Vec2::new(100.0, 200.0),

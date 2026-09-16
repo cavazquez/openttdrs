@@ -740,11 +740,27 @@ pub fn overlay_pos(
     )
 }
 
+/// Convierte el byte de offset de child según el contrato del productor.
+///
+/// `DrawRailTileSeq` conserva el valor `int8_t`; `DrawNewGRFTileSeq` lo
+/// reinterpreta como `uint8_t`. El modelo guarda ambos bytes en `i8` para
+/// conservar el sentinel `origin.z == i8::MIN`, por lo que los productores
+/// NewGRF deben recuperar aquí el byte sin signo.
+#[must_use]
+pub fn tile_layout_child_offset(raw: i8, unsigned: bool) -> f32 {
+    if unsigned {
+        f32::from(raw as u8)
+    } else {
+        f32::from(raw)
+    }
+}
+
 /// Centro Bevy de un child que `DrawCommonTileSeq` entrega a
 /// `DrawGroundSprite` porque todavía no encontró un parent.
 ///
 /// En ese camino `origin.x/y` no son coordenadas TILE_SEQ del mundo: son
-/// offsets de pantalla firmados desde el ancla de la tesela. Los offsets NFO
+/// offsets de pantalla desde el ancla de la tesela. El contrato puede ser
+/// signed (`DrawRailTileSeq`) o unsigned (`DrawNewGRFTileSeq`); los offsets NFO
 /// del sprite siguen formando el centro base y el eje Y de OpenTTD se invierte
 /// al entrar en Bevy. El caller decide después si conserva la profundidad
 /// sortable para una foundation o la reemplaza por [`ground_draw_z`].
@@ -761,12 +777,13 @@ pub fn tile_layout_orphan_ground_center(
     ty: i32,
     base_z: u8,
     layer_z: f32,
+    child_offsets_unsigned: bool,
 ) -> Vec3 {
     let mut position = overlay_pos(
         ref_pos, x_offs, y_offs, width, height, base_z, layer_z, tx, ty,
     );
-    position.x += f32::from(origin[0]);
-    position.y -= f32::from(origin[1]);
+    position.x += tile_layout_child_offset(origin[0], child_offsets_unsigned);
+    position.y -= tile_layout_child_offset(origin[1], child_offsets_unsigned);
     position
 }
 

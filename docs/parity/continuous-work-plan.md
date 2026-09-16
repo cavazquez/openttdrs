@@ -9110,3 +9110,13 @@ animación mientras están ocultas, para reaparecer correctamente al restablecer
 la categoría. Pasan 46 pruebas focalizadas y Clippy estricto. La fila sigue
 parcial por otros efectos/producers, callbacks/consumidores NewGRF,
 composición global y framebuffer.
+
+### #326/#329/#567-DIRECT-DEPOT-ROADSTOP-BUILD-TRANSPARENCY — fachadas directas
+
+Actualizado: 2026-09-16 (`899dcc08`). Las fachadas BUILD directas de paradas
+bus/camión y depósitos rail/road, incluidas vistas NewGRF y reemplazos Action5,
+usan la máscara de destino 802 bajo `TO_BUILDINGS` en lugar de alpha blanco.
+Los `TileLayout` conservan su color intermedio hasta resolver `OPAQUE` y la
+paleta por entrada. Pasan 135 pruebas focalizadas y Clippy estricto. La fila
+continúa parcial por otros producers BUILD, callbacks/consumidores NewGRF,
+composición global y framebuffer.

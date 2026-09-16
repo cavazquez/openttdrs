@@ -6304,3 +6304,14 @@ el alpha blanco genérico que los hacía parecer edificios transparentes. Pasan
 46 pruebas focalizadas de humo/burbujas y Clippy estricto. La corrección es
 parcial y no cierra #326/#329/#567: quedan otros efectos/producers,
 callbacks/consumidores NewGRF, composición global y comparación de framebuffer.
+
+Corrección #326/#329/#567-DIRECT-DEPOT-ROADSTOP-BUILD-TRANSPARENCY
+(2026-09-16, `899dcc08`): las fachadas BUILD directas de paradas bus/camión
+y depósitos rail/road —incluidos reemplazos Action5 y vistas NewGRF— dejan de
+usar el alpha blanco genérico y reciben la máscara de destino equivalente a
+`PALETTE_TO_TRANSPARENT` (`802`) bajo `TO_BUILDINGS`. Las secuencias
+`TileLayout` conservan el color intermedio porque después resuelven
+`OPAQUE`/paleta por entrada. Pasan 135 pruebas focalizadas de road stops y
+depósitos, además de Clippy estricto. La corrección es parcial y no cierra
+#326/#329/#567: siguen pendientes otros producers, callbacks/consumidores
+NewGRF, composición global y comparación de framebuffer.

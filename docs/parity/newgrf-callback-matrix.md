@@ -2373,3 +2373,11 @@ categoría. El estado transparente u oculto de `TO_INDUSTRIES` los hace
 invisibles durante el ciclo, conservando posición, frame y ordenamiento para
 cuando la categoría vuelva a visible. Pasan 46 pruebas focalizadas y Clippy
 estricto; la cobertura de #326/#329/#567 continúa parcial y no se cierran.
+
+Actualización #326/#329/#567-DIRECT-DEPOT-ROADSTOP-BUILD-TRANSPARENCY
+(2026-09-16, `899dcc08`): las rutas directas de fachadas BUILD de road stops y
+depósitos rail/road aplican la máscara de destino 802 para `TO_BUILDINGS`,
+incluyendo grupos NewGRF y sustituciones Action5. Las secuencias `TileLayout`
+no se alteran: mantienen el color intermedio hasta que `OPAQUE` y la paleta
+directa se resuelven por entrada. Pasan 135 pruebas focalizadas y Clippy
+estricto; la cobertura continúa parcial y no se cierran #326/#329/#567.

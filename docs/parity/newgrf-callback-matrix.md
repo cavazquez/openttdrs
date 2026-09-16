@@ -2135,3 +2135,13 @@ mantienen ese nibble al escribir `MP_STATION`, y las regresiones cubren la zona
 de selva, el frame con bit 5 y una colocación sobre árbol tropical. La fila
 continúa parcial por foundations/rotaciones, paletas y delegación completa de
 `StationScope`.
+
+Actualización #326/#329-NEWGRF-AIRPORT-ARCTIC-TERRAIN (2026-09-16,
+`ed991210`): el resolver de `AirportTile` ya usa la línea de nieve efectiva
+del mundo. `GetTileMaxZ` se aplica a station/airport/house/industry,
+`GetTileZ` a water/void y los tipos clear/rail/road/trees consultan sus bits
+nativos de nieve, densidad y ground; la ruta visual de Bevy pasa
+`TileRenderContext.snow_line_height` a layout, vista plana y foundation. Las
+regresiones cubren la comparación estricta y los formatos de suelo; la fila
+sigue parcial por foundations/rotaciones completas, paletas y delegación de
+`StationScope`.

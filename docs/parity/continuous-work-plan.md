@@ -8809,3 +8809,19 @@ selva, frame animado y colocación sobre árbol; la suite core queda en
 `2813 passed; 1 ignored`, con Clippy estricto. La fila sigue parcial por
 foundations/rotaciones del compositor, paletas y delegación completa de
 `StationScope`.
+
+### #326/#329-NEWGRF-AIRPORT-ARCTIC-TERRAIN — línea de nieve de `AirportTile`
+
+Actualizado: 2026-09-16 (`ed991210`). `AirportTile` deja de asumir nieve
+global en `Climate::SubArctic`. La variante map-aware de `GetTerrainType`
+compara `GetTileMaxZ` para station/airport/house/industry, `GetTileZ` para
+water/void y reproduce los bits de nieve, densidad y ground de
+clear/rail/road/trees. Las APIs sin estado siguen usando
+`DEF_SNOW_LINE_HEIGHT`; el renderer de Bevy pasa la línea persistida del
+`TileRenderContext` a los tres consumidores visuales: layout, vista plana y
+callback de foundation. Las regresiones cubren altura máxima, comparación
+estricta y formatos nativos de suelo; core queda en `2815 passed; 1 ignored`,
+las 33 pruebas dirigidas del cliente y Clippy estricto pasan. Los callbacks
+del scheduler que todavía entran por wrappers legacy se mantienen como una
+subbrecha separada; foundations/rotaciones completas, paletas y scopes
+NewGRF restantes mantienen #326/#329/#567 abiertos.

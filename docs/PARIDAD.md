@@ -6021,3 +6021,17 @@ Las regresiones cubren selva, frame `MAP7` y una colocación sobre árbol tropic
 la suite core queda en `2813 passed; 1 ignored` y Clippy estricto pasa.
 #326/#329/#567 continúan abiertas por la composición raster, foundations/
 rotaciones y scopes NewGRF restantes.
+
+Corrección #326/#329-NEWGRF-AIRPORT-ARCTIC-TERRAIN (2026-09-16,
+`ed991210`): `AirportTile` ya no devuelve nieve para cualquier tesela ártica.
+El contexto con línea de nieve reproduce `GetTerrainType`: estaciones,
+aeropuertos, casas e industrias comparan `GetTileMaxZ`; agua y vacío comparan
+`GetTileZ`; clear, rail, road y árboles consultan sus bits nativos de nieve,
+densidad y sustrato. La nueva variante conserva la API legacy con la línea
+por defecto y el renderer Bevy pasa la línea persistida del mundo a layout,
+vista plana y callback de foundations. Las regresiones cubren la comparación
+estricta con la línea, la altura máxima y los cinco formatos de suelo; la suite
+core queda en `2815 passed; 1 ignored`, las 33 pruebas dirigidas del cliente y
+Clippy estricto pasan. La animación/scheduler que aún usa wrappers legacy queda
+separada para una etapa posterior; #326/#329/#567 continúan abiertas por
+foundations/rotaciones completas, paletas y scopes/callbacks restantes.

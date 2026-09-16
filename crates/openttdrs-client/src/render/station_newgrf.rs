@@ -40,6 +40,7 @@ impl NewGrfStationSpriteCache {
     }
 
     /// Textura re-resolviendo Action2 con vars de tesela.
+    #[cfg(test)]
     pub(crate) fn handle_for_runtime(
         &mut self,
         def: &StationSpecDef,
@@ -48,16 +49,33 @@ impl NewGrfStationSpriteCache {
         ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
+        let view = if def.newgrf_runtime.is_some() {
+            def.newgrf_view_runtime(view_idx, ctx)?
+        } else {
+            def.newgrf_view(view_idx)?.clone()
+        };
+        Some(self.handle_for_resolved_view(def, view_idx, colour, ctx, &view, images))
+    }
+
+    /// Materializa una vista ya resuelta sin volver a ejecutar Action2.
+    ///
+    /// El fingerprint se toma después de la resolución: `var 1C`, `STO` y
+    /// procedimientos pueden dejar estado que la siguiente evaluación
+    /// consulta y que también distingue la textura resultante.
+    pub(crate) fn handle_for_resolved_view(
+        &mut self,
+        def: &StationSpecDef,
+        view_idx: usize,
+        colour: Option<CompanyColour>,
+        ctx: &openttdrs_core::Action2EvalCtx,
+        view: &openttdrs_core::DecodedSprite,
+        images: &mut Assets<Image>,
+    ) -> Handle<Image> {
         let colour_key = colour.map(CompanyColour::as_u8).unwrap_or(0xFF);
         let fp = if def.newgrf_runtime.is_some() {
             runtime_fingerprint(ctx, vars::STATION, false)
         } else {
             0
-        };
-        let view = if def.newgrf_runtime.is_some() {
-            def.newgrf_view_runtime(view_idx, ctx)?
-        } else {
-            def.newgrf_view(view_idx)?.clone()
         };
         // Un runtime NewGRF puede no publicar vistas estáticas. En ese caso
         // `newgrf_views.len() == 0` no debe convertir todas las orientaciones
@@ -69,17 +87,15 @@ impl NewGrfStationSpriteCache {
             u16::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0)
         };
         let key = (def.id.as_u16(), idx, colour_key, fp, 0, 0);
-        Some(
-            self.handles
-                .entry(key)
-                .or_insert_with(|| {
-                    images.add(decoded_sprite_image(
-                        &view,
-                        DecodedSpriteImagePolicy::MaskedAndRecolored { colour },
-                    ))
-                })
-                .clone(),
-        )
+        self.handles
+            .entry(key)
+            .or_insert_with(|| {
+                images.add(decoded_sprite_image(
+                    view,
+                    DecodedSpriteImagePolicy::MaskedAndRecolored { colour },
+                ))
+            })
+            .clone()
     }
 
     /// Materializa una pieza ya resuelta de un layout `TileSeq`.

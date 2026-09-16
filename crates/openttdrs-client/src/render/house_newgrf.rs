@@ -41,15 +41,27 @@ impl NewGrfHouseSpriteCache {
         ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
-        let fp = if def.newgrf_runtime.is_some() {
-            runtime_fingerprint(ctx, vars::HOUSE, false)
-        } else {
-            0
-        };
         let view = if def.newgrf_runtime.is_some() {
             def.newgrf_view_runtime(view_idx, ctx)?
         } else {
             def.newgrf_view(view_idx)?.clone()
+        };
+        Some(self.handle_for_resolved_view(def, view_idx, ctx, &view, images))
+    }
+
+    /// Materializa una vista ya resuelta sin volver a ejecutar Action2.
+    pub(crate) fn handle_for_resolved_view(
+        &mut self,
+        def: &HouseSpecDef,
+        view_idx: usize,
+        ctx: &openttdrs_core::Action2EvalCtx,
+        view: &openttdrs_core::DecodedSprite,
+        images: &mut Assets<Image>,
+    ) -> Handle<Image> {
+        let fp = if def.newgrf_runtime.is_some() {
+            runtime_fingerprint(ctx, vars::HOUSE, false)
+        } else {
+            0
         };
         // Un Action2 runtime-only puede devolver varias vistas aunque no
         // haya una fila estática para usar como módulo de la clave.
@@ -59,18 +71,16 @@ impl NewGrfHouseSpriteCache {
             u16::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0)
         };
         let key = (def.id, idx, fp, 0, 0);
-        Some(
-            self.handles
-                .entry(key)
-                .or_insert_with(|| {
-                    // HouseSpec todavía no conserva `random_colour`; por eso
-                    // no se aplica una paleta de compañía aquí. La textura
-                    // cruda mantiene los píxeles decodificados y deja esa
-                    // diferencia explícita en la matriz de paridad.
-                    images.add(decoded_sprite_image(&view, DecodedSpriteImagePolicy::Raw))
-                })
-                .clone(),
-        )
+        self.handles
+            .entry(key)
+            .or_insert_with(|| {
+                // HouseSpec todavía no conserva `random_colour`; por eso
+                // no se aplica una paleta de compañía aquí. La textura
+                // cruda mantiene los píxeles decodificados y deja esa
+                // diferencia explícita en la matriz de paridad.
+                images.add(decoded_sprite_image(view, DecodedSpriteImagePolicy::Raw))
+            })
+            .clone()
     }
 
     /// Materializa una pieza ya resuelta de un layout `TileSeq` de casa.

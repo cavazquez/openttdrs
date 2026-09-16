@@ -99,15 +99,27 @@ impl NewGrfObjectSpriteCache {
         ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
-        let fp = if def.newgrf_runtime.is_some() {
-            runtime_fingerprint(ctx, vars::OBJECT, false)
-        } else {
-            0
-        };
         let view = if def.newgrf_runtime.is_some() {
             def.newgrf_view_runtime(view_idx, ctx)?
         } else {
             def.view(view_idx)?.clone()
+        };
+        Some(self.handle_for_resolved_view(def, view_idx, ctx, &view, images))
+    }
+
+    /// Materializa una vista ya resuelta sin volver a ejecutar Action2.
+    pub(crate) fn handle_for_resolved_view(
+        &mut self,
+        def: &ObjectSpecDef,
+        view_idx: usize,
+        ctx: &openttdrs_core::Action2EvalCtx,
+        view: &openttdrs_core::DecodedSprite,
+        images: &mut Assets<Image>,
+    ) -> Handle<Image> {
+        let fp = if def.newgrf_runtime.is_some() {
+            runtime_fingerprint(ctx, vars::OBJECT, false)
+        } else {
+            0
         };
         // El runtime puede publicar sólo el resultado Action2. Mantener el
         // índice solicitado evita reutilizar la textura de otra orientación
@@ -125,18 +137,16 @@ impl NewGrfObjectSpriteCache {
         let key = (def.id, idx, object_colour, fp, 0, 0);
         let policy = object_image_policy(def, object_colour);
         let twocc_map = self.twocc_map_for(def, object_colour);
-        Some(
-            self.handles
-                .entry(key)
-                .or_insert_with(|| {
-                    images.add(decoded_sprite_image_with_twocc_map(
-                        &view,
-                        policy,
-                        twocc_map.as_ref(),
-                    ))
-                })
-                .clone(),
-        )
+        self.handles
+            .entry(key)
+            .or_insert_with(|| {
+                images.add(decoded_sprite_image_with_twocc_map(
+                    view,
+                    policy,
+                    twocc_map.as_ref(),
+                ))
+            })
+            .clone()
     }
 
     /// Materializa una pieza ya resuelta de un layout `TileSeq` de objeto.
@@ -526,6 +536,96 @@ mod tests {
         let second = cache
             .handle_for_runtime(&def, 1, &mut second_ctx, &mut images)
             .expect("object view 1");
+        assert_ne!(first, second);
+        assert_eq!(
+            images.get(&first).and_then(|image| image.data.as_deref()),
+            Some(&red.rgba[..])
+        );
+        assert_eq!(
+            images.get(&second).and_then(|image| image.data.as_deref()),
+            Some(&blue.rgba[..])
+        );
+    }
+
+    #[test]
+    fn object_runtime_cache_separates_previous_action2_result() {
+        use openttdrs_core::{
+            Action2VarAdjust, Action2VarEntry, Action2VarTerm, DecodedSprite, TrainSpriteAssign,
+            TrainSpriteGraphics,
+        };
+
+        fn solid(r: u8, g: u8, b: u8) -> DecodedSprite {
+            DecodedSprite {
+                width: 1,
+                height: 1,
+                x_offs: 0,
+                y_offs: 0,
+                rgba: vec![r, g, b, 255],
+                mask: Vec::new(),
+            }
+        }
+
+        let red = solid(255, 0, 0);
+        let blue = solid(0, 0, 255);
+        let mut runtime = TrainSpriteGraphics {
+            sets: vec![vec![red.clone()], vec![blue.clone()]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 0,
+                set_id: 7,
+            }],
+            ..Default::default()
+        };
+        runtime.action2_var.insert(
+            7,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1C,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::MAX,
+                        ..Default::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(0, 0, 0), (1, 1, 1)],
+                default: 0,
+            },
+        );
+        let def = ObjectSpecDef {
+            id: 7,
+            class_label: "RSLT".into(),
+            name: "previous Action2 result".into(),
+            size: OBJECT_SIZE_1X1,
+            from_newgrf: true,
+            local_id: 0,
+            grfid: 0,
+            newgrf_grf_version: 0,
+            climate_mask: openttdrs_core::DEFAULT_OBJECT_CLIMATE_MASK,
+            build_cost_factor: openttdrs_core::DEFAULT_OBJECT_BUILD_COST_FACTOR,
+            clear_cost_factor: openttdrs_core::DEFAULT_OBJECT_CLEAR_COST_FACTOR,
+            flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            callback_mask: 0,
+            views: Vec::new(),
+            newgrf_runtime: Some(Box::new(runtime)),
+            associated_badges: Vec::new(),
+        };
+        let mut images = Assets::<Image>::default();
+        let mut cache = NewGrfObjectSpriteCache::default();
+        let mut first_ctx = openttdrs_core::Action2EvalCtx::default();
+        let first = cache
+            .handle_for_runtime(&def, 0, &mut first_ctx, &mut images)
+            .expect("result 0");
+        let mut second_ctx = openttdrs_core::Action2EvalCtx {
+            last_result: 1,
+            ..Default::default()
+        };
+        let second = cache
+            .handle_for_runtime(&def, 0, &mut second_ctx, &mut images)
+            .expect("result 1");
         assert_ne!(first, second);
         assert_eq!(
             images.get(&first).and_then(|image| image.data.as_deref()),

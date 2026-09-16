@@ -30,6 +30,10 @@ pub(crate) fn runtime_fingerprint(
     include_consist_random: bool,
 ) -> u32 {
     let mut h = ctx.random_bits;
+    // Action2 variable `1C` exposes the result left by a previous procedure
+    // or VarAction2 in the same scope. It is an input to the next group even
+    // though it is not part of the ordinary `vars` table.
+    h = h.wrapping_mul(31).wrapping_add(ctx.last_result);
     h = h
         .wrapping_mul(31)
         .wrapping_add(ctx.vehicle_palette_generation)
@@ -178,6 +182,17 @@ mod tests {
         let b = runtime_fingerprint(&ctx, vars::INDUSTRY, false);
         assert_eq!(a, b);
         assert_ne!(a, 7);
+    }
+
+    #[test]
+    fn fingerprint_separates_previous_action2_result() {
+        let first = Action2EvalCtx::default();
+        let mut second = first.clone();
+        second.last_result = 1;
+        assert_ne!(
+            runtime_fingerprint(&first, vars::OBJECT, false),
+            runtime_fingerprint(&second, vars::OBJECT, false)
+        );
     }
 
     #[test]

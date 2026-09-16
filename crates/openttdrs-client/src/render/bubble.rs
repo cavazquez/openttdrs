@@ -10,7 +10,7 @@ use crate::render::{
     MapVisualLayer, ViewportSortableParent, WorldAssets, palette_animations_should_run,
     viewport_insertion_key, viewport_source_depth,
 };
-use crate::sprites::{BUBBLE_FRAMES, BUBBLE_META, TransparencyOption, with_to_alpha};
+use crate::sprites::{BUBBLE_FRAMES, BUBBLE_META, TransparencyOption, is_hidden, is_transparent};
 use crate::state::{ClientScreen, SimWorld};
 
 const SPAWN_X: [i16; 4] = [11, 0, -4, -14];
@@ -27,6 +27,10 @@ const BUBBLE_PARENT_ORDINAL_BASE: u8 = 0x80;
 /// sigue siendo el frame real de la burbuja. No puede ser `SPR_EMPTY_BOUNDING_BOX`.
 const BUBBLE_SORT_SPRITE_ID: u32 = 0xFFFE_0001;
 const TILE_SIZE_PX: i32 = 16;
+
+fn industry_effects_hidden() -> bool {
+    is_hidden(TransparencyOption::Industries) || is_transparent(TransparencyOption::Industries)
+}
 
 #[derive(Resource, Default)]
 pub(crate) struct BubbleSpawnQueue(Vec<(TileCoord, u8)>);
@@ -398,8 +402,7 @@ fn spawn_queued_bubbles(
         let Some(state) = bubble_state(0, direction, effect.float_direction, seed) else {
             continue;
         };
-        let mut sprite = assets.bubble[state.frame].sprite();
-        sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
+        let sprite = assets.bubble[state.frame].sprite();
         let position = bubble_world_position(&sim.state.map, &effect, state);
         let parent = bubble_parent(&effect, position, sim.state.map.dimensions().0);
         let translation = bubble_translation(position, state, parent.source_depth);
@@ -408,7 +411,11 @@ fn spawn_queued_bubbles(
             effect,
             sprite,
             Transform::from_translation(translation),
-            Visibility::Visible,
+            if industry_effects_hidden() {
+                Visibility::Hidden
+            } else {
+                Visibility::Visible
+            },
             parent,
         ));
     }
@@ -422,6 +429,7 @@ fn animate_bubbles(
         &BubbleEffect,
         &mut Sprite,
         &mut Transform,
+        &mut Visibility,
         Option<&mut ViewportSortableParent>,
     )>,
     mut commands: Commands,
@@ -430,12 +438,18 @@ fn animate_bubbles(
         return;
     };
     let tick = sim.state.tick.get();
-    for (entity, effect, mut sprite, mut transform, parent) in &mut bubbles {
+    let effects_hidden = industry_effects_hidden();
+    for (entity, effect, mut sprite, mut transform, mut visibility, parent) in &mut bubbles {
         let age = tick.saturating_sub(effect.started_tick);
         let Some(state) = bubble_state(age, effect.direction, effect.float_direction, effect.seed)
         else {
             commands.entity(entity).despawn();
             continue;
+        };
+        *visibility = if effects_hidden {
+            Visibility::Hidden
+        } else {
+            Visibility::Visible
         };
         if let Some(frame) = assets.bubble.get(state.frame)
             && !frame.matches(&sprite)

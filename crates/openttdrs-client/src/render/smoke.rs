@@ -16,6 +16,7 @@ use crate::render::{
 };
 use crate::sprites::{
     CHIMNEY_SMOKE_FRAMES, CHIMNEY_SMOKE_META, COPPER_MINE_SMOKE_FRAMES, COPPER_MINE_SMOKE_META,
+    TransparencyOption, is_hidden, is_transparent,
 };
 use crate::state::{ClientScreen, SimWorld};
 
@@ -52,6 +53,10 @@ const COPPER_MINE_SMOKE_SORT_SPRITE_ID: u32 = 0xFFFE_0003;
 /// `SPR_SMOKE_4` en el tick 72. El emisor visual lo reinicia para representar
 /// la siguiente emisión de la chimenea persistente.
 const COPPER_SMOKE_CYCLE_TICKS: u64 = 72;
+
+fn industry_effects_hidden() -> bool {
+    is_hidden(TransparencyOption::Industries) || is_transparent(TransparencyOption::Industries)
+}
 
 /// Frames del humo de chimenea (`chimney_smoke_{i}.png`).
 #[derive(Resource)]
@@ -212,8 +217,6 @@ pub(crate) fn spawn_chimney_smoke(
     let position = chimney_smoke_position(ctx);
     let parent = smoke_parent(position, map_width, CHIMNEY_SMOKE_SORT_SPRITE_ID);
     let translation = smoke_translation(position, CHIMNEY_SMOKE_META[phase], parent.source_depth);
-    let color =
-        crate::sprites::with_to_alpha(Color::WHITE, crate::sprites::TransparencyOption::Industries);
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
@@ -222,8 +225,13 @@ pub(crate) fn spawn_chimney_smoke(
             map_width,
             phase,
         },
-        assets.chimney_smoke[phase].sprite_colored(color),
+        assets.chimney_smoke[phase].sprite_colored(Color::WHITE),
         Transform::from_translation(translation),
+        if industry_effects_hidden() {
+            Visibility::Hidden
+        } else {
+            Visibility::Visible
+        },
         parent,
     ));
 }
@@ -284,8 +292,6 @@ pub(crate) fn spawn_copper_mine_smoke(
         COPPER_MINE_SMOKE_META[state.frame],
         parent.source_depth,
     );
-    let color =
-        crate::sprites::with_to_alpha(Color::WHITE, crate::sprites::TransparencyOption::Industries);
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
@@ -294,8 +300,13 @@ pub(crate) fn spawn_copper_mine_smoke(
             map_width,
             phase,
         },
-        assets.copper_mine_smoke[state.frame].sprite_colored(color),
+        assets.copper_mine_smoke[state.frame].sprite_colored(Color::WHITE),
         Transform::from_translation(translation),
+        if industry_effects_hidden() {
+            Visibility::Hidden
+        } else {
+            Visibility::Visible
+        },
         parent,
     ));
 }
@@ -313,6 +324,7 @@ pub(crate) fn animate_chimney_smoke(
         &ChimneySmoke,
         &mut Sprite,
         &mut Transform,
+        &mut Visibility,
         Option<&ViewportSortableParent>,
     )>,
 ) {
@@ -320,7 +332,13 @@ pub(crate) fn animate_chimney_smoke(
         return;
     };
     let tick = sim.state.tick.get();
-    for (smoke, mut sprite, mut transform, parent) in &mut q {
+    let effects_hidden = industry_effects_hidden();
+    for (smoke, mut sprite, mut transform, mut visibility, parent) in &mut q {
+        if effects_hidden {
+            *visibility = Visibility::Hidden;
+            continue;
+        }
+        *visibility = Visibility::Visible;
         let idx = smoke_frame_index(tick, smoke.phase);
         if !frames.0[idx].matches(&sprite) {
             frames.0[idx].apply_to(&mut sprite);
@@ -341,6 +359,7 @@ pub(crate) fn animate_copper_mine_smoke(
         &CopperMineSmoke,
         &mut Sprite,
         &mut Transform,
+        &mut Visibility,
         Option<&mut ViewportSortableParent>,
     )>,
 ) {
@@ -348,7 +367,13 @@ pub(crate) fn animate_copper_mine_smoke(
         return;
     };
     let tick = sim.state.tick.get();
-    for (smoke, mut sprite, mut transform, parent) in &mut q {
+    let effects_hidden = industry_effects_hidden();
+    for (smoke, mut sprite, mut transform, mut visibility, parent) in &mut q {
+        if effects_hidden {
+            *visibility = Visibility::Hidden;
+            continue;
+        }
+        *visibility = Visibility::Visible;
         let state = copper_smoke_state(tick, smoke.phase);
         if !frames.0[state.frame].matches(&sprite) {
             frames.0[state.frame].apply_to(&mut sprite);
@@ -565,6 +590,7 @@ mod tests {
                 },
                 Sprite::default(),
                 Transform::from_xyz(0.0, 0.0, sorted_depth),
+                Visibility::Visible,
                 parent,
             ))
             .id();

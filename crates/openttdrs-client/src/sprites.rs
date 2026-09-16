@@ -59,6 +59,8 @@ mod track_fence_meta_generated;
 mod transparency;
 #[path = "sprites/tree_draw_data_generated.rs"]
 mod tree_draw_data_generated;
+#[path = "sprites/tree_palette.rs"]
+pub(crate) mod tree_palette;
 #[path = "sprites/tunnel.rs"]
 mod tunnel;
 #[path = "sprites/water_canal_dike_gfx_data_generated.rs"]
@@ -296,6 +298,7 @@ pub(crate) use bridge_structure_palette::{
     BridgePaletteSprites, bridge_structure_palette_for_sprite,
 };
 pub(crate) use house_palette::HousePaletteSprites;
+pub(crate) use tree_palette::TreePaletteSprites;
 
 /// Variante para una capa aeroportuaria animada.
 ///

@@ -42,13 +42,14 @@ use crate::render::{
 use crate::sprites::{
     COMPANY_HQ_SPRITE_BASE, CompanyColour, FENCE_MOD_BY_TILEH_NE, FENCE_MOD_BY_TILEH_NW,
     FENCE_MOD_BY_TILEH_SE, FENCE_MOD_BY_TILEH_SW, FENCE_SPRITE_META, FIELD_STATES, HOUSE_DRAW_DATA,
-    HouseDrawSpec, TILEH_TO_SHORE_SPRITE, TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY, TREE_SPRITE_META,
-    company_hq_asset_filename, company_hq_build_height, company_hq_build_sprite_id,
-    company_hq_ground_sprite_id, company_hq_sprite_meta, house_building_stage_from_tile,
-    industry_anim_layer_used_in_any_frame, industry_building_needs_client_anim,
-    industry_effective_m4_for_draw, industry_gfx_entry_for_tile,
-    industry_gfx_uses_fizzy_drink_anim, industry_gfx_uses_random_colour,
-    industry_gfx_uses_refinery_fire_anim, industry_palette_colour_for_instance,
+    HouseDrawSpec, TILEH_TO_SHORE_SPRITE, TREE_LAYOUT_PALETTE, TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY,
+    TREE_SPRITE_META, company_hq_asset_filename, company_hq_build_height,
+    company_hq_build_sprite_id, company_hq_ground_sprite_id, company_hq_sprite_meta,
+    house_building_stage_from_tile, industry_anim_layer_used_in_any_frame,
+    industry_building_needs_client_anim, industry_effective_m4_for_draw,
+    industry_gfx_entry_for_tile, industry_gfx_uses_fizzy_drink_anim,
+    industry_gfx_uses_random_colour, industry_gfx_uses_refinery_fire_anim,
+    industry_palette_colour_for_instance,
 };
 
 #[must_use]
@@ -3822,8 +3823,8 @@ fn spawn_field_fences(commands: &mut Commands, assets: &WorldAssets, ctx: &TileR
 ///
 /// OpenTTD selecciona repetidamente la entrada con menor `x + y` de la lista
 /// original. La ordenación estable conserva el mismo desempate por índice.
-fn sort_tree_layers_like_openttd(layers: &mut [(usize, u8, u8)]) {
-    layers.sort_by_key(|(_, dx, dy)| u16::from(*dx) + u16::from(*dy));
+fn sort_tree_layers_like_openttd(layers: &mut [(usize, u8, u8, u16)]) {
+    layers.sort_by_key(|(_, dx, dy, _)| u16::from(*dx) + u16::from(*dy));
 }
 
 /// Resuelve la fila de `_tree_layout_sprite` exactamente como `DrawTile_Trees`.
@@ -3924,11 +3925,12 @@ pub(crate) fn push_forest_tree(
         return;
     };
     let row = &TREE_LAYOUT_SPRITE[layout_index];
+    let palette_row = &TREE_LAYOUT_PALETTE[layout_index];
     let mut layers = Vec::with_capacity(count);
     for i in 0..count {
         let stage = if i == count - 1 { growth } else { 3 };
         let (dx, dy) = TREE_LAYOUT_XY[layout][i];
-        layers.push((row[i] as usize + stage, dx, dy));
+        layers.push((row[i] as usize + stage, dx, dy, palette_row[i]));
     }
 
     // `DrawTile_Trees` no dibuja en el orden de la tabla: eso determina cuál
@@ -3937,12 +3939,20 @@ pub(crate) fn push_forest_tree(
     sort_tree_layers_like_openttd(&mut layers);
 
     let mut parent_entity = None;
-    for (draw_order, (sprite_idx, dx, dy)) in layers.into_iter().enumerate() {
+    for (draw_order, (sprite_idx, dx, dy, palette)) in layers.into_iter().enumerate() {
         // `TREE_LAYOUT_SPRITE` contiene índices relativos a SPR_TREE_BASE
         // (1576). Registrar el ID original antes de resolver el atlas permite
         // contrastar el árbol azul/corrupto contra el draw proc de OpenTTD.
         let slope_z_offset = tree_slope_z_offset(ctx.info.tileh);
-        WorldDrawTrace::record_sprite_with_geometry(
+        let palette_sprite = (palette != 0)
+            .then(|| {
+                assets
+                    .tree_palettes
+                    .handle(1576 + sprite_idx as u32, u32::from(palette))
+            })
+            .flatten();
+        let palette_fallback = palette != 0 && palette_sprite.is_none();
+        WorldDrawTrace::record_sprite_with_palette_and_geometry(
             "tree",
             if draw_order == 0 {
                 "sortable"
@@ -3950,7 +3960,8 @@ pub(crate) fn push_forest_tree(
                 "combined"
             },
             1576 + sprite_idx as u32,
-            false,
+            u32::from(palette),
+            palette_fallback,
             (i32::from(dx), i32::from(dy), 0),
             slope_z_offset,
             Some(TraceSpriteBounds::new(0, 0, 0, 16, 16, 48)),
@@ -3974,7 +3985,14 @@ pub(crate) fn push_forest_tree(
         // unidad de `GetSlopeMaxPixelZ(tileh) / 2` en píxeles y en la capa.
         pos3.y += slope_z_offset as f32;
         pos3.z += slope_z_offset as f32 * 0.000_125;
-        let sprite = assets.trees[sprite_idx].sprite_colored(tint);
+        let sprite = palette_sprite.map_or_else(
+            || assets.trees[sprite_idx].sprite_colored(tint),
+            |image| Sprite {
+                image: image.clone(),
+                color: tint,
+                ..default()
+            },
+        );
         if draw_order == 0 {
             // Sólo la primera capa es un parent de `DrawTile_Trees`; las
             // restantes llegan con `AddCombinedSprite` y deben seguirlo si
@@ -4147,11 +4165,11 @@ mod tests {
 
     #[test]
     fn forest_layers_follow_openttd_subtile_order_and_ties() {
-        let mut layers = [(1593, 9, 3), (1611, 1, 8), (1700, 1, 8)];
+        let mut layers = [(1593, 9, 3, 0), (1611, 1, 8, 0), (1700, 1, 8, 0)];
 
         sort_tree_layers_like_openttd(&mut layers);
 
-        assert_eq!(layers, [(1611, 1, 8), (1700, 1, 8), (1593, 9, 3)]);
+        assert_eq!(layers, [(1611, 1, 8, 0), (1700, 1, 8, 0), (1593, 9, 3, 0)]);
     }
 
     #[test]

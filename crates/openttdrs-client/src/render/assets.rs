@@ -6,9 +6,9 @@ use crate::render::atlas::{AtlasSprite, TileAtlas};
 use crate::sprites::{
     AIRPORT_STATION_SPRITES, BridgePaletteSprites, HOUSE_DRAW_DATA, HousePaletteSprites,
     INDUSTRY_GFX_DATA, RAIL_DEPOT_VISUAL_TYPE_COUNT, ROAD_DEPOT_GROUND_PATH, SPR_EXCAVATION_X,
-    SPR_EXCAVATION_Y, StationTileClass, airport_station_base_for_gfx, house_sprite_asset_filename,
-    level_crossing_sprite_atlas_key, rail_depot_build_layers, rail_pbs_sprite_ids_for_preload,
-    rail_sprite_ids_for_preload, rail_station_draw_layers,
+    SPR_EXCAVATION_Y, StationTileClass, TreePaletteSprites, airport_station_base_for_gfx,
+    house_sprite_asset_filename, level_crossing_sprite_atlas_key, rail_depot_build_layers,
+    rail_pbs_sprite_ids_for_preload, rail_sprite_ids_for_preload, rail_station_draw_layers,
     rail_station_ground_track_sprite_for_type, rail_station_layer_for_type,
     rail_waypoint_draw_layers, road_depot_build_layers, road_stop_build_layers,
     road_stop_drive_through_layers, signal_sprite_texture_id,
@@ -191,6 +191,8 @@ pub(crate) struct WorldAssets {
     /// `tree_{NN}.png` (NN = sprite − 1576): todos los climas y las filas
     /// extra árticas de nieve densa, con 7 etapas por sprite base.
     pub(crate) trees: Vec<AtlasSprite>,
+    /// Copias RGBA de las entradas toyland con `PALETTE_TO_*` aplicada.
+    pub(crate) tree_palettes: TreePaletteSprites,
     /// `field_{estado}_{offset:02}.png`: índice = estado × 19 +
     /// `SlopeToSpriteOffset` (0..18).
     pub(crate) fields: Vec<AtlasSprite>,
@@ -755,6 +757,8 @@ impl WorldAssets {
         let trees = (0..crate::sprites::TREE_SPRITE_COUNT)
             .map(|i| atlas.get(&format!("tree_{i:02}.png")))
             .collect();
+        let mut tree_palettes = TreePaletteSprites::default();
+        tree_palettes.build_all(images);
         let mut fields = Vec::with_capacity(crate::sprites::FIELD_STATES * 19);
         for state in 0..crate::sprites::FIELD_STATES {
             for offset in 0..19 {
@@ -915,6 +919,7 @@ impl WorldAssets {
             house_palettes,
             houses,
             trees,
+            tree_palettes,
             fields,
             fences,
             chimney_smoke,

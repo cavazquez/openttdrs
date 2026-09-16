@@ -6969,6 +6969,56 @@ fn forest_combined_layers_attach_to_the_global_sort_parent() {
 }
 
 #[test]
+fn toyland_forest_keeps_global_tree_type_and_palette_texture() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(4, 4, 0);
+    let mut tree = tile_template();
+    tree.kind = TileKind::Forest;
+    tree.mapt = 0x40;
+    tree.m3 = 0x20; // `TREE_TOYLAND`.
+    tree.m5 = 0; // una copa, etapa Growing1.
+    map.set_tile(TileCoord::new(1, 1), tree)
+        .expect("toyland forest tile");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                push_forest_tree(
+                    &mut commands,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    m.0.dimensions().0,
+                );
+            },
+        )
+        .expect("toyland forest spawn");
+
+    // tmp=CountBits(5 + 16 + 16)=3, por lo que variant=3 y la primera capa
+    // de la fila toyland 131 es 0x79b con PALETTE_TO_YELLOW (778).
+    let expected_sprite_id = 1947;
+    let expected_palette = 778;
+    let expected_image = world
+        .resource::<TsAssets>()
+        .0
+        .tree_palettes
+        .handle(expected_sprite_id, expected_palette)
+        .expect("toyland palette handle")
+        .clone();
+    let mut query = world.query::<(&ViewportSortableParent, &Sprite)>();
+    let (_parent, sprite) = query
+        .iter(&world)
+        .find(|(parent, _)| parent.sprite_id == expected_sprite_id)
+        .expect("toyland tree parent");
+    assert_eq!(sprite.image, expected_image);
+    assert!(sprite.texture_atlas.is_none());
+}
+
+#[test]
 fn sloped_house_ground_attaches_to_the_last_foundation_parent() {
     let assets = boot_assets_app();
     let mut map = Map::new_flat(3, 3, 0);

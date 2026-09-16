@@ -150,6 +150,7 @@ pub use airport_tile_action2::{
     action2_eval_ctx_for_airport_tile, action2_eval_ctx_for_airport_tile_with_towns,
     action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog,
     action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line,
+    action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line_and_overrides,
 };
 pub use airport_tile_spec::{
     AirportAnimationTrigger, AirportTileGfxId, AirportTileSpecDef, INVALID_AIRPORT_TILE,

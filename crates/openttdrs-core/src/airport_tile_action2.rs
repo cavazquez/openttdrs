@@ -9,7 +9,9 @@
 use std::collections::BTreeSet;
 
 use crate::airport_class::{NewgrfAirportSpecDef, newgrf_airport_spec_def};
-use crate::airport_tile_spec::{AirportTileSpecDef, NEW_AIRPORT_TILE_OFFSET};
+use crate::airport_tile_spec::{
+    AirportTileSpecDef, NEW_AIRPORT_TILE_OFFSET, get_translated_airport_tile_id,
+};
 use crate::house_spec::{distance_square, get_town_radius_group};
 use crate::map::{
     Map, SLOPE_STEEP, Tile, TileCoord, TileKind, is_coast_tile, tile_slope_and_z, water_class,
@@ -127,6 +129,42 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow
     climate: Climate,
     snow_line_height: u8,
 ) -> Action2EvalCtx {
+    action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line_and_overrides(
+        map,
+        stations,
+        towns,
+        airport_catalog,
+        coord,
+        tile_catalog,
+        current_spec,
+        climate,
+        snow_line_height,
+        &[],
+    )
+}
+
+/// Variante que además recibe la tabla persistida de overrides
+/// `AirportTile` vanilla → `NewGRF`.
+///
+/// `GetAirportTileIDAtOffset` no inspecciona el byte limpio de `m5`
+/// directamente: primero pasa por `GetAirportGfx`, que aplica
+/// `GetTranslatedAirportTileID`. Los saves que conservan el `subst` vanilla
+/// en el mapa necesitan esta tabla para que `var 0x62` vea el mismo gfx global
+/// que el renderer y la simulación.
+#[must_use]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line_and_overrides(
+    map: &Map,
+    stations: &[Station],
+    towns: &[crate::town::Town],
+    airport_catalog: &[NewgrfAirportSpecDef],
+    coord: TileCoord,
+    tile_catalog: &[AirportTileSpecDef],
+    current_spec: &AirportTileSpecDef,
+    climate: Climate,
+    snow_line_height: u8,
+    airport_tile_overrides: &[u16],
+) -> Action2EvalCtx {
     let mut ctx = Action2EvalCtx::default();
     let Some(station) = station_at_tile(map, stations, coord)
         .filter(|candidate| candidate.stop_kind.has_airport_facility())
@@ -217,6 +255,7 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow
                     station,
                     tile_catalog,
                     current_spec.newgrf_grfid,
+                    airport_tile_overrides,
                 ),
                 _ => continue,
             };
@@ -400,6 +439,7 @@ fn airport_tile_id_at_offset(
     source: &Station,
     tile_catalog: &[AirportTileSpecDef],
     current_grfid: u32,
+    airport_tile_overrides: &[u16],
 ) -> u32 {
     let Some(candidate) = station_at_tile(map, stations, nearby).filter(|station| {
         station.stop_kind.has_airport_facility()
@@ -408,7 +448,7 @@ fn airport_tile_id_at_offset(
     }) else {
         return u32::from(u16::MAX);
     };
-    let Some(gfx) = airport_tile_gfx(candidate, map, nearby) else {
+    let Some(gfx) = airport_tile_gfx(candidate, map, nearby, airport_tile_overrides) else {
         return u32::from(u16::MAX);
     };
     if gfx < NEW_AIRPORT_TILE_OFFSET {
@@ -430,13 +470,25 @@ fn airport_tile_id_at_offset(
     }
 }
 
-fn airport_tile_gfx(station: &Station, map: &Map, coord: TileCoord) -> Option<u16> {
+fn airport_tile_gfx(
+    station: &Station,
+    map: &Map,
+    coord: TileCoord,
+    airport_tile_overrides: &[u16],
+) -> Option<u16> {
     station
         .airport_tile_gfx
         .iter()
         .find(|(candidate, _)| *candidate == coord)
         .map(|(_, gfx)| *gfx)
         .or_else(|| map.get(coord).map(|tile| u16::from(tile.m5)))
+        .map(|gfx| {
+            if gfx < NEW_AIRPORT_TILE_OFFSET {
+                get_translated_airport_tile_id(gfx, airport_tile_overrides)
+            } else {
+                gfx
+            }
+        })
 }
 
 fn airport_terrain_type_with_snow_line(
@@ -770,6 +822,78 @@ mod tests {
         assert_eq!(ctx.parameterized_vars.get(&(0x7A, 1)), Some(&u32::MAX));
         let selected = current.newgrf_view_runtime(0, &mut ctx);
         assert_eq!(selected.as_ref().map(|sprite| sprite.rgba[0]), Some(255));
+    }
+
+    #[test]
+    fn airport_context_translates_vanilla_neighbour_with_tile_override() {
+        let mut map = Map::new_flat(4, 4, 2);
+        let first = TileCoord::new(1, 1);
+        let second = TileCoord::new(2, 1);
+        for coord in [first, second] {
+            let mut tile = map.get(coord).expect("airport tile");
+            tile.kind = TileKind::Airport;
+            map.set_tile(coord, tile).expect("set airport tile");
+        }
+        let mut station = Station::new_with_kind(first, StopKind::Airport);
+        station.airport_tiles = vec![first, second];
+        // The save-compatible representation keeps the vanilla substitution
+        // in the station mapping; OpenTTD translates it through the override
+        // table before returning AirportTileIDAtOffset.
+        station.airport_tile_gfx = vec![(first, 74), (second, 24)];
+
+        let mut runtime = TrainSpriteGraphics::default();
+        runtime.action2_var.insert(
+            7,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x62,
+                    param: Some(1),
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::MAX,
+                        ..Default::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        let current = AirportTileSpecDef {
+            gfx: AirportTileGfxId(74),
+            subst_id: 24,
+            from_newgrf: true,
+            callback_mask: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            newgrf_local_id: 3,
+            newgrf_grfid: 0xAABB_CCDD,
+            newgrf_grf_version: 0,
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(runtime)),
+        };
+        let mut overrides = crate::airport_tile_spec::empty_airport_tile_overrides();
+        overrides[24] = 74;
+        let ctx = action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow_line_and_overrides(
+            &map,
+            &[station],
+            &[],
+            &[],
+            first,
+            std::slice::from_ref(&current),
+            &current,
+            Climate::Temperate,
+            DEF_SNOW_LINE_HEIGHT,
+            &overrides,
+        );
+
+        assert_eq!(ctx.parameterized_vars.get(&(0x62, 1)), Some(&3));
     }
 
     #[test]

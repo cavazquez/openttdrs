@@ -6168,3 +6168,16 @@ cubren sets de 1, 2, 3 y 4 sprites y las etapas 0–3; pasan 29 pruebas core y 2
 de composición cliente, con Clippy estricto. La corrección es parcial y no
 cierra #326/#329/#567: siguen pendientes otros layouts, foundations/rotaciones,
 paletas, callbacks y consumidores NewGRF.
+
+Corrección #326/#329-NEWGRF-TILE-LAYOUT-PALETTE-MODIFIER-GUARD (2026-09-16,
+`5580d7b9`): `TileLayout` respeta ahora el contrato de
+`SpriteLayoutPaletteTransform`/`GroundSpritePaletteTransform`: una paleta
+directa sólo se consume cuando la entrada tiene `TRANSPARENT` o `RECOLOUR`, y
+el ground exige específicamente `RECOLOUR`. Sin el modifier, las paletas
+especiales (compañía, crash, newspaper, bare-land, estructura, 2CC o
+transparencia) se ignoran como en OpenTTD en lugar de hornear color o forzar un
+fallback. La defensa se aplica tanto en el resolver core como en la caché de
+imágenes Bevy; pasan 29 pruebas dirigidas de core, 14 de fábrica de imágenes y
+Clippy estricto. La corrección es parcial y no cierra #326/#329/#567: siguen
+pendientes composición destino, otros layouts, foundations/rotaciones,
+callbacks y consumidores NewGRF.

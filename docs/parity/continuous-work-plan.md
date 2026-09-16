@@ -8964,3 +8964,17 @@ conservan offsets firmados. La regresión con el byte crudo `0xFC` valida `252`,
 y pasan 23 pruebas dirigidas de TileLayout con Clippy estricto. La fila sigue
 parcial y #326/#329/#567 permanecen abiertas por layouts, foundations/
 rotaciones exhaustivas, paletas, callbacks y consumidores NewGRF restantes.
+
+### #326/#329-NEWGRF-TILE-LAYOUT-PALETTE-MODIFIER-GUARD — consumo de paletas
+
+Actualizado: 2026-09-16 (`5580d7b9`). El resolver común copia ahora la
+decisión de `SpriteLayoutPaletteTransform`: una paleta directa se usa sólo si
+el sprite trae `TRANSPARENT` o `RECOLOUR`; para `GroundSpritePaletteTransform`
+sólo `RECOLOUR` habilita la paleta. Esto corrige la aplicación espuria de
+paletas de compañía, crash, newspaper, bare-land y estructura, y permite que
+un sprite base con paleta inactiva siga siendo válido, en lugar de colorearse o
+caer al fallback. La caché Bevy mantiene el mismo guard para layouts ya
+resueltos. Pasan 29 pruebas de core, 14 de imagen y Clippy estricto. La fila
+continúa parcial: la composición destino de transparencia, otros layouts,
+foundations/rotaciones, callbacks y consumidores NewGRF siguen pendientes y
+#326/#329/#567 permanecen abiertas.

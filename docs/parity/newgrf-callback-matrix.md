@@ -2261,3 +2261,12 @@ de tamaños distintos y las baterías dirigidas de core/cliente pasan con Clippy
 estricto. La fila sigue **parcial runtime**: otros layouts,
 foundations/rotaciones, paletas, delegación StationScope y callbacks o
 consumidores NewGRF restantes mantienen abiertas #326/#329/#567.
+
+Actualización #326/#329-NEWGRF-TILE-LAYOUT-PALETTE-MODIFIER-GUARD (2026-09-16,
+`5580d7b9`): la matriz registra que las paletas directas de `TileLayout` no se
+aplican por el solo hecho de estar presentes. BUILD sigue
+`SpriteLayoutPaletteTransform` (`TRANSPARENT|RECOLOUR`) y ground sigue
+`GroundSpritePaletteTransform` (`RECOLOUR`); sin esos modifiers la paleta
+queda en `PAL_NONE`, incluidos los sprites directos del baseset. La regresión
+negativa de estructura y las pruebas de compañía/crash/newspaper/bare-land
+fijan el contrato; la fila continúa parcial y #326/#329/#567 siguen abiertas.

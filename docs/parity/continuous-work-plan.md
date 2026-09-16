@@ -8927,3 +8927,16 @@ combina child huérfano, parent y child normal; la batería dirigida y Clippy
 estricto pasan. Este bloque no cierra #326/#329/#567: continúan pendientes
 otros productores/layouts, rotaciones, paletas, callbacks y consumidores
 NewGRF.
+
+### #326/#329-NEWGRF-TILE-LAYOUT-ORPHAN-CHILD — productores compartidos
+
+Actualizado: 2026-09-16 (`68077824`). La conversión de un child `TileLayout`
+que aparece antes de su parent se centraliza en el renderer Bevy y se aplica a
+`Station`, `RoadStop`/`RoadWaypoint` y `Object`, además de la ruta AirportTile
+ya corregida. `origin.x/y` se interpreta como offset screen-space firmado para
+`DrawGroundSprite`; en terreno inclinado el sprite se asocia al parent de
+foundation, mientras que parents y children posteriores conservan el sorter
+global. La regresión de objeto comprueba coordenadas y depth; pasan 22 pruebas
+dirigidas de TileLayout, 4 de road stop, 3 de waypoint y Clippy estricto. La
+fila sigue parcial y #326/#329/#567 permanecen abiertas por layouts restantes,
+foundations/rotaciones exhaustivas, paletas, callbacks y consumidores NewGRF.

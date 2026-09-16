@@ -2229,3 +2229,14 @@ verifica el offset, la profundidad y el child posterior unido al parent. La fila
 sigue **parcial runtime**: quedan otros productores/layouts, foundations y
 rotaciones exhaustivas, paletas, delegación StationScope y callbacks/consumidores
 NewGRF restantes de #326/#329/#567.
+
+Actualización #326/#329-NEWGRF-TILE-LAYOUT-ORPHAN-CHILD (2026-09-16,
+`68077824`): el contrato de `DrawCommonTileSeq` para un child sin parent se
+aplica ahora de forma común a `Station`, `RoadStop`/`RoadWaypoint` y `Object`.
+La entrada se dibuja en el pase ground con sus offsets screen-space firmados;
+si existe una foundation, conserva la profundidad sortable y queda enlazada a
+su parent. La prueba de objeto valida el anclaje exacto y las baterías de
+TileLayout, road stop y waypoint pasan con Clippy estricto. La fila continúa
+**parcial runtime**: siguen pendientes otros layouts, foundations/rotaciones
+exhaustivas, paletas, delegación StationScope y callbacks/consumidores NewGRF
+restantes de #326/#329/#567.

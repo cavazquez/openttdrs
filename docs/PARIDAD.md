@@ -6131,3 +6131,17 @@ posición, profundidad y relación de compositor; la batería dirigida de
 AirportTile y Clippy estricto pasan. Esto corrige una subbrecha de composición,
 pero no cierra #326/#329/#567: siguen pendientes otros productores/layouts,
 rotaciones, paletas, callbacks y consumidores NewGRF.
+
+Corrección #326/#329-NEWGRF-TILE-LAYOUT-ORPHAN-CHILD (2026-09-16,
+`68077824`): la misma semántica de `DrawCommonTileSeq` se comparte ahora entre
+`Station`, `RoadStop`/`RoadWaypoint` y `Object`. Un child previo al primer
+parent se emite como `DrawGroundSprite` con `origin.x/y` como offsets de
+pantalla firmados, conserva la profundidad del pase ground y, en pendiente,
+se adjunta al parent de la foundation. Los children posteriores siguen usando
+`AddChildSpriteScreen` y los parents mantienen sus bounds sortable. La prueba
+de objeto verifica posición y profundidad, la batería de `TileLayout` cubre
+estación/objeto/industria/aeropuerto y las regresiones de road stop/waypoint
+quedan verdes junto con Clippy estricto. Esto corrige otra subbrecha de
+composición, pero no cierra #326/#329/#567: siguen pendientes layouts
+restantes, foundations/rotaciones exhaustivas, paletas, callbacks y
+consumidores NewGRF.

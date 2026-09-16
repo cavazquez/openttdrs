@@ -5783,3 +5783,14 @@ fija una red donde la rama inversa gana aunque el path visible empiece hacia
 delante. Validación: `2804` tests de core pasados, `0` fallidos y `1` ignorado,
 Clippy estricto de core/cliente, formato y `git diff --check` verdes. #329/#567
 permanecen abiertas por callbacks y cachés visuales NewGRF restantes.
+
+Corrección #329/#567-SHIP-YAPF-BLOCKED-REVERSE (2026-09-16, `8c93ac34`): la
+reversa ante una vía bloqueada deja de comparar sólo longitudes geométricas y
+usa una búsqueda YAPF por cada `Trackdir` de salida, con la velocidad efectiva
+del motor, la clase mar/canal y las penalizaciones `pf.yapf.ship_curve*`. El
+controlador propaga el catálogo y los settings también por los fallbacks de
+acueducto; `ship_reverse_on_blocked_track_uses_weighted_yapf_cost` fija que un
+rodeo de mar más largo gane a un canal corto pero penalizado. Validación: `2805`
+tests de core pasados, `0` fallidos y `1` ignorado, Clippy estricto del núcleo y
+del binario cliente, formato y `git diff --check` verdes. #329/#567 permanecen
+abiertas por callbacks y cachés visuales NewGRF restantes.

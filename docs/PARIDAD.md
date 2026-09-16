@@ -6358,3 +6358,16 @@ contratos independientes. Pasan 64 pruebas filtradas de catenaria y Clippy
 estricto. La corrección es parcial y no cierra #326/#329/#567: siguen
 pendientes composición global, callbacks/consumidores NewGRF y comparación de
 framebuffer.
+
+Corrección #326/#329/#567-SIGN-STATION-LABEL-TRANSPARENCY (2026-09-16,
+`c8c7fd87`): los carteles de usuario respetan ahora la separación nativa de
+`TO_SIGNS`: `TransparentRect` usa la máscara de destino equivalente a
+`PALETTE_TO_TRANSPARENT` (`802`) y conserva texto blanco opaco; los carteles
+de GameScript siguen sin marco. Las estaciones y waypoints transparentes ya
+no dibujan panel y usan el tono `SHADE_LIGHTER` de la rampa de compañía,
+incluido el gris de estaciones sin propietario o sin facilities. El modo
+oculto continúa suprimiendo sólo los carteles de usuario, como
+`ViewportAddKdtreeSigns`; el nombre de estación mantiene su contrato propio.
+Pasan 3 pruebas de carteles, 6 de estaciones y Clippy estricto. La corrección
+es parcial y no cierra #326/#329/#567: siguen pendientes otros producers,
+callbacks/consumidores NewGRF, composición global y comparación de framebuffer.

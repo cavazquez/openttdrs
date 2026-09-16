@@ -9164,3 +9164,17 @@ sortable. Las superficies, overlays y el modo oculto permanecen separados.
 Pasan 64 pruebas filtradas de catenaria y Clippy estricto. La fila sigue
 parcial y #326/#329/#567 continúan abiertas por composición global,
 callbacks/consumidores NewGRF y comparación de framebuffer.
+
+### #326/#329/#567-SIGN-STATION-LABEL-TRANSPARENCY — carteles y estaciones
+
+Actualizado: 2026-09-16 (`c8c7fd87`). Los carteles de usuario aplican la
+semántica nativa de `TO_SIGNS`: en transparente el marco usa destino 802 y el
+texto permanece blanco opaco; los carteles de GameScript continúan sin marco.
+Las estaciones y waypoints transparentes no crean panel y usan el tono claro
+`SHADE_LIGHTER` de la rampa de compañía, con gris claro para estaciones sin
+propietario o sin facilities. La invisibilidad sigue afectando sólo a los
+carteles de usuario, mientras las etiquetas de estación conservan su flujo
+nativo separado. Pasan 3 pruebas de carteles, 6 de estaciones y Clippy
+estricto. La fila continúa parcial y #326/#329/#567 permanecen abiertas por
+otros producers, callbacks/consumidores NewGRF, composición global y
+framebuffer.

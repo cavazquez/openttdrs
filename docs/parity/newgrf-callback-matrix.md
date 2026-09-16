@@ -2414,3 +2414,15 @@ la misma normalización antes de ser hijos del parent estructural. No se
 modifican `ROTSG_GROUND`, `ROTSG_OVERLAY`, las superficies ni el modo oculto.
 Pasan 64 pruebas filtradas y Clippy estricto; la cobertura sigue parcial y no
 se cierran #326/#329/#567.
+
+Actualización #326/#329/#567-SIGN-STATION-LABEL-TRANSPARENCY
+(`c8c7fd87`): los productores de texto del viewport reflejan ahora el
+contrato de `TO_SIGNS`. Los carteles de usuario transparentes usan un marco
+de destino 802 y texto blanco opaco; los carteles de GameScript no agregan
+marco. Las etiquetas de estaciones/waypoints cambian a `TextColour`, sin
+panel, usando `SHADE_LIGHTER` de la rampa de compañía o gris claro para
+estaciones neutrales/fantasma. La invisibilidad sólo omite carteles de usuario,
+igual que `ViewportAddKdtreeSigns`; no se mezclan los labels de pueblos, que
+siguen fuera de `TO_SIGNS`. Pasan 3 pruebas de carteles, 6 de estaciones y
+Clippy estricto; la cobertura de #326/#329/#567 continúa parcial y no se
+cierran issues madre.

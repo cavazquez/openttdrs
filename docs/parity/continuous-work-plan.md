@@ -9284,6 +9284,22 @@ puente y Clippy estricto; los grupos específicos NewGRF que todavía pasan por
 `spawn_bridge_specific_child` siguen pendientes. La fila continúa parcial y
 no se cierran #326/#329/#567.
 
+### #326/#329/#567-PALETTE-INITIAL-PHASE — fase inicial y boyas congeladas
+
+Actualizado: 2026-09-16 (`5aa725c7`). `PaletteAnimationClock::default()`
+reproduce la pasada inicial de `GfxInitPalettes`/`DoPaletteAnimations` de
+OpenTTD (`counter=8`). El sincronizador de radio ya no depende de que el gate
+de animación esté encendido para materializar una boya nueva en la fase
+actual: actualiza sólo la fase cambiada, el recurso reemplazado o las entidades
+recién añadidas. Así una captura `CLEAN` no vuelve al frame base 0 cuando el
+mapa se reconstruye o la animación está pausada. En
+`mvp_openttd_ship.sav`, centro 32,32, 512×512, zoom 1 y 60 frames de
+estabilización, OpenTTD 15.3 y Bevy quedan idénticos (`0/262.144` píxeles,
+traslación `[0,0]`, sin hotspots); el recorte naval mantiene `AE=0`. Pasan
+1.585 tests del cliente, 2 ignorados y Clippy estricto. Es evidencia de una
+fase/fixture, no un cierre: siguen pendientes la matriz amplia naval, otros
+consumidores de paleta, callbacks, producers y compositor global.
+
 ### #326/#567-SHIP-DEPOT-RASTER-CROP — evidencia de framebuffer naval
 
 Actualizado: 2026-09-16. Sobre `mvp_openttd_ship.sav`, con captura de 512×512,

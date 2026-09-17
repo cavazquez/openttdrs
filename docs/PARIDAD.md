@@ -6599,3 +6599,16 @@ Esto valida la ruta global para este caso aislado, pero no cierra #326/#567:
 siguen pendientes la matriz completa de vecinos/callbacks, clipping y otros
 casos de composición; el píxel de la boya queda separado como próximo
 residual de captura.
+
+Corrección #326/#329/#567-PALETTE-INITIAL-PHASE (`5aa725c7`, 2026-09-16): el
+reloj compartido de paleta comienza en `8`, igual que la primera pasada de
+`DoPaletteAnimations` ejecutada por `GfxInitPalettes` en OpenTTD. Las boyas
+vanilla nuevas o reconstruidas se sincronizan con el frame RGBA de esa fase
+actual aunque `FullAnimation` esté congelado; las boyas custom y el gate de
+animación no se mezclan. La captura limpia del fixture
+`mvp_openttd_ship.sav` (512×512, zoom 1, centro 32,32, 60 frames) queda en
+`0/262.144` píxeles distintos, sin traslación ni hotspots; el recorte del
+depósito sigue siendo `AE=0`. Pasan 1.585 tests del cliente, 2 ignorados y
+Clippy estricto. Esto valida una escena y su estado inicial, no cierra
+#326/#329/#567: permanecen la matriz amplia de depósitos/vecinos, callbacks,
+otros producers y el compositor global.

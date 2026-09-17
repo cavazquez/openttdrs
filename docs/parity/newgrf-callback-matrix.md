@@ -2630,3 +2630,17 @@ La evidencia confirma paridad del depósito en esta escena, no de toda la
 matriz de agua/vecinos ni de los consumidores NewGRF. El píxel de la boya se
 mantiene como residual independiente para la siguiente auditoría; #326/#567
 siguen abiertos.
+
+### #326/#329/#567-PALETTE-INITIAL-PHASE — estado inicial del renderer
+
+Actualización (2026-09-16, `5aa725c7`): el contador compartido de
+`DoPaletteAnimations` inicia en `8`, porque la referencia ejecuta una pasada
+desde `GfxInitPalettes` antes del primer draw. La ruta de radio conserva el
+frame vigente al materializar boyas nuevas o al reconstruir visuales mientras
+`FullAnimation` está desactivado; no aplica un tinte aproximado ni altera
+boyas custom. La regresión de sistema cubre la fase inicial congelada y la
+captura de `mvp_openttd_ship.sav` queda en paridad raster exacta
+(`0/262.144`, sin hotspots) contra OpenTTD 15.3. Pasan 1.585 tests del
+cliente, 2 ignorados y Clippy estricto. La cobertura de callbacks/paletas
+NewGRF, vecinos y compositor permanece parcial; no se cierran las issues
+madre.

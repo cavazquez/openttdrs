@@ -14598,6 +14598,32 @@ fn direct_airport_tile_layout_uses_airport_atlas_and_nfo_geometry() {
             assert_eq!(resolved.y_offs, meta.y_offs, "{name} sprite {sprite_id}");
         }
     }
+
+    let transparent_build = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+        sprite: None,
+        base_sprite: Some(2601),
+        sprite_modifiers: openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT,
+        direct_palette: 802,
+        origin: [0, 0, 0],
+        extent: [16, 16, 16],
+    };
+    assert!(
+        direct_tile_layout_airport_sequence(&transparent_build, &assets).is_some(),
+        "AirportTile debe resolver el atlas vanilla aun con PALETTE_TO_TRANSPARENT"
+    );
+
+    let transparent_ground = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+        sprite: None,
+        base_sprite: Some(2601),
+        sprite_modifiers: openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR,
+        direct_palette: 802,
+        origin: [0, 0, 0],
+        extent: [16, 16, 16],
+    };
+    assert!(
+        direct_tile_layout_airport_ground(&transparent_ground, &assets).is_some(),
+        "AirportTile ground debe resolver la máscara directa de destino"
+    );
 }
 
 #[test]

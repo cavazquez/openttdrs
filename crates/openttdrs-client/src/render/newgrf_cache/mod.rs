@@ -316,12 +316,39 @@ fn direct_tile_layout_ground_geometry(sprite_id: u16) -> Option<DirectTileLayout
 
 /// Direct baseset references that have a known atlas asset and NFO anchor.
 /// These ranges cover the four grass densities, rough/rocky terrain, water,
-/// and the four snow/desert densities. Any modifier or palette still forces
-/// the complete layout fallback in `tile_layout_is_renderable`.
+/// and the four snow/desert densities. Unsupported modifiers or palettes
+/// still force the complete layout fallback in `tile_layout_is_renderable`.
 fn direct_tile_layout_ground_sprite_is_supported(sprite_id: u16) -> bool {
     direct_tile_layout_ground_geometry(sprite_id).is_some()
         || direct_tile_layout_industry_ground_geometry(sprite_id).is_some()
         || direct_tile_layout_house_ground_geometry(sprite_id).is_some()
+}
+
+const PALETTE_TO_TRANSPARENT: u16 = 802;
+
+/// Decide si una referencia directa conserva una transformación que el atlas
+/// puede representar sin hornear píxeles nuevos. La única paleta directa que
+/// tiene semántica independiente del RGB es `PALETTE_TO_TRANSPARENT`: se
+/// dibuja como una máscara negra sobre el destino. Las 2CC y las paletas
+/// custom siguen requiriendo el sprite decodificado y su mapa Action5.
+fn direct_tile_layout_airport_palette_is_supported(
+    layer: &ResolvedTileLayoutSprite,
+    is_ground: bool,
+) -> bool {
+    match layer.direct_palette {
+        0 => layer.sprite_modifiers == 0,
+        PALETTE_TO_TRANSPARENT => {
+            let required = if is_ground {
+                openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR
+            } else {
+                openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
+            };
+            let allowed =
+                required | openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_OPAQUE;
+            layer.sprite_modifiers & required != 0 && layer.sprite_modifiers & !allowed == 0
+        }
+        _ => false,
+    }
 }
 
 /// Busca la geometría del suelo propio de una industria (`s1`) en todas sus
@@ -1007,8 +1034,7 @@ pub(crate) fn tile_layout_is_airport_renderable(layout: &ResolvedTileLayout) -> 
         || layout.sequence.iter().any(|entry| {
             entry.action1_sprite().is_none()
                 && !entry.base_sprite_id().is_some_and(|id| {
-                    entry.sprite_modifiers == 0
-                        && entry.direct_palette == 0
+                    direct_tile_layout_airport_palette_is_supported(entry, false)
                         && direct_tile_layout_airport_sequence_sprite_is_supported(id)
                 })
         })
@@ -1020,8 +1046,7 @@ pub(crate) fn tile_layout_is_airport_renderable(layout: &ResolvedTileLayout) -> 
         Some(ground) => {
             ground.action1_sprite().is_some()
                 || ground.base_sprite_id().is_some_and(|id| {
-                    ground.sprite_modifiers == 0
-                        && ground.direct_palette == 0
+                    direct_tile_layout_airport_palette_is_supported(ground, true)
                         && direct_tile_layout_airport_ground_sprite_is_supported(id)
                 })
         }
@@ -1165,8 +1190,7 @@ pub(crate) fn direct_tile_layout_airport_ground(
         return Some(base);
     }
     if ground.action1_sprite().is_some()
-        || ground.sprite_modifiers != 0
-        || ground.direct_palette != 0
+        || !direct_tile_layout_airport_palette_is_supported(ground, true)
     {
         return None;
     }
@@ -1362,7 +1386,8 @@ pub(crate) fn direct_tile_layout_airport_sequence(
     if let Some(ground) = direct_tile_layout_airport_ground(layer, assets) {
         return Some(ground);
     }
-    if layer.action1_sprite().is_some() || layer.sprite_modifiers != 0 || layer.direct_palette != 0
+    if layer.action1_sprite().is_some()
+        || !direct_tile_layout_airport_palette_is_supported(layer, false)
     {
         return None;
     }
@@ -1824,6 +1849,32 @@ mod tests {
         layout.ground.as_mut().expect("ground").base_sprite = Some(2634);
         layout.ground.as_mut().expect("ground").direct_palette = 1;
         assert!(!tile_layout_is_airport_renderable(&layout));
+
+        layout.ground.as_mut().expect("ground").direct_palette = 802;
+        layout.ground.as_mut().expect("ground").sprite_modifiers =
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR;
+        assert!(
+            tile_layout_is_airport_renderable(&layout),
+            "AirportTile debe conservar la máscara directa de destino en ground"
+        );
+
+        layout.ground = None;
+        layout.sequence[0].sprite = None;
+        layout.sequence[0].base_sprite = Some(2634);
+        layout.sequence[0].direct_palette = 802;
+        layout.sequence[0].sprite_modifiers =
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT;
+        assert!(
+            tile_layout_is_airport_renderable(&layout),
+            "AirportTile debe conservar la máscara directa de destino en BUILD"
+        );
+
+        layout.sequence[0].sprite_modifiers =
+            openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_RECOLOUR;
+        assert!(
+            !tile_layout_is_airport_renderable(&layout),
+            "BUILD necesita el modificador transparente nativo para palette 802"
+        );
     }
 
     #[test]

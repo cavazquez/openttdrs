@@ -53,6 +53,7 @@ use crate::render::newgrf_cache::{
     tile_layout_is_road_stop_renderable, tile_layout_is_road_waypoint_renderable,
     tile_layout_sprite_color_with_palette, vars,
 };
+
 use crate::render::road_newgrf::{
     newgrf_road_def_for_tile, newgrf_tram_def_for_tile, road_newgrf_view_index,
     specific_sprite_for_tile,
@@ -94,6 +95,8 @@ use crate::sprites::{
     road_waypoint_build_layers, road_waypoint_sprite_index, roadside_is_paved, ship_depot_layers,
     ship_depot_seq_extent, station_tile_class, with_to_alpha,
 };
+
+const PALETTE_TO_TRANSPARENT: u16 = 802;
 
 fn buildings_hidden() -> bool {
     is_hidden(TransparencyOption::Buildings)
@@ -4964,7 +4967,11 @@ fn spawn_newgrf_airport_layout_ground(
         return true;
     };
     let ground_color =
-        tile_layout_ground_sprite_color(ground.sprite_modifiers, ground.direct_palette);
+        if ground.action1_sprite().is_none() && ground.direct_palette == PALETTE_TO_TRANSPARENT {
+            tile_layout_destination_transparent_color()
+        } else {
+            tile_layout_ground_sprite_color(ground.sprite_modifiers, ground.direct_palette)
+        };
     let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
         let Some(slot) = airport_tile_layout_cache_slot(gfx, 0) else {
             return false;
@@ -5131,7 +5138,12 @@ fn spawn_newgrf_airport_layout_sequence(
             remap_x_adj: 0.0,
         };
         let layer_z = 0.05 + index as f32 * 0.0003;
-        sprite.color = if destination_transparent {
+        let direct_destination_transparent = layer.action1_sprite().is_none()
+            && build_palette == PALETTE_TO_TRANSPARENT
+            && build_sprite_modifiers
+                & openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
+                != 0;
+        sprite.color = if destination_transparent || direct_destination_transparent {
             tile_layout_destination_transparent_color()
         } else {
             tile_layout_sprite_color_with_palette(

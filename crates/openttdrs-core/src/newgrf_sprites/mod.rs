@@ -57,6 +57,14 @@ pub use pixel_codec::{
     sprite_v2_bpp,
 };
 
+pub use crate::newgrf_palette_data::{DOS_PALETTE_RGB, PALETTE_TO_TRANSPARENT_MAP};
+
+/// Devuelve el índice de destino de la tabla OpenGFX `PALETTE_TO_TRANSPARENT`.
+#[must_use]
+pub const fn palette_to_transparent_index(index: u8) -> u8 {
+    PALETTE_TO_TRANSPARENT_MAP[index as usize]
+}
+
 // Re-exportar funciones de runtime de action_graph
 pub use action_graph::{
     collect_aircraft_sprite_graphics, collect_airport_sprite_graphics,
@@ -146,6 +154,17 @@ mod tests {
             0x1C
         );
         assert_eq!(CBID_HOUSE_ANIMATION_SPEED, 0x20);
+    }
+
+    #[test]
+    fn palette_to_transparent_map_matches_opengfx_table() {
+        assert_eq!(PALETTE_TO_TRANSPARENT_MAP.len(), 256);
+        assert_eq!(palette_to_transparent_index(0), 0);
+        assert_eq!(palette_to_transparent_index(15), 21);
+        assert_eq!(palette_to_transparent_index(24), 104);
+        assert_eq!(palette_to_transparent_index(198), 198);
+        assert_eq!(palette_to_transparent_index(206), 90);
+        assert_eq!(palette_to_transparent_index(255), 201);
     }
 
     #[test]

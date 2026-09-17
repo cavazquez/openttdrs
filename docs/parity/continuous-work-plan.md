@@ -9711,3 +9711,14 @@ alineadas (`52,07%`), delta medio `14,617310` y `70781` por encima de `64`; en
 de `64`. La diferencia de exactitud entre niveles pertenece al muestreo y a
 la composición de productores aún no cubiertos; no es una regresión del
 encuadre y no cambia el estado abierto de #326/#567.
+
+### #326/#561-RAIL-GLASS-TRANSPARENT-BLACK — preservar el índice 0
+
+Actualizado: 2026-09-17 (`fed25765`). El shader del compositor ya no remapea
+un destino sRGB completamente negro al primer color opaco de la LUT: conserva
+el índice 0, que es transparente en el framebuffer 8bpp nativo. En el foco de
+Kale (`132,2`, 800×600, `Normal`, limpio), el exacto baja de `2713` a `2543`
+(`-6,3%`) y el delta medio de `0,151114` a `0,146864`. La comparación sin
+compositor deja `6137` diferencias y la captura con el pass mantiene la
+corrección del techo; esto es una subetapa publicada, no un cierre de
+#326/#561.

@@ -6857,3 +6857,15 @@ depósito no agrega diferencias detectables. Esto descarta un gap vanilla de
 selección, ancla u orientación en estos ejes. No cierra #567: siguen fuera de
 esta evidencia las combinaciones completas Sea/Canal/River, callbacks,
 vecinos complejos, clipping y la matriz de framebuffer en zooms alejados.
+
+Corrección #326/#561-RAIL-GLASS-TRANSPARENT-BLACK (`fed25765`, 2026-09-17):
+el compositor conserva ahora el destino negro del índice 0 antes de consultar
+la LUT de `PALETTE_TO_TRANSPARENT`. La búsqueda general de color empieza en el
+índice 1, por lo que un framebuffer transparente completamente negro se estaba
+convirtiendo erróneamente en gris DOS 16. En el foco de Kale (`132,2`, 800×600,
+`Normal`, limpio), la repetición pasa de `2713` a `2543` píxeles distintos
+(`-6,3%`) y el delta medio de `0,151114` a `0,146864`; la banda `>64` queda en
+`831`. La A/B sin compositor conserva `6137` diferencias, confirmando que el
+pass sigue corrigiendo el vidrio. Esto cierra sólo la subbrecha del destino
+transparente negro; #326/#561 permanecen abiertas por las otras divergencias
+de escena y por la validación de cámaras, escalas y productores restantes.

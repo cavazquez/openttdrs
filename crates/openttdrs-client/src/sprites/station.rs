@@ -429,7 +429,7 @@ pub fn rail_waypoint_sprite_center(
 }
 
 // Secuencias de `_station_display_datas_rail` (gfx 0..7). Cristal 1083–1086:
-// máscara calibrada en el cliente (`PALETTE_TO_TRANSPARENT` → alpha 0,50).
+// el compositor 2D aplica `PALETTE_TO_TRANSPARENT` sobre el framebuffer.
 static RAIL_STATION_SEQ_0: [RailStationLayer; 2] = [
     layer(1070, 0.0, 0.0, 0.0, 0.03),
     layer(1072, 0.0, 11.0, 0.0, 0.04),

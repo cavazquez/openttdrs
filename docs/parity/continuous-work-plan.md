@@ -9614,3 +9614,17 @@ limpio, el exacto baja de `7332` a `6427` píxeles (`-12,3%`), el delta medio de
 `6319/6315/5490/3815/1903/832`. Es una corrección de origen visual, no el
 compositor dependiente del framebuffer completo: #326/#561 siguen abiertas y
 no se cierra ninguna issue.
+
+### #326/#561-RAIL-GLASS-FRAMEBUFFER-COMPOSITOR — LUT nativa sobre la escena
+
+Actualizado: 2026-09-17. La cobertura de los cuatro sprites de vidrio se
+renderiza en una cámara secundaria y un pass fullscreen consulta el color del
+framebuffer principal mediante la LUT 8bpp de `PALETTE_TO_TRANSPARENT`. Esto
+reproduce la dependencia del destino que no podía expresarse con un alpha
+constante. En el foco de Kale (`132,2`, 800×600, `Normal`, limpio), el exacto
+pasa de `6427` a `3712` y el delta medio de `0,216257` a `0,185931`; las bandas
+`>2/>4/>8/>16/>32/>64` quedan en `3712/3712/3712/3218/2247/836`. La captura
+sin compositor verificó que el pass sólo modifica el rectángulo del techo en
+este caso. El siguiente subfrente es hacer que la máscara respete la oclusión
+del sorter global; también siguen fuera de este hito los demás productores de
+#326/#561 y la paridad completa NewGRF. Las issues madre permanecen abiertas.

@@ -841,6 +841,8 @@ pub(crate) fn setup(
     commands.spawn((
         Camera2d,
         crate::render::PrimaryGameCamera,
+        crate::render::RailGlassPostProcessSettings,
+        bevy::camera::visibility::RenderLayers::layer(0),
         // El blitter 8bpp de OpenTTD compone píxeles sin suavizado de bordes.
         // El MSAA ×4 por defecto de Bevy mezcla los bordes de quads incluso
         // cuando los PNG y el sampler son estrictamente nearest, creando

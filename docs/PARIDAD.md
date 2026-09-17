@@ -6735,3 +6735,18 @@ orientaciones y rail/eléctrico/mono/maglev. En el foco `Kale_TitleGame.sav`
 `2/4/8/16/32/64` pasan de `7291/7291/7071/6594/4968/1426` a
 `6319/6315/5490/3815/1903/832`. La mejora no completa el compositor
 dependiente del framebuffer: #326/#561 permanecen abiertas.
+
+Corrección #326/#561-RAIL-GLASS-FRAMEBUFFER-COMPOSITOR (2026-09-17): el
+renderer separa la cobertura de los sprites `1083`–`1086` en una cámara de
+máscara y ejecuta después de la escena un pass fullscreen con la LUT nativa de
+`PALETTE_TO_TRANSPARENT`. La transformación consulta el color ya compuesto en
+cada píxel, conserva el alpha de la escena y evita el tinte fijo que no podía
+reproducir el blitter 8bpp. En el foco `Kale_TitleGame.sav`, centro `132,2`,
+800×600, `Normal`, perfil limpio, el exacto pasa de `6427` a `3712` píxeles
+(`-42,2%`) y el delta medio de `0,216257` a `0,185931`; las bandas
+`>2/>4/>8/>16/>32/>64` pasan de `6319/6315/5490/3815/1903/832` a
+`3712/3712/3712/3218/2247/836`. La comprobación de la escena sin la máscara
+confirma que el pass sólo altera la región del techo en esta captura. Quedan
+residuales de oclusión/coverage en el orden global de sprites, además de los
+otros productores del compositor; #326/#561 permanecen abiertas y no se
+cierra ninguna issue por esta mejora parcial.

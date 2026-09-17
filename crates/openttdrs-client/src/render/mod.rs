@@ -25,6 +25,7 @@ mod lighthouse_anim;
 pub(crate) mod newgrf_cache;
 pub(crate) mod object_newgrf;
 mod radio_blink;
+mod rail_glass_compositor;
 mod refinery_fire;
 mod road_newgrf;
 mod shore_newgrf;
@@ -89,6 +90,9 @@ pub(crate) use industry_draw_proc::{IndustryDrawProcPlugin, spawn_industry_draw_
 pub(crate) use label_spatial_index::{MapLabelCandidates, MapLabelSpatialIndex};
 pub(crate) use lighthouse_anim::{LighthouseAnim, LighthouseAnimPlugin};
 pub(crate) use radio_blink::{RADIO_BLINK_FRAME_COUNT, RadioBlinkAnim, RadioBlinkAnimPlugin};
+pub(crate) use rail_glass_compositor::{
+    RAIL_GLASS_RENDER_LAYER, RailGlassCompositorPlugin, RailGlassPostProcessSettings,
+};
 pub(crate) use refinery_fire::{RefineryFireAnim, RefineryFireAnimPlugin};
 pub(crate) use sign_labels::SignLabel;
 pub(crate) use smoke::{

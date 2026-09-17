@@ -67,9 +67,10 @@ use crate::render::viewport_sort::{
 };
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
-    AirportStationAnim, AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext,
-    ViewportSortableChild, ViewportSortableParent, ViewportSortablePromotableChild,
-    ViewportSortableSegmentedChild, ViewportSortableSegmentedSource, WaterTile, WorldAssets,
+    AirportStationAnim, AtlasSprite, CompanyColoredSprites, MapVisualLayer,
+    RAIL_GLASS_RENDER_LAYER, TileRenderContext, ViewportSortableChild, ViewportSortableParent,
+    ViewportSortablePromotableChild, ViewportSortableSegmentedChild,
+    ViewportSortableSegmentedSource, WaterTile, WorldAssets,
     sprite_from_atlas_or_company_white_colour, viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
@@ -123,32 +124,6 @@ fn destination_mask_building_sprite(mut sprite: Sprite) -> Sprite {
 fn tint_building_sprite(mut sprite: Sprite) -> Sprite {
     sprite.color = with_to_alpha(sprite.color, TransparencyOption::Buildings);
     sprite
-}
-
-/// Equivalente visual de `PALETTE_TO_TRANSPARENT` para el vidrio de techo
-/// vanilla. OpenTTD transforma el destino mediante una tabla 8bpp; Bevy
-/// compone alpha lineal. El 0,50 se calibró contra la captura limpia OpenGFX
-/// 8bpp de Kale, donde el anterior 0,28 dejaba sistemáticamente el techo más
-/// claro que el oráculo.
-const RAIL_STATION_ROOF_GLASS_MASK_ALPHA: f32 = 0.50;
-
-/// Interpreta el alpha de calibración opcional usado por las capturas raster.
-/// Valores inválidos se descartan para que una variable de entorno de QA no
-/// altere el render normal de forma accidental.
-fn rail_station_roof_glass_mask_alpha_from(raw: Option<&str>) -> f32 {
-    raw.and_then(|raw| raw.parse::<f32>().ok())
-        .filter(|alpha| alpha.is_finite() && (0.0..=1.0).contains(alpha))
-        .unwrap_or(RAIL_STATION_ROOF_GLASS_MASK_ALPHA)
-}
-
-fn rail_station_roof_glass_mask_alpha() -> f32 {
-    rail_station_roof_glass_mask_alpha_from(
-        std::env::var("OPENTTDRS_RAIL_GLASS_ALPHA").ok().as_deref(),
-    )
-}
-
-fn rail_station_roof_glass_mask_color() -> Color {
-    Color::srgba(0.0, 0.0, 0.0, rail_station_roof_glass_mask_alpha())
 }
 
 /// Dibuja una vista `RTSG_TUNNEL` como `DrawGroundSprite`, conservando el
@@ -2212,12 +2187,10 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     };
                     let sprite = if crate::sprites::rail_station_roof_glass_sprite(layer.sprite_id)
                     {
-                        // OpenTTD: `PALETTE_TO_TRANSPARENT` oscurece el destino (máscara),
-                        // no pinta el blob CC amarillo del PNG como vidrio tintado.
-                        use crate::sprites::with_to_alpha;
-                        let mut s = img.sprite_colored(rail_station_roof_glass_mask_color());
-                        s.color = with_to_alpha(s.color, TransparencyOption::Buildings);
-                        s
+                        // El sprite sólo alimenta la cobertura de la máscara:
+                        // el pass 2D aplica la transformación dependiente del
+                        // framebuffer y necesita recibir alpha completo.
+                        img.sprite_colored(Color::WHITE)
                     } else {
                         destination_mask_building_sprite(sprite_from_atlas_or_company_white_colour(
                             company,
@@ -2286,6 +2259,11 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                         sprite,
                         Transform::from_translation(pos3),
                     ));
+                    if crate::sprites::rail_station_roof_glass_sprite(layer.sprite_id) {
+                        entity.insert(bevy::camera::visibility::RenderLayers::layer(
+                            RAIL_GLASS_RENDER_LAYER,
+                        ));
+                    }
                     if let Some(parent) = sortable_parent {
                         if class == StationTileClass::Rail {
                             previous_station_parent = Some(entity.id());
@@ -8348,7 +8326,7 @@ fn spawn_rail_depot_tile(
 mod tests {
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::{
-        Assets, Color, Commands, Image, Res, ResMut, Resource, Sprite, Vec2, World,
+        Assets, Commands, Image, Res, ResMut, Resource, Sprite, Vec2, World,
     };
 
     use super::{
@@ -8358,7 +8336,6 @@ mod tests {
         dock_clear_land_sprite_id, dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
         rail_depot_build_parent_sprites, rail_depot_catenary_parent_sprite,
         rail_depot_foundation_child_offset, rail_depot_reservation_track_visible,
-        rail_station_roof_glass_mask_alpha_from, rail_station_roof_glass_mask_color,
         road_depot_foundation_child_offset, road_depot_newgrf_def_for_tile,
         road_depot_parent_sprites, road_stop_foundation_child_offset, road_stop_layout_ground_slot,
         road_stop_layout_is_static, road_stop_layout_sequence_slot_range, road_stop_parent_sprites,
@@ -8425,29 +8402,6 @@ mod tests {
             newgrf_grfid: 0,
             newgrf_type_tables: None,
         }
-    }
-
-    #[test]
-    fn rail_station_roof_glass_mask_matches_palette_transparent_calibration() {
-        assert_eq!(
-            rail_station_roof_glass_mask_color(),
-            Color::srgba(0.0, 0.0, 0.0, 0.50)
-        );
-    }
-
-    #[test]
-    fn rail_station_roof_glass_alpha_accepts_only_finite_unit_interval() {
-        assert_eq!(rail_station_roof_glass_mask_alpha_from(None), 0.50);
-        assert_eq!(rail_station_roof_glass_mask_alpha_from(Some("0")), 0.0);
-        assert_eq!(
-            rail_station_roof_glass_mask_alpha_from(Some("0.125")),
-            0.125
-        );
-        assert_eq!(rail_station_roof_glass_mask_alpha_from(Some("1")), 1.0);
-        assert_eq!(rail_station_roof_glass_mask_alpha_from(Some("-0.1")), 0.50);
-        assert_eq!(rail_station_roof_glass_mask_alpha_from(Some("1.1")), 0.50);
-        assert_eq!(rail_station_roof_glass_mask_alpha_from(Some("NaN")), 0.50);
-        assert_eq!(rail_station_roof_glass_mask_alpha_from(Some("nope")), 0.50);
     }
 
     #[test]

@@ -19,6 +19,8 @@ from compare_world_screenshots import (
     best_candidate_translation,
     image_metrics,
     openttd_zoom_for_orthographic_scale,
+    parse_pixel_tolerances,
+    pixel_tolerance_metrics,
     raster_hotspots,
 )
 from window_visual_regression import PNG_SIGNATURE, PngImage, read_png, write_png
@@ -97,6 +99,20 @@ def main() -> int:
         print(f"FAIL: hotspots raster inesperados: {hotspot_report}", file=sys.stderr)
         return 1
 
+    subtle = bytearray(reference.rgba)
+    subtle[0] += 1
+    tolerance_report = pixel_tolerance_metrics(
+        reference, PngImage(40, 32, bytes(subtle)), 0, 0, [0, 1, 2]
+    )
+    if (
+        tolerance_report["0"]["changed_pixels"] != 1
+        or tolerance_report["1"]["changed_pixels"] != 0
+        or tolerance_report["2"]["changed_pixels"] != 0
+        or parse_pixel_tolerances("0,2,16") != [0, 2, 16]
+    ):
+        print(f"FAIL: tolerancias raster inesperadas: {tolerance_report}", file=sys.stderr)
+        return 1
+
     if (
         openttd_zoom_for_orthographic_scale(0.25) != "In4x"
         or openttd_zoom_for_orthographic_scale(0.5) != "In2x"
@@ -159,6 +175,9 @@ def main() -> int:
             return 1
         if report["capture"]["openttd_zoom"] != "Out4x":
             print(f"FAIL: informe sin zoom nativo real: {report}", file=sys.stderr)
+            return 1
+        if report["capture"]["pixel_tolerances"] != [0, 2, 4, 8, 16]:
+            print(f"FAIL: informe sin tolerancias raster: {report}", file=sys.stderr)
             return 1
         if report["hotspots"]["cell_size_px"] != 64 or not report["hotspots"]["reported_cells"]:
             print(f"FAIL: reporte sin hotspots raster: {report}", file=sys.stderr)

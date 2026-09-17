@@ -112,6 +112,62 @@ def image_metrics(reference: PngImage, candidate: PngImage, dx: int = 0, dy: int
     )
 
 
+def pixel_tolerance_metrics(
+    reference: PngImage,
+    candidate: PngImage,
+    dx: int,
+    dy: int,
+    tolerances: list[int],
+) -> dict[str, dict[str, Any]]:
+    """Cuenta diferencias por encima de varios umbrales de canal.
+
+    El diff principal sigue siendo exacto. Esta vista separa cambios grandes
+    de ruido de cuantización o antialiasing para poder priorizar el trabajo sin
+    perder el camino de vuelta al criterio estricto.
+    """
+    width, height = reference.width, reference.height
+    changed = [0] * len(tolerances)
+    outside = [0] * len(tolerances)
+    overlap = 0
+    for y in range(height):
+        source_y = y - dy
+        for x in range(width):
+            source_x = x - dx
+            if not (0 <= source_x < candidate.width and 0 <= source_y < candidate.height):
+                pixel_delta = 255
+                for index in range(len(tolerances)):
+                    if pixel_delta > tolerances[index]:
+                        changed[index] += 1
+                        outside[index] += 1
+                continue
+
+            overlap += 1
+            target = (y * width + x) * 4
+            source = (source_y * candidate.width + source_x) * 4
+            pixel_delta = max(
+                abs(reference.rgba[target + channel] - candidate.rgba[source + channel])
+                for channel in range(4)
+            )
+            for index, tolerance in enumerate(tolerances):
+                if pixel_delta > tolerance:
+                    changed[index] += 1
+
+    total_pixels = width * height
+    return {
+        str(tolerance): {
+            "tolerance": tolerance,
+            "changed_pixels": changed[index],
+            "changed_ratio": changed[index] / total_pixels,
+            "changed_ratio_in_overlap": (
+                (changed[index] - outside[index]) / overlap if overlap else None
+            ),
+            "outside_candidate_pixels": outside[index],
+            "meaning": f"píxeles con delta máximo de canal > {tolerance}",
+        }
+        for index, tolerance in enumerate(tolerances)
+    }
+
+
 def raster_hotspots(
     reference: PngImage,
     candidate: PngImage,
@@ -253,6 +309,18 @@ def parse_resolution(raw: str) -> list[int]:
     return [width, height]
 
 
+def parse_pixel_tolerances(raw: str) -> list[int]:
+    try:
+        values = [int(value.strip()) for value in raw.split(",") if value.strip()]
+    except (TypeError, ValueError) as exc:
+        raise GateError("--pixel-tolerances debe ser una lista como 0,2,4,8,16") from exc
+    if not values or any(value < 0 or value > 255 for value in values):
+        raise GateError("--pixel-tolerances debe contener valores entre 0 y 255")
+    if values != sorted(set(values)):
+        raise GateError("--pixel-tolerances debe estar ordenado y no repetir valores")
+    return values
+
+
 def artifact(path: Path) -> dict[str, str]:
     return {"path": relative(path), "sha256": sha256(path)}
 
@@ -306,6 +374,11 @@ def main(argv: list[str]) -> int:
         default=DEFAULT_HOTSPOT_LIMIT,
         help="máximo de celdas divergentes incluidas en el reporte",
     )
+    parser.add_argument(
+        "--pixel-tolerances",
+        default="0,2,4,8,16",
+        help="umbrales de delta máximo por canal para el reporte, separados por coma",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -320,6 +393,7 @@ def main(argv: list[str]) -> int:
         openttd_zoom = openttd_zoom_for_orthographic_scale(args.openttdrs_scale)
         center = parse_center(args.center)
         requested_resolution = parse_resolution(args.resolution)
+        pixel_tolerances = parse_pixel_tolerances(args.pixel_tolerances)
         reference, candidate = read_png(args.reference), read_png(args.candidate)
         if (reference.width, reference.height) != (candidate.width, candidate.height):
             raise GateError(
@@ -339,6 +413,12 @@ def main(argv: list[str]) -> int:
             reference, candidate, args.alignment_radius, args.alignment_stride
         )
         aligned_metrics, diff = image_metrics(reference, candidate, dx, dy)
+        raw_metrics["by_pixel_tolerance"] = pixel_tolerance_metrics(
+            reference, candidate, 0, 0, pixel_tolerances
+        )
+        aligned_metrics["by_pixel_tolerance"] = pixel_tolerance_metrics(
+            reference, candidate, dx, dy, pixel_tolerances
+        )
         args.diff.parent.mkdir(parents=True, exist_ok=True)
         write_png(args.diff, diff)
 
@@ -354,6 +434,7 @@ def main(argv: list[str]) -> int:
                 "reference_graphics": args.reference_graphics,
                 "candidate_graphics": args.candidate_graphics,
                 "profile": args.capture_profile,
+                "pixel_tolerances": pixel_tolerances,
             },
             "artifacts": {
                 "reference": artifact(args.reference),

@@ -86,6 +86,26 @@ pub(crate) fn spawn_empty_bounding_box(
     ));
 }
 
+/// Caja conservadora para una vista plana Action1/3 de NewGRF.
+///
+/// `DecodedSprite` no contiene la línea `TILE_SEQ_LINE` de un layout completo,
+/// pero sí conserva los offsets y dimensiones NFO. Usar esa extensión como
+/// prisma mantiene el sprite dentro del ordenador de viewport y evita que una
+/// vista simple atraviese sprites vecinos mientras su layout avanzado no
+/// resuelve una secuencia `BUILD`.
+pub(crate) fn newgrf_flat_parent_bounds(
+    ctx: &TileRenderContext,
+    view: &openttdrs_core::DecodedSprite,
+    surface_base_z: u8,
+) -> ParentSpriteBounds {
+    let x = ctx.tx_i32() * 16 + i32::from(view.x_offs);
+    let y = ctx.ty_i32() * 16 + i32::from(view.y_offs);
+    let z = i32::from(surface_base_z) * 8;
+    let width = i32::from(view.width).max(1);
+    let height = i32::from(view.height).max(1);
+    ParentSpriteBounds::new(x, y, z, x + width - 1, y + height - 1, z + height - 1)
+}
+
 pub(crate) fn sloped_or_flat_image(
     tileh: u8,
     flat: &AtlasSprite,

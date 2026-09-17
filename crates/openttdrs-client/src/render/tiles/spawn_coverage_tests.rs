@@ -11692,6 +11692,118 @@ fn sloped_newgrf_station_overlay_follows_foundation_parent() {
 }
 
 #[test]
+fn flat_newgrf_station_overlay_joins_global_sort() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(3, 3, 0);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m5: 0,
+            m6: 0,
+            ..tile_template()
+        },
+    )
+    .expect("flat station");
+
+    let sprite = DecodedSprite {
+        width: 4,
+        height: 4,
+        x_offs: -2,
+        y_offs: -8,
+        rgba: [32, 192, 64, 255].repeat(16),
+        mask: Vec::new(),
+    };
+    let station_spec = StationSpecDef {
+        id: StationSpecId::from_u16(1),
+        class: StationClassId::DEFAULT,
+        label: "Plano NewGRF".into(),
+        short_label: "NGRF".into(),
+        disallowed_platforms: 0,
+        disallowed_lengths: 0,
+        callback_mask: 0,
+        flags: 0,
+        animation_status: 0,
+        animation_frames: 0,
+        animation_speed: 2,
+        animation_triggers: 0,
+        from_newgrf: true,
+        newgrf_preview: Some(sprite.clone()),
+        newgrf_views: vec![sprite],
+        newgrf_local_id: 0,
+        newgrf_runtime: None,
+        newgrf_grfid: 0x5354_4E47,
+        newgrf_grf_version: 8,
+        newgrf_type_tables: None,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
+        custom_layouts: std::collections::HashMap::new(),
+    };
+    let mut station = Station::new_with_kind(coord, StopKind::RailStation);
+    station.station_spec = StationSpecId::from_u16(1);
+    let stations = vec![station];
+
+    let grid = RenderGrid::from_map(&map, 3, 3);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let mut station_sprites = crate::render::NewGrfStationSpriteCache::default();
+                let mut images = Assets::<Image>::default();
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    &stations,
+                    4.0,
+                    true,
+                    std::slice::from_ref(&station_spec),
+                    &[],
+                    Some(&mut station_sprites),
+                    Some(&mut images),
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+            },
+        )
+        .expect("flat NewGRF station");
+
+    let (parent, transform) = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .find(|(parent, _)| parent.sprite_id == 1)
+        .expect("parent sortable de estación NewGRF plana");
+    assert_eq!(
+        parent.bounds,
+        ParentSpriteBounds::new(14, 8, 0, 17, 11, 3),
+        "la vista plana usa offsets y dimensiones NFO como prisma sortable"
+    );
+    assert_eq!(
+        parent.insertion_key,
+        viewport_insertion_key(1, 1, 16),
+        "la vista plana conserva el tramo BUILD posterior a la catenaria"
+    );
+    assert_eq!(
+        parent.source_depth, transform.translation.z,
+        "el parent de estación conserva su profundidad fuente"
+    );
+}
+
+#[test]
 fn flat_newgrf_station_tile_layout_keeps_ground_in_ground_pass() {
     use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
 

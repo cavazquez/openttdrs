@@ -24,10 +24,11 @@ use super::{
     catenary_under_low_bridge,
     helpers::{
         FLAT_WATER_LAYER_FRAC, ForcedLeveledFoundation, SHORE_LAYER_FRAC, TRAM_OVERLAY_LAYER_FRAC,
-        forced_leveled_foundation_decision_at, spawn_custom_station_foundation_combined_child,
-        spawn_custom_station_foundation_sprite, spawn_empty_bounding_box,
-        spawn_forced_leveled_foundation_with_child_parent, spawn_foundation_child_ground_sprite_at,
-        spawn_foundation_child_sprite_at, spawn_ground_sprite_at,
+        forced_leveled_foundation_decision_at, newgrf_flat_parent_bounds,
+        spawn_custom_station_foundation_combined_child, spawn_custom_station_foundation_sprite,
+        spawn_empty_bounding_box, spawn_forced_leveled_foundation_with_child_parent,
+        spawn_foundation_child_ground_sprite_at, spawn_foundation_child_sprite_at,
+        spawn_ground_sprite_at,
     },
     sloped_or_flat_image, spawn_ground_sprite,
 };
@@ -2003,7 +2004,42 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                         ctx.tx_i32(),
                         ctx.ty_i32(),
                     );
-                    newgrf_overlay = Some((handle, pos3));
+                    let trace_role = if class == StationTileClass::RailWaypoint {
+                        "station-waypoint-newgrf"
+                    } else {
+                        "station-rail-newgrf"
+                    };
+                    let sprite_id = u32::from(def.id.as_u16());
+                    let trace_bounds = TraceSpriteBounds::new(
+                        i32::from(view.x_offs),
+                        i32::from(view.y_offs),
+                        0,
+                        i32::from(view.width).max(1),
+                        i32::from(view.height).max(1),
+                        i32::from(view.height).max(1),
+                    );
+                    if foundation_child_parent.is_some() {
+                        WorldDrawTrace::record_foundation_child_sprite_with_palette(
+                            trace_role,
+                            sprite_id,
+                            station_company_palette(owner_colour),
+                            false,
+                            (i32::from(view.x_offs), i32::from(view.y_offs), 0),
+                        );
+                    } else {
+                        WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+                            trace_role,
+                            "sortable",
+                            sprite_id,
+                            station_company_palette(owner_colour),
+                            false,
+                            (0, 0),
+                            0,
+                            (i32::from(view.x_offs), i32::from(view.y_offs), 0),
+                            Some(trace_bounds),
+                        );
+                    }
+                    newgrf_overlay = Some((handle, pos3, view, sprite_id));
                 }
             }
             // La secuencia custom se emite después de la catenaria, igual que
@@ -2059,7 +2095,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     image_store,
                 );
             }
-            if let Some((handle, pos3)) = newgrf_overlay {
+            if let Some((handle, mut pos3, view, sprite_id)) = newgrf_overlay {
                 let sprite = destination_mask_building_sprite(Sprite {
                     image: handle,
                     color: Color::WHITE,
@@ -2068,13 +2104,23 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 if let Some(parent) = foundation_child_parent {
                     spawn_foundation_child_sprite_at(commands, sprite, ctx, pos3, dims.0, parent);
                 } else {
-                    // En plano no existe un parent de `DrawFoundation`; la
-                    // entidad conserva la ruta directa que usa OpenTTD.
+                    let source_depth = viewport_source_depth(pos3.z, ctx.tx, dims.0);
+                    pos3.z = source_depth;
                     commands.spawn((
                         MapVisualLayer,
                         ctx.map_tile_chunk(),
                         sprite,
                         Transform::from_translation(pos3),
+                        ViewportSortableParent {
+                            sprite_id,
+                            bounds: newgrf_flat_parent_bounds(ctx, &view, rail_base_z),
+                            insertion_key: viewport_insertion_key(
+                                ctx.tx,
+                                ctx.ty,
+                                STATION_RAIL_LAYER_PARENT_ORDINAL,
+                            ),
+                            source_depth,
+                        },
                     ));
                 }
             }

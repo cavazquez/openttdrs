@@ -11,7 +11,7 @@ use openttdrs_core::{
 
 use super::{
     helpers::{
-        FLAT_WATER_LAYER_FRAC, foundation_surface_overlay_pos,
+        FLAT_WATER_LAYER_FRAC, foundation_surface_overlay_pos, newgrf_flat_parent_bounds,
         spawn_forced_leveled_foundation_with_child_parent, spawn_foundation_child_ground_sprite_at,
         spawn_foundation_child_sprite_at,
     },
@@ -475,26 +475,6 @@ fn house_building_parent_bounds(
         y + bounds.ey - 1,
         z + bounds.ez - 1,
     )
-}
-
-/// Caja conservadora para una vista plana Action1/3 de NewGRF.
-///
-/// `DecodedSprite` no contiene la línea `TILE_SEQ_LINE` de un layout completo,
-/// pero sí conserva los offsets y dimensiones NFO. Usar esa extensión como
-/// prisma mantiene el sprite dentro del ordenador de viewport y evita que una
-/// casa, industria u objeto custom atraviese edificios vecinos mientras su
-/// layout avanzado no resuelve una secuencia `BUILD`.
-fn newgrf_flat_parent_bounds(
-    ctx: &TileRenderContext,
-    view: &openttdrs_core::DecodedSprite,
-    surface_base_z: u8,
-) -> ParentSpriteBounds {
-    let x = ctx.tx_i32() * 16 + i32::from(view.x_offs);
-    let y = ctx.ty_i32() * 16 + i32::from(view.y_offs);
-    let z = i32::from(surface_base_z) * 8;
-    let width = i32::from(view.width).max(1);
-    let height = i32::from(view.height).max(1);
-    ParentSpriteBounds::new(x, y, z, x + width - 1, y + height - 1, z + height - 1)
 }
 
 /// `DrawTile_Object` usa `PALETTE_RECOLOUR_START` para objetos de una rampa y

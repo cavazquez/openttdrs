@@ -6627,3 +6627,13 @@ de `bridge_middle` existentes también pasan. La suite del cliente queda en
 1.586 tests, 2 ignorados y Clippy estricto verde. Es un fallback acotado: no
 cierra #326/#329/#567, que aún requieren la matriz global de bridges, otros
 combines, callbacks y comparación raster.
+
+Corrección #326/#329/#567-BRIDGE-PBS-ORPHAN (`a9bc705a`, 2026-09-16): la
+reserva PBS de un puente que resuelve su sprite pero no consigue materializar
+la fachada trasera tampoco queda ya como sprite suelto. Comparte el fallback
+sortable autónomo con los grupos específicos, conservando `BridgeTracePlacement`,
+la caja nativa, profundidad e índice de inserción; cuando existe la fachada,
+la reserva continúa siendo child segmentado del parent combinado. Pasan 75
+pruebas focalizadas de puentes, 1.586 tests del cliente, 2 ignorados y Clippy
+estricto. Es una corrección de composición acotada y no cierra #326/#329/#567:
+siguen pendientes otros combines/producers, callbacks y comparación raster.

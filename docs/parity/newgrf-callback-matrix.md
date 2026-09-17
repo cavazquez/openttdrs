@@ -2622,6 +2622,17 @@ Action2 ni se aproxima ninguna paleta; quedan abiertos otros combines,
 layouts, callbacks y la comparación de framebuffer, por lo que #326/#329/#567
 siguen parciales.
 
+### #326/#329/#567-BRIDGE-PBS-ORPHAN — reserva PBS sin fachada parent
+
+Actualizado: 2026-09-16 (`a9bc705a`). La reserva PBS de un puente que
+materializa su imagen pero no obtiene la fachada trasera del combine se emite
+como `ViewportSortableParent` autónomo mediante el mismo helper que los grupos
+específicos NewGRF. Se conservan `BridgeTracePlacement`, bounds, profundidad y
+ordinal; el camino con fachada mantiene el child `Promotable`/`Segmented`. La
+regresión focal de puentes pasa junto con 1.586 tests del cliente, 2 ignorados y
+Clippy estricto. El contrato sólo cubre este fallback de compositor y no cierra
+las issues madre.
+
 ### #326/#329/#567-AIRPORT-TILE-DIRECT-TRANSPARENT — paleta directa 802
 
 Actualización (2026-09-16, `c753924f`): el consumidor visual de

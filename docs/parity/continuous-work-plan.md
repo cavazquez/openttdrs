@@ -9301,6 +9301,18 @@ ignorados) y Clippy estricto. Esta etapa cubre sólo el fallback huérfano; la
 composición global, otros combines, callbacks y el framebuffer mantienen
 abierto #326/#329/#567.
 
+### #326/#329/#567-BRIDGE-PBS-ORPHAN — reserva PBS sin fachada parent
+
+Actualizado: 2026-09-16 (`a9bc705a`). Una reserva PBS de puente que sí tiene
+imagen pero pierde la fachada trasera del `StartSpriteCombine` usa ahora el
+mismo fallback sortable autónomo que los grupos específicos NewGRF. Conserva
+`BridgeTracePlacement`, bounds, profundidad e índice de inserción, en lugar de
+emitirse como sprite fuera del compositor; con fachada disponible sigue siendo
+child `Promotable`/`Segmented` del parent combinado. Pasan 75 pruebas focalizadas
+de puentes, 1.586 tests del cliente, 2 ignorados y Clippy estricto. La cobertura
+es parcial: no se cierran #326/#329/#567 y permanecen otros combines, producers,
+callbacks y la comparación de framebuffer.
+
 ### #326/#329/#567-PALETTE-INITIAL-PHASE — fase inicial y boyas congeladas
 
 Actualizado: 2026-09-16 (`5aa725c7`). `PaletteAnimationClock::default()`

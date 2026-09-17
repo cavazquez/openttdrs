@@ -19,6 +19,7 @@ mod generated;
 #[path = "company_palette_paths_generated.rs"]
 mod paths_generated;
 
+use super::{TILE_ATLAS_NAMES, TILE_ATLAS_RECTS};
 use generated::{COMPANY_COLOUR_COUNT, COMPANY_RAMP_RGB, COMPANY_RAMP_SHADES};
 use paths_generated::COMPANY_PALETTE_STATIC_PATHS;
 
@@ -225,6 +226,67 @@ pub fn load_recolored_png_path(
     let mut img = image::open(path).ok()?.into_rgba8();
     recolor_rgba8(img.as_mut(), target);
     Some(images.add(rgba_to_bevy_image(native_zoom_image_for_capture(img))))
+}
+
+/// Carga un sprite de tesela y hornea `PALETTE_TO_BARE_LAND` (`791`).
+///
+/// La mayoría de las instalaciones distribuye los PNG individuales, pero el
+/// atlas es el único recurso obligatorio del paquete. Mantener el mismo
+/// fallback que las paletas de casas/árboles evita perder la variante cuando
+/// sólo existe `tiles_atlas_*.png`.
+pub(crate) fn load_bare_land_png(
+    filename: &str,
+    tiles: &Path,
+    pages: &mut HashMap<u16, Option<RgbaImage>>,
+    images: &mut Assets<Image>,
+) -> Option<Handle<Image>> {
+    let img = load_tile_rgba(filename, tiles, pages)?;
+    let (width, height) = img.dimensions();
+    let sprite = openttdrs_core::DecodedSprite {
+        width: u16::try_from(width).ok()?,
+        height: u16::try_from(height).ok()?,
+        x_offs: 0,
+        y_offs: 0,
+        rgba: img.as_raw().clone(),
+        mask: Vec::new(),
+    };
+    let rgba = openttdrs_core::newgrf_sprites::bake_sprite_bare_land(&sprite)?;
+    let img = RgbaImage::from_raw(width, height, rgba)?;
+    Some(images.add(rgba_to_bevy_image(native_zoom_image_for_capture(img))))
+}
+
+/// Lee un PNG individual o recorta su entrada correspondiente del atlas.
+fn load_tile_rgba(
+    filename: &str,
+    tiles: &Path,
+    pages: &mut HashMap<u16, Option<RgbaImage>>,
+) -> Option<RgbaImage> {
+    if let Ok(img) = image::open(tiles.join(filename)) {
+        return Some(img.into_rgba8());
+    }
+    let entry = TILE_ATLAS_NAMES
+        .binary_search_by(|(name, _)| name.cmp(&filename))
+        .ok()?;
+    let &(page, x, y, width, height) = TILE_ATLAS_RECTS.get(TILE_ATLAS_NAMES[entry].1 as usize)?;
+    let atlas_dir = tiles.parent()?.join("atlas");
+    let img = pages
+        .entry(page)
+        .or_insert_with(|| {
+            image::open(atlas_dir.join(format!("tiles_atlas_{page}.png")))
+                .ok()
+                .map(image::DynamicImage::into_rgba8)
+        })
+        .as_ref()?;
+    let (x, y, width, height) = (
+        u32::from(x),
+        u32::from(y),
+        u32::from(width),
+        u32::from(height),
+    );
+    if x + width > img.width() || y + height > img.height() {
+        return None;
+    }
+    Some(image::imageops::crop_imm(img, x, y, width, height).to_image())
 }
 
 #[must_use]
@@ -538,6 +600,38 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn bare_land_loader_matches_core_palette_bake() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let source = RgbaImage::from_raw(
+            3,
+            1,
+            openttdrs_core::newgrf_sprites::indices_to_rgba(&[89, 83, 0], 3, 1)
+                .expect("rgba source"),
+        )
+        .expect("source image");
+        source.save(dir.path().join("rail_test.png")).expect("png");
+
+        let mut images = Assets::<Image>::default();
+        let mut pages = HashMap::new();
+        let handle = load_bare_land_png("rail_test.png", dir.path(), &mut pages, &mut images)
+            .expect("bare-land handle");
+        let actual = images.get(&handle).expect("baked image");
+        let expected =
+            openttdrs_core::newgrf_sprites::bake_sprite_bare_land(&openttdrs_core::DecodedSprite {
+                width: 3,
+                height: 1,
+                x_offs: 0,
+                y_offs: 0,
+                rgba: source.as_raw().to_vec(),
+                mask: Vec::new(),
+            })
+            .expect("bare-land output");
+        assert_eq!(actual.data.as_deref(), Some(expected.as_slice()));
+        assert_eq!(actual.width(), 3);
+        assert_eq!(actual.height(), 1);
     }
 
     #[test]

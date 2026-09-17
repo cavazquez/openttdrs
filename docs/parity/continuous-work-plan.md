@@ -9832,3 +9832,23 @@ Evidencia reproducible en `Kale_TitleGame.sav`, 800×600, OpenGFX 8bpp y
 La etapa reduce decenas de miles de diferencias en bordes sin extrapolar el
 resultado a otros niveles. #326/#561/#567 siguen abiertas por productores,
 composición, orientaciones, escalas y el gate exacto completo.
+
+### Siguiente etapa publicada — 2026-09-17 — #326/#567 paleta bare-land de vías
+
+La ruta vanilla de `DrawTrackBits` no pinta todas las capas ferroviarias con
+la misma paleta: sobre `RailGroundType::Barren` usa `PALETTE_TO_BARE_LAND`
+(`791`) para el suelo/vía combinado, mientras los overlays individuales de un
+cruce conservan `PAL_NONE`. Se agregó una clasificación por ID base que cubre
+rail, mono y maglev, y una caché de texturas RGBA horneadas con el mismo mapa
+de paleta del core. Si sólo existe el atlas, el cargador recorta la entrada
+del atlas antes de hornearla; la variante respeta además el muestreo nativo de
+Out2x/Out4x/Out8x.
+
+La evidencia reproducible sobre `mvp_openttd_ship.sav`, Normal, 800×600,
+OpenGFX 8bpp y `clean-static` es `338 → 3` diferencias crudas/alineadas de
+`480000` (`0,0704167% → 0,000625%`), con reducción del `99,11%`; el draw trace
+confirma `sprite 1012`, mundo `(448,640,8)` y paleta `791` en la tesela
+`(28,40)`. Quedan tres píxeles en la capa de estación ferroviaria heredada,
+uno por encima de delta `64`; el recorte del depósito naval sigue exacto.
+La issue #567 permanece abierta por agua/canal/río, callbacks, vecinos,
+clipping y escalas no cubiertos por este foco.

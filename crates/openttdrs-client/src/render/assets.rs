@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 
 use crate::render::atlas::{AtlasSprite, TileAtlas};
+use crate::sprites::company_palette::{load_bare_land_png, tiles_assets_dir};
 use crate::sprites::{
     AIRPORT_STATION_SPRITES, BridgePaletteSprites, HOUSE_DRAW_DATA, HousePaletteSprites,
     INDUSTRY_GFX_DATA, RAIL_DEPOT_VISUAL_TYPE_COUNT, ROAD_DEPOT_GROUND_PATH, SPR_EXCAVATION_X,
@@ -114,6 +115,11 @@ pub(crate) struct WorldAssets {
     /// Y_W, Y_E, X_W, X_E.
     pub(crate) road_waypoint: [AtlasSprite; 4],
     pub(crate) rail: HashMap<u32, AtlasSprite>,
+    /// Copias de las capas combinadas de vía con `PALETTE_TO_BARE_LAND`.
+    ///
+    /// El atlas conserva los píxeles de pasto originales; OpenTTD remapea
+    /// esas capas al suelo estéril sólo cuando `GetRailGroundType` es barren.
+    pub(crate) rail_bare_land: HashMap<u32, Handle<Image>>,
     /// Suelo de cruce de nivel, separado de `rail`: los IDs lógicos se solapan
     /// con señales Action5 y por tanto no pueden usar `rail_<id>.png`.
     level_crossing_grounds: HashMap<u32, AtlasSprite>,
@@ -248,8 +254,8 @@ fn rocky_terrain_atlas_name(variant: usize, offset: usize) -> String {
 }
 
 impl WorldAssets {
-    /// Resuelve todos los sprites del mapa contra el [`TileAtlas`]; no toca
-    /// el filesystem (la tabla de rects es metadata compilada).
+    /// Resuelve todos los sprites del mapa contra el [`TileAtlas`] y prepara
+    /// las variantes de paleta que no pueden vivir dentro de una página RGBA.
     pub(crate) fn load(atlas: &TileAtlas, images: &mut Assets<Image>) -> Self {
         let grass = atlas.get("grass.png");
         let rough = atlas.get("grass_rough.png");
@@ -402,6 +408,9 @@ impl WorldAssets {
         // porque sus IDs 1414/1415 no son señales ni piezas de rail.
         rail_ids.extend([SPR_EXCAVATION_X, SPR_EXCAVATION_Y]);
         let mut rail = std::collections::HashMap::new();
+        let mut rail_bare_land = std::collections::HashMap::new();
+        let tiles = tiles_assets_dir();
+        let mut rail_palette_pages = HashMap::new();
         for id in rail_ids {
             let tex_id = signal_sprite_texture_id(id);
             let sprite = crate::sprites::rail_sprite_atlas_keys(tex_id)
@@ -411,6 +420,16 @@ impl WorldAssets {
             rail.insert(tex_id, sprite.clone());
             if tex_id != id {
                 rail.insert(id, sprite);
+            }
+            if crate::sprites::rail_track_uses_bare_land_palette(tex_id)
+                && let Some(handle) = load_bare_land_png(
+                    &format!("rail_{tex_id}.png"),
+                    &tiles,
+                    &mut rail_palette_pages,
+                    images,
+                )
+            {
+                rail_bare_land.insert(tex_id, handle);
             }
         }
         // El bloque vanilla de tranvía (`SPR_TRAMWAY_BASE`) vive en
@@ -878,6 +897,7 @@ impl WorldAssets {
             tram_flat,
             road_waypoint,
             rail,
+            rail_bare_land,
             level_crossing_grounds,
             rail_pbs,
             station_grounds,

@@ -201,7 +201,10 @@ pub use rail::{
     signal_world_position_for_side, tramway_sprite_atlas_key, tramway_sprite_gfx,
     tramway_sprite_ids,
 };
-pub(crate) use rail::{collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface};
+pub(crate) use rail::{
+    collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface,
+    rail_track_uses_bare_land_palette,
+};
 #[allow(unused_imports)]
 pub use station::{
     DockTileLayer, ROAD_WAYPOINT_SPRITE_PATHS, RailStationLayer, RoadStopLayerGfx,

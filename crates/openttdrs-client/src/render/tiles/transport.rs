@@ -47,9 +47,9 @@ use crate::sprites::{
     is_road_level_crossing, is_transparent, is_typed_rail_track_sprite,
     level_crossing_ground_sprite_id_for_type, level_crossing_has_rail_reservation,
     oneway_road_sprite_id, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
-    rail_tile_is_signals, rail_trackbits_for_render, remap_rail_sprite_id, road_bits_for_render,
-    road_catenary_sprite_ids, road_flat_sprite_color, road_flat_sprite_index,
-    road_ground_sprite_id, road_streetlight_sprite_id, road_tile_roadside,
+    rail_tile_is_signals, rail_track_uses_bare_land_palette, rail_trackbits_for_render,
+    remap_rail_sprite_id, road_bits_for_render, road_catenary_sprite_ids, road_flat_sprite_color,
+    road_flat_sprite_index, road_ground_sprite_id, road_streetlight_sprite_id, road_tile_roadside,
     road_tile_snow_or_desert, road_works_sprite_id, roadside_is_paved,
     signal_safe_slope_position_for_side, signal_screen_anchor_for_side,
     signal_screen_position_for_side, signal_sprite_center_offset, signal_world_position_for_side,
@@ -87,6 +87,7 @@ const SPR_FLAT_WATER_TILE: u32 = 4061;
 const SPR_FLAT_SNOW_DESERT_TILE: u32 = 4550;
 const SPR_SHORE_BASE: u32 = 5936;
 const RAIL_SLOPE_STEEP: u8 = 0x10;
+const PALETTE_TO_BARE_LAND: u32 = 791;
 /// Selectores `RoadTypeSpriteGroup` de `road.h` para suelo y overlays.
 const ROTSG_OVERLAY: u8 = 1;
 const ROTSG_GROUND: u8 = 2;
@@ -518,21 +519,25 @@ const fn rail_track_trace_mode(foundation: u8, halftile_corner: Option<u8>) -> R
 fn record_rail_track_trace(
     role: &'static str,
     sprite_id: u32,
+    palette: u32,
     fallback: bool,
     mode: RailTrackTraceMode,
 ) {
     match mode {
-        RailTrackTraceMode::Ground => WorldDrawTrace::record_sprite_with_geometry(
+        RailTrackTraceMode::Ground => WorldDrawTrace::record_sprite_with_palette_and_geometry(
             role,
             "ground",
             sprite_id,
+            palette,
             fallback,
             (0, 0, 0),
             0,
             None,
         ),
         RailTrackTraceMode::FoundationChild(offset) => {
-            WorldDrawTrace::record_foundation_child_sprite(role, sprite_id, fallback, offset);
+            WorldDrawTrace::record_foundation_child_sprite_with_palette(
+                role, sprite_id, palette, fallback, offset,
+            );
         }
     }
 }
@@ -3145,9 +3150,10 @@ pub(crate) fn spawn_rail_tile(
         rail_type,
         openttdrs_core::RailType::Monorail | openttdrs_core::RailType::Maglev
     ) && !typed_layers;
-    // `DrawTrackBits` usa `PAL_NONE` para la vía base, inclusive en vías
-    // electrificadas, mono/maglev y teselas con señales. El tipo está en el
-    // ID del sprite: el tinte sintético lo ocultaba tras azul/violeta.
+    // `DrawTrackBits` usa `PAL_NONE` para la vía base salvo terreno estéril,
+    // donde aplica `PALETTE_TO_BARE_LAND` a la capa combinada. El tipo está en
+    // el ID del sprite; las variantes horneadas conservan ese contrato sin
+    // convertir los overlays individuales de un cruce.
     let rail_paint = Color::WHITE;
     let reservation_draws = show_pbs_reservations.then(|| {
         let reservation_bits = ctx.tile.map_or(0, |tile| {
@@ -3311,8 +3317,15 @@ pub(crate) fn spawn_rail_tile(
         }
         if !custom_track_drawn && (!rail_uses_overlay || !custom_ground_complete) {
             for sid in rail_layers[start..end].iter().copied() {
+                let palette = if rail_ground_type == 0 && rail_track_uses_bare_land_palette(sid) {
+                    PALETTE_TO_BARE_LAND
+                } else {
+                    0
+                };
                 let missing_asset = !assets.rail.contains_key(&sid);
-                let fallback = typed_selection_fallback || missing_asset;
+                let missing_palette_variant =
+                    palette != 0 && !assets.rail_bare_land.contains_key(&sid);
+                let fallback = typed_selection_fallback || missing_asset || missing_palette_variant;
                 let role = if fallback {
                     match rail_type {
                         openttdrs_core::RailType::Rail => "rail-track-fallback-rail",
@@ -3323,7 +3336,7 @@ pub(crate) fn spawn_rail_tile(
                 } else {
                     "rail-track"
                 };
-                record_rail_track_trace(role, sid, fallback, pass_modes[pass_index]);
+                record_rail_track_trace(role, sid, palette, fallback, pass_modes[pass_index]);
                 let Some(img) = assets.rail.get(&sid) else {
                     track_layer_index += 1;
                     continue;
@@ -3337,7 +3350,14 @@ pub(crate) fn spawn_rail_tile(
                     z,
                     pass_half_h[pass_index],
                 );
-                let mut sprite = img.sprite_colored(rail_paint);
+                let mut sprite = assets
+                    .rail_bare_land
+                    .get(&sid)
+                    .map(|handle| Sprite {
+                        image: handle.clone(),
+                        ..default()
+                    })
+                    .unwrap_or_else(|| img.sprite_colored(rail_paint));
                 let crop_shift = if let Some((rect, shift)) = halftile_track_subsprite(
                     pass_halftile_corner[pass_index],
                     img.size,

@@ -418,6 +418,24 @@ pub fn is_typed_rail_track_sprite(id: u32) -> bool {
     matches!(id, 1087..=1120 | 1169..=1202)
 }
 
+/// ¿El sprite es la capa de suelo/vía que `DrawTrackBits` pinta con
+/// `PALETTE_TO_BARE_LAND` sobre terreno estéril?
+///
+/// Las piezas `1005..=1010` (y sus equivalentes tipadas) son overlays de un
+/// cruce y OpenTTD las pinta con `PAL_NONE`; sólo las capas combinadas y las
+/// pendientes reciben el remapeo de tierra desnuda.
+#[must_use]
+pub(crate) fn rail_track_uses_bare_land_palette(id: u32) -> bool {
+    let base_id = if (1087..=1120).contains(&id) {
+        id - MONO_RAIL_SPRITE_OFFSET
+    } else if (1169..=1202).contains(&id) {
+        id - MAGLEV_RAIL_SPRITE_OFFSET
+    } else {
+        id
+    };
+    (1011..=1038).contains(&base_id)
+}
+
 /// IDs de sprites de vía férrea usados (cruce a nivel 1370–1373; nieve 1037/1038; pendiente 1023–1034).
 pub const RAIL_SPRITE_IDS: [u32; 38] = [
     1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020,
@@ -3793,6 +3811,22 @@ mod tests {
             );
         }
         assert!(ids.contains(&1279));
+    }
+
+    #[test]
+    fn bare_land_palette_only_targets_combined_track_layers() {
+        for id in [1011, 1018, 1023, 1038, 1093, 1105, 1120, 1175, 1187, 1202] {
+            assert!(
+                rail_track_uses_bare_land_palette(id),
+                "la capa combinada {id} debe aceptar PALETTE_TO_BARE_LAND"
+            );
+        }
+        for id in [1005, 1010, 1087, 1092, 1169, 1174] {
+            assert!(
+                !rail_track_uses_bare_land_palette(id),
+                "el overlay individual {id} debe conservar PAL_NONE"
+            );
+        }
     }
 
     #[test]

@@ -6978,3 +6978,20 @@ A/B directo de candidatas sólo cambia `4411` píxeles por la variación normal 
 la captura. Esto valida la compuerta por clamp, pero no cierra #326/#567:
 siguen pendientes productores, composiciones, otras orientaciones y el gate
 exacto completo.
+
+### #326/#567-RAIL-BARE-LAND-PALETTE — paleta de vía sobre terreno estéril
+
+Actualizado: 2026-09-17. `DrawTrackBits` aplica `PALETTE_TO_BARE_LAND` (`791`)
+al sprite combinado de vía cuando `GetRailGroundType` es `Barren`. El atlas
+RGBA no puede transportar esa `PaletteID`, así que el cliente ahora prepara
+copias horneadas de las capas combinadas clásicas, mono y maglev; las piezas
+individuales de un cruce (`1005..1010`) siguen en `PAL_NONE`. La traza
+`world-draw` del mismo foco conserva también la paleta `791`.
+
+En `mvp_openttd_ship.sav`, Normal, 800×600, OpenGFX 8bpp y `clean-static`, la
+captura baja de `338` a `3` píxeles distintos (`0,0704167% → 0,000625%`), una
+reducción del `99,11%`. El máximo de tres canales queda en `84` y sólo un
+píxel supera `64`; los tres restantes están en la capa de estación ferroviaria
+que comparte la fixture, no en el depósito naval. El recorte del depósito no
+agrega diferencias. Esto deja #567 abierta: faltan las matrices completas de
+agua/canal/río, callbacks, vecinos complejos, clipping y las demás escalas.

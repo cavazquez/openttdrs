@@ -1935,16 +1935,21 @@ fn spawn_layer(
     );
     sprite.color = bridge_structure_sprite_color(bridges_transparent);
     let (w, h, xrel, yrel) = bridge_sprite_meta(sprite_id).unwrap_or((64.0, 32.0, -32.0, -16.0));
-    let crop_x_shift = if let Some((axis, half)) = pillar_half {
-        let Some((rect, x_shift)) = pillar_half_crop(axis, half, w, h, xrel) else {
-            // Igual que `GfxBlitter`: una subsprite vacía conserva la decisión
-            // de dibujo en la traza, pero no llega a rasterizar píxeles.
-            return None;
-        };
-        sprite.rect = Some(rect);
-        x_shift
+    let (sprite, crop_x_shift) = if let Some((axis, half)) = pillar_half {
+        match pillar_half_crop(axis, half, w, h, xrel) {
+            Some((rect, x_shift)) => {
+                sprite.rect = Some(rect);
+                (Some(sprite), x_shift)
+            }
+            None => {
+                // Igual que `GfxBlitter`: una subsprite vacía no rasteriza
+                // píxeles, pero `AddSortableSpriteToDraw` sí conserva su
+                // parent y su caja para el orden de los sprites vecinos.
+                (None, 0.0)
+            }
+        }
     } else {
-        0.0
+        (Some(sprite), 0.0)
     };
     let mut pos = Vec3::new(
         ctx.iso_pos.x + shift.x + xrel + w / 2.0 + crop_x_shift,
@@ -1969,18 +1974,18 @@ fn spawn_layer(
     }
     let child_transform = Transform::from_translation(pos);
     let child_source_sprite = sprite.clone();
-    let mut entity = commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        sprite,
-        child_transform,
-    ));
+    let mut entity = commands.spawn((MapVisualLayer, ctx.map_tile_chunk(), child_transform));
+    if let Some(sprite) = sprite {
+        entity.insert(sprite);
+    }
     if let Some(parent) = combined_parent {
         entity.insert(ViewportSortableChild {
             parent,
             source_depth: child_source_depth.unwrap_or(pos.z),
         });
-        if let Some(placement) = effective_placement {
+        if let (Some(placement), Some(child_source_sprite)) =
+            (effective_placement, child_source_sprite)
+        {
             entity.insert((
                 ViewportSortablePromotableChild {
                     sprite_id,
@@ -2001,14 +2006,13 @@ fn spawn_layer(
             ));
         }
     } else if let Some(parent) = sortable_parent {
-        entity.insert((
-            parent,
-            Visibility::Inherited,
-            ViewportSortableSegmentedSource {
+        entity.insert((parent, Visibility::Inherited));
+        if let Some(child_source_sprite) = child_source_sprite {
+            entity.insert(ViewportSortableSegmentedSource {
                 sprite: child_source_sprite,
                 transform: child_transform,
-            },
-        ));
+            });
+        }
     }
     Some(entity.id())
 }
@@ -2146,12 +2150,21 @@ fn spawn_custom_layer(
         },
     );
     sprite.color = bridge_structure_sprite_color(bridges_transparent);
-    let crop_x_shift = if let Some((axis, half)) = pillar_half {
-        let (rect, x_shift) = pillar_half_crop(axis, half, w, h, xrel)?;
-        sprite.rect = Some(rect);
-        x_shift
+    let (sprite, crop_x_shift) = if let Some((axis, half)) = pillar_half {
+        match pillar_half_crop(axis, half, w, h, xrel) {
+            Some((rect, x_shift)) => {
+                sprite.rect = Some(rect);
+                (Some(sprite), x_shift)
+            }
+            None => {
+                // Igual que `GfxBlitter`: una subsprite vacía no rasteriza
+                // píxeles, pero `AddSortableSpriteToDraw` sí conserva su
+                // parent y su caja para el orden de los sprites vecinos.
+                (None, 0.0)
+            }
+        }
     } else {
-        0.0
+        (Some(sprite), 0.0)
     };
     let mut pos = Vec3::new(
         ctx.iso_pos.x + shift.x + xrel + w / 2.0 + crop_x_shift,
@@ -2176,18 +2189,18 @@ fn spawn_custom_layer(
     }
     let child_transform = Transform::from_translation(pos);
     let child_source_sprite = sprite.clone();
-    let mut entity = commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        sprite,
-        child_transform,
-    ));
+    let mut entity = commands.spawn((MapVisualLayer, ctx.map_tile_chunk(), child_transform));
+    if let Some(sprite) = sprite {
+        entity.insert(sprite);
+    }
     if let Some(parent) = combined_parent {
         entity.insert(ViewportSortableChild {
             parent,
             source_depth: child_source_depth.unwrap_or(pos.z),
         });
-        if let Some(placement) = effective_placement {
+        if let (Some(placement), Some(child_source_sprite)) =
+            (effective_placement, child_source_sprite)
+        {
             entity.insert((
                 ViewportSortablePromotableChild {
                     sprite_id,
@@ -2208,14 +2221,13 @@ fn spawn_custom_layer(
             ));
         }
     } else if let Some(parent) = sortable_parent {
-        entity.insert((
-            parent,
-            Visibility::Inherited,
-            ViewportSortableSegmentedSource {
+        entity.insert((parent, Visibility::Inherited));
+        if let Some(child_source_sprite) = child_source_sprite {
+            entity.insert(ViewportSortableSegmentedSource {
                 sprite: child_source_sprite,
                 transform: child_transform,
-            },
-        ));
+            });
+        }
     }
     Some(entity.id())
 }

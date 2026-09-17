@@ -18,6 +18,7 @@ OPENTTD_BIN="${6:-${OPENTTD_BIN:-${ROOT}/reference/openttd-upstream/build/opentt
 MODE_FILE="${ROOT}/assets/opengfx/.graphics_mode"
 MODE="${OPENTTDRS_WORLD_SCREENSHOT_CANDIDATE_GFX_MODE:-}"
 CLEAN="${OPENTTDRS_WORLD_SCREENSHOT_CLEAN:-1}"
+PIXEL_TOLERANCES="${OPENTTDRS_WORLD_SCREENSHOT_PIXEL_TOLERANCES:-0,2,4,8,16}"
 
 if [[ ! -f "$SAV" ]]; then
   echo "error: no existe $SAV" >&2
@@ -72,10 +73,12 @@ python3 "${ROOT}/scripts/compare_world_screenshots.py" \
   --candidate-graphics "OpenGFX · $MODE" \
   --capture-profile "$CAPTURE_PROFILE" \
   --alignment-radius "${OPENTTDRS_WORLD_SCREENSHOT_ALIGNMENT_RADIUS:-8}" \
-  --alignment-stride "${OPENTTDRS_WORLD_SCREENSHOT_ALIGNMENT_STRIDE:-8}"
+  --alignment-stride "${OPENTTDRS_WORLD_SCREENSHOT_ALIGNMENT_STRIDE:-8}" \
+  --pixel-tolerances "$PIXEL_TOLERANCES"
 
 echo "OK: comparación focalizada escrita en $OUT_DIR"
 echo "  referencia: $REFERENCE"
 echo "  candidata:  $CANDIDATE"
 echo "  diff:       $DIFF"
 echo "  reporte:    $REPORT"
+echo "  tolerancias: $PIXEL_TOLERANCES"

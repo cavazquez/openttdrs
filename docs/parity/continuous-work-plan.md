@@ -9569,3 +9569,22 @@ depósito permanece verde junto con Clippy estricto. Es una mejora de evidencia,
 no una corrección de raster ni un cierre: siguen pendientes la identidad NFO
 global, layouts/callbacks restantes y la composición visual completa de
 #326/#329/#567.
+
+### #326/#561-RAIL-GLASS-TOLERANCE — curva de aceptación sin ocultar el exacto
+
+Actualizado: 2026-09-17. El comparador raster conserva el gate exacto y añade
+una curva reproducible de diferencias por canal (`0,2,4,8,16`). El flujo
+focalizado acepta ahora `OPENTTDRS_WORLD_SCREENSHOT_PIXEL_TOLERANCES`, de modo
+que cada etapa puede comenzar con una tolerancia explícita y reducirla sin
+cambiar la captura ni borrar el histórico. La tolerancia es sólo una métrica
+de priorización: no cambia `status`, `changed_pixels`, el diff ni los criterios
+de cierre.
+
+En `Kale_TitleGame.sav`, centro `132,2`, 800×600, `Normal`, perfil limpio, la
+captura fresca del techo ferroviario da `7332` píxeles exactos y `6594` por
+encima de 16; las bandas intermedias son `7291` (>2), `7291` (>4) y `7071`
+(>8). Que permanezcan miles de píxeles incluso en la banda amplia confirma
+que el problema es composición dependiente del framebuffer
+(`PALETTE_TO_TRANSPARENT`), no sólo antialiasing. Se conserva esta curva como
+baseline para la próxima implementación del compositor; #326/#561 continúan
+abiertas y no se cierra ninguna issue por tolerancia.

@@ -20,8 +20,20 @@ use crate::map::{
 use crate::newgrf_sprites::Action2EvalCtx;
 #[cfg(test)]
 use crate::station::StopKind;
-use crate::station::{Station, station_at_tile};
+use crate::station::{Station, station_at_tile, station_type_from_m6};
 use crate::world_gen::{Climate, DEF_SNOW_LINE_HEIGHT};
+
+/// Equivalente local de `IsAirport(tile)` para los dos formatos de mapa que
+/// puede recibir el runtime. Los mapas generados ya distinguen
+/// `TileKind::Airport`; los SAV conservan `MP_STATION` y el tipo real en
+/// `MAP6`. El bit de facilidad aérea de `BaseStation` no basta: un `OilRig` lo
+/// comparte para FTA, pero su tesela sigue siendo `StationType::Oilrig`.
+pub(crate) fn is_airport_tile_for_newgrf(map: &Map, coord: TileCoord) -> bool {
+    map.get(coord).is_some_and(|tile| {
+        tile.kind == TileKind::Airport
+            || (tile.kind == TileKind::Station && station_type_from_m6(tile.m6) == 1)
+    })
+}
 
 /// Construye el contexto de una tesela de aeropuerto con la estación padre.
 ///
@@ -167,6 +179,9 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog_and_snow
     airport_tile_overrides: &[u16],
 ) -> Action2EvalCtx {
     let mut ctx = Action2EvalCtx::default();
+    if !is_airport_tile_for_newgrf(map, coord) {
+        return ctx;
+    }
     let Some(station) =
         station_at_tile(map, stations, coord).filter(|candidate| candidate.has_airport_facility())
     else {
@@ -387,15 +402,13 @@ fn nearby_animation_frame(
     source: &Station,
     nearby: TileCoord,
 ) -> u32 {
-    station_at_tile(map, stations, nearby)
-        .filter(|candidate| candidate.has_airport_facility() && candidate.pos == source.pos)
-        .map_or(u32::MAX, |candidate| {
-            if candidate.airport_tiles.contains(&nearby) || candidate.pos == nearby {
-                u32::from(map.get(nearby).map_or(0, |tile| tile.m7))
-            } else {
-                u32::MAX
-            }
-        })
+    airport_station_for_tile(map, stations, source, nearby).map_or(u32::MAX, |candidate| {
+        if candidate.airport_tiles.contains(&nearby) || candidate.pos == nearby {
+            u32::from(map.get(nearby).map_or(0, |tile| tile.m7))
+        } else {
+            u32::MAX
+        }
+    })
 }
 
 fn nearby_land_info(
@@ -425,11 +438,7 @@ fn nearby_land_info(
     let terrain =
         airport_terrain_type_with_snow_line(map, nearby, climate, Some(tile), snow_line_height);
     let tile_type = u32::from(tile_kind_as_ottd(map, stations, nearby, tile));
-    let same_airport = station_at_tile(map, stations, nearby).is_some_and(|candidate| {
-        candidate.has_airport_facility()
-            && candidate.pos == source.pos
-            && (candidate.airport_tiles.contains(&nearby) || candidate.pos == nearby)
-    });
+    let same_airport = airport_station_for_tile(map, stations, source, nearby).is_some();
     let terrain_bits = water_bits | (u32::from(tile_type == 6) << 1) | (terrain << 2);
     tile_type << 24
         | u32::from(z) << 16
@@ -446,11 +455,7 @@ fn airport_tile_id_at_offset(
     current_grfid: u32,
     airport_tile_overrides: &[u16],
 ) -> u32 {
-    let Some(candidate) = station_at_tile(map, stations, nearby).filter(|station| {
-        station.has_airport_facility()
-            && station.pos == source.pos
-            && (station.airport_tiles.contains(&nearby) || station.pos == nearby)
-    }) else {
+    let Some(candidate) = airport_station_for_tile(map, stations, source, nearby) else {
         return u32::from(u16::MAX);
     };
     let Some(gfx) = airport_tile_gfx(candidate, map, nearby, airport_tile_overrides) else {
@@ -473,6 +478,22 @@ fn airport_tile_id_at_offset(
     } else {
         0xFFFE
     }
+}
+
+fn airport_station_for_tile<'a>(
+    map: &Map,
+    stations: &'a [Station],
+    source: &Station,
+    nearby: TileCoord,
+) -> Option<&'a Station> {
+    if !is_airport_tile_for_newgrf(map, nearby) {
+        return None;
+    }
+    station_at_tile(map, stations, nearby).filter(|candidate| {
+        candidate.has_airport_facility()
+            && candidate.pos == source.pos
+            && (candidate.airport_tiles.contains(&nearby) || candidate.pos == nearby)
+    })
 }
 
 fn airport_tile_gfx(
@@ -1263,6 +1284,53 @@ mod tests {
                 .resolve_callback_ctx(current.newgrf_local_id, 0, 0, 0, &mut ctx),
             123
         );
+    }
+
+    #[test]
+    fn airport_context_rejects_oilrig_station_tile_even_with_air_service() {
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(3, 3, 0);
+        let mut tile = map.get(coord).expect("oilrig tile");
+        tile.kind = TileKind::Station;
+        tile.m6 = crate::station::STATION_TYPE_OILRIG << 3;
+        tile.m5 = 74;
+        map.set_tile(coord, tile).expect("set oilrig tile");
+
+        let mut oilrig = Station::new_with_kind(coord, StopKind::OilRig);
+        oilrig.airport_tiles = vec![coord];
+        oilrig.airport_tile_gfx = vec![(coord, 74)];
+        let current = AirportTileSpecDef {
+            gfx: AirportTileGfxId(74),
+            subst_id: 24,
+            from_newgrf: true,
+            callback_mask: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            newgrf_local_id: 0,
+            newgrf_grfid: 1,
+            newgrf_grf_version: 8,
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: None,
+        };
+
+        assert!(!is_airport_tile_for_newgrf(&map, coord));
+        let ctx = action2_eval_ctx_for_airport_tile(
+            &map,
+            &[oilrig],
+            coord,
+            std::slice::from_ref(&current),
+            &current,
+            Climate::Temperate,
+        );
+        assert!(ctx.vars.is_empty());
+        assert!(ctx.parent_vars.is_empty());
     }
 
     #[test]

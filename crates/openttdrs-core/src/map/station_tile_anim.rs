@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::hash::BuildHasher;
 
 use crate::airport::{AirportPiece, airport_station_gfx_animation_frames};
-use crate::airport_tile_action2::airport_tile_random_bits;
+use crate::airport_tile_action2::{airport_tile_random_bits, is_airport_tile_for_newgrf};
 use crate::airport_tile_spec::{
     AirportAnimationTrigger, AirportTileSpecDef, NEW_AIRPORT_TILE_OFFSET,
     get_translated_airport_tile_id,
@@ -95,6 +95,9 @@ pub fn step_airport_tiles(map: &mut Map, tick: u64, stations: &[Station]) -> Vec
         // Los saves importados pueden mezclar instalaciones bajo el mismo
         // StationID. En ese caso `ottd_station_id` identifica que `m5` es el
         // StationGfx airport real, aun si `stop_kind` no quedó Airport.
+        if !station_has_airport_tile(map, station) {
+            continue;
+        }
         let imported_station_gfx = station.ottd_station_id.is_some();
         if !imported_station_gfx && !station.stop_kind.has_airport_facility() {
             continue;
@@ -108,9 +111,10 @@ pub fn step_airport_tiles(map: &mut Map, tick: u64, stations: &[Station]) -> Vec
             let Some(mut tile) = map.get(pos) else {
                 continue;
             };
-            let frames = if imported_station_gfx {
+            let is_airport_tile = is_airport_tile_for_newgrf(map, pos);
+            let frames = if imported_station_gfx && is_airport_tile {
                 airport_station_gfx_animation_frames(tile.m5)
-            } else if is_airport_tower_tile(tile.kind, tile.m5) {
+            } else if is_airport_tile && is_airport_tower_tile(tile.kind, tile.m5) {
                 Some(AIRPORT_RADAR_FRAMES)
             } else {
                 None
@@ -158,10 +162,24 @@ fn airport_tile_gfx_with_overrides(
         })
 }
 
-fn airport_station_index(stations: &[Station], coord: TileCoord) -> Option<usize> {
+fn airport_station_index(map: &Map, stations: &[Station], coord: TileCoord) -> Option<usize> {
+    if !is_airport_tile_for_newgrf(map, coord) {
+        return None;
+    }
     stations
         .iter()
         .position(|station| station.stop_kind.has_airport_facility() && station.covers_tile(coord))
+}
+
+fn station_has_airport_tile(map: &Map, station: &Station) -> bool {
+    let tiles = if station.airport_tiles.is_empty() {
+        std::slice::from_ref(&station.pos)
+    } else {
+        station.airport_tiles.as_slice()
+    };
+    tiles
+        .iter()
+        .any(|&coord| is_airport_tile_for_newgrf(map, coord))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -181,7 +199,7 @@ fn airport_animation_context_with_towns_and_snow_line_and_overrides(
     AirportTileSpecDef,
     crate::newgrf_sprites::Action2EvalCtx,
 )> {
-    let station_index = airport_station_index(stations, coord)?;
+    let station_index = airport_station_index(map, stations, coord)?;
     let gfx = airport_tile_gfx_with_overrides(
         &stations[station_index],
         map,
@@ -238,7 +256,7 @@ fn airport_cargo_local_id(
     let Some(cargo) = cargo else {
         return 0;
     };
-    let Some(station_index) = airport_station_index(stations, coord) else {
+    let Some(station_index) = airport_station_index(map, stations, coord) else {
         return crate::newgrf_type_tables::local_cargo_id_with_catalog(
             None,
             0,
@@ -799,10 +817,11 @@ fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and
     cargo: Option<CargoType>,
     sound_events: Option<&mut Vec<StationAnimationSound>>,
 ) -> Vec<TileCoord> {
-    let Some(station) = stations
-        .iter()
-        .find(|station| station.pos == station_anchor && station.stop_kind.has_airport_facility())
-    else {
+    let Some(station) = stations.iter().find(|station| {
+        station.pos == station_anchor
+            && station.stop_kind.has_airport_facility()
+            && station_has_airport_tile(map, station)
+    }) else {
         return Vec::new();
     };
     let mut coords = if station.airport_tiles.is_empty() {
@@ -1039,10 +1058,11 @@ fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and
     rng: &mut crate::cargodist::parity::Randomizer,
     sound_events: Option<&mut Vec<StationAnimationSound>>,
 ) -> Vec<TileCoord> {
-    let Some(station) = stations
-        .iter()
-        .find(|station| station.pos == station_anchor && station.stop_kind.has_airport_facility())
-    else {
+    let Some(station) = stations.iter().find(|station| {
+        station.pos == station_anchor
+            && station.stop_kind.has_airport_facility()
+            && station_has_airport_tile(map, station)
+    }) else {
         return Vec::new();
     };
 
@@ -1444,7 +1464,7 @@ pub fn step_newgrf_airport_tiles_with_towns_and_airport_catalog_and_sounds_with_
 
     let mut candidates = Vec::new();
     for station in stations.iter() {
-        if !station.stop_kind.has_airport_facility() {
+        if !station.stop_kind.has_airport_facility() || !station_has_airport_tile(map, station) {
             continue;
         }
         let tiles = if station.airport_tiles.is_empty() {
@@ -3390,6 +3410,27 @@ mod tests {
         map.set_tile(pos, tile).unwrap();
         assert!(step_airport_tiles(&mut map, 3, &[]).is_empty());
         assert_eq!(map.get(pos).unwrap().m7, 0);
+    }
+
+    #[test]
+    fn airport_animation_ignores_oilrig_station_tile_even_with_air_service() {
+        let mut map = Map::new_flat(8, 8, 1);
+        let pos = TileCoord::new(3, 3);
+        let mut tile = map.get(pos).expect("oilrig tile");
+        tile.kind = TileKind::Station;
+        tile.m5 = 51;
+        tile.m6 = crate::station::STATION_TYPE_OILRIG << 3;
+        map.set_tile(pos, tile).expect("set oilrig tile");
+
+        let mut oilrig = Station::new_with_kind(pos, StopKind::OilRig);
+        oilrig.ottd_station_id = Some(7);
+        oilrig.airport_tiles = vec![pos];
+        let stations = vec![oilrig];
+
+        assert!(!is_airport_tile_for_newgrf(&map, pos));
+        assert!(airport_station_index(&map, &stations, pos).is_none());
+        assert!(step_airport_tiles(&mut map, 3, &stations).is_empty());
+        assert_eq!(map.get(pos).expect("oilrig tile").m7, 0);
     }
 
     #[test]

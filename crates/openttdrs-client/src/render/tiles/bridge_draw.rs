@@ -697,11 +697,28 @@ fn spawn_bridge_specific_child(
             combine_ordinal,
         );
     } else {
+        // Si la fachada trasera no pudo materializarse, OpenTTD todavía
+        // dibuja el grupo específico. No dejarlo como sprite suelto: sin la
+        // caja de `AddSortableSpriteToDraw` pierde el orden global frente a
+        // vecinos y al vano. En este fallback el propio grupo ocupa el lugar
+        // del parent combinado; no se crea un child artificial.
+        let sortable_parent = bridge_sortable_parent(
+            ctx,
+            map_width,
+            sprite_id,
+            surface_z,
+            layer,
+            combine_ordinal,
+            placement,
+        );
+        let mut position = position;
+        position.z = sortable_parent.source_depth;
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
             Transform::from_translation(position),
+            sortable_parent,
         ));
     }
 }
@@ -2216,6 +2233,66 @@ mod tests {
         vanilla_road_stop_disallowed_pillars,
     };
     use crate::sprites::bridge_deck_sprite_ids;
+
+    #[test]
+    fn orphan_bridge_specific_group_becomes_sortable_parent() {
+        use bevy::ecs::system::RunSystemOnce;
+        use bevy::prelude::{Commands, Sprite, Transform, World};
+        use openttdrs_core::DecodedSprite;
+
+        use crate::render::viewport_sort::ParentSpriteBounds;
+        use crate::render::world_draw_trace::TraceSpriteBounds;
+        use crate::render::{ViewportSortableChild, ViewportSortableParent};
+
+        let map = Map::new_flat(8, 8, 0);
+        let grid = crate::render::RenderGrid::from_map(&map, 8, 8);
+        let view = DecodedSprite {
+            width: 2,
+            height: 2,
+            x_offs: 1,
+            y_offs: -1,
+            rgba: [255, 0, 0, 255].repeat(4),
+            mask: Vec::new(),
+        };
+        let sprite_id = 0x8123_0042;
+        let placement = super::BridgeTracePlacement {
+            world_xy_delta: (0, 0),
+            world_z_delta: 8,
+            offset: (0, 0, 0),
+            bounds: TraceSpriteBounds::new(0, 0, 0, 16, 16, 1),
+        };
+        let mut world = World::new();
+        world
+            .run_system_once(move |mut commands: Commands| {
+                let ctx = crate::render::TileRenderContext::new(&map, &grid, 2, 2);
+                super::spawn_bridge_specific_child(
+                    &mut commands,
+                    &ctx,
+                    8,
+                    None,
+                    Sprite::default(),
+                    &view,
+                    1,
+                    super::DECK_LAYER_FRAC,
+                    sprite_id,
+                    placement,
+                    7,
+                );
+            })
+            .expect("orphan bridge-specific spawn");
+
+        let mut query = world.query::<(&ViewportSortableParent, &Transform)>();
+        let mut rows = query.iter(&world);
+        let (parent, transform) = rows.next().expect("sortable orphan parent");
+        assert!(rows.next().is_none(), "only one orphan sprite should spawn");
+        assert_eq!(parent.sprite_id, sprite_id);
+        assert_eq!(parent.bounds, ParentSpriteBounds::new(32, 32, 8, 47, 47, 8));
+        assert_eq!(transform.translation.z, parent.source_depth);
+        assert_eq!(
+            world.query::<&ViewportSortableChild>().iter(&world).count(),
+            0
+        );
+    }
 
     #[test]
     fn bridge_structure_transparency_uses_destination_mask() {

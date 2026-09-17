@@ -105,6 +105,13 @@ offset de pantalla relativo al padre. En ese caso debe conservar
 `primitive:"child"`; no puede declararse como `ground` aunque el ID del sprite
 sea el mismo.
 
+Las vistas decodificadas de NewGRF pueden incluir `"trace_only":true` y
+`sprite.source:"newgrf"`. Conservan una identidad sintética estable, el ancla
+NFO y la relación `ground`/`child`, pero el `DecodedSprite` no conserva el
+`SpriteID` global que permitiría compararlas con el oráculo. El comparador las
+mantiene en el JSONL y las excluye de la contención visual para no convertir una
+limitación de identidad en un falso fallo.
+
 La implementación candidata debe conservar la misma identidad lógica antes
 de convertirla a `Handle<Image>`/índice de atlas. Las diferencias de página o
 packing del atlas no pertenecen al contrato.

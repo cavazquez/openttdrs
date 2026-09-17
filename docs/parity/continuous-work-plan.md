@@ -9553,3 +9553,19 @@ BUILD posterior a la catenaria. En pendiente mantiene el child de
 inserción y la profundidad. El cambio no cubre layouts `TileSeq`, callbacks,
 paletas/Action5 ni comparación raster; pasan 1.592 tests del cliente, 2
 ignorados y Clippy estricto. Las issues madre continúan parciales y abiertas.
+
+### #326/#329/#567-NEWGRF-ROAD-TRACE-ONLY — observabilidad de vistas decodificadas
+
+Actualizado (2026-09-16, `f982b116`): las rutas de carretera y tranvía normal,
+waypoint, parada, overlay y overlay de depósito ahora registran también las
+vistas Action1/2/3 que Bevy ya materializaba. La traza conserva selector,
+índice, ancla NFO, dimensiones y la frontera nativa entre `DrawGroundSprite` y
+`AddChildSpriteScreen`. Como `DecodedSprite` no contiene el `SpriteID` global
+del GRF, esas filas usan una identidad sintética determinista,
+`sprite.source:"newgrf"` y `trace_only:true`; el comparador las conserva como
+diagnóstico, pero no las mezcla con la contención de IDs vanilla. La regresión
+Python fija esta regla y la suite focalizada de carretera/waypoint/parada/
+depósito permanece verde junto con Clippy estricto. Es una mejora de evidencia,
+no una corrección de raster ni un cierre: siguen pendientes la identidad NFO
+global, layouts/callbacks restantes y la composición visual completa de
+#326/#329/#567.

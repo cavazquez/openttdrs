@@ -6712,3 +6712,14 @@ prisma `(13,11,0)` a `(18,17,6)`, la inserción y la profundidad. Los layouts
 `TileSeq`, callbacks, paletas/Action5 y la comparación raster global siguen
 pendientes; la suite completa pasa con 1.592 tests del cliente, 2 ignorados y
 Clippy estricto. No se cierran #326/#329/#567.
+
+Corrección de observabilidad #326/#329/#567-NEWGRF-ROAD-TRACE-ONLY
+(`f982b116`, 2026-09-16): las vistas decodificadas de carretera y tranvía,
+waypoints, paradas y overlays de depósito ya quedan registradas en
+`world-draw` con selector, índice, ancla NFO y relación ground/child. Como el
+`DecodedSprite` no conserva el `SpriteID` global del GRF, estas filas llevan
+`sprite.source:"newgrf"` y `trace_only:true`: el comparador las mantiene como
+evidencia, pero no las usa para exigir contención contra IDs vanilla. La
+regresión del comparador y las pruebas focalizadas quedan verdes. Es una
+mejora diagnóstica; no cambia el raster ni cierra #326/#329/#567, que aún
+requieren identidad global, callbacks/layouts y composición completa.

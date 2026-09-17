@@ -2749,3 +2749,15 @@ relación child y el offset de pantalla del draw inclinado. La regresión
 profundidad; la suite completa pasa con 1.592 tests, 2 ignorados y Clippy
 estricto. Layouts `TileSeq`, callbacks, paletas/Action5 y la validación raster
 siguen fuera de este subalcance, por lo que no se cierran las issues madre.
+
+### Observabilidad de vistas de carretera (`f982b116`)
+
+Las vistas Action1/2/3 de carretera y tranvía que se resuelven para suelo,
+waypoints, paradas y overlays de depósito ahora entran en `world-draw` como
+evidencia `trace_only`. El registro conserva selector, índice, offsets y
+dimensiones NFO y marca `sprite.source:"newgrf"`; usa una identidad sintética
+estable porque `DecodedSprite` no conserva el ID global del GRF. El comparador
+las excluye de la contención de IDs vanilla, sin ocultar la fila del JSONL.
+Esto mejora la auditoría de selección y de foundation child, pero no declara
+completos los callbacks ni los layouts dinámicos de RoadType; #326/#329/#567
+siguen abiertas.

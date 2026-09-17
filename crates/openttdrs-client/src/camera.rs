@@ -126,6 +126,22 @@ fn map_shot_edge_screen_bias(clamped: bool, capture_scale: f32) -> Vec2 {
     Vec2::new(-half_screen_pixel_world, half_screen_pixel_world)
 }
 
+/// Resultado geométrico de posicionar una captura focalizada.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct MapShotCameraTarget {
+    pub(crate) position: Vec2,
+    pub(crate) clamped: bool,
+}
+
+/// Estado compartido entre el driver de captura y el remapeo de sprites.
+///
+/// Sólo vive durante la ejecución del perfil `OPENTTDRS_MAP_SHOT`; el juego
+/// normal nunca consulta esta fase de raster.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Resource)]
+pub(crate) struct MapShotCameraState {
+    pub(crate) clamped: bool,
+}
+
 /// Altura de superficie en píxeles de mundo para la iteración del clamp.
 ///
 /// Es la contraparte de `GetSlopePixelZ` en la frontera de mapa que consulta
@@ -157,7 +173,7 @@ fn openttd_slope_pixel_z(map: &Map, x: i32, y: i32) -> i32 {
 /// capturada. `capture_scale` es la escala ortográfica de openttdrs (`2` =
 /// `Out2x`).
 #[must_use]
-pub(crate) fn map_shot_camera_world_pos(
+pub(crate) fn map_shot_camera_target(
     map: &Map,
     coord: TileCoord,
     window_width: f32,
@@ -165,10 +181,13 @@ pub(crate) fn map_shot_camera_world_pos(
     capture_scale: f32,
     map_height_limit: u8,
     freeform_edges: bool,
-) -> Vec2 {
+) -> MapShotCameraTarget {
     let direct_target = tile_camera_world_pos(map, coord);
     if !capture_scale.is_finite() || capture_scale <= 0.0 {
-        return direct_target;
+        return MapShotCameraTarget {
+            position: direct_target,
+            clamped: false,
+        };
     }
 
     let width = window_width.round().max(1.0) as i32;
@@ -192,7 +211,10 @@ pub(crate) fn map_shot_camera_world_pos(
 
     let (map_width, map_height) = map.dimensions();
     if map_width == 0 || map_height == 0 {
-        return direct_target;
+        return MapShotCameraTarget {
+            position: direct_target,
+            clamped: false,
+        };
     }
     let min_coord = if freeform_edges { OPENTTD_TILE_SIZE } else { 0 };
     let max_x = map_width
@@ -256,10 +278,36 @@ pub(crate) fn map_shot_camera_world_pos(
     // menos el desplazamiento que introdujo el viewport de captura.
     let capture_center = clamped_center - center_delta;
     let edge_screen_bias = map_shot_edge_screen_bias(clamped, capture_scale);
-    Vec2::new(
-        capture_center.x as f32 / OPENTTD_ZOOM_BASE as f32 + edge_screen_bias.x,
-        -(capture_center.y as f32) / OPENTTD_ZOOM_BASE as f32 + edge_screen_bias.y,
+    MapShotCameraTarget {
+        position: Vec2::new(
+            capture_center.x as f32 / OPENTTD_ZOOM_BASE as f32 + edge_screen_bias.x,
+            -(capture_center.y as f32) / OPENTTD_ZOOM_BASE as f32 + edge_screen_bias.y,
+        ),
+        clamped,
+    }
+}
+
+#[cfg(test)]
+#[must_use]
+pub(crate) fn map_shot_camera_world_pos(
+    map: &Map,
+    coord: TileCoord,
+    window_width: f32,
+    window_height: f32,
+    capture_scale: f32,
+    map_height_limit: u8,
+    freeform_edges: bool,
+) -> Vec2 {
+    map_shot_camera_target(
+        map,
+        coord,
+        window_width,
+        window_height,
+        capture_scale,
+        map_height_limit,
+        freeform_edges,
     )
+    .position
 }
 
 pub(crate) struct CameraControlPlugin;
@@ -269,6 +317,7 @@ impl Plugin for CameraControlPlugin {
         app.init_resource::<CameraVelocity>()
             .init_resource::<ZoomMode>()
             .init_resource::<CameraFocusRequest>()
+            .init_resource::<MapShotCameraState>()
             .add_systems(
                 Update,
                 (
@@ -950,8 +999,10 @@ mod tests {
         let map = Map::new_flat(256, 256, 1);
         let coord = TileCoord::new(132, 2);
         let direct = tile_camera_world_pos(&map, coord);
-        let clamped = map_shot_camera_world_pos(&map, coord, 800.0, 600.0, 2.0, 15, true);
+        let target = map_shot_camera_target(&map, coord, 800.0, 600.0, 2.0, 15, true);
+        let clamped = target.position;
 
+        assert!(target.clamped);
         assert_ne!(clamped, direct);
         assert!(clamped.x > direct.x);
         assert!(clamped.y < direct.y);

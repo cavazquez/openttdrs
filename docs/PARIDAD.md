@@ -6943,9 +6943,9 @@ Actualizado: 2026-09-17. Durante una captura de mapa `Out4x`, los sprites de
 atlas con tamaño, ancla, rotación y recorte por defecto convierten sus bordes
 actuales a coordenadas de pantalla y redondean ambos ejes hacia arriba antes de
 volver a mundo. La corrección queda limitada a `OPENTTDRS_MAP_SHOT`; no altera
-la partida interactiva, `Normal`, `Out2x` ni `Out8x`. La matriz experimental
-descartó `floor-floor` para Out2x y cualquier redondeo global para Out8x, donde
-la fase depende del clamp y del agrupamiento de ocho píxeles.
+la partida interactiva ni `Normal`. Out2x aplica ahora `floor-floor` sólo cuando
+el foco quedó clamped; la matriz descartó cualquier redondeo global para Out8x,
+donde la fase depende del agrupamiento de ocho píxeles.
 
 En `Kale_TitleGame.sav`, 800×600, OpenGFX 8bpp y perfil `clean-static`, el
 borde `(132,2)` Out4x baja de `91245` a `88624` diferencias alineadas; las
@@ -6956,3 +6956,25 @@ corrección baja de `168902` a `78825` diferencias alineadas y de `12,719043` a
 Es una reducción focal de cuantización, no paridad global: siguen pendientes
 los productores y contratos de composición restantes, otras orientaciones y
 el gate exacto completo. #326/#561/#567 permanecen abiertas.
+
+### #326/#567-OPENTTD-VIEWPORT-POSITION-QUANTIZATION-OUT2-CLAMP — fase de borde
+
+Actualizado: 2026-09-17. Se conserva el resultado del clamp de la cámara de
+captura y se usa sólo para seleccionar la cuantización de sprites en `Out2x`:
+cuando el foco tocó un borde, los bordes de pantalla se redondean hacia abajo;
+un foco interior no recibe ningún ajuste. La decisión sigue limitada a
+`OPENTTDRS_MAP_SHOT`, por lo que no cambia la cámara interactiva ni el atlas.
+
+La A/B limpia de `Kale_TitleGame.sav`, 800×600 y OpenGFX 8bpp muestra una caída
+grande en el borde `(132,2)`: de `157389` a `22280` píxeles alineados distintos,
+delta medio de `5,467231` a `1,533480`, y banda `>64` de `18935` a `8063`; la
+traslación queda `[0,0]`. En el borde especular `(2,132)`, la comparación
+histórica baja de `98583` a `9367` diferencias, con delta medio `2,772141` a
+`0,559923` y banda `>64` `8591` a `2759`, también con `[0,0]`.
+
+El control interior `(189,126)` no activa la regla: la repetición queda en
+`172888` diferencias alineadas frente a `172703` del control anterior, y el
+A/B directo de candidatas sólo cambia `4411` píxeles por la variación normal de
+la captura. Esto valida la compuerta por clamp, pero no cierra #326/#567:
+siguen pendientes productores, composiciones, otras orientaciones y el gate
+exacto completo.

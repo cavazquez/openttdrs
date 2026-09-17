@@ -26,7 +26,7 @@ use openttdrs_core::prelude::*;
 use std::fmt::Write as _;
 
 use crate::bevy_app::UpdateSet;
-use crate::camera::{CameraVelocity, map_shot_camera_world_pos};
+use crate::camera::{CameraVelocity, MapShotCameraState, map_shot_camera_target};
 use crate::render::{
     AircraftRotorSprite, AircraftShadowSprite, ConsistUnitSprite, MapPreviewCamera, MapVisualLayer,
     PrimaryGameCamera, ShoreTile, SignLabel, StationLabel, TownLabel, VehicleCargoLabel,
@@ -1265,7 +1265,8 @@ impl Plugin for WindowsShotPlugin {
             );
         } else if std::env::var_os("OPENTTDRS_MAP_SHOT").is_some() {
             app.init_resource::<MapShotProgress>()
-                .init_resource::<MapShotPreferenceGuard>();
+                .init_resource::<MapShotPreferenceGuard>()
+                .init_resource::<MapShotCameraState>();
             app.add_systems(
                 OnEnter(ClientScreen::InGame),
                 (
@@ -1578,6 +1579,7 @@ fn hide_clean_map_shot_dynamic_layers(world: &mut World) {
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 fn map_shot_driver(
     mut progress: ResMut<MapShotProgress>,
+    mut camera_state: ResMut<MapShotCameraState>,
     mut windows: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
     mut tool_state: ResMut<crate::ui::toolbar::UiToolState>,
     mut toolbar_state: ResMut<crate::ui::toolbar::ToolbarState>,
@@ -1602,7 +1604,7 @@ fn map_shot_driver(
             .map(|window| (window.width(), window.height()))
             .unwrap_or((1280.0, 720.0));
         let capture_scale = map_shot_scale_from_env().unwrap_or(1.0);
-        let target = map_shot_camera_world_pos(
+        let target = map_shot_camera_target(
             &sim.state.map,
             center,
             window_width,
@@ -1611,8 +1613,9 @@ fn map_shot_driver(
             sim.state.construction.effective_map_height_limit(),
             sim.state.construction.freeform_edges,
         );
-        transform.translation.x = target.x;
-        transform.translation.y = target.y;
+        camera_state.clamped = target.clamped;
+        transform.translation.x = target.position.x;
+        transform.translation.y = target.position.y;
         camera_velocity.0 = Vec2::ZERO;
         // La cámara puede cambiar el conjunto de chunks visibles. En mapas
         // grandes basta un remapeo incremental; una reconstrucción completa
@@ -1635,7 +1638,7 @@ fn map_shot_driver(
             "map_shot: cámara centrada en ({}, {}) → {:?} con escala {:?}",
             center.x,
             center.y,
-            target,
+            target.position,
             map_shot_scale_from_env(),
         );
     }

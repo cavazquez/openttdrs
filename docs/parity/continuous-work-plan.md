@@ -9797,9 +9797,9 @@ orientaciones, productores y el gate exacto completo.
 
 La captura de mapa `Out4x` redondea hacia arriba ambos bordes de los sprites de
 atlas que conservan tamaño, ancla, rotación y recorte por defecto. El ajuste se
-activa sólo con `OPENTTDRS_MAP_SHOT` y deja intactos la partida interactiva,
-`Normal`, `Out2x` y `Out8x`. Out2x no recibe la regla: su matriz requiere
-conocer si el foco está clamped; Out8x tampoco, porque su fase está ligada al
+activa sólo con `OPENTTDRS_MAP_SHOT` y deja intactas la partida interactiva y
+`Normal`. Out2x aplica ahora `floor-floor` sólo cuando el foco está clamped;
+Out8x tampoco recibe una regla global, porque su fase está ligada al
 agrupamiento nativo de ocho píxeles.
 
 En Kale, 800×600, limpio, el borde `(132,2)` Out4x baja de `91245` a `88624`
@@ -9808,3 +9808,27 @@ pixeles alineados distintos y las bandas `>16/>32/>64` de `86478/69430/38018` a
 de `12,719043` a `6,126154`; la traslación pasa de `[1,0]` a `[0,0]`. La
 mejora sigue siendo focal: #326/#561/#567 permanecen abiertas por productores,
 orientaciones, escalas y el gate exacto completo.
+
+### Siguiente etapa publicada — 2026-09-17 — #326/#567 cuantización Out2x sólo en borde
+
+El driver de captura conserva si el cálculo geométrico realmente acotó el
+viewport. El remapeo de sprites usa esa señal para aplicar `floor-floor` sólo
+en `Out2x` clamped; `Out2x` interior, `Normal`, `Out4x`, `Out8x` y la partida
+interactiva conservan sus rutas anteriores. El contrato queda cubierto por
+tests de escala y estado de clamp, además de una prueba de cámara que verifica
+la señal producida por el algoritmo real.
+
+Evidencia reproducible en `Kale_TitleGame.sav`, 800×600, OpenGFX 8bpp y
+`clean-static`:
+
+- `(132,2)`, Out2x: `157389 → 22280` diferencias alineadas, delta medio
+  `5,467231 → 1,533480`, banda `>64` `18935 → 8063`, traslación `[0,0]`;
+- `(2,132)`, Out2x: `98583 → 9367`, delta medio `2,772141 → 0,559923`, banda
+  `>64` `8591 → 2759`, traslación `[0,0]`;
+- `(189,126)`, Out2x interior: `172703 → 172888` en repeticiones independientes;
+  el A/B directo de candidatas cambia sólo `4411` píxeles, por lo que la
+  compuerta no introduce una modificación sistemática en interiores.
+
+La etapa reduce decenas de miles de diferencias en bordes sin extrapolar el
+resultado a otros niveles. #326/#561/#567 siguen abiertas por productores,
+composición, orientaciones, escalas y el gate exacto completo.

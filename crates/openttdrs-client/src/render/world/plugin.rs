@@ -7,6 +7,7 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 
 use crate::bevy_app::UpdateSet;
+use crate::camera::MapShotCameraState;
 use crate::render::{
     MapTileChunk, TileViewportBounds, chunk_tile_bounds, chunks_in_bounds,
     large_map_viewport_cull_enabled, sort_viewport_sortable_parents,
@@ -87,23 +88,24 @@ fn sync_flat_water_raster_footprint(
 
 /// Redondeo de posición estable para el atlas nativo de zoom.
 ///
-/// En la ruta Bevy, `Out4x` es el único nivel donde la posición de los
-/// sprites de mapa sin tamaño/ancla explícitos tiene el mismo contrato de
-/// cuantización que el recorte nativo: ambos extremos de pantalla se
-/// redondean hacia arriba. Out2x depende de la fase del clamp de cámara y
-/// Out8x ya agrupa la raíz en bloques de ocho; aplicarles esta regla global
-/// empeora escenas interiores. Es una corrección exclusiva de capturas de
-/// mapa hasta disponer de una matriz de fase completa para esos niveles.
+/// La cuantización depende del nivel y de la fase del clamp: Out2x en borde
+/// conserva el redondeo hacia abajo del recorte nativo, mientras Out4x usa
+/// redondeo hacia arriba. Out8x ya agrupa la raíz en bloques de ocho y aplicar
+/// una regla global empeora escenas interiores. Es una corrección exclusiva
+/// de capturas de mapa hasta disponer de una matriz de fase completa.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NativeMapSpritePositionRounding {
+    Floor,
     Ceil,
 }
 
 fn native_map_sprite_position_rounding(
     capture_requested: bool,
     scale: f32,
+    clamped: bool,
 ) -> Option<NativeMapSpritePositionRounding> {
     match crate::sprites::company_palette::native_zoom_factor_for(capture_requested, Some(scale)) {
+        Some(2) if clamped => Some(NativeMapSpritePositionRounding::Floor),
         Some(4) => Some(NativeMapSpritePositionRounding::Ceil),
         _ => None,
     }
@@ -111,6 +113,7 @@ fn native_map_sprite_position_rounding(
 
 fn sync_native_map_sprite_position(
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    camera_state: Res<MapShotCameraState>,
     layouts: Res<Assets<TextureAtlasLayout>>,
     mut queries: ParamSet<(
         Query<
@@ -147,8 +150,8 @@ fn sync_native_map_sprite_position(
     if !scale.is_finite() || !matches!(scale.round() as i32, 2 | 4 | 8) {
         return;
     }
-    let Some(NativeMapSpritePositionRounding::Ceil) =
-        native_map_sprite_position_rounding(capture_requested, scale)
+    let Some(rounding) =
+        native_map_sprite_position_rounding(capture_requested, scale, camera_state.clamped)
     else {
         return;
     };
@@ -170,8 +173,22 @@ fn sync_native_map_sprite_position(
         let source_size = rect.as_rect().size();
         let current_left = transform.translation.x - source_size.x * 0.5;
         let current_top = transform.translation.y + source_size.y * 0.5;
-        let screen_left = ((current_left - camera.x) / scale + window_width * 0.5).ceil();
-        let screen_top = (window_height * 0.5 - (current_top - camera.y) / scale).ceil();
+        let screen_left = match rounding {
+            NativeMapSpritePositionRounding::Floor => {
+                ((current_left - camera.x) / scale + window_width * 0.5).floor()
+            }
+            NativeMapSpritePositionRounding::Ceil => {
+                ((current_left - camera.x) / scale + window_width * 0.5).ceil()
+            }
+        };
+        let screen_top = match rounding {
+            NativeMapSpritePositionRounding::Floor => {
+                (window_height * 0.5 - (current_top - camera.y) / scale).floor()
+            }
+            NativeMapSpritePositionRounding::Ceil => {
+                (window_height * 0.5 - (current_top - camera.y) / scale).ceil()
+            }
+        };
         let world_left = camera.x + (screen_left - window_width * 0.5) * scale;
         let world_top = camera.y + (window_height * 0.5 - screen_top) * scale;
         transform.translation.x = world_left + source_size.x * 0.5;
@@ -503,6 +520,7 @@ impl Plugin for WorldRenderPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RemapMapVisualsPending>()
             .init_resource::<MapTileSpawnViewport>()
+            .init_resource::<MapShotCameraState>()
             .init_resource::<FlatWaterRasterFootprintState>()
             .init_resource::<crate::render::ViewportSortableChildDepthWindows>()
             .init_resource::<crate::render::MapLabelSpatialIndex>()
@@ -589,15 +607,31 @@ mod tests {
     }
 
     #[test]
-    fn native_map_position_rounding_is_capture_scoped_to_out4() {
-        assert_eq!(super::native_map_sprite_position_rounding(false, 4.0), None);
-        assert_eq!(super::native_map_sprite_position_rounding(true, 1.0), None);
-        assert_eq!(super::native_map_sprite_position_rounding(true, 2.0), None);
+    fn native_map_position_rounding_is_capture_scoped_to_zoom_and_clamp() {
         assert_eq!(
-            super::native_map_sprite_position_rounding(true, 4.0),
+            super::native_map_sprite_position_rounding(false, 4.0, false),
+            None
+        );
+        assert_eq!(
+            super::native_map_sprite_position_rounding(true, 1.0, false),
+            None
+        );
+        assert_eq!(
+            super::native_map_sprite_position_rounding(true, 2.0, false),
+            None
+        );
+        assert_eq!(
+            super::native_map_sprite_position_rounding(true, 2.0, true),
+            Some(super::NativeMapSpritePositionRounding::Floor)
+        );
+        assert_eq!(
+            super::native_map_sprite_position_rounding(true, 4.0, false),
             Some(super::NativeMapSpritePositionRounding::Ceil)
         );
-        assert_eq!(super::native_map_sprite_position_rounding(true, 8.0), None);
+        assert_eq!(
+            super::native_map_sprite_position_rounding(true, 8.0, true),
+            None
+        );
     }
 
     #[test]

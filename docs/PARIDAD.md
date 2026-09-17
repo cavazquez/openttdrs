@@ -6686,3 +6686,18 @@ regresión existente de industria exige para esa ruta sin `TileSeq`. La suite
 completa pasa con 1.590 tests, 2 ignorados y Clippy estricto. Es una corrección
 acotada de compositor: layouts `TileSeq`, paletas/mapas Action5, callbacks y la
 comparación raster global siguen pendientes; no se cierran #326/#329/#567.
+
+Corrección #326/#329/#567-NEWGRF-STATION-FLAT-BUILDING-SORT (`886841d5`,
+2026-09-16): las vistas simples Action1/3 de estaciones ferroviarias y
+waypoints NewGRF ya no quedan como sprites directos en terreno plano. El
+renderer registra la vista como `sortable` y publica un
+`ViewportSortableParent` con bounds derivados del ancla NFO, profundidad de
+fuente e inserción posterior a la catenaria; la misma caja conservadora se
+reutiliza con industria y objetos. En pendiente se mantiene el child de la
+foundation nivelada, preservando el contrato de `DrawFoundation` y el offset
+de pantalla. La regresión `flat_newgrf_station_overlay_joins_global_sort`
+comprueba bounds, ordinal y profundidad, mientras la prueba inclinada conserva
+la relación con la foundation. Pasan 1.591 tests del cliente, 2 ignorados,
+Clippy estricto y `git diff --check`. El subalcance no completa layouts
+`TileSeq`, callbacks, paletas/Action5 ni la comparación raster global; no se
+cierran #326/#329/#567.

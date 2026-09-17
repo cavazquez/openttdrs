@@ -9524,3 +9524,20 @@ o `TWOCC_PALETTE_BASE + colour` según `Uses2CC`; no se inventa una textura para
 paletas custom. Pasan 1.590 tests del cliente, 2 ignorados y Clippy estricto.
 El subalcance no completa `TileLayout`, Action5, callbacks ni la comparación
 raster; las issues madre siguen abiertas.
+
+### #326/#329/#567-NEWGRF-STATION-FLAT-BUILDING-SORT — estaciones y waypoints
+
+Actualizado: 2026-09-16 (`886841d5`). Las vistas simples Action1/3 de
+estaciones ferroviarias y waypoints NewGRF entran al compositor global cuando
+la tesela es plana: conservan el ancla NFO, bounds derivados de sus
+dimensiones, `viewport_source_depth` y el ordinal BUILD posterior a la
+catenaria. En pendientes continúan como children del parent de
+`FOUNDATION_LEVELED`, porque esa ruta representa el draw con offset de pantalla
+del contrato nativo. El helper de bounds quedó compartido con industria y
+objetos para que las tres familias no diverjan. La regresión
+`flat_newgrf_station_overlay_joins_global_sort` fija el prisma `(14,8,0)` a
+`(17,11,3)`, el ordinal 16 y la profundidad fuente; la regresión inclinada
+confirma que no se abre un parent independiente. Pasan 1.591 tests del cliente,
+2 ignorados y Clippy estricto. La fila sigue parcial: faltan layouts `TileSeq`,
+callbacks, paletas/Action5 y comparación raster; las issues madre permanecen
+abiertas.

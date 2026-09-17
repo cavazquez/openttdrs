@@ -2724,3 +2724,16 @@ rampas desde `TWOCC_PALETTE_BASE + Object::colour`. Esto corrige el compositor
 sin afirmar soporte para layouts `BUILD`, paletas directas custom ni Action5.
 La suite completa del cliente pasa con 1.590 tests, 2 ignorados y Clippy
 estricto; #326/#329/#567 continúan parciales y abiertas.
+
+### #326/#329/#567-NEWGRF-STATION-FLAT-BUILDING-SORT — fallback Action1/3
+
+Actualizado (2026-09-16, `886841d5`): la ruta simple de estaciones
+ferroviarias y waypoints que resuelve una vista Action1/3 publica un parent
+`sortable` en plano, con bounds conservadores desde `DecodedSprite` y el
+ordinal de capas BUILD posterior a la catenaria. La traza conserva la paleta
+de compañía y el mismo ancla NFO; en una tesela inclinada registra y materializa
+el sprite como child de `FOUNDATION_LEVELED`. La caja plana se comparte con los
+fallbacks de industria/objeto. La regresión plana comprueba bounds, inserción y
+profundidad y la inclinada conserva el parent de foundation. Pasan 1.591 tests
+del cliente, 2 ignorados y Clippy estricto. Esto no implica soporte completo de
+layouts `TileSeq`, callbacks, paletas/Action5 ni cierre de las issues madre.

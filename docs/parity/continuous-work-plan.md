@@ -9862,3 +9862,18 @@ Kale confirma una reducción de `4187` a `2859` diferencias alineadas en
 `Normal`, 800×600, perfil limpio (`-31,7%`). No se cierra ningún issue: el
 vidrio, otros productores y las matrices de zoom/orientación siguen formando
 parte del trabajo de #326/#561/#567.
+
+### Etapa completada — 2026-09-17 — reserva de profundidad para SpriteCombine
+
+El sorter Bevy ahora separa parents vecinos con ocho `next_f32_after` cuando
+la profundidad fuente no deja sitio para las capas de un bloque combinado.
+La reserva escala con el valor de profundidad y conserva el orden lógico sin
+usar un epsilon decimal fijo. Así `sync_viewport_sortable_children` puede
+interpolar hasta cuatro children entre parent y siguiente parent sin que el
+redondeo de `f32` los mezcle con otra tesela.
+
+La evidencia sobre `Kale_TitleGame.sav`, `(132,2)`, 800×600, `Normal` y perfil
+limpio es `2859 → 1010` diferencias alineadas, con delta medio `0,161401 →
+0,056100` y bandas `>16/>32/>64` de `951/653/222`. La traza y la comparación
+visual conservan `[0,0]`; el vidrio y los productores no cubiertos continúan
+pendientes. No se cierra ningún issue.

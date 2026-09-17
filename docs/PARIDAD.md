@@ -7011,3 +7011,23 @@ la comparación alineada pasa de `4187` a `2859` píxeles distintos
 que desaparecen las líneas marrones de las vías; la banda `>64` queda en `807`
 porque pertenece al vidrio y a otros productores aún pendientes. #326/#561/#567
 siguen abiertas.
+
+### Corrección publicada — 2026-09-17 — #326/#567-DEPTH-SLOTS-COMBINE
+
+El compositor reserva ocho valores `f32` representables entre parents vecinos
+cuando sus profundidades fuente están demasiado juntas. El margen es relativo
+a la magnitud de la profundidad: alcanza para las cuatro capas máximas de un
+`SpriteCombine` y evita que las fracciones de los children redondeen al parent
+o se intercalen con el bloque siguiente. La prueba cubre cuatro children en un
+intervalo de profundidad agrupado.
+
+En `Kale_TitleGame.sav`, foco `(132,2)`, 800×600, `Normal`, OpenGFX 8bpp y
+perfil `clean-static`, la A/B baja de `2859` a `1010` diferencias alineadas
+(`0,595625% → 0,210417%`, `-64,7%`). El delta medio pasa de `0,161401` a
+`0,056100`; las bandas `>16/>32/>64` quedan en `951/653/222`, con traslación
+`[0,0]`. El cambio elimina principalmente intercalaciones de árboles
+combinados; vidrio y otros productores siguen en el residual.
+
+La mejora es una corrección del compositor, no paridad global. Las issues
+`#326/#561/#567` permanecen abiertas hasta completar las escenas, escalas,
+orientaciones y el gate exacto de todos los productores.

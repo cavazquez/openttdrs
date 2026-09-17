@@ -280,6 +280,8 @@ pub(crate) fn viewport_sort_parent_sprites(parents: &[ParentSprite]) -> Vec<usiz
 ///
 /// `order` debe ser la permutación emitida por
 /// [`viewport_sort_parent_sprites`] para el mismo conjunto de parents.
+const COMBINE_DEPTH_SLOTS: usize = 8;
+
 #[must_use]
 pub(crate) fn depths_in_viewport_sort_order_from_order(
     order: &[usize],
@@ -300,9 +302,23 @@ pub(crate) fn depths_in_viewport_sort_order_from_order(
     // veces porque varios TileSeq comparten la misma profundidad fuente.
     // Avanzar sólo las colisiones al siguiente valor representable conserva
     // la banda original y hace observable el orden final de OpenTTD.
+    // Un `SpriteCombine` necesita varios valores entre dos parents: cada
+    // child ocupa uno de ellos después de que `sync_viewport_sortable_children`
+    // reasigna el bloque. Un solo `next_f32_after` evita empates entre parents,
+    // pero no alcanza cuando la separación original era una sola ulp: las
+    // fracciones intermedias vuelven a redondear al parent o al vecino y el
+    // child puede terminar intercalado con otro bloque.
+    // Ocho ulps dejan espacio para las cuatro capas máximas de un
+    // `SpriteCombine` y sus extremos, pero escalan con la magnitud de la
+    // profundidad. Un epsilon decimal fijo sería demasiado grande cerca del
+    // origen y demasiado pequeño en mapas con diagonales muy profundas.
     for index in 1..slots.len() {
-        if slots[index] <= slots[index - 1] {
-            slots[index] = next_f32_after(slots[index - 1]);
+        let mut minimum = slots[index - 1];
+        for _ in 0..COMBINE_DEPTH_SLOTS {
+            minimum = next_f32_after(minimum);
+        }
+        if slots[index] < minimum {
+            slots[index] = minimum;
         }
     }
 
@@ -358,8 +374,8 @@ pub(crate) fn depths_in_viewport_sort_order(
 #[cfg(test)]
 mod tests {
     use super::{
-        ChildScreenSprite, ParentSprite, ParentSpriteBounds, ParentSpriteKind,
-        depths_in_viewport_sort_order, depths_in_viewport_sort_order_from_order,
+        COMBINE_DEPTH_SLOTS, ChildScreenSprite, ParentSprite, ParentSpriteBounds, ParentSpriteKind,
+        depths_in_viewport_sort_order, depths_in_viewport_sort_order_from_order, next_f32_after,
         viewport_sort_parent_sprites,
     };
 
@@ -536,6 +552,24 @@ mod tests {
             depths,
             depths_in_viewport_sort_order(&parents, &[1.0, 1.0, 1.0])
         );
+    }
+
+    #[test]
+    fn clustered_depth_slots_admit_four_combined_children() {
+        let order = [0, 1];
+        let depths = depths_in_viewport_sort_order_from_order(&order, &[1.0, 1.0]);
+        let lower = depths[0];
+        let upper = depths[1];
+        let children: Vec<_> = (0..4)
+            .map(|rank| lower + (upper - lower) * ((rank + 1) as f32 / (4 + 1) as f32))
+            .collect();
+
+        assert_eq!(
+            upper,
+            (0..COMBINE_DEPTH_SLOTS).fold(lower, |depth, _| next_f32_after(depth))
+        );
+        assert!(children.windows(2).all(|pair| pair[0] < pair[1]));
+        assert!(children.iter().all(|&depth| lower < depth && depth < upper));
     }
 
     #[test]

@@ -6809,3 +6809,10 @@ ignorados, con `cargo check`, Clippy estricto y `git diff --check` verdes. Es
 una mejora de muestreo, no paridad completa: todavía faltan cobertura de
 orientaciones/escenas, zoom runtime, borde de cámara y composición de todos
 los productores; #326/#329/#567 siguen abiertas.
+
+La repetición en el mismo foco conserva la mejora en los otros niveles: `Out4x`
+queda en `174822` píxeles alineados distintos, delta medio `13,099865` y
+`347749` crudos; `Out8x` queda en `167120`, `12,857783` y `340119`,
+respectivamente. El control `Normal` continúa en `19873` (`4,14%`) con delta
+medio `1,540128`, confirmando que las variantes sólo se activan en las escalas
+fijas de captura.

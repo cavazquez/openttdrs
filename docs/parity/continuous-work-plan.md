@@ -9676,9 +9676,11 @@ acotada a capturas fijas `Out2x`/`Out4x`/`Out8x`; fuera de ellas no se copia ni
 se altera el buffer.
 
 En Kale interior `Out2x`, esta etapa reduce el exacto alineado de `177345` a
-`172703` y el delta medio de `13,069116` a `12,784330`. El exacto crudo baja
-de `339990` a `318664`. La suite queda en `1596` tests, 2 ignorados, y las
-validaciones de compilación y Clippy son verdes. Siguiente secuencia: medir
-esta etapa en `Out4x` y `Out8x` contra sus baselines, cubrir orientaciones y
+`172703` y el delta medio de `13,069116` a `12,784330`; el exacto crudo baja
+de `339990` a `318664`. Repetida en el mismo foco, `Out4x` queda en `174822`
+alineados y `347749` crudos, mientras `Out8x` queda en `167120` y `340119`.
+El control `Normal` conserva `19873` diferencias (`4,14%`). La suite queda en
+`1596` tests, 2 ignorados, y las validaciones de compilación y Clippy son
+verdes. Siguiente secuencia: aislar el borde de cámara, cubrir orientaciones y
 escenas con vehículos/depósitos, y recién entonces diseñar la conmutación de
 zoom para runtime; no cerrar #326/#329/#567 por esta evidencia focalizada.

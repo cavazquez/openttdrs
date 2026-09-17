@@ -2633,6 +2633,16 @@ regresión focal de puentes pasa junto con 1.586 tests del cliente, 2 ignorados 
 Clippy estricto. El contrato sólo cubre este fallback de compositor y no cierra
 las issues madre.
 
+### #326/#329/#567-BRIDGE-VANILLA-ORPHAN — overlays sin fachada parent
+
+Actualizado: 2026-09-16 (`211bb551`). La catenaria trasera vanilla, el deck
+Action5 y el overlay de tranvía usan el fallback `ViewportSortableParent`
+autónomo cuando el parent trasero combinado no se puede materializar. La
+colocación conserva `BridgeTracePlacement`, bounds, profundidad y ordinal; con
+fachada continúa el child `Promotable`/`Segmented`. La regresión ejercita los
+tres roles y la suite queda en 1.587 tests del cliente, 2 ignorados, con Clippy
+estricto verde. El alcance es sólo de compositor y no cierra las issues madre.
+
 ### #326/#329/#567-AIRPORT-TILE-DIRECT-TRANSPARENT — paleta directa 802
 
 Actualización (2026-09-16, `c753924f`): el consumidor visual de

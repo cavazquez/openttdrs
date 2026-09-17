@@ -6637,3 +6637,14 @@ la reserva continúa siendo child segmentado del parent combinado. Pasan 75
 pruebas focalizadas de puentes, 1.586 tests del cliente, 2 ignorados y Clippy
 estricto. Es una corrección de composición acotada y no cierra #326/#329/#567:
 siguen pendientes otros combines/producers, callbacks y comparación raster.
+
+Corrección #326/#329/#567-BRIDGE-VANILLA-ORPHAN (`211bb551`, 2026-09-16):
+la catenaria trasera vanilla, el deck Action5 y el overlay de tranvía que
+resuelven una imagen sin fachada trasera ahora usan también un
+`ViewportSortableParent` autónomo. Conservan la geometría de
+`BridgeTracePlacement`, la profundidad y el ordinal de `DrawBridgeMiddle`; con
+fachada disponible permanecen children segmentados del parent combinado. La
+regresión cubre los tres roles huérfanos y pasa junto con 76 pruebas de puente,
+1.587 tests del cliente, 2 ignorados y Clippy estricto. Es una corrección
+acotada de composición: #326/#329/#567 siguen abiertas por otros combines,
+producers, callbacks y comparación raster.

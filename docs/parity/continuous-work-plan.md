@@ -9313,6 +9313,17 @@ de puentes, 1.586 tests del cliente, 2 ignorados y Clippy estricto. La cobertura
 es parcial: no se cierran #326/#329/#567 y permanecen otros combines, producers,
 callbacks y la comparación de framebuffer.
 
+### #326/#329/#567-BRIDGE-VANILLA-ORPHAN — overlays sin fachada parent
+
+Actualizado: 2026-09-16 (`211bb551`). Los fallbacks de catenaria trasera
+vanilla, deck Action5 y overlay de tranvía ya no emiten sprites planos cuando
+`rear_parent` no existe. Los tres pasan por el parent sortable autónomo común y
+conservan bounds, profundidad, geometría `BridgeTracePlacement` y ordinal; el
+camino normal sigue usando children `Promotable`/`Segmented`. La regresión cubre
+los tres roles y pasan 76 pruebas focalizadas de puentes, 1.587 tests del
+cliente, 2 ignorados y Clippy estricto. Esta fila es parcial y no cierra
+#326/#329/#567.
+
 ### #326/#329/#567-PALETTE-INITIAL-PHASE — fase inicial y boyas congeladas
 
 Actualizado: 2026-09-16 (`5aa725c7`). `PaletteAnimationClock::default()`

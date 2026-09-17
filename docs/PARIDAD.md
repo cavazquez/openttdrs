@@ -6674,3 +6674,15 @@ del pase y el ancla visual. Pasan 1.588 tests del cliente, 2 ignorados, Clippy
 estricto y `git diff --check`. Es una corrección acotada del productor de
 railtypes; layouts de vía, paletas, pendientes/rotaciones restantes y la
 comparación raster global mantienen #326/#329/#567 abiertas.
+
+Corrección #326/#329/#567-NEWGRF-FLAT-BUILDING-SORT (`58479e34`, 2026-09-16):
+las vistas planas Action1/3 de `IndustryTile` y `Object` ya no quedan como
+sprites sueltos en terreno plano. El renderer las registra como `sortable` y
+materializa `ViewportSortableParent` con profundidad de fuente, ordinal de
+inserción y bounds derivados del ancla NFO; los objetos conservan además la
+paleta nativa de una o dos rampas de compañía. Cuando la vista de compatibilidad
+se dibuja sobre una foundation, sigue siendo child del cimiento, igual que la
+regresión existente de industria exige para esa ruta sin `TileSeq`. La suite
+completa pasa con 1.590 tests, 2 ignorados y Clippy estricto. Es una corrección
+acotada de compositor: layouts `TileSeq`, paletas/mapas Action5, callbacks y la
+comparación raster global siguen pendientes; no se cierran #326/#329/#567.

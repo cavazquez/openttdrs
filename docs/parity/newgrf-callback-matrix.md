@@ -2709,3 +2709,18 @@ sprite como child con el `extra_offs_y` de `DrawTrackSprite` y lo enlaza a
 `custom_rail_ground_keeps_nfo_anchor_outside_sortable_pass` fija la frontera
 plana. La cobertura es parcial: no cierra #326/#329/#567 por layouts completos,
 paletas especiales, pendientes/rotaciones y otros producers.
+
+### #326/#329/#567-NEWGRF-FLAT-BUILDING-SORT — `IndustryTile` y `Object`
+
+Actualizado: 2026-09-16 (`58479e34`). Las vistas Action1/3 que llegan por la
+ruta plana de industria u objeto se distinguen del suelo `DrawGroundSprite`:
+en una tesela plana abren un `ViewportSortableParent`, conservando el ancla
+NFO, la caja derivada de offset/dimensiones, profundidad de fuente y ordinal
+local. En una pendiente, la vista sin `TileSeq` permanece child de la
+foundation, que es el contrato de compatibilidad ya ejercitado por
+`sloped_newgrf_industry_overlay_is_child_of_foundation`. El objeto conserva la
+paleta de `DrawTileLayout`: rampa única desde `PALETTE_RECOLOUR_START` y dos
+rampas desde `TWOCC_PALETTE_BASE + Object::colour`. Esto corrige el compositor
+sin afirmar soporte para layouts `BUILD`, paletas directas custom ni Action5.
+La suite completa del cliente pasa con 1.590 tests, 2 ignorados y Clippy
+estricto; #326/#329/#567 continúan parciales y abiertas.

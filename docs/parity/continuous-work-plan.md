@@ -9508,3 +9508,19 @@ se procesa si contiene alguna tesela Airport real. Las regresiones de Action2,
 animación, radar y scheduler pasan junto con 2.827 tests de core y 1 ignorado;
 Clippy estricto de producción (`--lib`) queda verde. La fila sigue parcial y
 no se cierran #326/#329/#567.
+
+### #326/#329/#567-NEWGRF-FLAT-BUILDING-SORT — vistas planas de industria y objeto
+
+Actualizado: 2026-09-16 (`58479e34`). Las rutas de compatibilidad Action1/3 de
+`IndustryTile` y `Object` emiten un parent global cuando la tesela es plana,
+con bounds conservadores calculados desde `DecodedSprite.x_offs/y_offs` y sus
+dimensiones, `viewport_source_depth` e índice de inserción estable. Esto evita
+que una construcción alta quede atada a la profundidad local de la tesela y
+permite que el sorter la cruce correctamente con vecinos, vías y puentes. En
+pendiente se conserva el child de foundation de la vista plana sin `TileSeq`,
+porque esa ruta representa el `DrawGroundSprite` de compatibilidad ya cubierto
+por la matriz existente. La paleta de objetos refleja `PALETTE_RECOLOUR_START`
+o `TWOCC_PALETTE_BASE + colour` según `Uses2CC`; no se inventa una textura para
+paletas custom. Pasan 1.590 tests del cliente, 2 ignorados y Clippy estricto.
+El subalcance no completa `TileLayout`, Action5, callbacks ni la comparación
+raster; las issues madre siguen abiertas.

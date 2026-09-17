@@ -56,8 +56,8 @@ use crate::render::newgrf_cache::{
 };
 
 use crate::render::road_newgrf::{
-    newgrf_road_def_for_tile, newgrf_tram_def_for_tile, road_newgrf_view_index,
-    specific_sprite_for_tile,
+    newgrf_road_def_for_tile, newgrf_tram_def_for_tile, record_specific_sprite_trace,
+    road_newgrf_view_index, specific_sprite_for_tile,
 };
 use crate::render::station_newgrf::{
     NewGrfStationSpriteCache, newgrf_station_def_for_tile, station_newgrf_view_index_for_tile,
@@ -2605,6 +2605,14 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     def.newgrf_view(view_idx).cloned()
                 };
                 if let Some(view) = view {
+                    record_specific_sprite_trace(
+                        "road-waypoint-newgrf",
+                        def,
+                        0,
+                        view_idx,
+                        &view,
+                        foundation_child_parent.is_some(),
+                    );
                     let handle =
                         cache.handle_for_resolved_view(def, view_idx, &action2, &view, image_store);
                     let position = overlay_pos(
@@ -2698,6 +2706,14 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                         def.newgrf_view(tram_idx).cloned()
                     };
                     if let Some(view) = view {
+                        record_specific_sprite_trace(
+                            "tram-waypoint-newgrf",
+                            def,
+                            0,
+                            tram_idx,
+                            &view,
+                            foundation_child_parent.is_some(),
+                        );
                         let handle = cache.handle_for_resolved_view(
                             def,
                             tram_idx,
@@ -3112,6 +3128,14 @@ fn spawn_road_stop_specific_layer(
     ) else {
         return false;
     };
+    record_specific_sprite_trace(
+        "station-road-stop-specific",
+        def,
+        selector,
+        view_idx,
+        &view,
+        foundation_child_parent.is_some(),
+    );
     let position = overlay_pos(
         ctx.iso_pos,
         f32::from(view.x_offs),
@@ -7385,6 +7409,8 @@ fn spawn_road_depot_tile(
         // consulta solamente `ROTSG_OVERLAY`. Una ausencia o un resultado
         // vacío no puede caer al riel vanilla: el grupo GROUND ya declaró que
         // la infraestructura suministra sus propias capas.
+        let overlay_view_idx =
+            crate::sprites::road_flat_sprite_index(0, road_depot_direction_road_bits(dir));
         if let Some((sprite, view)) = depot_tile.and_then(|tile| {
             depot_newgrf_type_def
                 .filter(|def| def.has_newgrf_specific_group(ROTSG_OVERLAY))
@@ -7393,10 +7419,7 @@ fn spawn_road_depot_tile(
                         def,
                         map,
                         ROTSG_OVERLAY,
-                        crate::sprites::road_flat_sprite_index(
-                            0,
-                            road_depot_direction_road_bits(dir),
-                        ),
+                        overlay_view_idx,
                         ctx.coord,
                         tile,
                         climate,
@@ -7408,6 +7431,18 @@ fn spawn_road_depot_tile(
                     )
                 })
         }) {
+            if let Some(def) =
+                depot_newgrf_type_def.filter(|def| def.has_newgrf_specific_group(ROTSG_OVERLAY))
+            {
+                record_specific_sprite_trace(
+                    "road-depot-overlay-newgrf",
+                    def,
+                    ROTSG_OVERLAY,
+                    overlay_view_idx,
+                    &view,
+                    foundation_child_parent.is_some(),
+                );
+            }
             spawn_road_depot_newgrf_overlay(
                 commands,
                 ctx,

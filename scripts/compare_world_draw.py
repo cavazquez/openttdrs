@@ -172,10 +172,19 @@ def matches_ordered_draw(reference: Row, candidate: Row, geometry: bool) -> bool
 
 
 def visual_draws(rows: Iterable[Row]) -> list[Row]:
+    """Devuelve sólo comandos que participan en la comparación visual.
+
+    Una entrada ``trace_only`` conserva una selección diagnóstica del
+    candidato cuando no existe un `SpriteID` global comparable (por ejemplo,
+    una vista decodificada de NewGRF). Se valida el stream y queda disponible
+    en el JSONL, pero no puede justificar ni invalidar un draw del oráculo.
+    """
     return [
         row
         for row in rows
-        if row.value.get("primitive") not in EMPTY_PRIMITIVES and sprite_id(row) is not None
+        if row.value.get("primitive") not in EMPTY_PRIMITIVES
+        and row.value.get("trace_only") is not True
+        and sprite_id(row) is not None
     ]
 
 

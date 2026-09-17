@@ -24,7 +24,7 @@ use crate::render::catenary_newgrf::{
 use crate::render::newgrf_cache::tile_layout_destination_transparent_color;
 use crate::render::road_newgrf::{
     NewGrfRoadSpriteCache, newgrf_road_def_for_tile, newgrf_tram_def_for_tile,
-    road_newgrf_view_index, specific_sprite_for_tile,
+    record_specific_sprite_trace, road_newgrf_view_index, specific_sprite_for_tile,
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
@@ -745,6 +745,18 @@ fn spawn_road_specific_layer(
     ) else {
         return false;
     };
+    record_specific_sprite_trace(
+        if selector == ROTSG_GROUND {
+            "road-newgrf-ground"
+        } else {
+            "road-newgrf-overlay"
+        },
+        def,
+        selector,
+        view_idx,
+        &view,
+        foundation_child_parent.is_some(),
+    );
     // `DrawGroundSprite` siempre parte de `TileInfo::x/y/z` y el blitter
     // agrega el ancla NFO del sprite. La pendiente cambia `tileh`, pero no
     // convierte la superficie en un sprite centrado de 64x31: perder aquí
@@ -1620,6 +1632,14 @@ pub(crate) fn spawn_road_tile(
                         &mut images,
                     )
                 {
+                    record_specific_sprite_trace(
+                        "tram-newgrf-overlay",
+                        def,
+                        ROTSG_OVERLAY,
+                        tfi,
+                        &view,
+                        foundation_child_parent.is_some(),
+                    );
                     let pos3 = overlay_pos(
                         ctx.iso_pos,
                         f32::from(view.x_offs),

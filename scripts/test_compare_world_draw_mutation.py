@@ -35,6 +35,7 @@ def draw(
     primitive: str,
     *,
     fallback: bool = False,
+    trace_only: bool = False,
     geometry_explicit: bool = False,
     world: object | None = None,
     offset: dict[str, int] | None = None,
@@ -49,6 +50,8 @@ def draw(
         "sprite": {"id": sprite},
         "fallback": fallback,
     }
+    if trace_only:
+        row["trace_only"] = True
     if geometry_explicit:
         row["geometry_explicit"] = True
         row["world"] = world
@@ -89,6 +92,26 @@ def main() -> int:
         if grouped.returncode != 0 or "ground: selecciones=1, IDs=1" not in grouped.stdout:
             print(grouped.stdout, grouped.stderr, file=sys.stderr)
             return 1
+
+        # Una vista NewGRF decodificada puede conservar selección, ancla y
+        # geometría sin conservar el SpriteID global que usa el oráculo. La
+        # fila diagnóstica debe sobrevivir en el stream, pero no contaminar la
+        # comparación de IDs vanilla.
+        write(
+            candidate,
+            stream(
+                "openttdrs",
+                [
+                    draw(2391, "ground"),
+                    draw(0x80026000, "ground", trace_only=True),
+                ],
+            ),
+        )
+        trace_only_ok = run(reference, candidate)
+        if trace_only_ok.returncode != 0:
+            print(trace_only_ok.stdout, trace_only_ok.stderr, file=sys.stderr)
+            return 1
+        write(candidate, stream("openttdrs", [draw(2391, "ground"), draw(2392, "sortable")]))
 
         json_report = root / "draw-report.json"
         reported = run(reference, candidate, "--json-report", str(json_report))

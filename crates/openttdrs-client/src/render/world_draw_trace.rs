@@ -86,6 +86,10 @@ struct TraceDraw {
     world_xy_delta: (i32, i32),
     world_z_delta: i32,
     bounds: Option<TraceSpriteBounds>,
+    /// Selección que todavía no puede compararse por `SpriteID` con el
+    /// oráculo porque el `DecodedSprite` no conserva el ID global del GRF.
+    /// Se exporta para auditar cobertura, pero el comparador visual la omite.
+    trace_only: bool,
     /// Último `sortable` de la tesela al que OpenTTD colgaría un `child`.
     /// Los `DrawGroundSprite` posteriores a `DrawFoundation` no conservan
     /// coordenadas de mundo propias: el vínculo es parte del contrato visual.
@@ -405,6 +409,34 @@ impl WorldDrawTrace {
         );
     }
 
+    /// Registra una vista decodificada de NewGRF sólo como evidencia de
+    /// selección. Su identidad sintética es útil para contar/ordenar la ruta
+    /// candidata, pero no se debe comparar contra un `SpriteID` del GRF que
+    /// el `DecodedSprite` ya no conserva.
+    pub(crate) fn record_trace_only_sprite_with_geometry(
+        role: &'static str,
+        primitive: &'static str,
+        sprite_id: u32,
+        offset: (i32, i32, i32),
+        world_z_delta: i32,
+        bounds: Option<TraceSpriteBounds>,
+    ) {
+        Self::record_sprite_with_visibility(
+            role,
+            primitive,
+            sprite_id,
+            0,
+            false,
+            offset,
+            (0, 0),
+            world_z_delta,
+            bounds,
+            true,
+            true,
+            true,
+        );
+    }
+
     /// Registra un `AddChildSpriteScreen` producido por `DrawGroundSprite`
     /// después de `DrawFoundation`. Su offset ya está normalizado por
     /// `ZOOM_BASE`, como el stream del oráculo C++.
@@ -455,6 +487,29 @@ impl WorldDrawTrace {
         offset: (i32, i32, i32),
     ) {
         Self::record_child_sprite_screen(role, sprite_id, palette, fallback, offset);
+    }
+
+    /// Variante diagnóstica de un child de foundation cuya vista proviene de
+    /// un GRF y por ello sólo tiene una identidad sintética local.
+    pub(crate) fn record_trace_only_foundation_child_sprite(
+        role: &'static str,
+        sprite_id: u32,
+        offset: (i32, i32, i32),
+    ) {
+        Self::record_sprite_with_visibility(
+            role,
+            "child",
+            sprite_id,
+            0,
+            false,
+            offset,
+            (0, 0),
+            0,
+            None,
+            false,
+            true,
+            true,
+        );
     }
 
     /// Variante que conserva la paleta lógica de OpenTTD además de la
@@ -532,6 +587,37 @@ impl WorldDrawTrace {
         has_world: bool,
         geometry_explicit: bool,
     ) {
+        Self::record_sprite_with_visibility(
+            role,
+            primitive,
+            sprite_id,
+            palette,
+            fallback,
+            offset,
+            world_xy_delta,
+            world_z_delta,
+            bounds,
+            has_world,
+            geometry_explicit,
+            false,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn record_sprite_with_visibility(
+        role: &'static str,
+        primitive: &'static str,
+        sprite_id: u32,
+        palette: u32,
+        fallback: bool,
+        offset: (i32, i32, i32),
+        world_xy_delta: (i32, i32),
+        world_z_delta: i32,
+        bounds: Option<TraceSpriteBounds>,
+        has_world: bool,
+        geometry_explicit: bool,
+        trace_only: bool,
+    ) {
         ACTIVE_TRACE.with(|active| {
             let mut active = active.borrow_mut();
             let Some(state) = active.as_mut() else {
@@ -565,6 +651,7 @@ impl WorldDrawTrace {
                 world_xy_delta,
                 world_z_delta,
                 bounds,
+                trace_only,
                 parent_ordinal,
             });
             // `AddSortableSpriteToDraw` deja el padre activo para los
@@ -673,7 +760,7 @@ impl WorldDrawTrace {
                         "role": draw.role,
                         "primitive": draw.primitive,
                         "sprite": {
-                            "source": "opengfx",
+                            "source": if draw.trace_only { "newgrf" } else { "opengfx" },
                             "id": draw.sprite_id,
                             "raw_id": draw.sprite_id,
                         },
@@ -701,6 +788,7 @@ impl WorldDrawTrace {
                         "parent_ordinal": draw.parent_ordinal,
                         "transparent": false,
                         "geometry_explicit": draw.geometry_explicit,
+                        "trace_only": draw.trace_only,
                         "fallback": draw.fallback,
                     })
                     .to_string(),

@@ -9,6 +9,7 @@ use openttdrs_core::{Climate, NewGrfEntry, RoadTypeDef};
 use crate::render::newgrf_cache::{
     DecodedSpriteImagePolicy, decoded_sprite_image, runtime_fingerprint, vars,
 };
+use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::sprites::CompanyColour;
 
 /// `(road_type_id, view_idx, runtime_fp)` → textura RGBA.
@@ -187,6 +188,56 @@ pub(crate) fn specific_sprite_for_tile(
         },
         view,
     ))
+}
+
+/// Identidad estable para una vista específica de RoadType en la traza.
+///
+/// Los `DecodedSprite` provenientes de Action1/2 conservan los píxeles y las
+/// anclas NFO, pero no el `SpriteID` global del GRF. El bit alto separa estas
+/// identidades diagnósticas de los IDs del baseset; los 12 bits finales
+/// alcanzan todas las vistas que usa el contrato `ROTSG_*` actual.
+#[must_use]
+pub(crate) fn specific_sprite_trace_id(def: &RoadTypeDef, selector: u8, view_idx: usize) -> u32 {
+    0x8000_0000
+        | (u32::from(def.id.as_u8()) << 16)
+        | (u32::from(selector) << 12)
+        | u32::try_from(view_idx).unwrap_or(u32::MAX).min(0x0FFF)
+}
+
+/// Registra una vista NewGRF de carretera sin hacerla pasar por la
+/// comparación de IDs vanilla. La posición y la caja sí se conservan: son
+/// precisamente los datos que permiten auditar el ancla NFO y la frontera
+/// `DrawGroundSprite`/`AddChildSpriteScreen`.
+pub(crate) fn record_specific_sprite_trace(
+    role: &'static str,
+    def: &RoadTypeDef,
+    selector: u8,
+    view_idx: usize,
+    view: &openttdrs_core::DecodedSprite,
+    foundation_child: bool,
+) {
+    let sprite_id = specific_sprite_trace_id(def, selector, view_idx);
+    let offset = (i32::from(view.x_offs), i32::from(view.y_offs), 0);
+    if foundation_child {
+        WorldDrawTrace::record_trace_only_foundation_child_sprite(role, sprite_id, offset);
+    } else {
+        let bounds = TraceSpriteBounds::new(
+            offset.0,
+            offset.1,
+            0,
+            i32::from(view.width).max(1),
+            i32::from(view.height).max(1),
+            i32::from(view.height).max(1),
+        );
+        WorldDrawTrace::record_trace_only_sprite_with_geometry(
+            role,
+            "ground",
+            sprite_id,
+            offset,
+            0,
+            Some(bounds),
+        );
+    }
 }
 
 /// Si el tipo de carretera de la tesela trae vistas NewGRF, devuelve el def.
@@ -480,6 +531,12 @@ mod tests {
             newgrf_type_tables: None,
         };
         assert!(def.has_newgrf_specific_group(6));
+        assert_eq!(specific_sprite_trace_id(&def, 6, 0), 0x8002_6000);
+        assert_ne!(
+            specific_sprite_trace_id(&def, 6, 0),
+            specific_sprite_trace_id(&def, 1, 0)
+        );
+        assert_eq!(specific_sprite_trace_id(&def, 6, usize::MAX), 0x8002_6FFF);
         let mut ctx = openttdrs_core::Action2EvalCtx::default();
         assert_eq!(
             def.newgrf_specific_view_runtime(6, 0, &mut ctx)

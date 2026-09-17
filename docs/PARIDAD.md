@@ -6661,3 +6661,16 @@ frames y su entrada al compositor; pasan 1.587 tests del cliente, 2 ignorados,
 Clippy estricto y `git diff --check`. Esto cubre sólo el fallback plano y no
 completa layouts, paletas, rotaciones ni callbacks de aeropuerto; #326/#329/#567
 siguen abiertas.
+
+Corrección #326/#329/#567-RAILTYPE-GROUND-PASS (`b1b90b1c`, 2026-09-16): las
+vistas planas Action3 de railtypes (`RTSG_GROUND`, `RTSG_OVERLAY`,
+`RTSG_GROUND_COMPLETE` y la reserva PBS) ya respetan el contrato nativo de
+`DrawGroundSprite`. En una tesela plana se mantienen como `ground`, con su
+ancla NFO y sin entrar al sorter global; después de `DrawFoundation` se
+registran y materializan como children del cimiento, conservando sólo el
+offset de pantalla de `DrawTrackSprite`. La regresión
+`custom_rail_ground_keeps_nfo_anchor_outside_sortable_pass` fija la profundidad
+del pase y el ancla visual. Pasan 1.588 tests del cliente, 2 ignorados, Clippy
+estricto y `git diff --check`. Es una corrección acotada del productor de
+railtypes; layouts de vía, paletas, pendientes/rotaciones restantes y la
+comparación raster global mantienen #326/#329/#567 abiertas.

@@ -41,6 +41,25 @@ cliente `1.587` tests pasados y `2` ignorados, Clippy estricto y
 fallback plano; #326/#329/#567 continúan abiertos por layouts y rotaciones
 restantes, paletas, callbacks, otros producers y evidencia raster amplia.
 
+## Etapa publicada — 2026-09-16 — #326/#329 RailTypes: ground/overlay en el pase nativo
+
+Las vistas Action3 planas de railtypes (`RTSG_GROUND`, `RTSG_OVERLAY`,
+`RTSG_GROUND_COMPLETE` y el overlay PBS) se materializan ahora con la misma
+frontera que OpenTTD: `DrawGroundSprite` entra al pase `ground` y sólo se
+convierte en child de la foundation cuando el draw proc ya abrió un cimiento.
+El cambio conserva el centro NFO de sprites HD, el recorte de media tesela y
+el `extra_offs_y` de `DrawTrackSprite`; elimina la promoción accidental a
+`sortable` en terreno plano.
+
+La regresión
+`custom_rail_ground_keeps_nfo_anchor_outside_sortable_pass` verifica que la
+profundidad ground no incorpore la altura del railtype. Validación publicada:
+suite del cliente `1.588` tests pasados y `2` ignorados, Clippy estricto y
+`git diff --check`; commit de código `b1b90b1c`. El contrato cubre este
+producer plano y su vínculo con foundations; #326/#329/#567 siguen abiertos
+por layouts, paletas, pendientes/rotaciones restantes, otros producers y
+comparación raster global.
+
 ## Etapa publicada — 2026-09-15 — #330 Helidepot FTA: aproximación completa
 
 La misma fixture `helidepot_fta_cycle_15_3.sav` ahora coincide con el oráculo

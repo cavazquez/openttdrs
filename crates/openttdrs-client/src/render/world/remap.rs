@@ -18,6 +18,18 @@ use super::plugin::{
 use super::tile_spawn::{spawn_map_chunk, spawn_world_layer};
 use super::viewport::{overview_stride_for_viewport, resolve_spawn_viewport, sync_camera_for_sim};
 
+/// OpenTTD sólo dibuja los detalles de carreteras y vías hasta `Out2x`.
+///
+/// `ClientPreferences::full_detail` representa la preferencia del usuario,
+/// pero no anula el límite de `DrawRoadBits`/`DrawTrackDetails`: en `Out4x` y
+/// `Out8x` el viewport nativo omite faroles, árboles de banquina y detalles
+/// ferroviarios aunque la opción siga activada. La escala ortográfica del
+/// cliente coincide con esos niveles (`2 = Out2x`, `4 = Out4x`).
+#[must_use]
+fn full_detail_enabled_at_zoom(preference: bool, ortho_scale: f32) -> bool {
+    preference && ortho_scale.is_finite() && ortho_scale <= 2.0
+}
+
 /// Materializa chunks en un orden canónico, nunca en el orden aleatorio de un
 /// `HashSet`.
 ///
@@ -143,7 +155,7 @@ pub(crate) fn apply_remap_map_visuals(
         && !loaded_chunks.is_empty();
 
     let show_pbs = prefs.show_pbs_reservations;
-    let show_full_detail = prefs.full_detail;
+    let show_full_detail = full_detail_enabled_at_zoom(prefs.full_detail, ortho_scale);
     let show_town_labels = prefs.show_town_labels;
     let show_station_labels = prefs.show_station_labels;
     let show_waypoint_labels = prefs.show_waypoint_labels;
@@ -313,7 +325,19 @@ pub(crate) fn apply_remap_map_visuals(
 mod tests {
     use std::collections::HashSet;
 
-    use super::canonical_chunk_order;
+    use super::{canonical_chunk_order, full_detail_enabled_at_zoom};
+
+    #[test]
+    fn full_detail_follows_the_native_zoom_cutoff() {
+        assert!(full_detail_enabled_at_zoom(true, 0.25));
+        assert!(full_detail_enabled_at_zoom(true, 0.5));
+        assert!(full_detail_enabled_at_zoom(true, 1.0));
+        assert!(full_detail_enabled_at_zoom(true, 2.0));
+        assert!(!full_detail_enabled_at_zoom(true, 4.0));
+        assert!(!full_detail_enabled_at_zoom(true, 8.0));
+        assert!(!full_detail_enabled_at_zoom(false, 1.0));
+        assert!(!full_detail_enabled_at_zoom(true, f32::NAN));
+    }
 
     #[test]
     fn canonical_chunk_order_does_not_depend_on_hashset_insertion_order() {

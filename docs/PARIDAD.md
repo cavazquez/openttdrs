@@ -6834,3 +6834,12 @@ queda en `1598` tests exitosos y 2 ignorados, con Clippy estricto y
 `git diff --check` verdes. Es una corrección de encuadre, no una paridad
 completa: todavía faltan validar todas las escalas, orientaciones y
 productores del compositor; #326/#567 permanecen abiertas.
+
+La repetición del mismo borde en `Out4x` y `Out8x` conserva la alineación
+geométrica a un píxel (`candidate_translation=[1,1]`): `Out4x` queda en
+`249928` diferencias alineadas (`52,07%`), delta medio `14,617310` y `70781`
+por encima de `64`; `Out8x` queda en `76466` (`15,93%`), delta medio
+`6,219157` y `36963` por encima de `64`. El aumento relativo del exacto en
+Out4x refleja que todavía falta cerrar el muestreo/composición de todos los
+productores a esos niveles; no se interpreta como regresión de cámara ni
+habilita el cierre de #326/#567.

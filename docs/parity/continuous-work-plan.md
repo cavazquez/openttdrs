@@ -9703,3 +9703,11 @@ diferencial alineado baja de `397091` (`82,73%`, delta medio `32,851093`) a
 Clippy estricto. Es una mejora de encuadre, no un cierre: faltan las demás
 escalas, orientaciones y productores del compositor; #326/#567 siguen
 abiertas.
+
+La repetición del borde en `Out4x` y `Out8x` conserva la geometría a un píxel
+(`candidate_translation=[1,1]`). En `Out4x` quedan `249928` diferencias
+alineadas (`52,07%`), delta medio `14,617310` y `70781` por encima de `64`; en
+`Out8x` quedan `76466` (`15,93%`), delta medio `6,219157` y `36963` por encima
+de `64`. La diferencia de exactitud entre niveles pertenece al muestreo y a
+la composición de productores aún no cubiertos; no es una regresión del
+encuadre y no cambia el estado abierto de #326/#567.

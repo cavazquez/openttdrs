@@ -477,14 +477,14 @@ fn house_building_parent_bounds(
     )
 }
 
-/// Caja conservadora para un sprite de casa proporcionado por NewGRF.
+/// Caja conservadora para una vista plana Action1/3 de NewGRF.
 ///
-/// `HouseSpecDef` todavía no modela `TileLayoutSpriteGroup`/`M(...)`; el
-/// decoder sí conserva offsets y dimensiones de Action1. Usar esa extensión
-/// como prisma mantiene el sprite dentro del ordenador de viewport y evita
-/// que una casa custom atraviese edificios vecinos aunque su layout avanzado
-/// siga pendiente.
-fn newgrf_house_parent_bounds(
+/// `DecodedSprite` no contiene la línea `TILE_SEQ_LINE` de un layout completo,
+/// pero sí conserva los offsets y dimensiones NFO. Usar esa extensión como
+/// prisma mantiene el sprite dentro del ordenador de viewport y evita que una
+/// casa, industria u objeto custom atraviese edificios vecinos mientras su
+/// layout avanzado no resuelve una secuencia `BUILD`.
+fn newgrf_flat_parent_bounds(
     ctx: &TileRenderContext,
     view: &openttdrs_core::DecodedSprite,
     surface_base_z: u8,
@@ -495,6 +495,16 @@ fn newgrf_house_parent_bounds(
     let width = i32::from(view.width).max(1);
     let height = i32::from(view.height).max(1);
     ParentSpriteBounds::new(x, y, z, x + width - 1, y + height - 1, z + height - 1)
+}
+
+/// `DrawTile_Object` usa `PALETTE_RECOLOUR_START` para objetos de una rampa y
+/// `SPR_2CCMAP_BASE` para objetos que conservan ambos colores de compañía.
+fn object_trace_palette(def: &ObjectSpecDef, object_colour: u8) -> u32 {
+    if def.flags & openttdrs_core::OBJECT_FLAG_USES_2CC != 0 {
+        u32::from(openttdrs_core::TWOCC_PALETTE_BASE) + u32::from(object_colour)
+    } else {
+        PALETTE_RECOLOUR_START + u32::from(object_colour & 0x0F)
+    }
 }
 
 /// Bounds inclusivos del parent vanilla de `DrawTile_Industry`.
@@ -912,7 +922,7 @@ pub(crate) fn spawn_house_tile(
                 Transform::from_translation(Vec3::new(pos3.x, pos3.y, source_depth)),
                 ViewportSortableParent {
                     sprite_id: u32::from(def.id),
-                    bounds: newgrf_house_parent_bounds(ctx, &view, foundation_surface_base_z),
+                    bounds: newgrf_flat_parent_bounds(ctx, &view, foundation_surface_base_z),
                     insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 2),
                     source_depth,
                 },
@@ -1822,14 +1832,50 @@ pub(crate) fn spawn_industry_tile_with_world(
                 },
                 industries_transparent,
             );
+            let source_depth = viewport_source_depth(pos3.z, ctx.tx, map_width);
+            let trace_bounds = TraceSpriteBounds::new(
+                i32::from(view.x_offs),
+                i32::from(view.y_offs),
+                0,
+                i32::from(view.width).max(1),
+                i32::from(view.height).max(1),
+                i32::from(view.height).max(1),
+            );
             if let Some(parent) = foundation.child_parent {
+                // La vista plana sin `TileSeq` es el fallback de overlay que
+                // este renderer puede resolver para un GRF incompleto. En
+                // una pendiente conserva la misma relación de
+                // `DrawGroundSprite` que el contrato histórico de la ruta.
+                WorldDrawTrace::record_foundation_child_sprite_with_palette(
+                    "industry-building-newgrf",
+                    u32::from(def.gfx.as_u16()),
+                    building_trace_palette,
+                    false,
+                    (i32::from(view.x_offs), i32::from(view.y_offs), 0),
+                );
                 spawn_foundation_child_sprite_at(commands, sprite, ctx, pos3, map_width, parent);
             } else {
+                WorldDrawTrace::record_sprite_with_palette_and_geometry(
+                    "industry-building-newgrf",
+                    "sortable",
+                    u32::from(def.gfx.as_u16()),
+                    building_trace_palette,
+                    false,
+                    (i32::from(view.x_offs), i32::from(view.y_offs), 0),
+                    0,
+                    Some(trace_bounds),
+                );
                 commands.spawn((
                     MapVisualLayer,
                     chunk,
                     sprite,
-                    Transform::from_translation(pos3),
+                    Transform::from_translation(Vec3::new(pos3.x, pos3.y, source_depth)),
+                    ViewportSortableParent {
+                        sprite_id: u32::from(def.gfx.as_u16()),
+                        bounds: newgrf_flat_parent_bounds(ctx, &view, foundation.surface_base_z),
+                        insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 2),
+                        source_depth,
+                    },
                 ));
             }
             return;
@@ -3628,16 +3674,60 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
                 );
-                commands.spawn((
-                    MapVisualLayer,
-                    ctx.map_tile_chunk(),
-                    destination_mask_structure_sprite(Sprite {
-                        image: handle,
-                        color: tint,
-                        ..default()
-                    }),
-                    Transform::from_translation(pos3),
-                ));
+                let object_colour = a2
+                    .vars
+                    .get(&0x47)
+                    .and_then(|value| u8::try_from(*value).ok())
+                    .unwrap_or_default();
+                let source_depth = viewport_source_depth(pos3.z, ctx.tx, map_width);
+                let trace_bounds = TraceSpriteBounds::new(
+                    i32::from(view.x_offs),
+                    i32::from(view.y_offs),
+                    0,
+                    i32::from(view.width).max(1),
+                    i32::from(view.height).max(1),
+                    i32::from(view.height).max(1),
+                );
+                let sprite = destination_mask_structure_sprite(Sprite {
+                    image: handle,
+                    color: tint,
+                    ..default()
+                });
+                if let Some(parent) = object_foundation_child_parent {
+                    WorldDrawTrace::record_foundation_child_sprite_with_palette(
+                        "object-building-newgrf",
+                        u32::from(def.id),
+                        object_trace_palette(def, object_colour),
+                        false,
+                        (i32::from(view.x_offs), i32::from(view.y_offs), 0),
+                    );
+                    spawn_foundation_child_sprite_at(
+                        commands, sprite, ctx, pos3, map_width, parent,
+                    );
+                } else {
+                    WorldDrawTrace::record_sprite_with_palette_and_geometry(
+                        "object-building-newgrf",
+                        "sortable",
+                        u32::from(def.id),
+                        object_trace_palette(def, object_colour),
+                        false,
+                        (i32::from(view.x_offs), i32::from(view.y_offs), 0),
+                        0,
+                        Some(trace_bounds),
+                    );
+                    commands.spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        sprite,
+                        Transform::from_translation(Vec3::new(pos3.x, pos3.y, source_depth)),
+                        ViewportSortableParent {
+                            sprite_id: u32::from(def.id),
+                            bounds: newgrf_flat_parent_bounds(ctx, &view, object_surface_base_z),
+                            insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 2),
+                            source_depth,
+                        },
+                    ));
+                }
                 return;
             }
         }
@@ -4068,17 +4158,18 @@ mod tests {
     use bevy::prelude::Vec2;
     use openttdrs_core::{
         CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
-        CLEAR_GROUND_SNOW, Map, TileCoord, TileKind,
+        CLEAR_GROUND_SNOW, Map, ObjectSpecDef, TileCoord, TileKind,
     };
 
     use super::{
         TreeGround, clear_ground_sprite_id, field_fence_draws, field_ground_sprite_id,
         field_slope_max_pixel_z, field_slope_pixel_z_in_corner, house_building_origin,
         house_building_trace_geometry, house_lift_screen_offset, industry_building_parent_bounds,
-        industry_building_trace_palette, openttd_tile_hash, rough_flat_variant,
-        sort_tree_layers_like_openttd, structure_sprite_color, tree_density_from_tile,
-        tree_ground_from_tile, tree_ground_sprite_id, tree_layout_index, tree_parent_bounds,
-        tree_shore_sprite_id, tree_slope_z_offset, void_ground_sprite_and_palette,
+        industry_building_trace_palette, newgrf_flat_parent_bounds, object_trace_palette,
+        openttd_tile_hash, rough_flat_variant, sort_tree_layers_like_openttd,
+        structure_sprite_color, tree_density_from_tile, tree_ground_from_tile,
+        tree_ground_sprite_id, tree_layout_index, tree_parent_bounds, tree_shore_sprite_id,
+        tree_slope_z_offset, void_ground_sprite_and_palette,
     };
 
     fn industry_ctx_at(tx: u32, ty: u32, base_z: u8) -> TileRenderContext {
@@ -4436,6 +4527,51 @@ mod tests {
         // Un GFX PAL_NONE no debe adquirir el color de la industria sólo por
         // compartir la misma instancia.
         assert_eq!(industry_building_trace_palette(10, CompanyColour::Mauve), 0);
+    }
+
+    #[test]
+    fn newgrf_flat_parent_bounds_follow_nfo_anchor_and_surface() {
+        let view = openttdrs_core::DecodedSprite {
+            width: 10,
+            height: 6,
+            x_offs: -3,
+            y_offs: -5,
+            rgba: vec![0; 10 * 6 * 4],
+            mask: Vec::new(),
+        };
+        assert_eq!(
+            newgrf_flat_parent_bounds(&industry_ctx_at(3, 4, 2), &view, 4),
+            ParentSpriteBounds::new(45, 59, 32, 54, 64, 37)
+        );
+    }
+
+    #[test]
+    fn object_trace_palette_matches_native_one_and_two_cc_offsets() {
+        let mut def = ObjectSpecDef {
+            id: openttdrs_core::NEW_OBJECT_OFFSET,
+            class_label: "TEST".into(),
+            name: "palette".into(),
+            size: openttdrs_core::OBJECT_SIZE_1X1,
+            from_newgrf: true,
+            local_id: 0,
+            grfid: 0,
+            newgrf_grf_version: 8,
+            climate_mask: openttdrs_core::DEFAULT_OBJECT_CLIMATE_MASK,
+            build_cost_factor: openttdrs_core::DEFAULT_OBJECT_BUILD_COST_FACTOR,
+            clear_cost_factor: openttdrs_core::DEFAULT_OBJECT_CLEAR_COST_FACTOR,
+            flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            callback_mask: 0,
+            views: Vec::new(),
+            newgrf_runtime: None,
+            associated_badges: Vec::new(),
+        };
+        assert_eq!(object_trace_palette(&def, 0x96), 781);
+        def.flags = openttdrs_core::OBJECT_FLAG_USES_2CC;
+        assert_eq!(object_trace_palette(&def, 0x96), 5680 + 0x96);
     }
 
     #[test]

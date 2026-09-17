@@ -642,6 +642,41 @@ fn spawn_bridge_segmented_child(
     ));
 }
 
+/// Materializa un sprite de un bloque combinado cuando su parent no pudo
+/// crearse. El fallback sigue siendo un parent sortable: conserva la caja
+/// nativa y el orden global sin inventar una relación child inexistente.
+#[allow(clippy::too_many_arguments)]
+fn spawn_bridge_standalone_sortable(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    map_width: u32,
+    sprite: Sprite,
+    mut position: Vec3,
+    sprite_id: u32,
+    surface_z: u8,
+    layer: f32,
+    placement: BridgeTracePlacement,
+    combine_ordinal: u8,
+) {
+    let sortable_parent = bridge_sortable_parent(
+        ctx,
+        map_width,
+        sprite_id,
+        surface_z,
+        layer,
+        combine_ordinal,
+        placement,
+    );
+    position.z = sortable_parent.source_depth;
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        sprite,
+        Transform::from_translation(position),
+        sortable_parent,
+    ));
+}
+
 /// Identidad estable para un sprite específico de RoadType.
 ///
 /// `DecodedSprite` conserva la imagen y sus anclas, pero no el `SpriteID`
@@ -698,28 +733,20 @@ fn spawn_bridge_specific_child(
         );
     } else {
         // Si la fachada trasera no pudo materializarse, OpenTTD todavía
-        // dibuja el grupo específico. No dejarlo como sprite suelto: sin la
-        // caja de `AddSortableSpriteToDraw` pierde el orden global frente a
-        // vecinos y al vano. En este fallback el propio grupo ocupa el lugar
-        // del parent combinado; no se crea un child artificial.
-        let sortable_parent = bridge_sortable_parent(
+        // dibuja el grupo específico. El propio grupo ocupa el lugar del
+        // parent combinado; no se crea un child artificial.
+        spawn_bridge_standalone_sortable(
+            commands,
             ctx,
             map_width,
+            sprite,
+            position,
             sprite_id,
             surface_z,
             layer,
-            combine_ordinal,
             placement,
+            combine_ordinal,
         );
-        let mut position = position;
-        position.z = sortable_parent.source_depth;
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            sprite,
-            Transform::from_translation(position),
-            sortable_parent,
-        ));
     }
 }
 
@@ -837,12 +864,23 @@ fn spawn_bridge_pbs_reservation(
             BRIDGE_REAR_PBS_CHILD_ORDINAL,
         );
     } else {
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
+        spawn_bridge_standalone_sortable(
+            commands,
+            ctx,
+            map_width,
             sprite,
-            Transform::from_translation(position),
-        ));
+            position,
+            sprite_id,
+            surface_z,
+            RAIL_ON_BRIDGE_LAYER_FRAC,
+            BridgeTracePlacement {
+                world_xy_delta: (0, 0),
+                world_z_delta: (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8,
+                offset: (0, 0, 0),
+                bounds,
+            },
+            BRIDGE_REAR_PBS_CHILD_ORDINAL,
+        );
     }
 }
 

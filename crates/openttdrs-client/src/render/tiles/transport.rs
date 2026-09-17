@@ -2828,9 +2828,9 @@ pub(crate) fn resolve_custom_rail_group_sprite(
 }
 
 /// Emite una vista Action3 de rail con el ancla NFO original y la relación
-/// parent/child de la fundación activa. `center_offset` se calcula desde
-/// `(x_offs, y_offs, width, height)`, por lo que no se impone el 64×31 de
-/// OpenGFX a un sprite NewGRF HD.
+/// `DrawGroundSprite`/child de la fundación activa. `center_offset` se calcula
+/// desde `(x_offs, y_offs, width, height)`, por lo que no se impone el 64×31
+/// de OpenGFX a un sprite NewGRF HD.
 #[allow(clippy::too_many_arguments)]
 fn spawn_custom_rail_sprite(
     commands: &mut Commands,
@@ -2865,19 +2865,33 @@ fn spawn_custom_rail_sprite(
     );
     position.y += pbs_extra_y_in_bevy(extra_y) + crop_shift.y;
     position.x += crop_shift.x;
-    WorldDrawTrace::record_sprite_with_palette_and_geometry(
-        role,
-        "sortable",
-        u32::from(trace_image),
-        0,
-        false,
-        (0, extra_y, 0),
-        0,
-        None,
-    );
     if let Some(parent) = foundation_child_parent {
+        // `DrawGroundSprite` cambia a `AddChildSpriteToFoundation` cuando la
+        // pasada ya abrió un cimiento. No es un parent global nuevo: el
+        // offset extra sigue siendo pantalla y el sprite conserva su ancla
+        // NFO propia.
+        WorldDrawTrace::record_foundation_child_sprite(
+            role,
+            u32::from(trace_image),
+            false,
+            (0, extra_y, 0),
+        );
         spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
     } else {
+        // En plano OpenTTD agrega estas capas al vector de `TileSprite`, no al
+        // sorter de estructuras. La altura se refleja en X/Y, pero nunca
+        // debe promover el suelo a la banda sortable global.
+        WorldDrawTrace::record_sprite_with_palette_and_geometry(
+            role,
+            "ground",
+            u32::from(trace_image),
+            0,
+            false,
+            (0, extra_y, 0),
+            0,
+            None,
+        );
+        position = custom_rail_ground_pass_position(position, ctx, layer);
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
@@ -2885,6 +2899,18 @@ fn spawn_custom_rail_sprite(
             Transform::from_translation(position),
         ));
     }
+}
+
+/// Conserva el ancla NFO de una capa ferroviaria custom, pero la entrega al
+/// pase de suelo cuando no existe una fundación activa.
+#[inline]
+fn custom_rail_ground_pass_position(
+    mut position: Vec3,
+    ctx: &TileRenderContext,
+    layer: f32,
+) -> Vec3 {
+    position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), layer);
+    position
 }
 
 #[allow(clippy::too_many_arguments, clippy::needless_option_as_deref)]
@@ -3696,21 +3722,23 @@ pub(crate) fn spawn_rail_tile(
 
 #[cfg(test)]
 mod tests {
-    use bevy::prelude::{Rect, Vec2};
+    use bevy::prelude::{Rect, Vec2, Vec3};
 
     use super::{
         RTO_CROSSING_XY, RTO_E, RTO_JUNCTION_SE, RTO_N, RTO_S, RTO_W, RTO_X, RTO_Y, RailGroundKind,
-        RailTrackTraceMode, catenary_local_z_delta, halftile_track_subsprite, pbs_extra_y_in_bevy,
-        pbs_track_sprite_extra_y, rail_catenary_pylon_parent_bounds,
-        rail_catenary_wire_parent_bounds, rail_custom_overlay_offsets,
-        rail_custom_underlay_offsets, rail_foundation_after_pass, rail_ground_complete_offset,
-        rail_ground_sprite_id, rail_initial_ground_draw, rail_signal_parent_bounds,
-        rail_track_fence_parent_bounds, rail_track_fence_visual_offset, rail_track_trace_mode,
-        rail_upper_halftile_ground_draw, road_catenary_bits_for_render,
+        RailTrackTraceMode, catenary_local_z_delta, custom_rail_ground_pass_position,
+        halftile_track_subsprite, pbs_extra_y_in_bevy, pbs_track_sprite_extra_y,
+        rail_catenary_pylon_parent_bounds, rail_catenary_wire_parent_bounds,
+        rail_custom_overlay_offsets, rail_custom_underlay_offsets, rail_foundation_after_pass,
+        rail_ground_complete_offset, rail_ground_sprite_id, rail_initial_ground_draw,
+        rail_signal_parent_bounds, rail_track_fence_parent_bounds, rail_track_fence_visual_offset,
+        rail_track_trace_mode, rail_upper_halftile_ground_draw, road_catenary_bits_for_render,
         road_catenary_custom_groups_are_active, road_catenary_parent_bounds,
         road_detail_world_z_delta, road_foundation_child_offset, road_tile_may_have_road,
         roadside_detail_parent_bounds, roadside_detail_sprite_color, signal_trace_geometry,
     };
+    use crate::render::TileRenderContext;
+    use crate::render::grid::TileRenderInfo;
     use crate::render::viewport_sort::{ParentSprite, ParentSpriteBounds};
     use crate::render::world_draw_trace::TraceSpriteBounds;
     use crate::sprites::{
@@ -3948,6 +3976,36 @@ mod tests {
         assert!(
             expected.z
                 < crate::iso::full_tile_sprite_pos(230, 150, 0, super::FLAT_WATER_LAYER_FRAC,).z
+        );
+    }
+
+    #[test]
+    fn custom_rail_ground_keeps_nfo_anchor_outside_sortable_pass() {
+        let ctx = TileRenderContext {
+            tx: 17,
+            ty: 9,
+            coord: TileCoord::new(17, 9),
+            tile: None,
+            object_type: None,
+            kind: TileKind::Rail,
+            info: TileRenderInfo {
+                tileh: 0,
+                base_z: 5,
+                use_shore: false,
+            },
+            iso_pos: Vec2::new(12.0, -8.0),
+            climate: openttdrs_core::Climate::Temperate,
+            snow_line_height: openttdrs_core::DEF_SNOW_LINE_HEIGHT,
+        };
+        let position =
+            custom_rail_ground_pass_position(Vec3::new(101.0, 202.0, 303.0), &ctx, 0.023);
+
+        assert_eq!(position.x, 101.0);
+        assert_eq!(position.y, 202.0);
+        assert_eq!(
+            position.z,
+            crate::iso::ground_draw_z(17, 9, 0.023),
+            "una capa custom de rail plana usa TileSprite aunque conserve su ancla NFO"
         );
     }
 

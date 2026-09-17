@@ -27,6 +27,27 @@ pub(crate) struct AtlasSprite {
     pub(crate) size: Vec2,
 }
 
+fn native_zoom_suffix_for(capture_requested: bool, scale: Option<f32>) -> &'static str {
+    if !capture_requested {
+        return "";
+    }
+    match scale {
+        Some(scale) if (scale - 2.0).abs() < f32::EPSILON => "_out2",
+        Some(scale) if (scale - 4.0).abs() < f32::EPSILON => "_out4",
+        Some(scale) if (scale - 8.0).abs() < f32::EPSILON => "_out8",
+        _ => "",
+    }
+}
+
+fn native_zoom_suffix_for_capture_env() -> &'static str {
+    native_zoom_suffix_for(
+        std::env::var_os("OPENTTDRS_MAP_SHOT").is_some(),
+        std::env::var("OPENTTDRS_MAP_SHOT_SCALE")
+            .ok()
+            .and_then(|raw| raw.parse::<f32>().ok()),
+    )
+}
+
 impl AtlasSprite {
     pub(crate) fn sprite(&self) -> Sprite {
         self.sprite_colored(Color::WHITE)
@@ -65,9 +86,11 @@ impl TileAtlas {
         asset_server: &AssetServer,
         layout_assets: &mut Assets<TextureAtlasLayout>,
     ) -> Self {
+        let suffix = native_zoom_suffix_for_capture_env();
         let pages = (0..TILE_ATLAS_PAGE_COUNT)
             .map(|p| {
-                asset_server.load::<Image>(format!("assets/opengfx/atlas/tiles_atlas_{p}.png"))
+                asset_server
+                    .load::<Image>(format!("assets/opengfx/atlas/tiles_atlas_{p}{suffix}.png"))
             })
             .collect();
         let layouts = (0..TILE_ATLAS_PAGE_COUNT)
@@ -138,6 +161,18 @@ impl TileAtlas {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_zoom_atlas_is_capture_scoped_and_matches_fixed_levels() {
+        assert_eq!(native_zoom_suffix_for(false, Some(2.0)), "");
+        assert_eq!(native_zoom_suffix_for(true, Some(0.25)), "");
+        assert_eq!(native_zoom_suffix_for(true, Some(0.5)), "");
+        assert_eq!(native_zoom_suffix_for(true, Some(1.0)), "");
+        assert_eq!(native_zoom_suffix_for(true, Some(2.0)), "_out2");
+        assert_eq!(native_zoom_suffix_for(true, Some(4.0)), "_out4");
+        assert_eq!(native_zoom_suffix_for(true, Some(8.0)), "_out8");
+        assert_eq!(native_zoom_suffix_for(true, Some(3.0)), "");
+    }
 
     fn test_atlas() -> (TileAtlas, Assets<TextureAtlasLayout>) {
         let mut layouts = Assets::<TextureAtlasLayout>::default();

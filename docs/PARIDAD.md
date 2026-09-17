@@ -6765,3 +6765,26 @@ oclusión del techo sin introducir el cambio de cobertura que producía el proxy
 completo. Es evidencia focalizada, no paridad global: faltan otros
 productores, escalas, orientaciones y la validación amplia del compositor;
 #326/#561 siguen abiertas.
+
+Corrección #326/#567-OPENTTD-8BPP-ZOOM-ATLAS (2026-09-17): las capturas de
+mapa en los niveles fijos `Out2x`, `Out4x` y `Out8x` seleccionan páginas de
+atlas reducidas con el muestreo del blitter nativo `8bpp-simple`: cada píxel
+de salida toma el primer píxel de su bloque de la raíz expandida. Las variantes
+`tiles_atlas_0_out2.png`, `_out4.png` y `_out8.png` conservan las mismas
+coordenadas y dimensiones de rectángulo, por lo que Bevy mantiene la geometría
+y el sampler nearest reproduce la muestra nativa. La selección está acotada a
+`OPENTTDRS_MAP_SHOT`; la partida interactiva y `Normal` siguen usando el atlas
+base hasta validar el cambio en runtime.
+
+En el foco interior de `Kale_TitleGame.sav` (centro `189,126`, 800×600, perfil
+limpio, OpenGFX 8bpp, `Out2x`), contra el atlas base el exacto alineado era
+`273607/480000` (`57,001%` de píxeles distintos), con delta medio `16,844373`
+y bandas `>2/>4/>8/>16/>32/>64` de
+`273491/259862/256957/233287/164915/82371`. Con la página nativa pasa a
+`177345/480000` (`36,947%`), delta medio `13,069116` y
+`177229/177133/176715/165545/128388/71076`: una reducción del `35,2%` en
+el exacto alineado y del `22,4%` en el delta medio. El exacto crudo baja de
+`390749` a `339990`. Es una reducción importante del error de muestreo, pero
+no un cierre: quedan diferencias de sprites recoloreados, vehículos y otros
+productores del compositor, además del borde de cámara y la validación de
+`Out4x`/`Out8x`; #326/#567 permanecen abiertas.

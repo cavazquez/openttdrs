@@ -6,7 +6,8 @@ comparten textura; con ~2300 PNGs sueltos cada tesela corta el batch. Este
 script deduplica por contenido (muchos archivos son aliases), empaqueta las
 imágenes únicas en páginas de atlas (shelf packing) y genera:
 
-  - assets/opengfx/atlas/tiles_atlas_{p}.png      (páginas, gitignored)
+  - assets/opengfx/atlas/tiles_atlas_{p}.png      (páginas base)
+  - assets/opengfx/atlas/tiles_atlas_{p}_out{2,4,8}.png (páginas reducidas)
   - crates/openttdrs-client/src/sprites/tile_atlas_generated.rs (committed)
 
 Correr después de scripts/descargar_graficos.sh.
@@ -36,6 +37,7 @@ PAGE_W = 2048
 PAGE_H = 4096
 # 1 px de separación: con sampler nearest y sin mipmaps evita el bleeding.
 PAD = 1
+NATIVE_ZOOM_LEVELS = (2, 4, 8)
 LEGACY_WATER_FRAME_RE = re.compile(
     r"(?:water|shore_full_\d{2})_anim_\d{2}\.png$"
 )
@@ -64,6 +66,33 @@ def shelf_pack(items):
 
 def assets_available() -> bool:
     return TILES_DIR.is_dir() and any(TILES_DIR.glob("*.png"))
+
+
+def native_zoom_variant(image: Image.Image, zoom: int) -> Image.Image:
+    """Replicate the 8bpp-simple root-sprite sampling at an out zoom.
+
+    OpenTTD keeps a fully expanded root sprite for the paletted blitter and
+    advances the source pointer by ``2**zoom`` for each destination pixel.
+    The atlas stores the normal-resolution RGBA equivalent, so preserving
+    the first source pixel in every block and expanding it back to the source
+    footprint makes Bevy's nearest sampler select the same value after the
+    orthographic reduction. The page and rect dimensions stay unchanged.
+    """
+    if zoom < 2 or zoom & (zoom - 1):
+        raise ValueError("zoom debe ser una potencia de dos >= 2")
+
+    factor = zoom
+    source = image.load()
+    variant = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    target = variant.load()
+    width, height = image.size
+    for y in range(0, height, factor):
+        for x in range(0, width, factor):
+            colour = source[x, y]
+            for yy in range(y, min(y + factor, height)):
+                for xx in range(x, min(x + factor, width)):
+                    target[xx, yy] = colour
+    return variant
 
 
 def build_atlas():
@@ -97,9 +126,18 @@ def build_atlas():
         used_h[page] = max(used_h[page], y + im.height + PAD)
 
     pages = [Image.new("RGBA", (PAGE_W, used_h[p]), (0, 0, 0, 0)) for p in range(page_count)]
+    native_pages = {
+        zoom: [
+            Image.new("RGBA", (PAGE_W, used_h[p]), (0, 0, 0, 0))
+            for p in range(page_count)
+        ]
+        for zoom in NATIVE_ZOOM_LEVELS
+    }
     for h, im in unique.items():
         page, x, y = placed[h]
         pages[page].paste(im, (x, y))
+        for zoom in NATIVE_ZOOM_LEVELS:
+            native_pages[zoom][page].paste(native_zoom_variant(im, zoom), (x, y))
 
     hashes_by_page: list[list[str]] = [[] for _ in range(page_count)]
     for h in unique:
@@ -161,7 +199,7 @@ def build_atlas():
     lines.append("];\n")
 
     rs_text = "".join(lines)
-    return rs_text, pages, used_h, files, unique
+    return rs_text, pages, native_pages, used_h, files, unique
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -182,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         raise SystemExit(f"No hay PNGs en {TILES_DIR}; corré descargar_graficos.sh")
 
-    rs_text, pages, used_h, files, unique = build_atlas()
+    rs_text, pages, native_pages, used_h, files, unique = build_atlas()
 
     if args.check:
         current = OUT_RS.read_text(encoding="utf-8")
@@ -197,6 +235,17 @@ def main(argv: list[str] | None = None) -> int:
             actual = Image.open(page_path).convert("RGBA")
             if actual.size != expected.size or actual.tobytes() != expected.tobytes():
                 problems.append(f"{page_path.relative_to(ROOT)} no coincide píxel a píxel")
+        for zoom, variant_pages in native_pages.items():
+            for p, expected in enumerate(variant_pages):
+                page_path = ATLAS_DIR / f"tiles_atlas_{p}_out{zoom}.png"
+                if not page_path.is_file():
+                    problems.append(f"falta {page_path.relative_to(ROOT)}")
+                    continue
+                actual = Image.open(page_path).convert("RGBA")
+                if actual.size != expected.size or actual.tobytes() != expected.tobytes():
+                    problems.append(
+                        f"{page_path.relative_to(ROOT)} no coincide píxel a píxel"
+                    )
         if problems:
             print(
                 "DRIFT: " + "; ".join(problems) + ".",
@@ -213,6 +262,9 @@ def main(argv: list[str] | None = None) -> int:
     ATLAS_DIR.mkdir(parents=True, exist_ok=True)
     for p, img in enumerate(pages):
         img.save(ATLAS_DIR / f"tiles_atlas_{p}.png", optimize=True)
+    for zoom, variant_pages in native_pages.items():
+        for p, img in enumerate(variant_pages):
+            img.save(ATLAS_DIR / f"tiles_atlas_{p}_out{zoom}.png", optimize=True)
     OUT_RS.write_text(rs_text, encoding="utf-8")
 
     total = sum(im.width * im.height for im in unique.values())
@@ -221,6 +273,7 @@ def main(argv: list[str] | None = None) -> int:
         f"atlas: {len(files)} archivos, {len(unique)} únicos, "
         f"{page_count} página(s) de {PAGE_W}px de ancho "
         f"(alturas {used_h}), ocupación {total / (PAGE_W * sum(used_h)):.0%}"
+        f" + variantes nativas Out{','.join(map(str, NATIVE_ZOOM_LEVELS))}x"
     )
     return 0
 

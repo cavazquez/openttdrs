@@ -9644,3 +9644,23 @@ delta medio de `0,185931` a `0,151273`, y las bandas
 `2701/2701/2701/2447/1901/832`. La mejora es del foco de calibración; todavía
 hay que validar otras cámaras, escalas, orientaciones y productores antes de
 considerar cerrar #326/#561.
+
+### #326/#567-OPENTTD-8BPP-ZOOM-ATLAS — muestreo nativo de zoom
+
+Actualizado: 2026-09-17. El generador de atlas produce páginas paralelas
+`_out2`, `_out4` y `_out8` que conservan el primer píxel de cada bloque de la
+raíz expandida, que es el muestreo usado por `8bpp-simple` en los zooms
+alejados. El cliente sólo las selecciona para `OPENTTDRS_MAP_SHOT` cuando la
+escala es exactamente `2`, `4` u `8`; el atlas base continúa en la partida
+interactiva para no mezclar todavía la validación de zoom con el renderer de
+runtime.
+
+La captura interior de Kale (`189,126`, 800×600, `Out2x`) reduce el exacto
+alineado de `273607` a `177345` píxeles y el delta medio de `16,844373` a
+`13,069116`; el exacto crudo baja de `390749` a `339990`. La prueba del
+generador (`scripts/gen_tile_atlas.py --check`) verifica también las tres
+páginas derivadas píxel a píxel. Próximos pasos: repetir la medición en las
+seis escalas y cuatro orientaciones mínimas, aplicar el mismo contrato a las
+imágenes recoloreadas de casas/árboles y vehículos, y recién después evaluar
+un selector de atlas equivalente para el zoom interactivo. El borde de cámara,
+la composición global y #326/#567 siguen abiertos.

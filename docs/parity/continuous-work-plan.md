@@ -9376,3 +9376,17 @@ mapas generados. Así la palabra de `GetNearbyTileInformation` mantiene el
 mismo byte alto que OpenTTD. La regresión verifica rail tunnel, road bridge,
 objeto crudo y el empaquetado de `0x60`; pasan 2.825 tests de core, 1 ignorado
 y Clippy estricto. La fila sigue parcial y no se cierran las issues madre.
+
+### #326/#329/#567-AIRPORT-TILE-OILRIG-BOUNDARY — frontera `IsAirport(tile)`
+
+Actualizado: 2026-09-16 (`fcd02189`). El resolver local exige ahora una tesela
+`TileKind::Airport` o una tesela `MP_STATION` cuyo `MAP6` tenga
+`StationType::Airport`; el bit de facilidad aérea no es suficiente porque
+`OilRig` lo comparte para FTA. El `OilRig` conserva `airport_tiles` para
+servicing y FTA y mantiene el render de agua, pero queda fuera del contexto
+`AirportTile`, de `TileBelongsToAirport`, de la animación legacy y de la
+selección de candidatos/anclas del scheduler NewGRF. Una estación mixta sólo
+se procesa si contiene alguna tesela Airport real. Las regresiones de Action2,
+animación, radar y scheduler pasan junto con 2.827 tests de core y 1 ignorado;
+Clippy estricto de producción (`--lib`) queda verde. La fila sigue parcial y
+no se cierran #326/#329/#567.

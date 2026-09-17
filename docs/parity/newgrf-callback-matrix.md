@@ -2589,3 +2589,20 @@ estructura es ferroviaria o vial, y mantiene los tipos crudos no cero de
 `GetNearbyTileInformation` y las regresiones de rail tunnel/road bridge quedan
 alineados con OpenTTD. Pasan 2.825 tests de core, 1 ignorado y Clippy estricto;
 la cobertura de vecinos sigue parcial y no se cierran las issues madre.
+
+### #326/#329/#567-AIRPORT-TILE-OILRIG-BOUNDARY — AirportTile vs. OilRig
+
+Actualización (2026-09-16, `fcd02189`): `AirportTileScopeResolver` y el
+scheduler aplican la frontera nativa `IsAirport(tile)`. Los mapas generados
+usan `TileKind::Airport`; los SAV usan `MP_STATION` más
+`StationType::Airport` en `MAP6`. Un `StationType::Oilrig` no se considera
+tesela de aeropuerto aunque su `BaseStation` tenga facilidad aérea: conserva
+el servicio de FTA, `airport_tiles` y el camino visual de agua, pero no recibe
+variables de contexto `AirportTile`, información de vecino del mismo
+aeropuerto, radar/animación legacy ni selección como candidato o ancla
+NewGRF. Las estaciones mixtas conservan sus teselas Airport reales. Las
+regresiones focalizadas cubren Action2 y `station_tile_anim`; pasan 2.827 tests
+de core, 1 ignorado y Clippy estricto de la librería. El lint de
+`--all-targets` sigue incluyendo 261 avisos preexistentes en tests; esta etapa
+no los mezcla con el contrato de aeropuerto y la cobertura de las issues madre
+sigue parcial.

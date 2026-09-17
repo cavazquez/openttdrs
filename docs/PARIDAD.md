@@ -6563,3 +6563,16 @@ palabra `0x60` que reciben los callbacks. La regresión cubre los dos caminos
 y la palabra empaquetada; pasan 2.825 tests de `openttdrs-core`, 1 ignorado y
 Clippy estricto. Es una corrección parcial del scope vecino y no cierra
 #326/#329/#567.
+
+Corrección #326/#329/#567-AIRPORT-TILE-OILRIG-BOUNDARY (`fcd02189`,
+2026-09-16): el runtime separa ahora `IsAirport(tile)` de la facilidad aérea
+de `BaseStation`. Un `OilRig` conserva su servicio aéreo y su entrada en
+`airport_tiles` para FTA, servicing y render de agua, pero una tesela cuyo
+`MAP6` declara `StationType::Oilrig` ya no entra en el contexto `AirportTile`,
+en `TileBelongsToAirport`, en la animación legacy ni en los candidatos o
+anclas del scheduler NewGRF. Las estaciones mixtas siguen siendo válidas si
+contienen al menos una tesela Airport real. Las regresiones cubren Action2,
+animación, radar y exclusión del scheduler; pasan 2.827 tests de
+`openttdrs-core`, 1 ignorado y Clippy estricto de producción (`--lib`). El
+alcance `--all-targets` mantiene 261 lints preexistentes en tests y no se
+mezcla en este bloque. La corrección es parcial y no cierra #326/#329/#567.

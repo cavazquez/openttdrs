@@ -3891,10 +3891,60 @@ fn spawn_field_fences(commands: &mut Commands, assets: &WorldAssets, ctx: &TileR
 /// por árbol de `_tree_layout_sprite[tipo×4 + variante]` y etapa de
 /// crecimiento (bits 0–2 de m5) solo en el último árbol (el resto adulto +3).
 ///
-/// OpenTTD selecciona repetidamente la entrada con menor `x + y` de la lista
-/// original. La ordenación estable conserva el mismo desempate por índice.
+/// OpenTTD selecciona repetidamente la entrada con menor `x + y` y reemplaza
+/// la entrada retirada con la última restante; por eso no es una ordenación
+/// estable cuando hay empates.
 fn sort_tree_layers_like_openttd(layers: &mut [(usize, u8, u8, u16)]) {
-    layers.sort_by_key(|(_, dx, dy, _)| u16::from(*dx) + u16::from(*dy));
+    // `DrawTile_Trees` busca el primer mínimo y, al quitarlo, copia el último
+    // elemento restante sobre su posición. No es un sort estable: con tres o
+    // más offsets empatados el segundo árbol cambia respecto del orden
+    // original de la tabla.
+    if layers.len() > 4 {
+        // El juego nunca emite más de cuatro árboles por tesela. Mantener un
+        // fallback defensivo evita que un fixture malformado haga panicar el
+        // renderer sin alterar la ruta nativa acotada.
+        layers.sort_by_key(|(_, dx, dy, _)| u16::from(*dx) + u16::from(*dy));
+        return;
+    }
+
+    let len = layers.len();
+    if len < 2 {
+        return;
+    }
+
+    let mut remaining = [0usize; 4];
+    let mut ordered = [0usize; 4];
+    for (index, slot) in remaining.iter_mut().enumerate().take(len) {
+        *slot = index;
+    }
+
+    let mut remaining_len = len;
+    for output in ordered.iter_mut().take(len) {
+        let mut minimum_index = 0;
+        let mut minimum = u16::from(layers[remaining[0]].1)
+            + u16::from(layers[remaining[0]].2);
+        for (index, &candidate) in remaining
+            .iter()
+            .enumerate()
+            .take(remaining_len)
+            .skip(1)
+        {
+            let value = u16::from(layers[candidate].1) + u16::from(layers[candidate].2);
+            if value < minimum {
+                minimum = value;
+                minimum_index = index;
+            }
+        }
+        *output = remaining[minimum_index];
+        remaining[minimum_index] = remaining[remaining_len - 1];
+        remaining_len -= 1;
+    }
+
+    let mut source = [(0usize, 0u8, 0u8, 0u16); 4];
+    source[..len].copy_from_slice(layers);
+    for (index, &source_index) in ordered.iter().enumerate().take(len) {
+        layers[index] = source[source_index];
+    }
 }
 
 /// Resuelve la fila de `_tree_layout_sprite` exactamente como `DrawTile_Trees`.
@@ -4241,6 +4291,15 @@ mod tests {
         sort_tree_layers_like_openttd(&mut layers);
 
         assert_eq!(layers, [(1611, 1, 8, 0), (1700, 1, 8, 0), (1593, 9, 3, 0)]);
+    }
+
+    #[test]
+    fn forest_layers_use_last_replacement_for_multiple_ties() {
+        let mut layers = [(1, 0, 0, 0), (2, 0, 0, 0), (3, 0, 0, 0)];
+
+        sort_tree_layers_like_openttd(&mut layers);
+
+        assert_eq!(layers, [(1, 0, 0, 0), (3, 0, 0, 0), (2, 0, 0, 0)]);
     }
 
     #[test]

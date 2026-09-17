@@ -6723,3 +6723,15 @@ evidencia, pero no las usa para exigir contención contra IDs vanilla. La
 regresión del comparador y las pruebas focalizadas quedan verdes. Es una
 mejora diagnóstica; no cambia el raster ni cierra #326/#329/#567, que aún
 requieren identidad global, callbacks/layouts y composición completa.
+
+Corrección #326/#561-RAIL-GLASS-CHILD-ORIGIN (2026-09-17): el vidrio de las
+estaciones rail vanilla se pinta con el origen visual del techo parent, como
+el `AddChildSpriteScreen(0, 0)` nativo, en lugar de usar el origen NFO (0,0)
+del PNG hijo. La relación se aplica a `1083`–`1086` y a sus variantes de
+railtype, y la preview comparte el helper. Las regresiones cubren las cuatro
+orientaciones y rail/eléctrico/mono/maglev. En el foco `Kale_TitleGame.sav`
+(centro `132,2`, 800×600, Normal, limpio), el exacto pasa de `7332` a `6427`
+(-12,3%) y el delta medio de `0,408396` a `0,216257`; las bandas por encima de
+`2/4/8/16/32/64` pasan de `7291/7291/7071/6594/4968/1426` a
+`6319/6315/5490/3815/1903/832`. La mejora no completa el compositor
+dependiente del framebuffer: #326/#561 permanecen abiertas.

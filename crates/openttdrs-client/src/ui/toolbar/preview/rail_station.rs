@@ -125,7 +125,12 @@ fn spawn_one_tile(
         let Some((w, h, nfo_xrel, nfo_yrel)) = rail_station_sprite_meta(layer.sprite_id) else {
             continue;
         };
-        let (xrel, yrel) = rail_station_overlay_rel(&layer, nfo_xrel, nfo_yrel);
+        let (xrel, yrel) = if crate::sprites::rail_station_roof_glass_sprite(layer.sprite_id) {
+            crate::sprites::rail_station_roof_glass_overlay_rel(&layer, layer.sprite_id)
+                .unwrap_or_else(|| rail_station_overlay_rel(&layer, nfo_xrel, nfo_yrel))
+        } else {
+            rail_station_overlay_rel(&layer, nfo_xrel, nfo_yrel)
+        };
         let mut pos3 = overlay_pos(
             origin,
             xrel,

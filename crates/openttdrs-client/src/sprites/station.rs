@@ -477,6 +477,41 @@ pub const fn rail_station_roof_glass_sprite(sprite_id: u32) -> bool {
     matches!(rail_station_sprite_base_id(sprite_id), 1083..=1086)
 }
 
+/// Parent visual del vidrio de techo publicado por `TILE_SEQ_CHILD`.
+///
+/// OpenTTD no usa el origen NFO del PNG del vidrio (0, 0) para estos cuatro
+/// sprites: `AddChildSpriteScreen(0, 0)` reutiliza `ParentSprite.left/top`,
+/// que ya contiene los offsets NFO del techo. El desplazamiento de la familia
+/// railtype se conserva al traducir el ID base.
+#[must_use]
+pub const fn rail_station_roof_glass_parent_sprite_id(sprite_id: u32) -> Option<u32> {
+    let base_id = rail_station_sprite_base_id(sprite_id);
+    let parent_base_id = match base_id {
+        1083 => 1079,
+        1084 => 1080,
+        1085 => 1081,
+        1086 => 1082,
+        _ => return None,
+    };
+    Some(parent_base_id + (sprite_id - base_id))
+}
+
+/// Origen visual de un vidrio ferroviario, equivalente al child relativo de
+/// `DrawCommonTileSeq`/`AddChildSpriteScreen` de OpenTTD.
+///
+/// El tamaño sigue siendo el del sprite hijo; sólo el origen `(xrel, yrel)`
+/// proviene del techo parent. Así la máscara cae sobre los mismos píxeles que
+/// el raster nativo, también para mono y maglev.
+#[must_use]
+pub fn rail_station_roof_glass_overlay_rel(
+    seq: &RailStationLayer,
+    glass_sprite_id: u32,
+) -> Option<(f32, f32)> {
+    let parent_id = rail_station_roof_glass_parent_sprite_id(glass_sprite_id)?;
+    let (_, _, parent_xrel, parent_yrel) = rail_station_sprite_meta(parent_id)?;
+    Some(rail_station_overlay_rel(seq, parent_xrel, parent_yrel))
+}
+
 /// Cuerpo ogfx2 19/20 + toldos CC 21/22 (eje X).
 ///
 /// Prop 1A: parents en (0,0) y (0,13). Los PNG este (4975/4979) se dibujan con
@@ -793,6 +828,69 @@ mod tests {
             assert_eq!(layers[2].dz, 16.0);
             assert_eq!(layers[3].dz, 16.0);
             assert!(rail_station_roof_glass_sprite(layers[3].sprite_id));
+        }
+    }
+
+    #[test]
+    fn rail_station_roof_glass_uses_the_parent_screen_origin() {
+        let expected = [
+            (4, 1083, 1079, (-31.0, -22.0)),
+            (5, 1084, 1080, (-31.0, -22.0)),
+            (6, 1085, 1081, (-31.0, -36.0)),
+            (7, 1086, 1082, (-33.0, -36.0)),
+        ];
+
+        for (gfx, glass_id, parent_id, expected_rel) in expected {
+            assert_eq!(
+                rail_station_roof_glass_parent_sprite_id(glass_id),
+                Some(parent_id)
+            );
+            let layer = rail_station_draw_layers(gfx)[3];
+            assert_eq!(
+                rail_station_roof_glass_overlay_rel(&layer, glass_id),
+                Some(expected_rel),
+                "glass {glass_id} debe reutilizar el origen NFO del parent {parent_id}"
+            );
+        }
+    }
+
+    #[test]
+    fn rail_station_roof_glass_parent_keeps_railtype_offset() {
+        for (glass_id, parent_id) in [(1083, 1079), (1084, 1080), (1085, 1081), (1086, 1082)] {
+            for rail_type in [
+                RailType::Rail,
+                RailType::Electric,
+                RailType::Monorail,
+                RailType::Maglev,
+            ] {
+                let glass = rail_station_layer_for_type(
+                    RailStationLayer {
+                        sprite_id: glass_id,
+                        dx: 0.0,
+                        dy: 0.0,
+                        dz: 16.0,
+                        z: 0.0,
+                    },
+                    rail_type,
+                )
+                .sprite_id;
+                let parent = rail_station_layer_for_type(
+                    RailStationLayer {
+                        sprite_id: parent_id,
+                        dx: 0.0,
+                        dy: 0.0,
+                        dz: 16.0,
+                        z: 0.0,
+                    },
+                    rail_type,
+                )
+                .sprite_id;
+                assert_eq!(
+                    rail_station_roof_glass_parent_sprite_id(glass),
+                    Some(parent),
+                    "{rail_type:?}: glass {glass} debe apuntar al techo {parent}"
+                );
+            }
         }
     }
 

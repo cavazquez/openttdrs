@@ -9599,3 +9599,18 @@ El alpha `0` baja artificialmente el exacto a `6125` porque elimina la
 contribución del vidrio, por lo que no es una corrección válida. La perilla
 queda sólo para QA mientras se implementa el pass dependiente del framebuffer;
 no cambia el gate exacto ni habilita el cierre de #326/#561.
+
+Corrección #326/#561-RAIL-GLASS-CHILD-ORIGIN (2026-09-17): los vidrios
+`1083`–`1086` se posicionan ahora con el origen NFO del techo parent
+(`1079`–`1082`), igual que `AddChildSpriteScreen(0, 0)` en OpenTTD. Antes el
+renderer usaba el origen propio del PNG del vidrio (0,0), desplazando la
+máscara fuera del techo; la regla queda centralizada y conserva el offset de
+railtype para mono y maglev. La preview de estación reutiliza el mismo helper.
+Las regresiones cubren las cuatro orientaciones y las cuatro familias de
+railtype. En la misma captura focalizada de Kale, 800×600, `Normal`, perfil
+limpio, el exacto baja de `7332` a `6427` píxeles (`-12,3%`), el delta medio de
+`0,408396` a `0,216257`, y las bandas `>2/>4/>8/>16/>32/>64` pasan de
+`7291/7291/7071/6594/4968/1426` a
+`6319/6315/5490/3815/1903/832`. Es una corrección de origen visual, no el
+compositor dependiente del framebuffer completo: #326/#561 siguen abiertas y
+no se cierra ninguna issue.

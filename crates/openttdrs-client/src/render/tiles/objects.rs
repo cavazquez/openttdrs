@@ -87,14 +87,14 @@ use crate::sprites::{
     rail_depot_seq_gfx, rail_depot_visual_type_index, rail_ghost_overlay_offset,
     rail_pbs_reservation_offset, rail_station_draw_layers,
     rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
-    rail_station_layer_for_type, rail_station_overlay_rel, rail_station_sprite_meta,
-    rail_waypoint_child_parent_slot, rail_waypoint_draw_layers, rail_waypoint_layer_bounds,
-    rail_waypoint_layer_meta, rail_waypoint_parent_slot, rail_waypoint_sprite_center,
-    remap_rail_sprite_id, road_depot_build_layers, road_depot_seq_gfx, road_flat_sprite_index,
-    road_ground_sprite_id, road_stop_build_layers, road_stop_drive_through_layers,
-    road_stop_ground_index, road_stop_ground_sprite_id, road_stop_seq_gfx,
-    road_waypoint_build_layers, road_waypoint_sprite_index, roadside_is_paved, ship_depot_layers,
-    ship_depot_seq_extent, station_tile_class, with_to_alpha,
+    rail_station_layer_for_type, rail_station_overlay_rel, rail_station_roof_glass_overlay_rel,
+    rail_station_sprite_meta, rail_waypoint_child_parent_slot, rail_waypoint_draw_layers,
+    rail_waypoint_layer_bounds, rail_waypoint_layer_meta, rail_waypoint_parent_slot,
+    rail_waypoint_sprite_center, remap_rail_sprite_id, road_depot_build_layers, road_depot_seq_gfx,
+    road_flat_sprite_index, road_ground_sprite_id, road_stop_build_layers,
+    road_stop_drive_through_layers, road_stop_ground_index, road_stop_ground_sprite_id,
+    road_stop_seq_gfx, road_waypoint_build_layers, road_waypoint_sprite_index, roadside_is_paved,
+    ship_depot_layers, ship_depot_seq_extent, station_tile_class, with_to_alpha,
 };
 
 const PALETTE_TO_TRANSPARENT: u16 = 802;
@@ -2189,7 +2189,15 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                         else {
                             continue;
                         };
-                        let (xrel, yrel) = rail_station_overlay_rel(&layer, nfo_xrel, nfo_yrel);
+                        let (xrel, yrel) =
+                            if crate::sprites::rail_station_roof_glass_sprite(layer.sprite_id) {
+                                rail_station_roof_glass_overlay_rel(&layer, layer.sprite_id)
+                                    .unwrap_or_else(|| {
+                                        rail_station_overlay_rel(&layer, nfo_xrel, nfo_yrel)
+                                    })
+                            } else {
+                                rail_station_overlay_rel(&layer, nfo_xrel, nfo_yrel)
+                            };
                         crate::iso::overlay_pos(
                             ctx.iso_pos,
                             xrel,

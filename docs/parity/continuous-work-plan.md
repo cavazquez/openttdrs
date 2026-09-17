@@ -9684,3 +9684,22 @@ El control `Normal` conserva `19873` diferencias (`4,14%`). La suite queda en
 verdes. Siguiente secuencia: aislar el borde de cámara, cubrir orientaciones y
 escenas con vehículos/depósitos, y recién entonces diseñar la conmutación de
 zoom para runtime; no cerrar #326/#329/#567 por esta evidencia focalizada.
+
+### #326/#567-OPENTTD-VIEWPORT-CLAMP — encuadre del borde en capturas focalizadas
+
+Actualizado: 2026-09-17 (`aed2ca9b`). El driver de captura reproduce ahora la
+secuencia de OpenTTD: centra el viewport normal, aplica el desplazamiento entre
+el viewport y la resolución/escala solicitados, ejecuta la inversa isométrica
+con clamp y recién entonces calcula el centro de la imagen. La iteración de
+altura usa las cuatro esquinas del mapa y conserva el límite de `freeform_edges`;
+la lógica se activa sólo con `OPENTTDRS_MAP_SHOT`, por lo que no altera el paneo
+ni la cámara de una partida normal.
+
+En el borde de `Kale_TitleGame.sav` (`132,2`, 800×600, `Out2x`, limpio), el
+diferencial alineado baja de `397091` (`82,73%`, delta medio `32,851093`) a
+`95087` (`19,81%`, delta medio `6,634246`); la banda `>64` baja de `239203` a
+`33724`. En crudo, el exacto pasa de `388140` a `344091` y el delta medio de
+`31,481848` a `13,903371`. Pasan `1598` tests del cliente, 2 ignorados, y
+Clippy estricto. Es una mejora de encuadre, no un cierre: faltan las demás
+escalas, orientaciones y productores del compositor; #326/#567 siguen
+abiertas.

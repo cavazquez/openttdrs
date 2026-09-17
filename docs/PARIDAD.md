@@ -6816,3 +6816,21 @@ queda en `174822` píxeles alineados distintos, delta medio `13,099865` y
 respectivamente. El control `Normal` continúa en `19873` (`4,14%`) con delta
 medio `1,540128`, confirmando que las variantes sólo se activan en las escalas
 fijas de captura.
+
+Corrección #326/#567-OPENTTD-VIEWPORT-CLAMP (`aed2ca9b`, 2026-09-17): las
+capturas focalizadas ahora reproducen el centrado en el viewport normal y el
+clamp de borde que OpenTTD aplica antes de recortar una captura con zoom. La
+ruta convierte el centro Bevy a coordenadas virtuales, repite la iteración de
+`InverseRemapCoords2` con las alturas del mapa y vuelve a convertir el centro
+para el tamaño real de la captura. El cambio es exclusivo de
+`OPENTTDRS_MAP_SHOT`; el paneo interactivo y la simulación no cambian.
+
+En el borde de `Kale_TitleGame.sav` (centro `132,2`, 800×600, `Out2x`, perfil
+limpio), el diferencial alineado baja de `397091` (`82,73%`, delta medio
+`32,851093`) a `95087` (`19,81%`, delta medio `6,634246`). La banda `>64`
+baja de `239203` a `33724` píxeles; en crudo, el exacto pasa de `388140` a
+`344091` y el delta medio de `31,481848` a `13,903371`. La suite del cliente
+queda en `1598` tests exitosos y 2 ignorados, con Clippy estricto y
+`git diff --check` verdes. Es una corrección de encuadre, no una paridad
+completa: todavía faltan validar todas las escalas, orientaciones y
+productores del compositor; #326/#567 permanecen abiertas.

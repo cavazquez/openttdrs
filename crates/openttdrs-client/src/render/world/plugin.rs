@@ -4,6 +4,7 @@ use std::collections::HashSet;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use bevy::sprite::Anchor;
 
 use crate::bevy_app::UpdateSet;
 use crate::render::{
@@ -81,6 +82,100 @@ fn sync_flat_water_raster_footprint(
                 sprite.custom_size = custom_size;
             }
         }
+    }
+}
+
+/// Redondeo de posición estable para el atlas nativo de zoom.
+///
+/// En la ruta Bevy, `Out4x` es el único nivel donde la posición de los
+/// sprites de mapa sin tamaño/ancla explícitos tiene el mismo contrato de
+/// cuantización que el recorte nativo: ambos extremos de pantalla se
+/// redondean hacia arriba. Out2x depende de la fase del clamp de cámara y
+/// Out8x ya agrupa la raíz en bloques de ocho; aplicarles esta regla global
+/// empeora escenas interiores. Es una corrección exclusiva de capturas de
+/// mapa hasta disponer de una matriz de fase completa para esos niveles.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NativeMapSpritePositionRounding {
+    Ceil,
+}
+
+fn native_map_sprite_position_rounding(
+    capture_requested: bool,
+    scale: f32,
+) -> Option<NativeMapSpritePositionRounding> {
+    match crate::sprites::company_palette::native_zoom_factor_for(capture_requested, Some(scale)) {
+        Some(4) => Some(NativeMapSpritePositionRounding::Ceil),
+        _ => None,
+    }
+}
+
+fn sync_native_map_sprite_position(
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    layouts: Res<Assets<TextureAtlasLayout>>,
+    mut queries: ParamSet<(
+        Query<
+            (&Transform, &Projection),
+            (
+                With<crate::render::PrimaryGameCamera>,
+                Without<crate::render::MapPreviewCamera>,
+            ),
+        >,
+        Query<
+            (&Sprite, &mut Transform, &Anchor),
+            (With<crate::render::MapVisualLayer>, Added<Sprite>),
+        >,
+    )>,
+) {
+    let capture_requested = std::env::var_os("OPENTTDRS_MAP_SHOT").is_some();
+    if !capture_requested {
+        return;
+    }
+    let (camera, scale) = {
+        let camera_q = queries.p0();
+        let Ok((camera, Projection::Orthographic(projection))) = camera_q.single() else {
+            return;
+        };
+        (camera.translation.truncate(), projection.scale)
+    };
+    let Some((window_width, window_height)) = windows
+        .iter()
+        .next()
+        .map(|window| (window.width(), window.height()))
+    else {
+        return;
+    };
+    if !scale.is_finite() || !matches!(scale.round() as i32, 2 | 4 | 8) {
+        return;
+    }
+    let Some(NativeMapSpritePositionRounding::Ceil) =
+        native_map_sprite_position_rounding(capture_requested, scale)
+    else {
+        return;
+    };
+    for (sprite, mut transform, anchor) in &mut queries.p1() {
+        if sprite.custom_size.is_some()
+            || sprite.rect.is_some()
+            || *anchor != Anchor::CENTER
+            || transform.rotation != Quat::IDENTITY
+            || transform.scale != Vec3::ONE
+        {
+            continue;
+        }
+        let Some(atlas) = sprite.texture_atlas.as_ref() else {
+            continue;
+        };
+        let Some(rect) = atlas.texture_rect(&layouts) else {
+            continue;
+        };
+        let source_size = rect.as_rect().size();
+        let current_left = transform.translation.x - source_size.x * 0.5;
+        let current_top = transform.translation.y + source_size.y * 0.5;
+        let screen_left = ((current_left - camera.x) / scale + window_width * 0.5).ceil();
+        let screen_top = (window_height * 0.5 - (current_top - camera.y) / scale).ceil();
+        let world_left = camera.x + (screen_left - window_width * 0.5) * scale;
+        let world_top = camera.y + (window_height * 0.5 - screen_top) * scale;
+        transform.translation.x = world_left + source_size.x * 0.5;
+        transform.translation.y = world_top - source_size.y * 0.5;
     }
 }
 
@@ -428,6 +523,7 @@ impl Plugin for WorldRenderPlugin {
                     sync_map_tile_spawn_viewport,
                     super::remap::sync_company_colored_sprites,
                     apply_remap_map_visuals,
+                    sync_native_map_sprite_position,
                     sort_viewport_sortable_parents,
                     sync_viewport_sortable_children,
                     sync_flat_water_raster_footprint,
@@ -490,6 +586,18 @@ mod tests {
     fn small_label_scale_matches_out_levels() {
         assert_eq!(super::label_visual_scale(2.0, false), 2.0);
         assert!((super::label_visual_scale(8.0, true) - 5.6).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn native_map_position_rounding_is_capture_scoped_to_out4() {
+        assert_eq!(super::native_map_sprite_position_rounding(false, 4.0), None);
+        assert_eq!(super::native_map_sprite_position_rounding(true, 1.0), None);
+        assert_eq!(super::native_map_sprite_position_rounding(true, 2.0), None);
+        assert_eq!(
+            super::native_map_sprite_position_rounding(true, 4.0),
+            Some(super::NativeMapSpritePositionRounding::Ceil)
+        );
+        assert_eq!(super::native_map_sprite_position_rounding(true, 8.0), None);
     }
 
     #[test]

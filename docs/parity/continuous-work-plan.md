@@ -9792,3 +9792,19 @@ estructuras; el residual que permanece pertenece a composición/muestreo de
 productores y no habilita un cierre global.
 Las issues `#326/#561/#567` permanecen abiertas: todavía faltan otras escenas,
 orientaciones, productores y el gate exacto completo.
+
+### Etapa publicada — 2026-09-17 — #326/#567 posición cuantizada en Out4x
+
+La captura de mapa `Out4x` redondea hacia arriba ambos bordes de los sprites de
+atlas que conservan tamaño, ancla, rotación y recorte por defecto. El ajuste se
+activa sólo con `OPENTTDRS_MAP_SHOT` y deja intactos la partida interactiva,
+`Normal`, `Out2x` y `Out8x`. Out2x no recibe la regla: su matriz requiere
+conocer si el foco está clamped; Out8x tampoco, porque su fase está ligada al
+agrupamiento nativo de ocho píxeles.
+
+En Kale, 800×600, limpio, el borde `(132,2)` Out4x baja de `91245` a `88624`
+pixeles alineados distintos y las bandas `>16/>32/>64` de `86478/69430/38018` a
+`84346/67089/35718`. En `(189,126)` baja de `168902` a `78825` y el delta medio
+de `12,719043` a `6,126154`; la traslación pasa de `[1,0]` a `[0,0]`. La
+mejora sigue siendo focal: #326/#561/#567 permanecen abiertas por productores,
+orientaciones, escalas y el gate exacto completo.

@@ -6936,3 +6936,23 @@ estructuras; el residual que permanece pertenece a composición/muestreo de
 productores y no habilita un cierre global.
 Las issues `#326/#561/#567` permanecen abiertas: todavía faltan otras escenas,
 orientaciones, productores y el gate exacto completo.
+
+### #326/#567-OPENTTD-VIEWPORT-POSITION-QUANTIZATION-OUT4 — fase de sprites
+
+Actualizado: 2026-09-17. Durante una captura de mapa `Out4x`, los sprites de
+atlas con tamaño, ancla, rotación y recorte por defecto convierten sus bordes
+actuales a coordenadas de pantalla y redondean ambos ejes hacia arriba antes de
+volver a mundo. La corrección queda limitada a `OPENTTDRS_MAP_SHOT`; no altera
+la partida interactiva, `Normal`, `Out2x` ni `Out8x`. La matriz experimental
+descartó `floor-floor` para Out2x y cualquier redondeo global para Out8x, donde
+la fase depende del clamp y del agrupamiento de ocho píxeles.
+
+En `Kale_TitleGame.sav`, 800×600, OpenGFX 8bpp y perfil `clean-static`, el
+borde `(132,2)` Out4x baja de `91245` a `88624` diferencias alineadas; las
+bandas `>16/>32/>64` pasan de `86478/69430/38018` a `84346/67089/35718`, con
+traslación `[0,0]` en ambos casos. En el foco interior `(189,126)`, la misma
+corrección baja de `168902` a `78825` diferencias alineadas y de `12,719043` a
+`6,126154` de delta medio; la traslación queda en `[0,0]` en lugar de `[1,0]`.
+Es una reducción focal de cuantización, no paridad global: siguen pendientes
+los productores y contratos de composición restantes, otras orientaciones y
+el gate exacto completo. #326/#561/#567 permanecen abiertas.

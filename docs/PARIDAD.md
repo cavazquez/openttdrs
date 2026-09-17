@@ -6869,3 +6869,21 @@ convirtiendo erróneamente en gris DOS 16. En el foco de Kale (`132,2`, 800×600
 pass sigue corrigiendo el vidrio. Esto cierra sólo la subbrecha del destino
 transparente negro; #326/#561 permanecen abiertas por las otras divergencias
 de escena y por la validación de cámaras, escalas y productores restantes.
+
+### #326/#561-CLEAN-CAMERA-PHASE — captura estática sin interpolación arbitraria
+
+Actualizado: 2026-09-17. La preparación de la captura de referencia desactiva
+`gui.smooth_scroll` únicamente durante `clean-static`. OpenTTD centra primero el
+viewport y luego procesa el recorte ampliado; con la interpolación normal, el
+instante de la segunda tarea podía conservar un píxel de fase distinto del
+destino ya calculado. La partida interactiva y el paneo normal mantienen su
+configuración original.
+
+En el borde de `Kale_TitleGame.sav` (`132,2`, 800×600, `Out2x`, `llvmpipe`), el
+exacto crudo baja de `344079` a `315130` píxeles (`-8,4%`) y el delta medio de
+`13,8825` a `10,6286`. Tras la alineación de hasta ocho píxeles, el exacto baja
+de `100439` a `100362` y el delta medio de `6,3915` a `6,2931`; la captura
+interior (`189,126`) conserva `281709` diferencias alineadas y delta medio
+`15,5532`. La mejora elimina ruido temporal del oráculo, no demuestra paridad
+del compositor ni cierra #326/#561: siguen pendientes las diferencias de
+sprites, productores, orientaciones y escalas restantes.

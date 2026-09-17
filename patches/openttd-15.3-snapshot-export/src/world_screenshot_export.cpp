@@ -181,6 +181,12 @@ void LogScreenshotViewport(const Window &window, uint32_t width, uint32_t height
 void PrepareCleanWorldScreenshot()
 {
 	_pause_mode.Set(PauseMode::Normal);
+	/* La captura estática no debe tomar una fase arbitraria de la interpolación
+	 * de cámara: el viewport normal se centra en un callback y el recorte
+	 * ampliado se actualiza en el siguiente. El valor por defecto de OpenTTD es
+	 * smooth_scroll=true, lo que deja un píxel de fase distinto según el
+	 * instante en que se procese la segunda tarea. */
+	_settings_client.gui.smooth_scroll = false;
 	ClrBit(_display_opt, DO_SHOW_TOWN_NAMES);
 	ClrBit(_display_opt, DO_SHOW_STATION_NAMES);
 	ClrBit(_display_opt, DO_SHOW_WAYPOINT_NAMES);

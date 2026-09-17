@@ -9722,3 +9722,18 @@ Kale (`132,2`, 800×600, `Normal`, limpio), el exacto baja de `2713` a `2543`
 compositor deja `6137` diferencias y la captura con el pass mantiene la
 corrección del techo; esto es una subetapa publicada, no un cierre de
 #326/#561.
+
+### #326/#561-CLEAN-CAMERA-PHASE — estabilizar el perfil `clean-static`
+
+Actualizado: 2026-09-17. La preparación de la captura de referencia desactiva
+`gui.smooth_scroll` sólo para el perfil `clean-static`. Así el recorte ampliado
+no captura una fase intermedia de la interpolación entre el viewport normal y
+el destino clamped; la configuración de la partida interactiva no cambia.
+
+En `Kale_TitleGame.sav`, borde `(132,2)`, 800×600, `Out2x`, `llvmpipe`, el
+exacto crudo baja de `344079` a `315130` (`-8,4%`) y el delta medio de `13,8825`
+a `10,6286`. El resultado alineado baja de `100439` a `100362` y de `6,3915` a
+`6,2931` de delta medio. El control interior `(189,126)` permanece en `281709`
+diferencias alineadas y `15,5532` de delta medio. Es una normalización del
+oráculo de captura, no un cierre de #326/#561; quedan pendientes los
+productores, escalas y orientaciones que aún difieren.

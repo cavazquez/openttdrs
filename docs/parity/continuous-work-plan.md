@@ -9737,3 +9737,33 @@ a `10,6286`. El resultado alineado baja de `100439` a `100362` y de `6,3915` a
 diferencias alineadas y `15,5532` de delta medio. Es una normalización del
 oráculo de captura, no un cierre de #326/#561; quedan pendientes los
 productores, escalas y orientaciones que aún difieren.
+
+### #326/#567-OPENTTD-VIEWPORT-RASTER-BIAS — medio píxel del clamp
+
+Actualizado: 2026-09-17. Después de reproducir el clamp del viewport, la
+cámara de captura aplica sólo cuando el centro realmente fue acotado una
+compensación de media pantalla expresada en unidades de mundo
+(`capture_scale * 0.5`). El helper queda cubierto por regresión para las
+escalas Out2x y Out8x y la ruta no afecta el paneo ni los focos que no
+requieren clamp.
+
+La A/B limpia de `Kale_TitleGame.sav` a 800×600 con `llvmpipe` muestra una
+reducción material en crudo:
+
+- borde `(132,2)`, Out2x: `315130 → 129479` píxeles distintos, delta medio
+  `10,628620 → 4,570007`, y la banda `>64` `38521 → 18182`; la traslación
+  pasa de `[1,0]` a `[0,0]`;
+- borde espejo `(2,132)`, Out2x: `108255 → 98583`, delta medio
+  `3,782333 → 2,772141`, y la banda `>64` `15469 → 8591`;
+- el mismo borde `(132,2)`, Out4x: `399418 → 107016`, delta medio
+  `21,964431 → 7,403230`, y la banda `>64` `111683 → 44477`;
+- Out8x: el crudo baja `431011 → 401460`, delta medio
+  `26,211478 → 23,169455`, y la banda `>64` `148703 → 122140`.
+
+Out8x todavía conserva una brecha propia: su métrica alineada queda en
+`242339` frente a `76466` del control histórico y mantiene una traslación
+diagnóstica `[1,0]`. Por eso esta etapa no se extrapola como paridad completa;
+queda pendiente aislar el muestreo/composición de ese nivel y validar las
+orientaciones restantes. Los controles interiores no cambian porque el sesgo
+está condicionado a `clamped`. La suite queda en `1599` tests del cliente, 2
+ignorados, y `2829` del core, 1 ignorado. #326/#561/#567 permanecen abiertas.

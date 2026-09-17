@@ -6887,3 +6887,27 @@ interior (`189,126`) conserva `281709` diferencias alineadas y delta medio
 `15,5532`. La mejora elimina ruido temporal del oráculo, no demuestra paridad
 del compositor ni cierra #326/#561: siguen pendientes las diferencias de
 sprites, productores, orientaciones y escalas restantes.
+
+### #326/#567-OPENTTD-VIEWPORT-RASTER-BIAS — compensación del borde
+
+Actualizado: 2026-09-17. La cámara de las capturas focalizadas aplica, sólo
+después de un clamp efectivo, media pantalla en unidades de mundo
+(`capture_scale * 0.5`) para conservar la fase raster del recorte de OpenTTD.
+La compensación está aislada en un helper con regresiones para `clamped=false`,
+Out2x y Out8x; la cámara interactiva no usa esta ruta.
+
+En A/B limpia sobre `Kale_TitleGame.sav`, 800×600, `llvmpipe`, el borde
+`(132,2)` Out2x pasa de `315130` a `129479` diferencias crudas y de delta medio
+`10,628620` a `4,570007`; la banda `>64` pasa de `38521` a `18182` y la
+traslación diagnóstica queda en `[0,0]`. El borde espejo `(2,132)` baja de
+`108255` a `98583` y de `3,782333` a `2,772141`; su banda `>64` baja de
+`15469` a `8591`.
+
+En `(132,2)`, Out4x baja de `399418` a `107016` diferencias crudas, de
+`21,964431` a `7,403230` de delta medio y de `111683` a `44477` en `>64`.
+Out8x baja en crudo de `431011` a `401460`, de `26,211478` a `23,169455` y
+de `148703` a `122140` en `>64`, pero su alineación diagnóstica todavía queda
+en `242339` frente a `76466` del control histórico. Esa discrepancia mantiene
+abierto el trabajo específico de Out8x, composición y orientaciones; no se
+cierran #326/#561/#567. La suite queda en `1599` tests del cliente y `2829`
+del core, con los ignorados históricos (`2` y `1`) sin cambios.

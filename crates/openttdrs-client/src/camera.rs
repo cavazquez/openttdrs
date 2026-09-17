@@ -108,6 +108,17 @@ fn openttd_inverse_remap(point: IVec2) -> IVec2 {
     )
 }
 
+/// Compensa el medio píxel de pantalla que introduce el clamp del viewport.
+/// Con `ScalingMode::WindowSize`, `capture_scale` son unidades de mundo por
+/// píxel; el desplazamiento se activa sólo para capturas que tocaron el mapa.
+fn map_shot_edge_screen_bias(clamped: bool, capture_scale: f32) -> Vec2 {
+    if !clamped {
+        return Vec2::ZERO;
+    }
+    let half_screen_pixel_world = capture_scale * 0.5;
+    Vec2::new(-half_screen_pixel_world, half_screen_pixel_world)
+}
+
 /// Altura de superficie en píxeles de mundo para la iteración del clamp.
 ///
 /// Es la contraparte de `GetSlopePixelZ` en la frontera de mapa que consulta
@@ -237,9 +248,10 @@ pub(crate) fn map_shot_camera_world_pos(
     // El centro de la captura es el centro clamp-eado del viewport normal,
     // menos el desplazamiento que introdujo el viewport de captura.
     let capture_center = clamped_center - center_delta;
+    let edge_screen_bias = map_shot_edge_screen_bias(clamped, capture_scale);
     Vec2::new(
-        capture_center.x as f32 / OPENTTD_ZOOM_BASE as f32,
-        -(capture_center.y as f32) / OPENTTD_ZOOM_BASE as f32,
+        capture_center.x as f32 / OPENTTD_ZOOM_BASE as f32 + edge_screen_bias.x,
+        -(capture_center.y as f32) / OPENTTD_ZOOM_BASE as f32 + edge_screen_bias.y,
     )
 }
 
@@ -917,6 +929,13 @@ mod tests {
             map_shot_camera_world_pos(&map, coord, 800.0, 600.0, 1.0, 15, true),
             direct
         );
+    }
+
+    #[test]
+    fn map_shot_edge_bias_is_half_a_pixel_and_only_for_clamped_views() {
+        assert_eq!(map_shot_edge_screen_bias(false, 2.0), Vec2::ZERO);
+        assert_eq!(map_shot_edge_screen_bias(true, 2.0), Vec2::new(-1.0, 1.0));
+        assert_eq!(map_shot_edge_screen_bias(true, 8.0), Vec2::new(-4.0, 4.0));
     }
 
     #[test]

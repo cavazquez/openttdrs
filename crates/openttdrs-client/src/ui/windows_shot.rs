@@ -26,7 +26,7 @@ use openttdrs_core::prelude::*;
 use std::fmt::Write as _;
 
 use crate::bevy_app::UpdateSet;
-use crate::camera::{CameraVelocity, tile_camera_world_pos};
+use crate::camera::{CameraVelocity, map_shot_camera_world_pos};
 use crate::render::{
     AircraftRotorSprite, AircraftShadowSprite, ConsistUnitSprite, MapPreviewCamera, MapVisualLayer,
     PrimaryGameCamera, ShoreTile, SignLabel, StationLabel, TownLabel, VehicleCargoLabel,
@@ -1596,7 +1596,21 @@ fn map_shot_driver(
         && let Some(center) = map_shot_center_from_env()
         && let Ok((mut transform, mut projection)) = camera_q.single_mut()
     {
-        let target = tile_camera_world_pos(&sim.state.map, center);
+        let (window_width, window_height) = windows
+            .iter()
+            .next()
+            .map(|window| (window.width(), window.height()))
+            .unwrap_or((1280.0, 720.0));
+        let capture_scale = map_shot_scale_from_env().unwrap_or(1.0);
+        let target = map_shot_camera_world_pos(
+            &sim.state.map,
+            center,
+            window_width,
+            window_height,
+            capture_scale,
+            sim.state.construction.effective_map_height_limit(),
+            sim.state.construction.freeform_edges,
+        );
         transform.translation.x = target.x;
         transform.translation.y = target.y;
         camera_velocity.0 = Vec2::ZERO;
@@ -1615,17 +1629,13 @@ fn map_shot_driver(
         if let Some(scale) = map_shot_scale_from_env()
             && let Projection::Orthographic(ortho) = &mut *projection
         {
-            let (window_width, window_height) = windows
-                .iter()
-                .next()
-                .map(|window| (window.width(), window.height()))
-                .unwrap_or((1280.0, 720.0));
             ortho.scale = clamp_ortho_scale(scale, window_width, window_height, viewport_cull);
         }
         info!(
-            "map_shot: cámara centrada en ({}, {}) con escala {:?}",
+            "map_shot: cámara centrada en ({}, {}) → {:?} con escala {:?}",
             center.x,
             center.y,
+            target,
             map_shot_scale_from_env(),
         );
     }

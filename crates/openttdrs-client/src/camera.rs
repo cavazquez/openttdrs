@@ -3,6 +3,7 @@
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use openttdrs_core::map::slope::{partial_pixel_z, tile_slope_and_z};
 use openttdrs_core::prelude::*;
 
 use crate::bevy_app::UpdateSet;
@@ -93,6 +94,153 @@ pub fn tile_camera_world_pos(map: &Map, coord: TileCoord) -> Vec2 {
     // limpia un píxel tras el redondeo. Mantener ambos conceptos separados
     // preserva el anclaje de sprites y alinea el viewport con OpenTTD.
     Vec2::new(pos.x, pos.y - ISO_QH + f32::from(height) * HEIGHT_PX)
+}
+
+const OPENTTD_TILE_SIZE: i32 = 16;
+const OPENTTD_ZOOM_BASE: i32 = 4;
+
+/// Convierte un punto virtual de OpenTTD al punto de mundo 3D que usa su
+/// `InverseRemapCoords2`, conservando el redondeo entero del oráculo.
+fn openttd_inverse_remap(point: IVec2) -> IVec2 {
+    IVec2::new(
+        (point.y * 2 - point.x) >> (2 + OPENTTD_ZOOM_BASE.ilog2()),
+        (point.y * 2 + point.x) >> (2 + OPENTTD_ZOOM_BASE.ilog2()),
+    )
+}
+
+/// Altura de superficie en píxeles de mundo para la iteración del clamp.
+///
+/// Es la contraparte de `GetSlopePixelZ` en la frontera de mapa que consulta
+/// `InverseRemapCoords2`. Las coordenadas ya llegan acotadas al mapa, por lo
+/// que no hace falta modelar las teselas virtuales del borde exterior.
+fn openttd_slope_pixel_z(map: &Map, x: i32, y: i32) -> i32 {
+    let (map_width, map_height) = map.dimensions();
+    if map_width == 0 || map_height == 0 {
+        return 0;
+    }
+    let max_tile_x = i32::try_from(map_width.saturating_sub(1)).unwrap_or(i32::MAX);
+    let max_tile_y = i32::try_from(map_height.saturating_sub(1)).unwrap_or(i32::MAX);
+    let tile_x = (x.div_euclid(OPENTTD_TILE_SIZE)).clamp(0, max_tile_x);
+    let tile_y = (y.div_euclid(OPENTTD_TILE_SIZE)).clamp(0, max_tile_y);
+    let sub_x = x.rem_euclid(OPENTTD_TILE_SIZE);
+    let sub_y = y.rem_euclid(OPENTTD_TILE_SIZE);
+    let Some((tileh, base_z)) = tile_slope_and_z(map, TileCoord::new(tile_x, tile_y)) else {
+        return 0;
+    };
+    i32::from(base_z) * i32::from(openttdrs_core::map::slope::TILE_PIXEL_HEIGHT)
+        + i32::from(partial_pixel_z(sub_x as f32, sub_y as f32, tileh))
+}
+
+/// Aplica el mismo clamp de mapa que OpenTTD antes de una captura focalizada.
+///
+/// OpenTTD centra primero el viewport normal y sólo después construye el
+/// screenshot con el zoom solicitado. Cuando ambos tamaños difieren, vuelve a
+/// validar el centro del viewport normal; en los bordes eso desplaza la región
+/// capturada. `capture_scale` es la escala ortográfica de openttdrs (`2` =
+/// `Out2x`).
+#[must_use]
+pub(crate) fn map_shot_camera_world_pos(
+    map: &Map,
+    coord: TileCoord,
+    window_width: f32,
+    window_height: f32,
+    capture_scale: f32,
+    map_height_limit: u8,
+    freeform_edges: bool,
+) -> Vec2 {
+    let direct_target = tile_camera_world_pos(map, coord);
+    if !capture_scale.is_finite() || capture_scale <= 0.0 {
+        return direct_target;
+    }
+
+    let width = window_width.round().max(1.0) as i32;
+    let height = window_height.round().max(1.0) as i32;
+    let capture_zoom_factor = (capture_scale * OPENTTD_ZOOM_BASE as f32).round().max(1.0) as i32;
+    let main_virtual_width = width * OPENTTD_ZOOM_BASE;
+    let main_virtual_height = height * OPENTTD_ZOOM_BASE;
+    let capture_virtual_width = width * capture_zoom_factor;
+    let capture_virtual_height = height * capture_zoom_factor;
+    let center_delta = IVec2::new(
+        (main_virtual_width - capture_virtual_width) / 2,
+        (main_virtual_height - capture_virtual_height) / 2,
+    );
+
+    // `iso` es `RemapCoords(16 * tx, 16 * ty) / 4` con Y invertido por Bevy.
+    let requested_center = IVec2::new(
+        (direct_target.x * OPENTTD_ZOOM_BASE as f32).round() as i32,
+        (-direct_target.y * OPENTTD_ZOOM_BASE as f32).round() as i32,
+    );
+    let shifted_center = requested_center + center_delta;
+
+    let (map_width, map_height) = map.dimensions();
+    if map_width == 0 || map_height == 0 {
+        return direct_target;
+    }
+    let min_coord = if freeform_edges { OPENTTD_TILE_SIZE } else { 0 };
+    let max_x = map_width
+        .saturating_sub(1)
+        .saturating_mul(OPENTTD_TILE_SIZE as u32)
+        .saturating_sub(1)
+        .min(i32::MAX as u32) as i32;
+    let max_y = map_height
+        .saturating_sub(1)
+        .saturating_mul(OPENTTD_TILE_SIZE as u32)
+        .saturating_sub(1)
+        .min(i32::MAX as u32) as i32;
+    let extra_tiles = (u32::from(map_height_limit) * 8).div_ceil(32);
+    let extra_limit = extra_tiles
+        .saturating_mul(OPENTTD_TILE_SIZE as u32)
+        .min(i32::MAX as u32) as i32;
+
+    let mut point = openttd_inverse_remap(shifted_center);
+    let mut clamped = false;
+    let old_point = point;
+    point.x = point.x.clamp(-extra_limit, max_x);
+    point.y = point.y.clamp(-extra_limit, max_y);
+    clamped |= point != old_point;
+
+    // Réplica literal de las tres pasadas de punto fijo de OpenTTD. El `z / 2`
+    // es parte de la inversa isométrica, no una conversión de altura del cliente.
+    let mut z = 0_i32;
+    for _ in 0..5 {
+        let sample_x = (point.x + z.max(4) - 4).clamp(min_coord, max_x);
+        let sample_y = (point.y + z.max(4) - 4).clamp(min_coord, max_y);
+        z = openttd_slope_pixel_z(map, sample_x, sample_y) / 2;
+    }
+    for margin in (1..=3).rev() {
+        let sample_x = (point.x + z.max(margin) - margin).clamp(min_coord, max_x);
+        let sample_y = (point.y + z.max(margin) - margin).clamp(min_coord, max_y);
+        z = openttd_slope_pixel_z(map, sample_x, sample_y) / 2;
+    }
+    for _ in 0..5 {
+        let sample_x = (point.x + z).clamp(min_coord, max_x);
+        let sample_y = (point.y + z).clamp(min_coord, max_y);
+        z = openttd_slope_pixel_z(map, sample_x, sample_y) / 2;
+    }
+
+    point += IVec2::splat(z);
+    let old_point = point;
+    point.x = point.x.clamp(min_coord, max_x);
+    point.y = point.y.clamp(min_coord, max_y);
+    clamped |= point != old_point;
+
+    let clamped_center = if clamped {
+        let final_z = openttd_slope_pixel_z(map, point.x, point.y);
+        IVec2::new(
+            (point.y - point.x) * 2 * OPENTTD_ZOOM_BASE,
+            (point.y + point.x - final_z) * OPENTTD_ZOOM_BASE,
+        )
+    } else {
+        shifted_center
+    };
+
+    // El centro de la captura es el centro clamp-eado del viewport normal,
+    // menos el desplazamiento que introdujo el viewport de captura.
+    let capture_center = clamped_center - center_delta;
+    Vec2::new(
+        capture_center.x as f32 / OPENTTD_ZOOM_BASE as f32,
+        -(capture_center.y as f32) / OPENTTD_ZOOM_BASE as f32,
+    )
 }
 
 pub(crate) struct CameraControlPlugin;
@@ -757,6 +905,30 @@ mod tests {
         // La diferencia de medio píxel respecto al ancla visual del sprite
         // es intencional: el scroll de OpenTTD centra el rombo lógico 64×32.
         assert_eq!(actual.y, top.y - 16.0 + 24.0);
+    }
+
+    #[test]
+    fn map_shot_camera_keeps_normal_capture_at_requested_tile() {
+        let map = Map::new_flat(64, 64, 1);
+        let coord = TileCoord::new(24, 24);
+        let direct = tile_camera_world_pos(&map, coord);
+
+        assert_eq!(
+            map_shot_camera_world_pos(&map, coord, 800.0, 600.0, 1.0, 15, true),
+            direct
+        );
+    }
+
+    #[test]
+    fn map_shot_camera_reproduces_viewport_clamp_for_zoomed_edge_capture() {
+        let map = Map::new_flat(256, 256, 1);
+        let coord = TileCoord::new(132, 2);
+        let direct = tile_camera_world_pos(&map, coord);
+        let clamped = map_shot_camera_world_pos(&map, coord, 800.0, 600.0, 2.0, 15, true);
+
+        assert_ne!(clamped, direct);
+        assert!(clamped.x > direct.x);
+        assert!(clamped.y < direct.y);
     }
 
     #[test]

@@ -18,15 +18,17 @@ use super::plugin::{
 use super::tile_spawn::{spawn_map_chunk, spawn_world_layer};
 use super::viewport::{overview_stride_for_viewport, resolve_spawn_viewport, sync_camera_for_sim};
 
-/// OpenTTD sólo dibuja los detalles de carreteras y vías hasta `Out2x`.
+/// OpenTTD sólo dibuja los detalles de carretera hasta `Out2x`.
 ///
 /// `ClientPreferences::full_detail` representa la preferencia del usuario,
-/// pero no anula el límite de `DrawRoadBits`/`DrawTrackDetails`: en `Out4x` y
-/// `Out8x` el viewport nativo omite faroles, árboles de banquina y detalles
-/// ferroviarios aunque la opción siga activada. La escala ortográfica del
-/// cliente coincide con esos niveles (`2 = Out2x`, `4 = Out4x`).
+/// pero no anula el límite de `DrawRoadBits`: en `Out4x` y `Out8x` el
+/// viewport nativo omite faroles y árboles de banquina aunque la opción siga
+/// activada. `DrawTrackDetails` tiene un contrato distinto y no recibe este
+/// corte de zoom; sus cercas ferroviarias siguen activas mientras la
+/// preferencia esté encendida. La escala ortográfica del cliente coincide con
+/// esos niveles (`2 = Out2x`, `4 = Out4x`).
 #[must_use]
-fn full_detail_enabled_at_zoom(preference: bool, ortho_scale: f32) -> bool {
+pub(super) fn full_detail_enabled_at_zoom(preference: bool, ortho_scale: f32) -> bool {
     preference && ortho_scale.is_finite() && ortho_scale <= 2.0
 }
 
@@ -155,7 +157,8 @@ pub(crate) fn apply_remap_map_visuals(
         && !loaded_chunks.is_empty();
 
     let show_pbs = prefs.show_pbs_reservations;
-    let show_full_detail = full_detail_enabled_at_zoom(prefs.full_detail, ortho_scale);
+    let show_road_detail = full_detail_enabled_at_zoom(prefs.full_detail, ortho_scale);
+    let show_rail_detail = prefs.full_detail;
     let show_town_labels = prefs.show_town_labels;
     let show_station_labels = prefs.show_station_labels;
     let show_waypoint_labels = prefs.show_waypoint_labels;
@@ -185,7 +188,8 @@ pub(crate) fn apply_remap_map_visuals(
                 cx,
                 cy,
                 show_pbs,
-                show_full_detail,
+                show_road_detail,
+                show_rail_detail,
                 newgrf_sprites.road.as_mut(),
                 newgrf_sprites.station.as_mut(),
                 newgrf_sprites.shore.as_mut(),
@@ -210,7 +214,8 @@ pub(crate) fn apply_remap_map_visuals(
                 cx,
                 cy,
                 show_pbs,
-                show_full_detail,
+                show_road_detail,
+                show_rail_detail,
                 newgrf_sprites.road.as_mut(),
                 newgrf_sprites.station.as_mut(),
                 newgrf_sprites.shore.as_mut(),
@@ -297,7 +302,8 @@ pub(crate) fn apply_remap_map_visuals(
             true,
             !preserve_vehicle_visuals,
             show_pbs,
-            show_full_detail,
+            show_road_detail,
+            show_rail_detail,
             show_town_labels,
             show_station_labels,
             show_waypoint_labels,

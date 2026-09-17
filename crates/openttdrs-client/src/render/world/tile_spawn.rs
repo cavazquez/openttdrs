@@ -101,7 +101,8 @@ pub(crate) fn spawn_map_tiles_in_bounds(
     sim: &SimWorld,
     spawn_bounds: TileViewportBounds,
     show_pbs_reservations: bool,
-    show_full_detail: bool,
+    show_road_detail: bool,
+    show_rail_detail: bool,
     road_sprites: &mut crate::render::NewGrfRoadSpriteCache,
     station_sprites: &mut crate::render::NewGrfStationSpriteCache,
     shore_sprites: &mut crate::render::NewGrfShoreSpriteCache,
@@ -214,7 +215,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     slope_half_ground,
                     climate,
                     show_pbs_reservations,
-                    show_full_detail,
+                    show_road_detail,
                     &sim.state.road_type_catalog,
                     Some(road_sprites),
                     Some(images),
@@ -239,7 +240,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     &mut rail_layers,
                     climate,
                     show_pbs_reservations,
-                    show_full_detail,
+                    show_rail_detail,
                     sim.state.construction.signals_on_right(),
                     &sim.state.runtime.catenary_newgrf_sprites,
                     Some(catenary_sprites),
@@ -690,7 +691,8 @@ pub(crate) fn spawn_world_layer(
     include_world_extras: bool,
     spawn_initial_vehicle_visuals: bool,
     show_pbs_reservations: bool,
-    show_full_detail: bool,
+    show_road_detail: bool,
+    show_rail_detail: bool,
     show_town_labels: bool,
     show_station_labels: bool,
     show_waypoint_labels: bool,
@@ -758,7 +760,8 @@ pub(crate) fn spawn_world_layer(
             sim,
             spawn_bounds,
             show_pbs_reservations,
-            show_full_detail,
+            show_road_detail,
+            show_rail_detail,
             road_sprites,
             station_sprites,
             shore_sprites,
@@ -782,7 +785,8 @@ pub(crate) fn spawn_map_chunk(
     cx: u32,
     cy: u32,
     show_pbs_reservations: bool,
-    show_full_detail: bool,
+    show_road_detail: bool,
+    show_rail_detail: bool,
     road_sprites: &mut crate::render::NewGrfRoadSpriteCache,
     station_sprites: &mut crate::render::NewGrfStationSpriteCache,
     shore_sprites: &mut crate::render::NewGrfShoreSpriteCache,
@@ -802,7 +806,8 @@ pub(crate) fn spawn_map_chunk(
         sim,
         chunk_tile_bounds(cx, cy, mw, mh),
         show_pbs_reservations,
-        show_full_detail,
+        show_road_detail,
+        show_rail_detail,
         road_sprites,
         station_sprites,
         shore_sprites,
@@ -919,7 +924,9 @@ pub(crate) fn setup(
         .as_ref()
         .map(|p| p.show_competitor_labels)
         .unwrap_or(true);
-    let show_full_detail = prefs.as_ref().map(|p| p.full_detail).unwrap_or(true);
+    let full_detail = prefs.as_ref().map(|p| p.full_detail).unwrap_or(true);
+    let show_road_detail = super::remap::full_detail_enabled_at_zoom(full_detail, cam_scale);
+    let show_rail_detail = full_detail;
     let label_index = MapLabelSpatialIndex::from_state(&sim.state);
     let mut road_sprites = crate::render::NewGrfRoadSpriteCache::default();
     let mut station_sprites = crate::render::NewGrfStationSpriteCache::default();
@@ -947,7 +954,8 @@ pub(crate) fn setup(
         true,
         true,
         true,
-        show_full_detail,
+        show_road_detail,
+        show_rail_detail,
         show_town_labels,
         show_station_labels,
         show_waypoint_labels,
@@ -1060,6 +1068,7 @@ pub(crate) fn spawn_intro_map_render(
         spawn_bounds,
         false,
         false,
+        true,
         true,
         true,
         true,

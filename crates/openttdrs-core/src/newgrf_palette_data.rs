@@ -261,7 +261,7 @@ pub const DOS_PALETTE_RGB: [[u8; 3]; 256] = [
     [252, 252, 252], // 255
 ];
 
-/// Tabla `PALETTE_TO_TRANSPARENT` (`802`) de la base OpenGFX seleccionada.
+/// Tabla `PALETTE_TO_TRANSPARENT` (`802`) de la base `OpenGFX` seleccionada.
 ///
 /// El blitter 8bpp aplica esta tabla al índice que ya existe en el destino;
 /// no es una opacidad constante. El índice 0 conserva el transparente y los

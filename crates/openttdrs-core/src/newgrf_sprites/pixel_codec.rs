@@ -8,7 +8,7 @@ use crate::newgrf_company_ramp::{
     AUTHOR_CC_PALETTE_FIRST, COMPANY_COLOUR_COUNT, COMPANY_RAMP_RGB, COMPANY_RAMP_SHADES,
 };
 use crate::newgrf_config::GrfContainerVersion;
-use crate::newgrf_palette_data::DOS_PALETTE_RGB;
+use crate::newgrf_palette_data::{DOS_PALETTE_RGB, PALETTE_TO_TRANSPARENT_MAP};
 
 use super::model::DecodedSprite;
 
@@ -29,6 +29,91 @@ pub fn indices_to_rgba(indices: &[u8], width: u16, height: u16) -> Option<Vec<u8
         }
     }
     Some(rgba)
+}
+
+/// Bits por canal que usa el lookup de color de `OpenTTD`.
+pub const PALETTE_LOOKUP_BITS: usize = 6;
+/// Cantidad de valores por canal en el lookup de color.
+pub const PALETTE_LOOKUP_SIZE: usize = 1 << PALETTE_LOOKUP_BITS;
+/// Ancho de la textura 2D que aplana el lookup RGB tridimensional.
+pub const PALETTE_LOOKUP_TEXTURE_WIDTH: u32 = 4096;
+/// Alto de la textura 2D que aplana el lookup RGB tridimensional.
+pub const PALETTE_LOOKUP_TEXTURE_HEIGHT: u32 = 64;
+
+/// Reduce un canal al mismo centro de cubeta que `CrunchColour` de `OpenTTD`.
+#[inline]
+#[must_use]
+pub const fn crunch_palette_channel(channel: u8) -> u8 {
+    (channel & 0xFC) | 0x02
+}
+
+#[inline]
+fn palette_colour_distance(candidate: [u8; 3], rgb: [u8; 3]) -> u64 {
+    // OpenTTD calcula esta distancia en sRGB con factores dependientes del
+    // promedio de rojo. Multiplicar toda la expresión por 256 permite
+    // conservar la misma truncación final sin usar punto flotante.
+    let r = i64::from(candidate[0]) - i64::from(rgb[0]);
+    let g = i64::from(candidate[1]) - i64::from(rgb[1]);
+    let b = i64::from(candidate[2]) - i64::from(rgb[2]);
+    let avgr = i64::midpoint(i64::from(candidate[0]), i64::from(rgb[0]));
+    let numerator = (512 + avgr) * r * r + 1024 * g * g + (512 + 255 - avgr) * b * b;
+    u64::try_from(numerator / 256).unwrap_or(u64::MAX)
+}
+
+/// Obtiene el índice DOS más cercano con el mismo rango y desempate que
+/// `GetNearestColourIndex` del blitter 32bpp de `OpenTTD`.
+#[must_use]
+pub fn nearest_dos_palette_index(rgb: [u8; 3]) -> u8 {
+    let rgb = rgb.map(crunch_palette_channel);
+    let mut best_index = 0u8;
+    let mut best_distance = u64::MAX;
+    for index in 1u8..198 {
+        let distance = palette_colour_distance(DOS_PALETTE_RGB[usize::from(index)], rgb);
+        if distance < best_distance {
+            best_index = index;
+            best_distance = distance;
+        }
+    }
+    // 198..=205 is the company-colour area, which the native lookup skips.
+    for index in 206u8..215 {
+        let distance = palette_colour_distance(DOS_PALETTE_RGB[usize::from(index)], rgb);
+        if distance < best_distance {
+            best_index = index;
+            best_distance = distance;
+        }
+    }
+    best_index
+}
+
+/// Aplica `PALETTE_TO_TRANSPARENT` al color que ya está en el framebuffer.
+#[must_use]
+pub fn palette_to_transparent_rgb(rgb: [u8; 3]) -> [u8; 3] {
+    let source = nearest_dos_palette_index(rgb);
+    DOS_PALETTE_RGB[usize::from(PALETTE_TO_TRANSPARENT_MAP[usize::from(source)])]
+}
+
+/// Genera el lookup RGBA8 para componer `PALETTE_TO_TRANSPARENT` en la GPU.
+///
+/// La textura es 2D de `4096×64`: `x = red_bucket * 64 + green_bucket` y
+/// `y = blue_bucket`. Cada texel contiene el RGB DOS resultante y alpha 255.
+/// El orden de las cubetas coincide con `CrunchColour`, que es el que usa el
+/// lookup nativo de `OpenTTD` antes de buscar el color más cercano.
+#[must_use]
+pub fn palette_to_transparent_lut_rgba8() -> Vec<u8> {
+    let pixel_count = PALETTE_LOOKUP_SIZE * PALETTE_LOOKUP_SIZE * PALETTE_LOOKUP_SIZE;
+    let mut lut = Vec::with_capacity(pixel_count * 4);
+    for blue in 0u8..64 {
+        let blue = blue << 2 | 0x02;
+        for red in 0u8..64 {
+            let red = red << 2 | 0x02;
+            for green in 0u8..64 {
+                let green = green << 2 | 0x02;
+                let rgb = palette_to_transparent_rgb([red, green, blue]);
+                lut.extend_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
+            }
+        }
+    }
+    lut
 }
 
 /// Descomprime stream LZ77 de sprites `NewGRF` (variante TTDP / `DecodeSingleSprite`).

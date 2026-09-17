@@ -47,19 +47,22 @@ pub(crate) use model::{map_tile_layout_sprite_modifiers, tile_layout_flags_valid
 
 // Re-exportar funciones de runtime de pixel_codec
 pub use pixel_codec::{
-    SPRITE_V2_ZOOM_PREFERENCE, apply_company_colour_mask, bake_sprite_bare_land,
-    bake_sprite_company_mask, bake_sprite_company_palette, bake_sprite_crash,
-    bake_sprite_newspaper, bake_sprite_palette_map, bake_sprite_two_company_palette,
-    bake_sprite_two_company_palette_with_map, decode_chunked_8bpp, decode_chunked_pixels,
-    decode_real_sprite_v1, decode_real_sprite_v1_uncompressed, decode_real_sprite_v2_section,
+    PALETTE_LOOKUP_BITS, PALETTE_LOOKUP_SIZE, PALETTE_LOOKUP_TEXTURE_HEIGHT,
+    PALETTE_LOOKUP_TEXTURE_WIDTH, SPRITE_V2_ZOOM_PREFERENCE, apply_company_colour_mask,
+    bake_sprite_bare_land, bake_sprite_company_mask, bake_sprite_company_palette,
+    bake_sprite_crash, bake_sprite_newspaper, bake_sprite_palette_map,
+    bake_sprite_two_company_palette, bake_sprite_two_company_palette_with_map,
+    crunch_palette_channel, decode_chunked_8bpp, decode_chunked_pixels, decode_real_sprite_v1,
+    decode_real_sprite_v1_uncompressed, decode_real_sprite_v2_section,
     decode_real_sprite_v2_section_zoom, decompress_grf_lz77, encode_chunked_8bpp_full_rows,
-    encode_chunked_pixels_full_rows, index_sprite_section, indices_to_rgba, resolve_fd_sprite,
-    sprite_v2_bpp,
+    encode_chunked_pixels_full_rows, index_sprite_section, indices_to_rgba,
+    nearest_dos_palette_index, palette_to_transparent_lut_rgba8, palette_to_transparent_rgb,
+    resolve_fd_sprite, sprite_v2_bpp,
 };
 
 pub use crate::newgrf_palette_data::{DOS_PALETTE_RGB, PALETTE_TO_TRANSPARENT_MAP};
 
-/// Devuelve el índice de destino de la tabla OpenGFX `PALETTE_TO_TRANSPARENT`.
+/// Devuelve el índice de destino de la tabla `OpenGFX` `PALETTE_TO_TRANSPARENT`.
 #[must_use]
 pub const fn palette_to_transparent_index(index: u8) -> u8 {
     PALETTE_TO_TRANSPARENT_MAP[index as usize]
@@ -165,6 +168,44 @@ mod tests {
         assert_eq!(palette_to_transparent_index(198), 198);
         assert_eq!(palette_to_transparent_index(206), 90);
         assert_eq!(palette_to_transparent_index(255), 201);
+    }
+
+    #[test]
+    fn palette_to_transparent_lookup_matches_native_quantization() {
+        assert_eq!(crunch_palette_channel(0), 2);
+        assert_eq!(crunch_palette_channel(255), 254);
+        assert_eq!(nearest_dos_palette_index(DOS_PALETTE_RGB[1]), 1);
+        assert_eq!(nearest_dos_palette_index(DOS_PALETTE_RGB[15]), 15);
+        assert_eq!(
+            palette_to_transparent_rgb(DOS_PALETTE_RGB[15]),
+            DOS_PALETTE_RGB[21]
+        );
+        assert_eq!(
+            palette_to_transparent_rgb(DOS_PALETTE_RGB[24]),
+            DOS_PALETTE_RGB[104]
+        );
+
+        let lut = palette_to_transparent_lut_rgba8();
+        assert_eq!(PALETTE_LOOKUP_BITS, 6);
+        assert_eq!(PALETTE_LOOKUP_SIZE, 64);
+        assert_eq!(
+            lut.len(),
+            PALETTE_LOOKUP_TEXTURE_WIDTH as usize * PALETTE_LOOKUP_TEXTURE_HEIGHT as usize * 4
+        );
+        let max_bucket = PALETTE_LOOKUP_SIZE - 1;
+        let offset = ((max_bucket * PALETTE_LOOKUP_SIZE * PALETTE_LOOKUP_SIZE)
+            + (max_bucket * PALETTE_LOOKUP_SIZE)
+            + max_bucket)
+            * 4;
+        assert_eq!(
+            &lut[offset..offset + 4],
+            &[
+                DOS_PALETTE_RGB[21][0],
+                DOS_PALETTE_RGB[21][1],
+                DOS_PALETTE_RGB[21][2],
+                255
+            ]
+        );
     }
 
     #[test]

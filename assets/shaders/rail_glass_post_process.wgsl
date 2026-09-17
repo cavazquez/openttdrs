@@ -3,7 +3,8 @@
 @group(0) @binding(0) var scene_texture: texture_2d<f32>;
 @group(0) @binding(1) var nearest_sampler: sampler;
 @group(0) @binding(2) var glass_mask_texture: texture_2d<f32>;
-@group(0) @binding(3) var transparent_lut_texture: texture_2d<f32>;
+@group(0) @binding(3) var glass_visibility_texture: texture_2d<f32>;
+@group(0) @binding(4) var transparent_lut_texture: texture_2d<f32>;
 
 fn srgb_to_linear(value: vec3<f32>) -> vec3<f32> {
     return select(
@@ -25,7 +26,9 @@ fn linear_to_srgb(value: vec3<f32>) -> vec3<f32> {
 @fragment
 fn fs_main(input: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let scene = textureSample(scene_texture, nearest_sampler, input.uv);
-    let mask = textureSample(glass_mask_texture, nearest_sampler, input.uv).a;
+    let coverage = textureSample(glass_mask_texture, nearest_sampler, input.uv).a;
+    let visibility = textureSample(glass_visibility_texture, nearest_sampler, input.uv).r;
+    let mask = coverage * select(0.0, 1.0, visibility > 0.5);
     if mask <= 0.0001 {
         return scene;
     }

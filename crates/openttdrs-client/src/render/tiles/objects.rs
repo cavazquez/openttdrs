@@ -68,8 +68,8 @@ use crate::render::viewport_sort::{
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     AirportStationAnim, AtlasSprite, CompanyColoredSprites, MapVisualLayer,
-    RAIL_GLASS_RENDER_LAYER, TileRenderContext, ViewportSortableChild, ViewportSortableParent,
-    ViewportSortablePromotableChild, ViewportSortableSegmentedChild,
+    RAIL_GLASS_RENDER_LAYER, RailGlassMaskSource, TileRenderContext, ViewportSortableChild,
+    ViewportSortableParent, ViewportSortablePromotableChild, ViewportSortableSegmentedChild,
     ViewportSortableSegmentedSource, WaterTile, WorldAssets,
     sprite_from_atlas_or_company_white_colour, viewport_insertion_key, viewport_source_depth,
 };
@@ -2260,8 +2260,9 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                         Transform::from_translation(pos3),
                     ));
                     if crate::sprites::rail_station_roof_glass_sprite(layer.sprite_id) {
-                        entity.insert(bevy::camera::visibility::RenderLayers::layer(
-                            RAIL_GLASS_RENDER_LAYER,
+                        entity.insert((
+                            RailGlassMaskSource,
+                            bevy::camera::visibility::RenderLayers::layer(RAIL_GLASS_RENDER_LAYER),
                         ));
                     }
                     if let Some(parent) = sortable_parent {
@@ -8325,9 +8326,7 @@ fn spawn_rail_depot_tile(
 #[cfg(test)]
 mod tests {
     use bevy::ecs::system::RunSystemOnce;
-    use bevy::prelude::{
-        Assets, Commands, Image, Res, ResMut, Resource, Sprite, Vec2, World,
-    };
+    use bevy::prelude::{Assets, Commands, Image, Res, ResMut, Resource, Sprite, Vec2, World};
 
     use super::{
         INVALID_ROAD_TYPE_ID, ROTSG_DEPOT, TileRenderContext, ViewportSortableParent,

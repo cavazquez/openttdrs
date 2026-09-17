@@ -9628,3 +9628,19 @@ sin compositor verificó que el pass sólo modifica el rectángulo del techo en
 este caso. El siguiente subfrente es hacer que la máscara respete la oclusión
 del sorter global; también siguen fuera de este hito los demás productores de
 #326/#561 y la paridad completa NewGRF. Las issues madre permanecen abiertas.
+
+### #326/#561-RAIL-GLASS-OCCLUSION-MASK — veto por depth test
+
+Actualizado: 2026-09-17. La máscara final mantiene el `Sprite` original de
+los cuatro vidrios y consulta una cámara auxiliar que duplica los sprites
+visuales materializados como `SpriteMesh` con `SpriteAlphaMode::Mask`. Los proxies
+normales sólo escriben profundidad y el proxy del vidrio escribe rojo; el
+fullscreen pass usa ese canal como veto binario antes de aplicar la LUT nativa.
+Así se conserva la cobertura del atlas, pero se descartan fragmentos que el
+sorter 2D ya sabe que están tapados. En el foco reproducible de Kale
+(`132,2`, 800×600, `Normal`, limpio), el exacto pasa de `3712` a `2701`, el
+delta medio de `0,185931` a `0,151273`, y las bandas
+`>2/>4/>8/>16/>32/>64` pasan de `3712/3712/3712/3218/2247/836` a
+`2701/2701/2701/2447/1901/832`. La mejora es del foco de calibración; todavía
+hay que validar otras cámaras, escalas, orientaciones y productores antes de
+considerar cerrar #326/#561.

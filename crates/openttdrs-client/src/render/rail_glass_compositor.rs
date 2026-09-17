@@ -6,6 +6,8 @@
 //! el pass pueda conservar el mapa debajo y aplicar la misma transformación
 //! dependiente del destino.
 
+use std::collections::HashMap;
+
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::{RenderTarget, visibility::RenderLayers};
 use bevy::core_pipeline::{
@@ -29,14 +31,21 @@ use bevy::render::texture::GpuImage;
 use bevy::render::view::{ExtractedView, ViewTarget};
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use bevy::shader::Shader;
+use bevy::sprite::{Anchor, SpriteAlphaMode, SpriteMesh};
 use bevy::window::PrimaryWindow;
 use openttdrs_core::newgrf_sprites::{
     PALETTE_LOOKUP_TEXTURE_HEIGHT, PALETTE_LOOKUP_TEXTURE_WIDTH, palette_to_transparent_lut_rgba8,
 };
 
+use crate::render::{MapDynamicVisual, MapTileChunk, MapVisualLayer};
+
 /// Capa reservada para la máscara del vidrio. Las entidades sin `RenderLayers`
 /// siguen perteneciendo a la capa 0, que es la cámara principal.
 pub(crate) const RAIL_GLASS_RENDER_LAYER: usize = 1;
+
+/// Capa del pase auxiliar que sólo calcula qué píxeles del vidrio quedan
+/// delante de los sprites opacos del mapa.
+const RAIL_GLASS_OCCLUSION_RENDER_LAYER: usize = 2;
 
 const RAIL_GLASS_SHADER_PATH: &str = "assets/shaders/rail_glass_post_process.wgsl";
 
@@ -47,10 +56,26 @@ pub(crate) struct RailGlassPostProcessSettings;
 #[derive(Component)]
 struct RailGlassMaskCamera;
 
+#[derive(Component)]
+struct RailGlassOcclusionCamera;
+
+/// Identifica el `Sprite` de mapa que representa una cubierta de vidrio.
+///
+/// El sprite conserva su backend original para que la cobertura final siga
+/// coincidiendo con el atlas. El pase auxiliar crea un proxy con depth test.
+#[derive(Component, Clone, Copy)]
+pub(crate) struct RailGlassMaskSource;
+
+#[derive(Component, Clone, Copy)]
+struct RailGlassMaskProxy {
+    source: Entity,
+}
+
 /// Handles compartidos entre el mundo principal y el render world.
 #[derive(Resource, Clone, ExtractResource)]
 struct RailGlassPostProcessAssets {
     mask: Handle<Image>,
+    visibility: Handle<Image>,
     lut: Handle<Image>,
 }
 
@@ -63,7 +88,13 @@ impl Plugin for RailGlassCompositorPlugin {
             ExtractResourcePlugin::<RailGlassPostProcessAssets>::default(),
         ))
         .add_systems(Startup, setup_rail_glass_targets)
-        .add_systems(Update, sync_rail_glass_mask_camera);
+        .add_systems(
+            Update,
+            (
+                sync_rail_glass_mask_camera,
+                sync_rail_glass_mask_proxies.after(crate::bevy_app::UpdateSet::RenderRefresh),
+            ),
+        );
 
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
@@ -84,6 +115,135 @@ impl Plugin for RailGlassCompositorPlugin {
     }
 }
 
+fn mask_sprite_from_source(source: &Sprite, is_glass: bool) -> SpriteMesh {
+    SpriteMesh {
+        image: source.image.clone(),
+        texture_atlas: source.texture_atlas.clone(),
+        color: if is_glass {
+            // Rojo = fragmento de vidrio que ganó el depth test.
+            Color::srgb(1.0, 0.0, 0.0)
+        } else {
+            // Los oclusores sólo escriben profundidad.
+            Color::srgb(0.0, 0.0, 0.0)
+        },
+        flip_x: source.flip_x,
+        flip_y: source.flip_y,
+        custom_size: source.custom_size,
+        rect: source.rect,
+        image_mode: source.image_mode.clone(),
+        alpha_mode: SpriteAlphaMode::Mask(0.5),
+    }
+}
+
+/// Duplica los sprites de mapa en una cámara auxiliar con depth test.
+///
+/// El resultado de este pase no se usa como cobertura: sólo indica si el
+/// vidrio ganó frente a un sprite normal. La cobertura continúa viniendo de
+/// la cámara original `Sprite`, que conserva exactamente el muestreo del atlas.
+fn sync_rail_glass_mask_proxies(
+    mut commands: Commands,
+    sources: Query<
+        (
+            Entity,
+            &Sprite,
+            &Anchor,
+            &Transform,
+            &Visibility,
+            Option<&MapTileChunk>,
+            Option<&RailGlassMaskSource>,
+        ),
+        (
+            Or<(With<MapVisualLayer>, With<MapDynamicVisual>)>,
+            Without<RailGlassMaskProxy>,
+        ),
+    >,
+    mut proxies: Query<(
+        Entity,
+        &RailGlassMaskProxy,
+        &mut SpriteMesh,
+        &mut Anchor,
+        &mut Transform,
+        &mut Visibility,
+        Option<&mut MapTileChunk>,
+    )>,
+) {
+    let mut proxies_by_source = HashMap::with_capacity(proxies.iter().len());
+    for (proxy_entity, proxy, _sprite, _anchor, _transform, _visibility, _chunk) in &mut proxies {
+        proxies_by_source.insert(proxy.source, proxy_entity);
+    }
+
+    let mut live_sources = HashMap::with_capacity(sources.iter().len());
+    for (
+        source_entity,
+        source_sprite,
+        source_anchor,
+        source_transform,
+        source_visibility,
+        source_chunk,
+        glass_source,
+    ) in &sources
+    {
+        live_sources.insert(source_entity, ());
+        let mask_sprite = mask_sprite_from_source(source_sprite, glass_source.is_some());
+
+        if let Some(&proxy_entity) = proxies_by_source.get(&source_entity) {
+            let Ok((
+                _,
+                _,
+                mut proxy_sprite,
+                mut proxy_anchor,
+                mut proxy_transform,
+                mut proxy_visibility,
+                proxy_chunk,
+            )) = proxies.get_mut(proxy_entity)
+            else {
+                continue;
+            };
+            if *proxy_sprite != mask_sprite {
+                *proxy_sprite = mask_sprite;
+            }
+            if *proxy_anchor != *source_anchor {
+                *proxy_anchor = *source_anchor;
+            }
+            if *proxy_transform != *source_transform {
+                *proxy_transform = *source_transform;
+            }
+            if *proxy_visibility != *source_visibility {
+                *proxy_visibility = *source_visibility;
+            }
+            if let (Some(source_chunk), Some(mut proxy_chunk)) = (source_chunk, proxy_chunk)
+                && *proxy_chunk != *source_chunk
+            {
+                *proxy_chunk = *source_chunk;
+            }
+            continue;
+        }
+
+        let proxy_entity = commands
+            .spawn((
+                RailGlassMaskProxy {
+                    source: source_entity,
+                },
+                MapVisualLayer,
+                mask_sprite,
+                *source_anchor,
+                *source_transform,
+                *source_visibility,
+                RenderLayers::layer(RAIL_GLASS_OCCLUSION_RENDER_LAYER),
+            ))
+            .id();
+        if let Some(source_chunk) = source_chunk {
+            commands.entity(proxy_entity).insert(*source_chunk);
+        }
+    }
+
+    for (source_entity, proxy_entity) in proxies_by_source {
+        if !live_sources.contains_key(&source_entity) {
+            commands.entity(proxy_entity).despawn();
+        }
+    }
+}
+
 fn setup_rail_glass_targets(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
@@ -96,6 +256,12 @@ fn setup_rail_glass_targets(
     };
     let (width, height) = physical_window_size(window);
     let mask = images.add(Image::new_target_texture(
+        width,
+        height,
+        TextureFormat::Rgba8Unorm,
+        None,
+    ));
+    let visibility = images.add(Image::new_target_texture(
         width,
         height,
         TextureFormat::Rgba8Unorm,
@@ -114,6 +280,7 @@ fn setup_rail_glass_targets(
     ));
     commands.insert_resource(RailGlassPostProcessAssets {
         mask: mask.clone(),
+        visibility: visibility.clone(),
         lut,
     });
     commands.spawn((
@@ -130,6 +297,20 @@ fn setup_rail_glass_targets(
         Transform::default(),
         Projection::Orthographic(OrthographicProjection::default_2d()),
     ));
+    commands.spawn((
+        Camera2d,
+        RailGlassOcclusionCamera,
+        Camera {
+            order: -101,
+            is_active: false,
+            clear_color: ClearColorConfig::Custom(Color::srgba(0.0, 0.0, 0.0, 0.0)),
+            ..default()
+        },
+        RenderTarget::from(visibility),
+        RenderLayers::layer(RAIL_GLASS_OCCLUSION_RENDER_LAYER),
+        Transform::default(),
+        Projection::Orthographic(OrthographicProjection::default_2d()),
+    ));
 }
 
 fn physical_window_size(window: &Window) -> (u32, u32) {
@@ -143,27 +324,27 @@ fn sync_rail_glass_mask_camera(
     windows: Query<&Window, With<PrimaryWindow>>,
     targets: Option<Res<RailGlassPostProcessAssets>>,
     mut images: ResMut<Assets<Image>>,
-    primary_q: Query<
-        (&Transform, &Projection),
-        (
-            With<crate::render::PrimaryGameCamera>,
-            Without<RailGlassMaskCamera>,
-        ),
-    >,
-    mut mask_q: Query<
-        (&mut Camera, &mut Transform, &mut Projection),
-        (
-            With<RailGlassMaskCamera>,
-            Without<crate::render::PrimaryGameCamera>,
-        ),
-    >,
+    mut cameras: ParamSet<(
+        Query<(&Transform, &Projection), With<crate::render::PrimaryGameCamera>>,
+        Query<(&mut Camera, &mut Transform, &mut Projection), With<RailGlassMaskCamera>>,
+        Query<(&mut Camera, &mut Transform, &mut Projection), With<RailGlassOcclusionCamera>>,
+    )>,
 ) {
-    let Ok((mut mask_camera, mut mask_transform, mut mask_projection)) = mask_q.single_mut() else {
+    let Ok((primary_transform, primary_projection)) = cameras
+        .p0()
+        .single()
+        .map(|(transform, projection)| (*transform, projection.clone()))
+    else {
         return;
     };
 
     let Some(targets) = targets else {
-        mask_camera.is_active = false;
+        if let Ok((mut mask_camera, ..)) = cameras.p1().single_mut() {
+            mask_camera.is_active = false;
+        }
+        if let Ok((mut occlusion_camera, ..)) = cameras.p2().single_mut() {
+            occlusion_camera.is_active = false;
+        }
         return;
     };
     if let Some(window) = windows.iter().next() {
@@ -173,15 +354,35 @@ fn sync_rail_glass_mask_camera(
         {
             *mask = Image::new_target_texture(width, height, TextureFormat::Rgba8Unorm, None);
         }
+        if let Some(mut visibility) = images.get_mut(&targets.visibility)
+            && (visibility.width(), visibility.height()) != (width, height)
+        {
+            *visibility = Image::new_target_texture(width, height, TextureFormat::Rgba8Unorm, None);
+        }
     }
 
-    let Ok((primary_transform, primary_projection)) = primary_q.single() else {
-        mask_camera.is_active = false;
-        return;
-    };
-    mask_camera.is_active = true;
-    *mask_transform = *primary_transform;
-    *mask_projection = primary_projection.clone();
+    {
+        let mut mask_query = cameras.p1();
+        let Ok((mut mask_camera, mut mask_transform, mut mask_projection)) =
+            mask_query.single_mut()
+        else {
+            return;
+        };
+        mask_camera.is_active = true;
+        *mask_transform = primary_transform;
+        *mask_projection = primary_projection.clone();
+    }
+    {
+        let mut occlusion_query = cameras.p2();
+        let Ok((mut occlusion_camera, mut occlusion_transform, mut occlusion_projection)) =
+            occlusion_query.single_mut()
+        else {
+            return;
+        };
+        occlusion_camera.is_active = true;
+        *occlusion_transform = primary_transform;
+        *occlusion_projection = primary_projection;
+    }
 }
 
 #[derive(Resource)]
@@ -232,6 +433,7 @@ fn init_rail_glass_pipeline(
             (
                 texture_2d(TextureSampleType::Float { filterable: false }),
                 sampler(SamplerBindingType::NonFiltering),
+                texture_2d(TextureSampleType::Float { filterable: false }),
                 texture_2d(TextureSampleType::Float { filterable: false }),
                 texture_2d(TextureSampleType::Float { filterable: false }),
             ),
@@ -304,7 +506,7 @@ fn prepare_rail_glass_pipelines(
 
 #[derive(Default)]
 struct RailGlassBindGroupCache {
-    key: Option<(TextureViewId, TextureViewId, TextureViewId)>,
+    key: Option<(TextureViewId, TextureViewId, TextureViewId, TextureViewId)>,
     bind_group: Option<BindGroup>,
 }
 
@@ -335,6 +537,9 @@ fn apply_rail_glass_post_process(
     let Some(mask) = gpu_images.get(&assets.mask) else {
         return;
     };
+    let Some(visibility) = gpu_images.get(&assets.visibility) else {
+        return;
+    };
     let Some(lut) = gpu_images.get(&assets.lut) else {
         return;
     };
@@ -343,6 +548,7 @@ fn apply_rail_glass_post_process(
     let key = (
         post_process.source.id(),
         mask.texture_view.id(),
+        visibility.texture_view.id(),
         lut.texture_view.id(),
     );
     if cache.key != Some(key) {
@@ -353,6 +559,7 @@ fn apply_rail_glass_post_process(
                 post_process.source,
                 &pipeline_resource.sampler,
                 &mask.texture_view,
+                &visibility.texture_view,
                 &lut.texture_view,
             )),
         ));

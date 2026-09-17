@@ -91,7 +91,8 @@ pub(crate) use label_spatial_index::{MapLabelCandidates, MapLabelSpatialIndex};
 pub(crate) use lighthouse_anim::{LighthouseAnim, LighthouseAnimPlugin};
 pub(crate) use radio_blink::{RADIO_BLINK_FRAME_COUNT, RadioBlinkAnim, RadioBlinkAnimPlugin};
 pub(crate) use rail_glass_compositor::{
-    RAIL_GLASS_RENDER_LAYER, RailGlassCompositorPlugin, RailGlassPostProcessSettings,
+    RAIL_GLASS_RENDER_LAYER, RailGlassCompositorPlugin, RailGlassMaskSource,
+    RailGlassPostProcessSettings,
 };
 pub(crate) use refinery_fire::{RefineryFireAnim, RefineryFireAnimPlugin};
 pub(crate) use sign_labels::SignLabel;

@@ -6750,3 +6750,18 @@ confirma que el pass sólo altera la región del techo en esta captura. Quedan
 residuales de oclusión/coverage en el orden global de sprites, además de los
 otros productores del compositor; #326/#561 permanecen abiertas y no se
 cierra ninguna issue por esta mejora parcial.
+
+Corrección #326/#561-RAIL-GLASS-OCCLUSION-MASK (2026-09-17): la cobertura
+final conserva el sprite original del atlas, pero añade una segunda cámara con
+proxies `SpriteMesh` y depth test para decidir si el vidrio ganó frente a los
+sprites normales del mapa. El shader usa esa visibilidad sólo como veto, de
+modo que no reemplaza la geometría ni el muestreo de la máscara vanilla. En el
+mismo foco limpio de `Kale_TitleGame.sav` (`132,2`, 800×600, `Normal`), el
+exacto baja de `3712` a `2701` píxeles (`-27,2%`), el delta medio de
+`0,185931` a `0,151273` (`-18,6%`) y las bandas
+`>2/>4/>8/>16/>32/>64` pasan de `3712/3712/3712/3218/2247/836` a
+`2701/2701/2701/2447/1901/832`. La corrección elimina falsos positivos de
+oclusión del techo sin introducir el cambio de cobertura que producía el proxy
+completo. Es evidencia focalizada, no paridad global: faltan otros
+productores, escalas, orientaciones y la validación amplia del compositor;
+#326/#561 siguen abiertas.

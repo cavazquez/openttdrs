@@ -45,7 +45,14 @@ fn fs_main(input: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         i32(buckets.r * 64u + buckets.g),
         i32(buckets.b),
     );
-    let mapped_srgb = textureLoad(transparent_lut_texture, lut_coord, 0).rgb;
+    // Index 0 is the transparent colour in the native 8bpp framebuffer. The
+    // general 32bpp-style nearest-colour lookup intentionally starts at 1,
+    // so preserve an all-zero destination before consulting that LUT.
+    let mapped_srgb = select(
+        textureLoad(transparent_lut_texture, lut_coord, 0).rgb,
+        vec3(0.0),
+        all(scene_srgb <= vec3(0.0001)),
+    );
     let mapped_linear = srgb_to_linear(mapped_srgb);
     return vec4(mix(scene.rgb, mapped_linear, clamp(mask, 0.0, 1.0)), scene.a);
 }

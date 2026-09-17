@@ -9588,3 +9588,14 @@ que el problema es composición dependiente del framebuffer
 (`PALETTE_TO_TRANSPARENT`), no sólo antialiasing. Se conserva esta curva como
 baseline para la próxima implementación del compositor; #326/#561 continúan
 abiertas y no se cierra ninguna issue por tolerancia.
+
+Calibración reproducible del alpha (misma captura, 2026-09-17):
+`OPENTTDRS_RAIL_GLASS_ALPHA` permite variar la aproximación sin tocar el
+comparador. Los valores `0,125`, `0,25`, `0,375`, `0,50` y `0,75` conservan
+los mismos `7332` píxeles exactos; el delta medio y la curva `>16/>32` fueron,
+respectivamente, `0.388067/5877/4725`, `0.393978/6095/4703`,
+`0.400621/6656/4686`, `0.408396/6594/4968` y `0.439153/6718/5573`.
+El alpha `0` baja artificialmente el exacto a `6125` porque elimina la
+contribución del vidrio, por lo que no es una corrección válida. La perilla
+queda sólo para QA mientras se implementa el pass dependiente del framebuffer;
+no cambia el gate exacto ni habilita el cierre de #326/#561.

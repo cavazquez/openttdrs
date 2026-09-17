@@ -132,8 +132,23 @@ fn tint_building_sprite(mut sprite: Sprite) -> Sprite {
 /// claro que el oráculo.
 const RAIL_STATION_ROOF_GLASS_MASK_ALPHA: f32 = 0.50;
 
+/// Interpreta el alpha de calibración opcional usado por las capturas raster.
+/// Valores inválidos se descartan para que una variable de entorno de QA no
+/// altere el render normal de forma accidental.
+fn rail_station_roof_glass_mask_alpha_from(raw: Option<&str>) -> f32 {
+    raw.and_then(|raw| raw.parse::<f32>().ok())
+        .filter(|alpha| alpha.is_finite() && (0.0..=1.0).contains(alpha))
+        .unwrap_or(RAIL_STATION_ROOF_GLASS_MASK_ALPHA)
+}
+
+fn rail_station_roof_glass_mask_alpha() -> f32 {
+    rail_station_roof_glass_mask_alpha_from(
+        std::env::var("OPENTTDRS_RAIL_GLASS_ALPHA").ok().as_deref(),
+    )
+}
+
 fn rail_station_roof_glass_mask_color() -> Color {
-    Color::srgba(0.0, 0.0, 0.0, RAIL_STATION_ROOF_GLASS_MASK_ALPHA)
+    Color::srgba(0.0, 0.0, 0.0, rail_station_roof_glass_mask_alpha())
 }
 
 /// Dibuja una vista `RTSG_TUNNEL` como `DrawGroundSprite`, conservando el
@@ -8335,9 +8350,9 @@ mod tests {
         dock_clear_land_sprite_id, dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
         rail_depot_build_parent_sprites, rail_depot_catenary_parent_sprite,
         rail_depot_foundation_child_offset, rail_depot_reservation_track_visible,
-        rail_station_roof_glass_mask_color, road_depot_foundation_child_offset,
-        road_depot_newgrf_def_for_tile, road_depot_parent_sprites,
-        road_stop_foundation_child_offset, road_stop_layout_ground_slot,
+        rail_station_roof_glass_mask_alpha_from, rail_station_roof_glass_mask_color,
+        road_depot_foundation_child_offset, road_depot_newgrf_def_for_tile,
+        road_depot_parent_sprites, road_stop_foundation_child_offset, road_stop_layout_ground_slot,
         road_stop_layout_is_static, road_stop_layout_sequence_slot_range, road_stop_parent_sprites,
         road_stop_simple_view_slot, road_stop_sorted_layer_centers, spawn_newgrf_airport_tile,
         station_catenary_pylon_parent_bounds, station_catenary_wire_parent_bounds,
@@ -8410,6 +8425,21 @@ mod tests {
             rail_station_roof_glass_mask_color(),
             Color::srgba(0.0, 0.0, 0.0, 0.50)
         );
+    }
+
+    #[test]
+    fn rail_station_roof_glass_alpha_accepts_only_finite_unit_interval() {
+        assert_eq!(rail_station_roof_glass_mask_alpha_from(None), 0.50);
+        assert_eq!(rail_station_roof_glass_mask_alpha_from(Some("0")), 0.0);
+        assert_eq!(
+            rail_station_roof_glass_mask_alpha_from(Some("0.125")),
+            0.125
+        );
+        assert_eq!(rail_station_roof_glass_mask_alpha_from(Some("1")), 1.0);
+        assert_eq!(rail_station_roof_glass_mask_alpha_from(Some("-0.1")), 0.50);
+        assert_eq!(rail_station_roof_glass_mask_alpha_from(Some("1.1")), 0.50);
+        assert_eq!(rail_station_roof_glass_mask_alpha_from(Some("NaN")), 0.50);
+        assert_eq!(rail_station_roof_glass_mask_alpha_from(Some("nope")), 0.50);
     }
 
     #[test]

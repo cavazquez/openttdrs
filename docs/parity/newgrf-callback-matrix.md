@@ -2643,6 +2643,21 @@ fachada continúa el child `Promotable`/`Segmented`. La regresión ejercita los
 tres roles y la suite queda en 1.587 tests del cliente, 2 ignorados, con Clippy
 estricto verde. El alcance es sólo de compositor y no cierra las issues madre.
 
+### #326/#329/#567-AIRPORT-TILE-FLAT-COMPOSITOR — fallback plano
+
+Actualizado: 2026-09-16 (`20a3df19`). Las vistas planas Action1/3 de
+`AirportTile` que no tienen `TileLayout` se registran como `sortable` y ahora
+materializan ese contrato: en terreno plano la imagen es un
+`ViewportSortableParent` con bounds derivados de offset/dimensiones, profundidad
+de fuente e inserción estable. En terreno nivelado se conserva el vínculo
+`ViewportSortableChild` con la foundation, sin crear un prisma independiente.
+La regresión `airport_flat_cache_keeps_static_animation_frames_separate`
+comprueba los dos frames, sus handles y la entrada al compositor. La suite del
+cliente pasa con 1.587 tests y 2 ignorados, más Clippy estricto y
+`git diff --check`. La fila sigue parcial: no cubre `TileLayout` adicional,
+rotaciones completas, paletas base/custom, callbacks ni la comparación raster
+de una matriz de aeropuertos; #326/#329/#567 permanecen abiertas.
+
 ### #326/#329/#567-AIRPORT-TILE-DIRECT-TRANSPARENT — paleta directa 802
 
 Actualización (2026-09-16, `c753924f`): el consumidor visual de

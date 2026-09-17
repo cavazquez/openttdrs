@@ -23,6 +23,24 @@ El bloque termina sólo con `git commit` y `git push`. La captura raster se usa
 cuando hay compositor WGPU; si el entorno no lo permite, se registra el bloqueo
 y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
+## Etapa publicada — 2026-09-16 — #326/#329 AirportTile plano en el compositor
+
+La ruta de fallback que materializa una vista plana Action1/3 de `AirportTile`
+ahora respeta el contrato que ya declaraba su `world-draw`: en plano crea un
+`ViewportSortableParent` con bounds conservadores derivados del sprite,
+`source_depth` e índice estable de construcción. Cuando la tesela se nivela,
+la imagen sigue siendo `ViewportSortableChild` de la foundation y no inventa un
+parent de mundo adicional. La selección Action2, los frames y el namespace de
+caché no cambian.
+
+La regresión existente
+`airport_flat_cache_keeps_static_animation_frames_separate` ahora verifica
+también dos parents, bounds e inserción. Validación publicada: suite del
+cliente `1.587` tests pasados y `2` ignorados, Clippy estricto y
+`git diff --check`; commit de código `20a3df19`. Es una corrección acotada del
+fallback plano; #326/#329/#567 continúan abiertos por layouts y rotaciones
+restantes, paletas, callbacks, otros producers y evidencia raster amplia.
+
 ## Etapa publicada — 2026-09-15 — #330 Helidepot FTA: aproximación completa
 
 La misma fixture `helidepot_fta_cycle_15_3.sav` ahora coincide con el oráculo

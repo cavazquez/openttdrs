@@ -6648,3 +6648,16 @@ regresión cubre los tres roles huérfanos y pasa junto con 76 pruebas de puente
 1.587 tests del cliente, 2 ignorados y Clippy estricto. Es una corrección
 acotada de composición: #326/#329/#567 siguen abiertas por otros combines,
 producers, callbacks y comparación raster.
+
+Corrección #326/#329/#567-AIRPORT-TILE-FLAT-COMPOSITOR (`20a3df19`,
+2026-09-16): la ruta de compatibilidad de vistas planas Action1/3 de
+`AirportTile` ya no emite un sprite suelto cuando no hay foundation: conserva
+la semántica `sortable` de la traza con `ViewportSortableParent`, bounds
+derivados de offsets/dimensiones, profundidad de fuente e índice de inserción.
+Sobre una foundation el sprite continúa siendo child del parent nivelado y no
+abre un prisma independiente. La regresión
+`airport_flat_cache_keeps_static_animation_frames_separate` comprueba los dos
+frames y su entrada al compositor; pasan 1.587 tests del cliente, 2 ignorados,
+Clippy estricto y `git diff --check`. Esto cubre sólo el fallback plano y no
+completa layouts, paletas, rotaciones ni callbacks de aeropuerto; #326/#329/#567
+siguen abiertas.

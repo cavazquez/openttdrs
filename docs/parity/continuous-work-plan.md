@@ -9284,6 +9284,18 @@ puente y Clippy estricto; los grupos específicos NewGRF que todavía pasan por
 `spawn_bridge_specific_child` siguen pendientes. La fila continúa parcial y
 no se cierran #326/#329/#567.
 
+### #326/#567-SHIP-DEPOT-RASTER-CROP — evidencia de framebuffer naval
+
+Actualizado: 2026-09-16. Sobre `mvp_openttd_ship.sav`, con captura de 512×512,
+zoom 1, origen 32,32 y 60 frames de estabilización, la comparación contra
+OpenTTD 15.3 encuentra sólo 1 píxel distinto en el framebuffer completo
+(1/262.144). El hotspot está en la boya ubicada junto al depósito; el recorte
+de 120×90 de la estructura da `AE=0`, por lo que las capas 4070..4075 y su
+orden/posición visible son exactos en esta escena. No se debe convertir esta
+evidencia aislada en un cierre: falta repetir la matriz de costa, ejes, partes,
+vecinos y escalas, además de clipping y combinaciones NewGRF. El siguiente
+subalcance medible es el único píxel de la boya, separado del depósito naval.
+
 ### #326/#329/#567-AIRPORT-TILE-DIRECT-TRANSPARENT — `PALETTE_TO_TRANSPARENT`
 
 Actualización (2026-09-16, `c753924f`): las referencias directas vanilla del

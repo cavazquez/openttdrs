@@ -6587,3 +6587,15 @@ requiriendo sprites decodificados/mapas Action5 y permanecen acotadas como
 pendientes. Las regresiones cubren namespace, geometría y ambas rutas de
 materialización; la suite completa del cliente pasa con 1.583 tests, 2
 ignorados. Es una corrección parcial y no cierra #326/#329/#567.
+
+Evidencia #326/#567-SHIP-DEPOT-RASTER-CROP (2026-09-16): la captura
+determinista del fixture naval `mvp_openttd_ship.sav`, a 512×512, zoom 1 y
+origen 32,32, compara el renderer Bevy contra OpenTTD 15.3. El framebuffer
+completo difiere en 1 de 262.144 píxeles; ese píxel está en la boya vecina
+(`x=256,y=245`), no en el depósito. El recorte de 120×90 que contiene la
+estructura del depósito da `AE=0`: las fachadas 4070..4075, sus anclas y la
+composición naval visible quedan exactamente iguales en esta evidencia.
+Esto valida la ruta global para este caso aislado, pero no cierra #326/#567:
+siguen pendientes la matriz completa de vecinos/callbacks, clipping y otros
+casos de composición; el píxel de la boya queda separado como próximo
+residual de captura.

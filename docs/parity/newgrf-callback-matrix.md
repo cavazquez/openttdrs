@@ -2619,3 +2619,14 @@ custom o mapas Action5 cuando el atlas sólo tiene una textura RGBA. Las
 regresiones cubren la resolución airport, anchors NFO y ambas rutas directas;
 la suite del cliente pasa con 1.583 tests y 2 ignorados. La cobertura de
 paletas NewGRF y de las issues madre sigue parcial.
+
+### #326/#567-SHIP-DEPOT-RASTER-CROP — comparación aislada del depósito
+
+Actualización (2026-09-16): el fixture `mvp_openttd_ship.sav` se capturó a
+512×512, zoom 1, origen 32,32 y se comparó con OpenTTD 15.3. El diff global
+es de 1/262.144 píxeles y cae en la boya vecina (`256,245`); el recorte naval
+de 120×90 tiene `AE=0`, incluyendo las fachadas 4070..4075 y sus anclas NFO.
+La evidencia confirma paridad del depósito en esta escena, no de toda la
+matriz de agua/vecinos ni de los consumidores NewGRF. El píxel de la boya se
+mantiene como residual independiente para la siguiente auditoría; #326/#567
+siguen abiertos.

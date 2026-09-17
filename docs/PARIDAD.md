@@ -6843,3 +6843,17 @@ por encima de `64`; `Out8x` queda en `76466` (`15,93%`), delta medio
 Out4x refleja que todavía falta cerrar el muestreo/composición de todos los
 productores a esos niveles; no se interpreta como regresión de cámara ni
 habilita el cierre de #326/#567.
+
+Evidencia #326/#567-SHIP-DEPOT-REAL-AXES (2026-09-17): la traza real de
+`Kale_TitleGame.sav` confirma los dos ejes del depósito naval, no sólo el caso
+aislado del fixture. En `m5=0x32/0x33` (eje Y, teselas `175,16` y `175,17`),
+OpenTTD y openttdrs seleccionan 4073, 4075 y 4071, con bounds `1×16×20`, las
+mismas paletas y orden; la comparación focal pasa `5/5` selecciones, `3/3`
+geometrías y `3/3` paletas. En `m5=0x30/0x31` (eje X, teselas `163,34` y
+`164,34`) se repite `5/5`, `3/3` y `3/3`. La captura raster del fixture
+`mvp_openttd_ship.sav` en Normal, 800×600, queda en `338/480000` píxeles
+distintos (`0,0704%`) y sólo un píxel supera delta `64`; el recorte del
+depósito no agrega diferencias detectables. Esto descarta un gap vanilla de
+selección, ancla u orientación en estos ejes. No cierra #567: siguen fuera de
+esta evidencia las combinaciones completas Sea/Canal/River, callbacks,
+vecinos complejos, clipping y la matriz de framebuffer en zooms alejados.

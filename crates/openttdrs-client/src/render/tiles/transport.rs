@@ -88,6 +88,12 @@ const SPR_FLAT_SNOW_DESERT_TILE: u32 = 4550;
 const SPR_SHORE_BASE: u32 = 5936;
 const RAIL_SLOPE_STEEP: u8 = 0x10;
 const PALETTE_TO_BARE_LAND: u32 = 791;
+
+#[must_use]
+const fn rail_track_uses_bare_land_texture(palette: u32) -> bool {
+    palette == PALETTE_TO_BARE_LAND
+}
+
 /// Selectores `RoadTypeSpriteGroup` de `road.h` para suelo y overlays.
 const ROTSG_OVERLAY: u8 = 1;
 const ROTSG_GROUND: u8 = 2;
@@ -3350,14 +3356,15 @@ pub(crate) fn spawn_rail_tile(
                     z,
                     pass_half_h[pass_index],
                 );
-                let mut sprite = assets
-                    .rail_bare_land
-                    .get(&sid)
-                    .map(|handle| Sprite {
+                let bare_land_sprite = if rail_track_uses_bare_land_texture(palette) {
+                    assets.rail_bare_land.get(&sid).map(|handle| Sprite {
                         image: handle.clone(),
                         ..default()
                     })
-                    .unwrap_or_else(|| img.sprite_colored(rail_paint));
+                } else {
+                    None
+                };
+                let mut sprite = bare_land_sprite.unwrap_or_else(|| img.sprite_colored(rail_paint));
                 let crop_shift = if let Some((rect, shift)) = halftile_track_subsprite(
                     pass_halftile_corner[pass_index],
                     img.size,
@@ -3765,17 +3772,19 @@ mod tests {
     use bevy::prelude::{Rect, Vec2, Vec3};
 
     use super::{
-        RTO_CROSSING_XY, RTO_E, RTO_JUNCTION_SE, RTO_N, RTO_S, RTO_W, RTO_X, RTO_Y, RailGroundKind,
-        RailTrackTraceMode, catenary_local_z_delta, custom_rail_ground_pass_position,
-        halftile_track_subsprite, pbs_extra_y_in_bevy, pbs_track_sprite_extra_y,
-        rail_catenary_pylon_parent_bounds, rail_catenary_wire_parent_bounds,
-        rail_custom_overlay_offsets, rail_custom_underlay_offsets, rail_foundation_after_pass,
-        rail_ground_complete_offset, rail_ground_sprite_id, rail_initial_ground_draw,
-        rail_signal_parent_bounds, rail_track_fence_parent_bounds, rail_track_fence_visual_offset,
-        rail_track_trace_mode, rail_upper_halftile_ground_draw, road_catenary_bits_for_render,
-        road_catenary_custom_groups_are_active, road_catenary_parent_bounds,
-        road_detail_world_z_delta, road_foundation_child_offset, road_tile_may_have_road,
-        roadside_detail_parent_bounds, roadside_detail_sprite_color, signal_trace_geometry,
+        PALETTE_TO_BARE_LAND, RTO_CROSSING_XY, RTO_E, RTO_JUNCTION_SE, RTO_N, RTO_S, RTO_W, RTO_X,
+        RTO_Y, RailGroundKind, RailTrackTraceMode, catenary_local_z_delta,
+        custom_rail_ground_pass_position, halftile_track_subsprite, pbs_extra_y_in_bevy,
+        pbs_track_sprite_extra_y, rail_catenary_pylon_parent_bounds,
+        rail_catenary_wire_parent_bounds, rail_custom_overlay_offsets,
+        rail_custom_underlay_offsets, rail_foundation_after_pass, rail_ground_complete_offset,
+        rail_ground_sprite_id, rail_initial_ground_draw, rail_signal_parent_bounds,
+        rail_track_fence_parent_bounds, rail_track_fence_visual_offset, rail_track_trace_mode,
+        rail_track_uses_bare_land_texture, rail_upper_halftile_ground_draw,
+        road_catenary_bits_for_render, road_catenary_custom_groups_are_active,
+        road_catenary_parent_bounds, road_detail_world_z_delta, road_foundation_child_offset,
+        road_tile_may_have_road, roadside_detail_parent_bounds, roadside_detail_sprite_color,
+        signal_trace_geometry,
     };
     use crate::render::TileRenderContext;
     use crate::render::grid::TileRenderInfo;
@@ -4102,6 +4111,12 @@ mod tests {
             child_shore.trace_mode,
             RailTrackTraceMode::FoundationChild((0, 0, 0))
         );
+    }
+
+    #[test]
+    fn bare_land_texture_requires_the_native_bare_land_palette() {
+        assert!(rail_track_uses_bare_land_texture(PALETTE_TO_BARE_LAND));
+        assert!(!rail_track_uses_bare_land_texture(0));
     }
 
     #[allow(clippy::expect_used)] // Fixture del oráculo: el fallo debe mostrar el caso exacto.

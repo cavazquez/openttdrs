@@ -6995,3 +6995,19 @@ píxel supera `64`; los tres restantes están en la capa de estación ferroviari
 que comparte la fixture, no en el depósito naval. El recorte del depósito no
 agrega diferencias. Esto deja #567 abierta: faltan las matrices completas de
 agua/canal/río, callbacks, vecinos complejos, clipping y las demás escalas.
+
+### Corrección publicada — 2026-09-17 — #326/#567-RAIL-BARE-LAND-TEXTURE-GATE
+
+La textura horneada para `PALETTE_TO_BARE_LAND` (`791`) queda ahora
+condicionada a que la paleta efectiva sea realmente `791`. Antes, el cargador
+seleccionaba esa copia también cuando `DrawTrackBits` había emitido `PAL_NONE`
+(`0`), volviendo marrones las vías sobre pasto. Se agregó una regresión para
+proteger ambas ramas.
+
+En el mismo foco limpio de `Kale_TitleGame.sav` (`132,2`, 800×600, `Normal`),
+la comparación alineada pasa de `4187` a `2859` píxeles distintos
+(`0,872292% → 0,595625%`, `-31,7%`); el delta medio baja de `0,229082` a
+`0,161401` y la traslación permanece `[0,0]`. La inspección del diff confirma
+que desaparecen las líneas marrones de las vías; la banda `>64` queda en `807`
+porque pertenece al vidrio y a otros productores aún pendientes. #326/#561/#567
+siguen abiertas.

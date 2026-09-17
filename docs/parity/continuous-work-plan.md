@@ -9852,3 +9852,13 @@ confirma `sprite 1012`, mundo `(448,640,8)` y paleta `791` en la tesela
 uno por encima de delta `64`; el recorte del depósito naval sigue exacto.
 La issue #567 permanece abierta por agua/canal/río, callbacks, vecinos,
 clipping y escalas no cubiertos por este foco.
+
+### Etapa completada — 2026-09-17 — gate de textura bare-land ferroviaria
+
+La variante `rail_bare_land` se elige sólo cuando el draw de vía lleva la
+paleta nativa `PALETTE_TO_BARE_LAND` (`791`); con `PAL_NONE` se conserva la
+textura normal del atlas. La prueba unitaria fija el contrato y la captura
+Kale confirma una reducción de `4187` a `2859` diferencias alineadas en
+`Normal`, 800×600, perfil limpio (`-31,7%`). No se cierra ningún issue: el
+vidrio, otros productores y las matrices de zoom/orientación siguen formando
+parte del trabajo de #326/#561/#567.

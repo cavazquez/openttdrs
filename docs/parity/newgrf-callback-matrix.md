@@ -2606,3 +2606,16 @@ de core, 1 ignorado y Clippy estricto de la librería. El lint de
 `--all-targets` sigue incluyendo 261 avisos preexistentes en tests; esta etapa
 no los mezcla con el contrato de aeropuerto y la cobertura de las issues madre
 sigue parcial.
+
+### #326/#329/#567-AIRPORT-TILE-DIRECT-TRANSPARENT — paleta directa 802
+
+Actualización (2026-09-16, `c753924f`): el consumidor visual de
+`AirportDrawTileLayout` ya materializa referencias directas del baseset con
+`PALETTE_TO_TRANSPARENT` cuando el wire conserva el modificador correcto.
+`ground` usa `RECOLOUR`; las capas `BUILD` usan `TRANSPARENT`; la máscara
+resultante es negra con alpha `64/255`, equivalente a oscurecer el framebuffer
+en el blitter nativo. La tabla no declara soporte ficticio para 2CC, paletas
+custom o mapas Action5 cuando el atlas sólo tiene una textura RGBA. Las
+regresiones cubren la resolución airport, anchors NFO y ambas rutas directas;
+la suite del cliente pasa con 1.583 tests y 2 ignorados. La cobertura de
+paletas NewGRF y de las issues madre sigue parcial.

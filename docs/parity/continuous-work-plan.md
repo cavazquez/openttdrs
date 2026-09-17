@@ -9284,6 +9284,19 @@ puente y Clippy estricto; los grupos específicos NewGRF que todavía pasan por
 `spawn_bridge_specific_child` siguen pendientes. La fila continúa parcial y
 no se cierran #326/#329/#567.
 
+### #326/#329/#567-AIRPORT-TILE-DIRECT-TRANSPARENT — `PALETTE_TO_TRANSPARENT`
+
+Actualización (2026-09-16, `c753924f`): las referencias directas vanilla del
+layout de `AirportTile` conservan ahora la paleta 802 cuando el modificador
+coincide con el contrato nativo: `RECOLOUR` para `ground` y `TRANSPARENT` para
+`BUILD`. El renderer mantiene el atlas y su geometría NFO, pero pinta esas
+entradas como máscara negra de destino; `OPAQUE` puede acompañarlas sin
+activar el fallback. Las 2CC y las paletas custom no se aproximan con un tinte:
+siguen pendientes hasta portar el sprite decodificado y el mapa Action5. Las
+regresiones de resolver/atlas pasan y la suite completa del cliente queda en
+1.583 tests, 2 ignorados. La fila continúa parcial y no se cierran
+#326/#329/#567.
+
 ### #326/#329/#567-BRIDGE-ROAD-GROUPS-SEGMENTED — grupos específicos del puente
 
 Actualizado: 2026-09-16 (`959a57e8`). Los grupos `ROTSG_BRIDGE`,

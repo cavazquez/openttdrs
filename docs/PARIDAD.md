@@ -6576,3 +6576,14 @@ animación, radar y exclusión del scheduler; pasan 2.827 tests de
 `openttdrs-core`, 1 ignorado y Clippy estricto de producción (`--lib`). El
 alcance `--all-targets` mantiene 261 lints preexistentes en tests y no se
 mezcla en este bloque. La corrección es parcial y no cierra #326/#329/#567.
+
+Corrección #326/#329/#567-AIRPORT-TILE-DIRECT-TRANSPARENT (`c753924f`,
+2026-09-16): las referencias directas de `AirportTile` que usan
+`PALETTE_TO_TRANSPARENT` (`802`) ya no degradan todo el layout al fallback.
+`ground` exige el modificador nativo `RECOLOUR` y `BUILD` el modificador
+`TRANSPARENT`, conserva `OPAQUE` cuando está presente y aplica la máscara
+negra de destino sobre el sprite del atlas. Las paletas 2CC y custom siguen
+requiriendo sprites decodificados/mapas Action5 y permanecen acotadas como
+pendientes. Las regresiones cubren namespace, geometría y ambas rutas de
+materialización; la suite completa del cliente pasa con 1.583 tests, 2
+ignorados. Es una corrección parcial y no cierra #326/#329/#567.

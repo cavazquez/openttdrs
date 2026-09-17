@@ -15149,6 +15149,14 @@ fn spawn_bridge_middle_draws_deck_over_marked_water() {
     // Tablero + barandilla frontal + 1 pilar (deck_z 1, suelo 0).
     let sprites = world.query::<&Sprite>().iter(&world).count();
     assert_eq!(sprites, 3, "vano dibuja tablero, barandilla y pilar");
+    let segmented_parents = world
+        .query::<(&ViewportSortableParent, &ViewportSortableSegmentedSource)>()
+        .iter(&world)
+        .count();
+    assert_eq!(
+        segmented_parents, 3,
+        "las capas estructurales del puente deben conservar su fuente completa para clipping"
+    );
 }
 
 #[test]

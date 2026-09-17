@@ -94,7 +94,8 @@ pub(crate) struct ViewportSortablePromotableChild {
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ViewportSortableSegmentedChild;
 
-/// Estado completo de un child segmentado antes de aplicar el clipping local.
+/// Estado completo de un parent o child segmentado antes de aplicar el
+/// clipping local.
 ///
 /// El `Sprite` y la posición X/Y/escala no se pueden recuperar desde el
 /// rectángulo ya recortado en el siguiente paneo. Guardarlos junto al
@@ -107,12 +108,13 @@ pub(crate) struct ViewportSortableSegmentedSource {
     pub(crate) transform: Transform,
 }
 
-/// Copia recortada de un child que OpenTTD promueve sólo dentro de una banda.
+/// Copia recortada de un parent o child que OpenTTD ordena sólo dentro de una
+/// banda.
 ///
-/// La fuente original conserva el PNG completo y la entidad child se recorta
-/// al tramo que sí cubre su parent. Esta copia aporta únicamente el tramo que
-/// la llamada local de `ViewportDoDraw` habría convertido en parent; mantenerla
-/// como una entidad efímera evita mover globalmente la parte del sprite que
+/// La fuente original conserva el PNG completo y la entidad se recorta al
+/// tramo que sí cubre la llamada local de `ViewportDoDraw`. Esta copia aporta
+/// únicamente el tramo que la llamada local habría ordenado; mantenerla como
+/// una entidad efímera evita mover globalmente la parte del sprite que
 /// pertenece a otra banda.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ViewportSortableSegmentProxy {
@@ -623,6 +625,15 @@ impl DiagonalViewportSortScope {
                     && !(parent_start <= *band && *band < parent_end)
             })
             .collect()
+    }
+
+    #[must_use]
+    fn visible_sprite_bands(self, sprite: SpriteScreenBounds) -> Vec<i64> {
+        let (start, end) = self.sprite_band_range(sprite);
+        let band_height = self.band_height.max(1);
+        let visible_height = (self.screen_top - self.screen_bottom).max(0);
+        let visible_end = (visible_height + band_height - 1) / band_height;
+        (start.max(0)..end.min(visible_end)).collect()
     }
 
     #[must_use]
@@ -1156,9 +1167,11 @@ pub(crate) fn sort_viewport_sortable_parents(
         (
             Entity,
             Ref<ViewportSortableParent>,
-            Option<Ref<Visibility>>,
+            Option<Mut<Visibility>>,
             &mut Transform,
             Option<(Ref<Sprite>, Ref<Anchor>)>,
+            Option<&crate::render::MapTileChunk>,
+            Option<Ref<ViewportSortableSegmentedSource>>,
         ),
         Without<ViewportSortableSegmentProxy>,
     >,
@@ -1231,7 +1244,7 @@ pub(crate) fn sort_viewport_sortable_parents(
     let changed_image_ids = changed_asset_ids(image_events.as_deref(), &mut image_event_cursor);
     let changed_atlas_ids = changed_asset_ids(atlas_events.as_deref(), &mut atlas_event_cursor);
     let asset_geometry_changed = (!changed_image_ids.is_empty() || !changed_atlas_ids.is_empty())
-        && parents.iter_mut().any(|(_, _, _, _, sprite)| {
+        && parents.iter_mut().any(|(_, _, _, _, sprite, _, _)| {
             let Some((sprite, _)) = sprite else {
                 return false;
             };
@@ -1242,10 +1255,13 @@ pub(crate) fn sort_viewport_sortable_parents(
                     .is_some_and(|atlas| changed_atlas_ids.contains(&atlas.layout.id()))
         });
     let mut needs_sort = scope_changed || asset_geometry_changed || removed.read().next().is_some();
-    for (_, parent, visibility, _, sprite) in &mut parents {
+    for (_, parent, visibility, _, sprite, _, segmented_source) in &mut parents {
         needs_sort |= parent.is_added()
             || parent.is_changed()
             || visibility.as_ref().is_some_and(DetectChanges::is_changed)
+            || segmented_source
+                .as_ref()
+                .is_some_and(DetectChanges::is_changed)
             || sprite
                 .as_ref()
                 .is_some_and(|(sprite, anchor)| sprite.is_changed() || anchor.is_changed());
@@ -1321,17 +1337,28 @@ pub(crate) fn sort_viewport_sortable_parents(
     let clean_capture = crate::bevy_app::clean_map_capture_requested();
     let mut input = Vec::new();
     let mut parent_states = HashMap::new();
-    for (entity, parent, visibility, transform, sprite) in &mut parents {
+    for (entity, parent, mut visibility, transform, sprite, _chunk, segmented_source) in
+        &mut parents
+    {
         let parent = *parent;
-        let visible = visibility
+        let current_visible = visibility
             .as_ref()
             .is_none_or(|visibility| **visibility != Visibility::Hidden);
+        let source_sprite = segmented_source
+            .as_ref()
+            .map(|source| &source.sprite)
+            .or_else(|| sprite.as_ref().map(|(sprite, _)| &**sprite));
+        let source_transform = segmented_source
+            .as_ref()
+            .map(|source| &source.transform)
+            .unwrap_or(&*transform);
         let sprite_bounds = precise_scope.and_then(|_| {
-            sprite.and_then(|(sprite, anchor)| {
+            source_sprite.and_then(|source_sprite| {
+                let anchor = sprite.as_ref().map(|(_, anchor)| &**anchor)?;
                 sprite_screen_bounds(
-                    &sprite,
-                    &anchor,
-                    &transform,
+                    source_sprite,
+                    anchor,
+                    source_transform,
                     images.as_deref(),
                     texture_atlases.as_deref(),
                 )
@@ -1340,8 +1367,32 @@ pub(crate) fn sort_viewport_sortable_parents(
         let screen_band_range = precise_scope
             .zip(sprite_bounds)
             .map(|(precise_scope, sprite)| precise_scope.sprite_band_range(sprite));
+        let segment_parent = segmented_source.is_some()
+            && precise_scope.is_some()
+            && sprite_bounds.is_some_and(|sprite| {
+                parent_is_in_viewport_sort_scope(&parent, Some(sprite), scope, precise_scope)
+            });
+        if let Some(visibility) = visibility.as_mut() {
+            if segment_parent {
+                if **visibility != Visibility::Hidden {
+                    **visibility = Visibility::Hidden;
+                }
+            } else if segmented_source.is_some() && **visibility == Visibility::Hidden {
+                **visibility = Visibility::Inherited;
+            }
+        }
+        // Un parent con fuente completa puede seguir oculto del frame anterior
+        // mientras cambia la escala. La visibilidad ECS se restaura arriba;
+        // tratarlo como visible en esta misma pasada evita perder un frame al
+        // volver del compositor segmentado al global.
+        let visible = if segmented_source.is_some() {
+            true
+        } else {
+            current_visible
+        };
         let in_scope = !parent_excluded_from_clean_map_capture(&parent, clean_capture)
             && visible
+            && !segment_parent
             && parent_is_in_viewport_sort_scope(&parent, sprite_bounds, scope, precise_scope);
         let can_promote_child = precise_scope.is_some_and(|precise_scope| {
             !parent_excluded_from_clean_map_capture(&parent, clean_capture)
@@ -1362,6 +1413,75 @@ pub(crate) fn sort_viewport_sortable_parents(
             continue;
         }
         input.push((entity, parent, transform.translation.z));
+    }
+
+    // Un parent normal de OpenTTD puede aparecer en más de un
+    // `ViewportDoDraw` cuando su PNG cruza una frontera horizontal. En Bevy
+    // una sola entidad global no puede tener dos profundidades locales sin
+    // mover también los píxeles de la otra banda; los parents que publican
+    // una fuente completa se representan con una copia recortada por banda.
+    let mut segment_parent_candidates = Vec::new();
+    if let Some(precise_scope) = precise_scope {
+        for (entity, parent, _visibility, transform, sprite, chunk, segmented_source) in
+            &mut parents
+        {
+            let Some(source) = segmented_source else {
+                continue;
+            };
+            let Some((_, anchor)) = sprite.as_ref() else {
+                continue;
+            };
+            let source_bounds = sprite_screen_bounds(
+                &source.sprite,
+                anchor,
+                &source.transform,
+                images.as_deref(),
+                texture_atlases.as_deref(),
+            );
+            let Some(source_bounds) = source_bounds else {
+                continue;
+            };
+            if parent_excluded_from_clean_map_capture(&parent, clean_capture)
+                || !parent_is_in_viewport_sort_scope(
+                    &parent,
+                    Some(source_bounds),
+                    scope,
+                    Some(precise_scope),
+                )
+            {
+                continue;
+            }
+            let candidate = ViewportPromotionCandidate {
+                original_parent: entity,
+                child_entity: entity,
+                combine_ordinal: (parent.insertion_key & u64::from(u8::MAX)) as u8,
+                entity_bits: entity.to_bits(),
+                promoted_parent: *parent,
+                current_depth: transform.translation.z,
+            };
+            for band in precise_scope.visible_sprite_bands(source_bounds) {
+                let (band_bottom, band_top) = precise_scope.band_screen_bounds(band);
+                let Some((clipped_sprite, clipped_transform)) = clip_sprite_to_band(
+                    &source.sprite,
+                    anchor,
+                    &source.transform,
+                    band_bottom,
+                    band_top,
+                    images.as_deref(),
+                    texture_atlases.as_deref(),
+                ) else {
+                    continue;
+                };
+                segment_parent_candidates.push(ViewportSegmentProxyCandidate {
+                    candidate,
+                    band,
+                    sprite: clipped_sprite,
+                    anchor: **anchor,
+                    transform: clipped_transform,
+                    chunk: chunk.copied(),
+                });
+            }
+        }
     }
 
     // En un `SpriteCombine`, el primer sprite que alcanza una banda que el
@@ -1605,7 +1725,8 @@ pub(crate) fn sort_viewport_sortable_parents(
     // una copia recortada por banda. Las copias existentes se actualizan en el
     // mismo pase, mientras que las nuevas entran al sorter en el tick
     // siguiente cuando Bevy aplica el `CommandQueue`.
-    let mut segment_proxy_candidates: Vec<_> = promotion_by_parent_band.into_values().collect();
+    let mut segment_proxy_candidates = segment_parent_candidates;
+    segment_proxy_candidates.extend(promotion_by_parent_band.into_values());
     segment_proxy_candidates.sort_unstable_by(|left, right| {
         left.candidate
             .promoted_parent
@@ -1692,14 +1813,14 @@ pub(crate) fn sort_viewport_sortable_parents(
                 .next_parent_depth
                 .insert(original_parent, next_parent_depth);
         }
-        if let Ok((_, _, _, mut transform, _)) = parents.get_mut(original_parent) {
+        if let Ok((_, _, _, mut transform, _, _, _)) = parents.get_mut(original_parent) {
             transform.translation.z = sorted_depths[promoted_index];
         }
     }
 
     for ((entity, _, current_depth), &sorted_depth) in input.iter().zip(&sorted_depths) {
         if (current_depth - sorted_depth).abs() > f32::EPSILON {
-            if let Ok((_, _, _, mut transform, _)) = parents.get_mut(*entity) {
+            if let Ok((_, _, _, mut transform, _, _, _)) = parents.get_mut(*entity) {
                 transform.translation.z = sorted_depth;
             } else if let Ok((_, _, _, _, _, mut transform, _, _, _)) =
                 promotable_children.get_mut(*entity)
@@ -2081,6 +2202,10 @@ mod tests {
             visible_band_scope.child_only_visible_bands(Some((2, 3)), child_above_and_below),
             vec![1, 3]
         );
+        assert_eq!(
+            visible_band_scope.visible_sprite_bands(child_above_and_below),
+            vec![1, 2, 3]
+        );
         let child_only_above_viewport = SpriteScreenBounds {
             bottom: -45.0,
             top: 5.0,
@@ -2089,6 +2214,10 @@ mod tests {
         assert_eq!(
             visible_band_scope.child_only_visible_bands(Some((0, 1)), child_only_above_viewport),
             Vec::<i64>::new()
+        );
+        assert_eq!(
+            visible_band_scope.visible_sprite_bands(child_only_above_viewport),
+            vec![0]
         );
 
         // `AddSortableSpriteToDraw` recorta contra el rectángulo del PNG, no

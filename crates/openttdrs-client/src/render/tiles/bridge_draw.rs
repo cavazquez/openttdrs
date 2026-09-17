@@ -2001,7 +2001,14 @@ fn spawn_layer(
             ));
         }
     } else if let Some(parent) = sortable_parent {
-        entity.insert(parent);
+        entity.insert((
+            parent,
+            Visibility::Inherited,
+            ViewportSortableSegmentedSource {
+                sprite: child_source_sprite,
+                transform: child_transform,
+            },
+        ));
     }
     Some(entity.id())
 }
@@ -2201,7 +2208,14 @@ fn spawn_custom_layer(
             ));
         }
     } else if let Some(parent) = sortable_parent {
-        entity.insert(parent);
+        entity.insert((
+            parent,
+            Visibility::Inherited,
+            ViewportSortableSegmentedSource {
+                sprite: child_source_sprite,
+                transform: child_transform,
+            },
+        ));
     }
     Some(entity.id())
 }

@@ -541,6 +541,22 @@ impl DiagonalViewportSortScope {
     /// origen.
     #[must_use]
     fn parent_bounds_reach_viewport(self, bounds: ParentSpriteBounds) -> bool {
+        let screen = self.parent_bounds_screen_bounds(bounds);
+        screen.left < self.screen_right as f32
+            && screen.right > self.screen_left as f32
+            && screen.bottom < self.screen_top as f32
+            && screen.top > self.screen_bottom as f32
+    }
+
+    /// Rectángulo de pantalla de un `SPR_EMPTY_BOUNDING_BOX`.
+    ///
+    /// OpenTTD no consulta un PNG para estas entradas: proyecta los extremos
+    /// exclusivos de la caja 3D y agrega un píxel a los lados derecho e
+    /// inferior antes de recortar contra `dpi`. Conservar el mismo rectángulo
+    /// permite saber en qué lote de scanlines participa un separador invisible
+    /// sin tratarlo como presente en toda la captura.
+    #[must_use]
+    fn parent_bounds_screen_bounds(self, bounds: ParentSpriteBounds) -> SpriteScreenBounds {
         let xmin = i64::from(bounds.xmin.min(bounds.xmax));
         let xmax = i64::from(bounds.xmin.max(bounds.xmax));
         let ymin = i64::from(bounds.ymin.min(bounds.ymax));
@@ -568,10 +584,12 @@ impl DiagonalViewportSortScope {
         let projected_right = 2 * (y_end - xmin) + 1;
         let projected_bottom = -x_end - y_end + zmin - 1;
         let projected_top = -xmin - ymin + z_end;
-        projected_right > self.screen_left
-            && projected_left < self.screen_right
-            && projected_top > self.screen_bottom
-            && projected_bottom < self.screen_top
+        SpriteScreenBounds {
+            left: projected_left as f32,
+            right: projected_right as f32,
+            bottom: projected_bottom as f32,
+            top: projected_top as f32,
+        }
     }
 
     #[must_use]
@@ -889,10 +907,9 @@ fn segment_proxy_depths_for_band(
             .get(&entity)
             .map(|state| {
                 state.included
-                    && (state
+                    && state
                         .screen_band_range
                         .is_some_and(|(start, end)| start <= band && band < end)
-                        || parent.sprite_id == EMPTY_BOUNDING_BOX_SPRITE_ID)
             })
             .unwrap_or(true);
         if !reaches_band {
@@ -986,12 +1003,14 @@ pub(crate) fn viewport_source_depth(base_depth: f32, tx: u32, map_width: u32) ->
 /// entidades que llegaron al compositor Bevy, su orden de inserción nativo y
 /// la reasignación final de slots. Permite contrastar una captura raster con
 /// el `ViewportDoDraw` real de OpenTTD sin inferir el orden desde un PNG.
+#[allow(clippy::too_many_arguments)]
 fn export_viewport_sort_trace(
     input: &[(Entity, ViewportSortableParent, f32)],
     order: &[usize],
     sorted_depths: &[f32],
     scope: Option<TileViewportBounds>,
     precise_scope: Option<DiagonalViewportSortScope>,
+    parent_states: &HashMap<Entity, ViewportParentSortState>,
     local_proxies: &[ViewportSegmentProxyTrace],
     last_signature: &mut Option<u64>,
 ) {
@@ -1005,6 +1024,7 @@ fn export_viewport_sort_trace(
         sorted_depths,
         scope,
         precise_scope,
+        parent_states,
         local_proxies,
         path,
     );
@@ -1016,6 +1036,9 @@ fn export_viewport_sort_trace(
         .enumerate()
         .map(|(final_ordinal, &input_index)| {
             let (entity, parent, input_depth) = input[input_index];
+            let screen_band_range = parent_states
+                .get(&entity)
+                .and_then(|state| state.screen_band_range);
             json!({
                 "final_ordinal": final_ordinal,
                 "input_index": input_index,
@@ -1025,6 +1048,10 @@ fn export_viewport_sort_trace(
                 "source_depth": parent.source_depth,
                 "input_depth": input_depth,
                 "sorted_depth": sorted_depths[input_index],
+                "screen_band_range": screen_band_range.map(|(start, end)| json!({
+                    "start": start,
+                    "end": end,
+                })),
                 "world_bounds": {
                     "xmin": parent.bounds.xmin,
                     "ymin": parent.bounds.ymin,
@@ -1075,6 +1102,11 @@ fn export_viewport_sort_trace(
             "row_max": scope.row_max,
             "column_min": scope.column_min,
             "column_max": scope.column_max,
+            "screen_left": scope.screen_left,
+            "screen_right": scope.screen_right,
+            "screen_bottom": scope.screen_bottom,
+            "screen_top": scope.screen_top,
+            "band_height": scope.band_height,
         })),
         "parents_before_sort": input.len(),
         "parents": parents,
@@ -1091,12 +1123,14 @@ fn export_viewport_sort_trace(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn viewport_sort_trace_signature(
     input: &[(Entity, ViewportSortableParent, f32)],
     order: &[usize],
     sorted_depths: &[f32],
     scope: Option<TileViewportBounds>,
     precise_scope: Option<DiagonalViewportSortScope>,
+    parent_states: &HashMap<Entity, ViewportParentSortState>,
     local_proxies: &[ViewportSegmentProxyTrace],
     path: &Path,
 ) -> u64 {
@@ -1115,6 +1149,15 @@ fn viewport_sort_trace_signature(
         parent.insertion_key.hash(&mut hasher);
         parent.source_depth.to_bits().hash(&mut hasher);
         input_depth.to_bits().hash(&mut hasher);
+        match parent_states.get(entity) {
+            Some(state) => {
+                1_u8.hash(&mut hasher);
+                state.included.hash(&mut hasher);
+                state.can_promote_child.hash(&mut hasher);
+                state.screen_band_range.hash(&mut hasher);
+            }
+            None => 0_u8.hash(&mut hasher),
+        }
     }
     order.hash(&mut hasher);
     sorted_depths.len().hash(&mut hasher);
@@ -1377,9 +1420,16 @@ pub(crate) fn sort_viewport_sortable_parents(
                 )
             })
         });
-        let screen_band_range = precise_scope
-            .zip(sprite_bounds)
-            .map(|(precise_scope, sprite)| precise_scope.sprite_band_range(sprite));
+        let screen_band_range = precise_scope.map(|precise_scope| {
+            sprite_bounds.map_or_else(
+                || {
+                    precise_scope.sprite_band_range(
+                        precise_scope.parent_bounds_screen_bounds(parent.bounds),
+                    )
+                },
+                |sprite| precise_scope.sprite_band_range(sprite),
+            )
+        });
         let segment_parent = segmented_source.is_some()
             && precise_scope.is_some()
             && sprite_bounds.is_some_and(|sprite| {
@@ -1927,6 +1977,7 @@ pub(crate) fn sort_viewport_sortable_parents(
         &sorted_depths,
         scope,
         precise_scope,
+        &parent_states,
         &local_proxy_trace,
         &mut previous_trace_signature,
     );
@@ -2187,6 +2238,19 @@ mod tests {
         };
         assert!(
             !touching_scope.parent_bounds_reach_viewport(ParentSpriteBounds::new(0, 0, 0, 0, 0, 0))
+        );
+
+        let empty_bounds = ParentSpriteBounds::new(1_280, 672, 15, 1_295, 687, 15);
+        let empty_band_scope = DiagonalViewportSortScope {
+            screen_top: -1_676,
+            screen_bottom: -4_076,
+            band_height: 324,
+            ..edge_scope
+        };
+        assert_eq!(
+            empty_band_scope
+                .sprite_band_range(empty_band_scope.parent_bounds_screen_bounds(empty_bounds)),
+            (0, 1)
         );
 
         let parent = SpriteScreenBounds {
@@ -2531,11 +2595,28 @@ mod tests {
         let input = [(entity, parent, 1.0)];
         let order = [0];
         let sorted_depths = [1.0];
+        let parent_states = HashMap::new();
         let path = std::path::Path::new("/tmp/viewport-sort-signature-test.json");
-        let without_proxy =
-            viewport_sort_trace_signature(&input, &order, &sorted_depths, None, None, &[], path);
-        let same_without_proxy =
-            viewport_sort_trace_signature(&input, &order, &sorted_depths, None, None, &[], path);
+        let without_proxy = viewport_sort_trace_signature(
+            &input,
+            &order,
+            &sorted_depths,
+            None,
+            None,
+            &parent_states,
+            &[],
+            path,
+        );
+        let same_without_proxy = viewport_sort_trace_signature(
+            &input,
+            &order,
+            &sorted_depths,
+            None,
+            None,
+            &parent_states,
+            &[],
+            path,
+        );
         let proxy = ViewportSegmentProxyTrace {
             band: 1,
             band_ordinal: 0,
@@ -2551,6 +2632,7 @@ mod tests {
             &sorted_depths,
             None,
             None,
+            &parent_states,
             &[proxy],
             path,
         );

@@ -75,7 +75,7 @@ class WorldScreenshotExportSourceContractTest(unittest.TestCase):
         # La captura focalizada debe permitir endurecer o ampliar la curva de
         # tolerancias sin cambiar el comparador ni perder el valor exacto.
         self.assertIn(
-            'PIXEL_TOLERANCES="${OPENTTDRS_WORLD_SCREENSHOT_PIXEL_TOLERANCES:-0,2,4,8,16}"',
+            'PIXEL_TOLERANCES="${OPENTTDRS_WORLD_SCREENSHOT_PIXEL_TOLERANCES:-0,2,4,8,16,32,64}"',
             comparator,
         )
         self.assertIn('--pixel-tolerances "$PIXEL_TOLERANCES"', comparator)

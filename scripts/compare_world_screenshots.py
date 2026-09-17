@@ -313,7 +313,7 @@ def parse_pixel_tolerances(raw: str) -> list[int]:
     try:
         values = [int(value.strip()) for value in raw.split(",") if value.strip()]
     except (TypeError, ValueError) as exc:
-        raise GateError("--pixel-tolerances debe ser una lista como 0,2,4,8,16") from exc
+        raise GateError("--pixel-tolerances debe ser una lista como 0,2,4,8,16,32,64") from exc
     if not values or any(value < 0 or value > 255 for value in values):
         raise GateError("--pixel-tolerances debe contener valores entre 0 y 255")
     if values != sorted(set(values)):
@@ -376,7 +376,7 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument(
         "--pixel-tolerances",
-        default="0,2,4,8,16",
+        default="0,2,4,8,16,32,64",
         help="umbrales de delta máximo por canal para el reporte, separados por coma",
     )
     args = parser.parse_args(argv)

@@ -9573,7 +9573,7 @@ global, layouts/callbacks restantes y la composición visual completa de
 ### #326/#561-RAIL-GLASS-TOLERANCE — curva de aceptación sin ocultar el exacto
 
 Actualizado: 2026-09-17. El comparador raster conserva el gate exacto y añade
-una curva reproducible de diferencias por canal (`0,2,4,8,16`). El flujo
+una curva reproducible de diferencias por canal (`0,2,4,8,16,32,64`). El flujo
 focalizado acepta ahora `OPENTTDRS_WORLD_SCREENSHOT_PIXEL_TOLERANCES`, de modo
 que cada etapa puede comenzar con una tolerancia explícita y reducirla sin
 cambiar la captura ni borrar el histórico. La tolerancia es sólo una métrica

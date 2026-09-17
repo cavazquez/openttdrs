@@ -176,7 +176,7 @@ def main() -> int:
         if report["capture"]["openttd_zoom"] != "Out4x":
             print(f"FAIL: informe sin zoom nativo real: {report}", file=sys.stderr)
             return 1
-        if report["capture"]["pixel_tolerances"] != [0, 2, 4, 8, 16]:
+        if report["capture"]["pixel_tolerances"] != [0, 2, 4, 8, 16, 32, 64]:
             print(f"FAIL: informe sin tolerancias raster: {report}", file=sys.stderr)
             return 1
         if report["hotspots"]["cell_size_px"] != 64 or not report["hotspots"]["reported_cells"]:

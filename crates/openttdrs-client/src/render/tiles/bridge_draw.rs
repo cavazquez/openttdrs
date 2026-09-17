@@ -2333,6 +2333,101 @@ mod tests {
     }
 
     #[test]
+    fn orphan_bridge_vanilla_groups_become_sortable_parents() {
+        use crate::render::viewport_sort::ParentSpriteBounds;
+        use crate::render::world_draw_trace::TraceSpriteBounds;
+        use crate::render::{ViewportSortableChild, ViewportSortableParent};
+        use bevy::ecs::system::RunSystemOnce;
+        use bevy::prelude::{Commands, Sprite, Transform, Vec3, World};
+
+        let map = Map::new_flat(8, 8, 0);
+        let grid = crate::render::RenderGrid::from_map(&map, 8, 8);
+        let roles = [
+            (
+                6082,
+                super::DECK_LAYER_FRAC + 0.002,
+                super::BRIDGE_REAR_CATENARY_CHILD_ORDINAL,
+            ),
+            (
+                super::SPR_BRIDGE_DECKS_BASE,
+                super::DECK_LAYER_FRAC + 0.001,
+                super::BRIDGE_REAR_DECK_CHILD_ORDINAL,
+            ),
+            (
+                super::SPR_TRAMWAY_OVERLAY_BASE,
+                super::RAIL_ON_BRIDGE_LAYER_FRAC,
+                super::BRIDGE_REAR_TRAM_OVERLAY_CHILD_ORDINAL,
+            ),
+        ];
+        let placement = super::BridgeTracePlacement {
+            world_xy_delta: (0, 0),
+            world_z_delta: 8,
+            offset: (0, 0, 0),
+            bounds: TraceSpriteBounds::new(0, 0, 0, 16, 16, 1),
+        };
+        let mut world = World::new();
+        world
+            .run_system_once(move |mut commands: Commands| {
+                let ctx = crate::render::TileRenderContext::new(&map, &grid, 2, 2);
+                for (sprite_id, layer, ordinal) in roles {
+                    super::spawn_bridge_standalone_sortable(
+                        &mut commands,
+                        &ctx,
+                        8,
+                        Sprite::default(),
+                        Vec3::new(0.0, 0.0, 0.0),
+                        sprite_id,
+                        1,
+                        layer,
+                        placement,
+                        ordinal,
+                    );
+                }
+            })
+            .expect("orphan vanilla bridge group spawn");
+
+        let mut parents: Vec<_> = world
+            .query::<(&ViewportSortableParent, &Transform)>()
+            .iter(&world)
+            .map(|(parent, transform)| {
+                (
+                    parent.sprite_id,
+                    parent.bounds,
+                    transform.translation.z,
+                    parent.source_depth,
+                )
+            })
+            .collect();
+        parents.sort_unstable_by_key(|(sprite_id, _, _, _)| *sprite_id);
+        assert_eq!(
+            parents
+                .iter()
+                .map(|(sprite_id, bounds, _, _)| (*sprite_id, *bounds))
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    super::SPR_TRAMWAY_OVERLAY_BASE,
+                    ParentSpriteBounds::new(32, 32, 8, 47, 47, 8),
+                ),
+                (6082, ParentSpriteBounds::new(32, 32, 8, 47, 47, 8),),
+                (
+                    super::SPR_BRIDGE_DECKS_BASE,
+                    ParentSpriteBounds::new(32, 32, 8, 47, 47, 8),
+                ),
+            ]
+        );
+        assert!(
+            parents
+                .iter()
+                .all(|(_, _, transform_z, source_depth)| *transform_z == *source_depth)
+        );
+        assert_eq!(
+            world.query::<&ViewportSortableChild>().iter(&world).count(),
+            0
+        );
+    }
+
+    #[test]
     fn bridge_structure_transparency_uses_destination_mask() {
         let visible = bridge_structure_sprite_color(false).to_srgba();
         assert!((visible.red - 1.0).abs() < f32::EPSILON);
@@ -3801,12 +3896,23 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                             BRIDGE_REAR_CATENARY_CHILD_ORDINAL,
                         );
                     } else {
-                        commands.spawn((
-                            MapVisualLayer,
-                            ctx.map_tile_chunk(),
+                        spawn_bridge_standalone_sortable(
+                            commands,
+                            ctx,
+                            dims.0,
                             sprite,
-                            Transform::from_translation(position),
-                        ));
+                            position,
+                            back_id,
+                            surface_z,
+                            DECK_LAYER_FRAC + 0.002,
+                            BridgeTracePlacement {
+                                world_xy_delta: (0, 0),
+                                world_z_delta: z_delta,
+                                offset,
+                                bounds,
+                            },
+                            BRIDGE_REAR_CATENARY_CHILD_ORDINAL,
+                        );
                     }
                 } else {
                     WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
@@ -3890,12 +3996,23 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 BRIDGE_REAR_DECK_CHILD_ORDINAL,
             );
         } else {
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
+            spawn_bridge_standalone_sortable(
+                commands,
+                ctx,
+                dims.0,
                 sprite,
-                Transform::from_translation(position),
-            ));
+                position,
+                sprite_id,
+                surface_z,
+                DECK_LAYER_FRAC + 0.001,
+                BridgeTracePlacement {
+                    world_xy_delta: (0, 0),
+                    world_z_delta: (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8,
+                    offset: (0, 0, 0),
+                    bounds,
+                },
+                BRIDGE_REAR_DECK_CHILD_ORDINAL,
+            );
         }
     }
     if span.rail && show_pbs_reservations && span.pbs_reserved {
@@ -3965,12 +4082,23 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                     BRIDGE_REAR_TRAM_OVERLAY_CHILD_ORDINAL,
                 );
             } else {
-                commands.spawn((
-                    MapVisualLayer,
-                    ctx.map_tile_chunk(),
+                spawn_bridge_standalone_sortable(
+                    commands,
+                    ctx,
+                    dims.0,
                     sprite,
-                    Transform::from_translation(position),
-                ));
+                    position,
+                    sprite_id,
+                    surface_z,
+                    RAIL_ON_BRIDGE_LAYER_FRAC,
+                    BridgeTracePlacement {
+                        world_xy_delta: (0, 0),
+                        world_z_delta: (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8,
+                        offset: (0, 0, 0),
+                        bounds,
+                    },
+                    BRIDGE_REAR_TRAM_OVERLAY_CHILD_ORDINAL,
+                );
             }
         }
     }

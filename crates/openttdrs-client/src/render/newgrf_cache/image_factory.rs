@@ -9,6 +9,7 @@ use openttdrs_core::{
 
 use crate::sprites::CompanyColour;
 use crate::sprites::bridge_structure_palette::{BridgeStructurePalette, recolor_structure_rgba8};
+use crate::sprites::company_palette::native_zoom_bytes_for_capture;
 
 const TILE_LAYOUT_PALETTE_MODIFIERS: u8 =
     openttdrs_core::newgrf_sprites::TILE_LAYOUT_SPRITE_MODIFIER_TRANSPARENT
@@ -305,6 +306,8 @@ pub(crate) fn decoded_sprite_image_with_twocc_map(
             rgba
         }
     };
+    let rgba =
+        native_zoom_bytes_for_capture(rgba, u32::from(sprite.width), u32::from(sprite.height));
     Image::new(
         Extent3d {
             width: u32::from(sprite.width),

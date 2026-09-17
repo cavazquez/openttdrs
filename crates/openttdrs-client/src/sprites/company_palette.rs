@@ -224,7 +224,7 @@ pub fn load_recolored_png_path(
 ) -> Option<Handle<Image>> {
     let mut img = image::open(path).ok()?.into_rgba8();
     recolor_rgba8(img.as_mut(), target);
-    Some(images.add(rgba_to_bevy_image(img)))
+    Some(images.add(rgba_to_bevy_image(native_zoom_image_for_capture(img))))
 }
 
 #[must_use]
@@ -241,6 +241,83 @@ pub fn rgba_to_bevy_image(img: RgbaImage) -> Image {
         TextureFormat::Rgba8UnormSrgb,
         default(),
     )
+}
+
+/// Factor de reducción nativa para una captura fija, si corresponde.
+///
+/// OpenTTD sólo cambia el muestreo en los niveles enteros `Out2x`, `Out4x` y
+/// `Out8x`. Mantener la decisión en una función pura permite que atlas,
+/// sprites recoloreados y vistas NewGRF compartan exactamente el mismo
+/// contrato sin activar variantes durante una partida interactiva.
+#[must_use]
+pub(crate) fn native_zoom_factor_for(capture_requested: bool, scale: Option<f32>) -> Option<u32> {
+    if !capture_requested {
+        return None;
+    }
+    match scale {
+        Some(scale) if (scale - 2.0).abs() < f32::EPSILON => Some(2),
+        Some(scale) if (scale - 4.0).abs() < f32::EPSILON => Some(4),
+        Some(scale) if (scale - 8.0).abs() < f32::EPSILON => Some(8),
+        _ => None,
+    }
+}
+
+#[must_use]
+pub(crate) fn native_zoom_factor_for_capture_env() -> Option<u32> {
+    native_zoom_factor_for(
+        std::env::var_os("OPENTTDRS_MAP_SHOT").is_some(),
+        std::env::var("OPENTTDRS_MAP_SHOT_SCALE")
+            .ok()
+            .and_then(|raw| raw.parse::<f32>().ok()),
+    )
+}
+
+/// Replica el muestreo del blitter `8bpp-simple` sobre una textura RGBA.
+///
+/// La textura resultante conserva sus dimensiones para no cambiar el ancla
+/// NFO. Cada bloque de `zoom × zoom` repite el primer píxel de la raíz; con el
+/// sampler nearest de Bevy, la reducción ortográfica elige esa misma muestra.
+#[must_use]
+pub(crate) fn native_zoom_variant_rgba8(image: RgbaImage, zoom: u32) -> RgbaImage {
+    if !matches!(zoom, 2 | 4 | 8) {
+        return image;
+    }
+
+    let (width, height) = image.dimensions();
+    let mut variant = RgbaImage::new(width, height);
+    let factor = zoom as usize;
+    for y in (0..height).step_by(factor) {
+        for x in (0..width).step_by(factor) {
+            let colour = *image.get_pixel(x, y);
+            for yy in y..(y + zoom).min(height) {
+                for xx in x..(x + zoom).min(width) {
+                    variant.put_pixel(xx, yy, colour);
+                }
+            }
+        }
+    }
+    variant
+}
+
+/// Aplica la variante nativa sólo durante una captura fija.
+#[must_use]
+pub(crate) fn native_zoom_image_for_capture(image: RgbaImage) -> RgbaImage {
+    match native_zoom_factor_for_capture_env() {
+        Some(zoom) => native_zoom_variant_rgba8(image, zoom),
+        None => image,
+    }
+}
+
+/// Versión equivalente para los buffers RGBA producidos por el cache NewGRF.
+#[must_use]
+pub(crate) fn native_zoom_bytes_for_capture(rgba: Vec<u8>, width: u32, height: u32) -> Vec<u8> {
+    let Some(zoom) = native_zoom_factor_for_capture_env() else {
+        return rgba;
+    };
+    let Some(image) = RgbaImage::from_raw(width, height, rgba) else {
+        return Vec::new();
+    };
+    native_zoom_variant_rgba8(image, zoom).into_raw()
 }
 
 /// Extrae el nombre de archivo de una ruta de asset (`bus_stop_ne_build_a.png`).
@@ -432,6 +509,36 @@ impl CompanyColoredSprites {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_zoom_factor_is_capture_scoped_and_fixed() {
+        assert_eq!(native_zoom_factor_for(false, Some(2.0)), None);
+        assert_eq!(native_zoom_factor_for(true, Some(0.25)), None);
+        assert_eq!(native_zoom_factor_for(true, Some(1.0)), None);
+        assert_eq!(native_zoom_factor_for(true, Some(2.0)), Some(2));
+        assert_eq!(native_zoom_factor_for(true, Some(4.0)), Some(4));
+        assert_eq!(native_zoom_factor_for(true, Some(8.0)), Some(8));
+        assert_eq!(native_zoom_factor_for(true, Some(3.0)), None);
+    }
+
+    #[test]
+    fn native_zoom_variant_repeats_first_pixel_of_each_block() {
+        let mut source = RgbaImage::new(5, 3);
+        for y in 0..3 {
+            for x in 0..5 {
+                source.put_pixel(x, y, image::Rgba([x as u8, y as u8, 7, 255]));
+            }
+        }
+        let variant = native_zoom_variant_rgba8(source, 2);
+        for y in 0..3 {
+            for x in 0..5 {
+                assert_eq!(
+                    *variant.get_pixel(x, y),
+                    image::Rgba([(x / 2 * 2) as u8, (y / 2 * 2) as u8, 7, 255])
+                );
+            }
+        }
+    }
 
     #[test]
     #[allow(clippy::expect_used)]

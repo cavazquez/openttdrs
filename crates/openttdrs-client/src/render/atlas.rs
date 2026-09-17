@@ -8,6 +8,7 @@
 
 use bevy::prelude::*;
 
+use crate::sprites::company_palette::native_zoom_factor_for;
 use crate::sprites::{
     TILE_ATLAS_NAMES, TILE_ATLAS_PAGE_COUNT, TILE_ATLAS_PAGE_RANGES, TILE_ATLAS_PAGE_SIZES,
     TILE_ATLAS_RECTS,
@@ -28,13 +29,10 @@ pub(crate) struct AtlasSprite {
 }
 
 fn native_zoom_suffix_for(capture_requested: bool, scale: Option<f32>) -> &'static str {
-    if !capture_requested {
-        return "";
-    }
-    match scale {
-        Some(scale) if (scale - 2.0).abs() < f32::EPSILON => "_out2",
-        Some(scale) if (scale - 4.0).abs() < f32::EPSILON => "_out4",
-        Some(scale) if (scale - 8.0).abs() < f32::EPSILON => "_out8",
+    match native_zoom_factor_for(capture_requested, scale) {
+        Some(2) => "_out2",
+        Some(4) => "_out4",
+        Some(8) => "_out8",
         _ => "",
     }
 }

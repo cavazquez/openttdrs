@@ -14,7 +14,7 @@ use openttdrs_core::{BridgePiece, BridgeType, RailType};
 use super::bridge_sprites_generated::{
     BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_ramp_sprite_id,
 };
-use super::company_palette::{rgba_to_bevy_image, tiles_assets_dir};
+use super::company_palette::{native_zoom_image_for_capture, rgba_to_bevy_image, tiles_assets_dir};
 
 #[path = "bridge_structure_palette_data_generated.rs"]
 mod generated;
@@ -258,7 +258,7 @@ fn load_recolored_bridge_png(
 ) -> Option<Handle<Image>> {
     let mut img = image::open(path).ok()?.into_rgba8();
     recolor_bridge_rgba8(img.as_mut(), palette);
-    Some(images.add(rgba_to_bevy_image(img)))
+    Some(images.add(rgba_to_bevy_image(native_zoom_image_for_capture(img))))
 }
 
 /// IDs de sprite usados por tipos con recolor de estructura.

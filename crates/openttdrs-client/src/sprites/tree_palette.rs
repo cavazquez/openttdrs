@@ -10,7 +10,10 @@ use std::path::Path;
 use bevy::prelude::*;
 use image::RgbaImage;
 
-use super::company_palette::{CompanyColour, recolor_rgba8, rgba_to_bevy_image, tiles_assets_dir};
+use super::company_palette::{
+    CompanyColour, native_zoom_image_for_capture, recolor_rgba8, rgba_to_bevy_image,
+    tiles_assets_dir,
+};
 use super::{
     TILE_ATLAS_NAMES, TILE_ATLAS_RECTS, TREE_LAYOUT_PALETTE, TREE_LAYOUT_SPRITE, TREE_SPRITE_COUNT,
 };
@@ -36,8 +39,10 @@ impl TreePaletteSprites {
                 continue;
             };
             recolor_rgba8(img.as_mut(), CompanyColour::from_u8((palette - 775) as u8));
-            self.sprites
-                .insert((sprite_id, palette), images.add(rgba_to_bevy_image(img)));
+            self.sprites.insert(
+                (sprite_id, palette),
+                images.add(rgba_to_bevy_image(native_zoom_image_for_capture(img))),
+            );
         }
     }
 

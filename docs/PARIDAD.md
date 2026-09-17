@@ -6788,3 +6788,24 @@ el exacto alineado y del `22,4%` en el delta medio. El exacto crudo baja de
 no un cierre: quedan diferencias de sprites recoloreados, vehículos y otros
 productores del compositor, además del borde de cámara y la validación de
 `Out4x`/`Out8x`; #326/#567 permanecen abiertas.
+
+Corrección #326/#329/#567-OPENTTD-8BPP-PALETTE-BUFFERS (2026-09-17): el
+contrato de muestreo se centraliza para las texturas que no viven en el atlas:
+PNG de compañía (incluidos vehículos, estaciones y depósitos), variantes de
+casas/árboles y estructuras de puente, además de todos los buffers RGBA
+producidos por el cache de sprites NewGRF. El bake de paleta ocurre antes de
+repetir el primer píxel de cada bloque, que es equivalente a remapear después
+de la muestra nativa. La ruta sólo se activa durante `OPENTTDRS_MAP_SHOT` en
+`Out2x`/`Out4x`/`Out8x`; `Normal`, la partida interactiva y los tamaños no
+enteros conservan las texturas originales.
+
+En el mismo foco interior de Kale (`189,126`, 800×600, `Out2x`), respecto de
+la etapa anterior de atlas nativo, el exacto alineado baja de `177345` a
+`172703`, el delta medio de `13,069116` a `12,784330` y la banda `>64` de
+`71076` a `69831`. En crudo, el exacto baja de `339990` a `318664` (`-6,3%`),
+el delta medio de `18,359668` a `16,685753` (`-9,1%`) y la banda `>64` de
+`84772` a `74853`. La suite del cliente queda en `1596` tests exitosos, 2
+ignorados, con `cargo check`, Clippy estricto y `git diff --check` verdes. Es
+una mejora de muestreo, no paridad completa: todavía faltan cobertura de
+orientaciones/escenas, zoom runtime, borde de cámara y composición de todos
+los productores; #326/#329/#567 siguen abiertas.

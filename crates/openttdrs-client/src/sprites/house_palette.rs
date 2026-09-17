@@ -12,7 +12,10 @@ use std::path::Path;
 use bevy::prelude::*;
 
 use super::bridge_structure_palette::{BridgeStructurePalette, recolor_structure_rgba8};
-use super::company_palette::{CompanyColour, recolor_rgba8, rgba_to_bevy_image, tiles_assets_dir};
+use super::company_palette::{
+    CompanyColour, native_zoom_image_for_capture, recolor_rgba8, rgba_to_bevy_image,
+    tiles_assets_dir,
+};
 use super::{HOUSE_DRAW_DATA, TILE_ATLAS_NAMES, TILE_ATLAS_RECTS, house_sprite_asset_filename};
 
 /// Copias RGBA de sprites de casa con una `PaletteID` vanilla aplicada.
@@ -103,7 +106,7 @@ fn load_recolored_house_png(
         return None;
     }
 
-    Some(images.add(rgba_to_bevy_image(img)))
+    Some(images.add(rgba_to_bevy_image(native_zoom_image_for_capture(img))))
 }
 
 /// Los PNGs sueltos son opcionales; un checkout limpio distribuye el atlas.

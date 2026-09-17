@@ -9664,3 +9664,21 @@ seis escalas y cuatro orientaciones mínimas, aplicar el mismo contrato a las
 imágenes recoloreadas de casas/árboles y vehículos, y recién después evaluar
 un selector de atlas equivalente para el zoom interactivo. El borde de cámara,
 la composición global y #326/#567 siguen abiertos.
+
+### #326/#329/#567-OPENTTD-8BPP-PALETTE-BUFFERS — recolores fuera del atlas
+
+Actualizado: 2026-09-17. El mismo helper de muestreo nativo se aplica después
+del bake de compañía/estructura en PNGs estáticos, casas, árboles y puentes, y
+después de resolver cada política RGBA del cache NewGRF. Así los vehículos
+custom y las capas NewGRF no vuelven a muestrear el sprite base con una textura
+plana mientras el atlas ya usa la variante correcta. La decisión sigue
+acotada a capturas fijas `Out2x`/`Out4x`/`Out8x`; fuera de ellas no se copia ni
+se altera el buffer.
+
+En Kale interior `Out2x`, esta etapa reduce el exacto alineado de `177345` a
+`172703` y el delta medio de `13,069116` a `12,784330`. El exacto crudo baja
+de `339990` a `318664`. La suite queda en `1596` tests, 2 ignorados, y las
+validaciones de compilación y Clippy son verdes. Siguiente secuencia: medir
+esta etapa en `Out4x` y `Out8x` contra sus baselines, cubrir orientaciones y
+escenas con vehículos/depósitos, y recién entonces diseñar la conmutación de
+zoom para runtime; no cerrar #326/#329/#567 por esta evidencia focalizada.

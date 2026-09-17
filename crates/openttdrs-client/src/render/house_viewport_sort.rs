@@ -193,11 +193,24 @@ const VIEWPORT_SORT_BUILDING_MARGIN_TILES: u32 = 11;
 /// El culling preciso se validó contra el raster nativo hasta `Out8x`.
 const VIEWPORT_SORT_PRECISE_MAX_ORTHO_SCALE: f32 = 8.0;
 
-/// `LargeWorldCallback` usa bloques de 51 píxeles de salida a escala Normal
-/// (204 unidades virtuales / 4 de `ZOOM_BASE`). En el mundo Bevy la escala
-/// Normal es 1, por lo que éste es también el alto de una banda; los zooms
-/// precisos lo reducen proporcionalmente.
-const VIEWPORT_SORT_NORMAL_BAND_HEIGHT_PX: f32 = 51.0;
+/// El proveedor PNG de OpenTTD reserva 64 KiB por lote de scanlines y limita
+/// el lote a 16..128 líneas: `Clamp(65536 / width, 16, 128)`. La altura de
+/// banda debe seguir el ancho real de la captura, porque `ViewportDoDraw`
+/// ordena cada lote por separado. El valor se expresa en píxeles de salida a
+/// escala Normal y luego se convierte a unidades de mundo.
+const VIEWPORT_SORT_SCREEN_BUFFER_BYTES: f32 = 65_536.0;
+const VIEWPORT_SORT_MIN_BAND_LINES: f32 = 16.0;
+const VIEWPORT_SORT_MAX_BAND_LINES: f32 = 128.0;
+
+#[must_use]
+fn native_viewport_sort_band_height_px(window_width: f32) -> f32 {
+    if !window_width.is_finite() || window_width <= 0.0 {
+        return VIEWPORT_SORT_MAX_BAND_LINES;
+    }
+    (VIEWPORT_SORT_SCREEN_BUFFER_BYTES / window_width)
+        .floor()
+        .clamp(VIEWPORT_SORT_MIN_BAND_LINES, VIEWPORT_SORT_MAX_BAND_LINES)
+}
 
 #[must_use]
 fn precise_sort_scope_enabled(ortho_scale: f32) -> bool {
@@ -494,7 +507,7 @@ impl DiagonalViewportSortScope {
             screen_right: right.ceil() as i64,
             screen_bottom: bottom.floor() as i64,
             screen_top: top.ceil() as i64,
-            band_height: (VIEWPORT_SORT_NORMAL_BAND_HEIGHT_PX * ortho_scale)
+            band_height: (native_viewport_sort_band_height_px(window_width) * ortho_scale)
                 .round()
                 .max(1.0) as i64,
         }
@@ -2070,6 +2083,16 @@ mod tests {
     }
 
     #[test]
+    fn native_viewport_sort_band_matches_png_scanline_batches() {
+        assert_eq!(native_viewport_sort_band_height_px(800.0), 81.0);
+        assert_eq!(native_viewport_sort_band_height_px(1_280.0), 51.0);
+        assert_eq!(native_viewport_sort_band_height_px(384.0), 128.0);
+        assert_eq!(native_viewport_sort_band_height_px(8_192.0), 16.0);
+        assert_eq!(native_viewport_sort_band_height_px(0.0), 128.0);
+        assert_eq!(native_viewport_sort_band_height_px(f32::NAN), 128.0);
+    }
+
+    #[test]
     fn clean_map_capture_excludes_only_vehicle_sort_parents() {
         let vehicle = ViewportSortableParent {
             sprite_id: crate::render::vehicles::VEHICLE_SORT_SPRITE_ID,
@@ -2116,7 +2139,7 @@ mod tests {
                 screen_right: -1_824,
                 screen_bottom: -5_200,
                 screen_top: -4_880,
-                band_height: 51,
+                band_height: 128,
             }
         );
 
@@ -2154,7 +2177,7 @@ mod tests {
             screen_right: 3,
             screen_bottom: 0,
             screen_top: 3,
-            band_height: 51,
+            band_height: 128,
         };
         assert!(edge_scope.parent_bounds_reach_viewport(ParentSpriteBounds::new(0, 0, 0, 0, 0, 0)));
 
@@ -2178,6 +2201,7 @@ mod tests {
         };
         let band_scope = DiagonalViewportSortScope {
             screen_top: 0,
+            band_height: 51,
             ..scope
         };
         assert_eq!(band_scope.sprite_band_range(parent), (4, 5));

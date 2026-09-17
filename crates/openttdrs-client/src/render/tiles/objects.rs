@@ -5342,18 +5342,39 @@ fn spawn_newgrf_airport_tile(
         &view,
         images,
     );
-    WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
-        "airport-newgrf-tile",
-        "sortable",
-        u32::from(gfx),
-        station_company_palette(owner_colour),
-        false,
-        (0, 0),
+    let trace_bounds = TraceSpriteBounds::new(
+        i32::from(view.x_offs),
+        i32::from(view.y_offs),
         0,
-        (i32::from(view.x_offs), i32::from(view.y_offs), 0),
-        None,
+        i32::from(view.width).max(1),
+        i32::from(view.height).max(1),
+        i32::from(view.height).max(1),
     );
-    let position = overlay_pos(
+    if child_parent.is_some() {
+        // A leveled airport keeps the flat compatibility sprite attached to
+        // the foundation, just like the ground emitted after DrawFoundation.
+        // It has no independent world prism in the native stream.
+        WorldDrawTrace::record_foundation_child_sprite_with_palette(
+            "airport-newgrf-tile",
+            u32::from(gfx),
+            station_company_palette(owner_colour),
+            false,
+            (i32::from(view.x_offs), i32::from(view.y_offs), 0),
+        );
+    } else {
+        WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+            "airport-newgrf-tile",
+            "sortable",
+            u32::from(gfx),
+            station_company_palette(owner_colour),
+            false,
+            (0, 0),
+            0,
+            (i32::from(view.x_offs), i32::from(view.y_offs), 0),
+            Some(trace_bounds),
+        );
+    }
+    let mut position = overlay_pos(
         ctx.iso_pos,
         f32::from(view.x_offs),
         f32::from(view.y_offs),
@@ -5372,14 +5393,41 @@ fn spawn_newgrf_airport_tile(
     if let Some(parent) = child_parent {
         spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
     } else {
+        let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+        position.z = source_depth;
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
             Transform::from_translation(position),
+            ViewportSortableParent {
+                sprite_id: u32::from(gfx),
+                bounds: newgrf_airport_tile_parent_bounds(ctx, &view, base_z),
+                insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 2),
+                source_depth,
+            },
         ));
     }
     true
+}
+
+/// Caja conservadora para la vista plana de `AirportTile`.
+///
+/// La vista Action1/3 no trae una línea `TILE_SEQ_LINE` propia. Sus offsets y
+/// dimensiones son, sin embargo, la única geometría disponible para el
+/// fallback que materializamos; conservarla como prisma evita que un sprite
+/// alto o desplazado atraviese el orden de la tesela vecina.
+fn newgrf_airport_tile_parent_bounds(
+    ctx: &TileRenderContext,
+    view: &openttdrs_core::DecodedSprite,
+    surface_base_z: u8,
+) -> ParentSpriteBounds {
+    let x = ctx.tx_i32() * 16 + i32::from(view.x_offs);
+    let y = ctx.ty_i32() * 16 + i32::from(view.y_offs);
+    let z = i32::from(surface_base_z) * 8;
+    let width = i32::from(view.width).max(1);
+    let height = i32::from(view.height).max(1);
+    ParentSpriteBounds::new(x, y, z, x + width - 1, y + height - 1, z + height - 1)
 }
 
 /// Decide si un `AirportTile` custom conserva la fundación vanilla sobre una
@@ -8144,7 +8192,7 @@ mod tests {
     };
 
     use super::{
-        INVALID_ROAD_TYPE_ID, ROTSG_DEPOT, TileRenderContext,
+        INVALID_ROAD_TYPE_ID, ROTSG_DEPOT, TileRenderContext, ViewportSortableParent,
         airport_station_ground_layer_trace_offset, airport_tile_layout_is_renderable,
         buoy_parent_bounds, buoy_trace_bounds, destination_mask_building_color,
         dock_clear_land_sprite_id, dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
@@ -8550,6 +8598,26 @@ mod tests {
             .map(|sprite| sprite.image.clone())
             .collect();
         assert_eq!(sprites.len(), 2, "cada frame plano debe emitir un sprite");
+        let parents: Vec<_> = world
+            .query::<&ViewportSortableParent>()
+            .iter(&world)
+            .copied()
+            .collect();
+        assert_eq!(
+            parents.len(),
+            2,
+            "cada frame plano debe entrar al compositor"
+        );
+        assert_eq!(
+            parents[0].bounds,
+            ParentSpriteBounds::new(16, 16, 0, 16, 16, 0),
+            "el parent usa offsets/dimensiones de la vista plana"
+        );
+        assert_eq!(
+            parents[0].insertion_key,
+            super::viewport_insertion_key(1, 1, 2),
+            "la vista plana conserva el ordinal de construcción"
+        );
         assert_ne!(
             sprites[0], sprites[1],
             "los frames no deben compartir handle"

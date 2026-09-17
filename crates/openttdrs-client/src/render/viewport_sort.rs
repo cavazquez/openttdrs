@@ -293,12 +293,43 @@ pub(crate) fn depths_in_viewport_sort_order_from_order(
 
     let mut slots = source_depths.to_vec();
     slots.sort_by(f32::total_cmp);
+    // Bevy usa el `Transform.z` para ordenar sprites transparentes. Si dos
+    // parents conservan exactamente el mismo slot, el vector lógico del
+    // sorter sigue siendo correcto, pero la fase de render vuelve a
+    // desempatar por la entidad ECS. En un mapa real esto ocurría decenas de
+    // veces porque varios TileSeq comparten la misma profundidad fuente.
+    // Avanzar sólo las colisiones al siguiente valor representable conserva
+    // la banda original y hace observable el orden final de OpenTTD.
+    for index in 1..slots.len() {
+        if slots[index] <= slots[index - 1] {
+            slots[index] = next_f32_after(slots[index - 1]);
+        }
+    }
 
     let mut depths = source_depths.to_vec();
     for (rank, &parent_index) in order.iter().enumerate() {
         depths[parent_index] = slots[rank];
     }
     depths
+}
+
+/// Siguiente profundidad representable para los slots de sprites.
+///
+/// Las profundidades del mapa son finitas y positivas, pero mantener el caso
+/// negativo hace que el helper siga siendo correcto para los tests del
+/// sorter y para callers futuros con una cámara desplazada a otra banda.
+fn next_f32_after(value: f32) -> f32 {
+    if value.is_nan() || value == f32::INFINITY {
+        return value;
+    }
+    if value == f32::NEG_INFINITY {
+        return f32::from_bits(f32::NEG_INFINITY.to_bits() - 1);
+    }
+    if value >= 0.0 {
+        f32::from_bits(value.to_bits().saturating_add(1))
+    } else {
+        f32::from_bits(value.to_bits().saturating_sub(1))
+    }
 }
 
 /// Reasigna slots de profundidad después de calcular el orden de OpenTTD.
@@ -484,6 +515,27 @@ mod tests {
             ParentSprite::empty_bounding_box(10, bounds(0, 0, 0, 2, 2, 2)),
         ];
         assert_matches_wrapper(&with_empty_bounding_box, &[4.000_05, 4.000_06]);
+    }
+
+    #[test]
+    fn duplicate_depth_slots_become_strictly_increasing() {
+        let parents = [
+            ParentSprite::sprite(20, 200, bounds(4, 4, 4, 6, 6, 6)),
+            ParentSprite::sprite(10, 100, bounds(0, 0, 0, 2, 2, 2)),
+            ParentSprite::sprite(30, 300, bounds(8, 8, 8, 10, 10, 10)),
+        ];
+        let order = viewport_sort_parent_sprites(&parents);
+        let depths = depths_in_viewport_sort_order_from_order(&order, &[1.0, 1.0, 1.0]);
+
+        assert!(
+            order
+                .windows(2)
+                .all(|pair| depths[pair[0]] < depths[pair[1]])
+        );
+        assert_eq!(
+            depths,
+            depths_in_viewport_sort_order(&parents, &[1.0, 1.0, 1.0])
+        );
     }
 
     #[test]

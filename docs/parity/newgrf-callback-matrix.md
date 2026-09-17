@@ -2607,6 +2607,21 @@ de core, 1 ignorado y Clippy estricto de la librería. El lint de
 no los mezcla con el contrato de aeropuerto y la cobertura de las issues madre
 sigue parcial.
 
+### #326/#329/#567-BRIDGE-SPECIFIC-ORPHAN — grupos NewGRF sin fachada parent
+
+Actualizado: 2026-09-16 (`9b0bfbd3`). Los grupos específicos de puente que
+resuelven una imagen (`ROTSG_BRIDGE`, `ROTSG_OVERLAY` y catenaria) ya no quedan
+como sprite suelto cuando la fachada trasera del `StartSpriteCombine` no pudo
+materializarse. El fallback emite el grupo como parent sortable autónomo con
+la caja, profundidad y ordinal de `AddSortableSpriteToDraw`; si la fachada sí
+existe, la imagen mantiene su child `Promotable`/`Segmented` y la fuente
+completa para clipping. La regresión
+`orphan_bridge_specific_group_becomes_sortable_parent` fija el prisma
+`16×16×1`, el Z y la ausencia de child artificial. No se altera la selección
+Action2 ni se aproxima ninguna paleta; quedan abiertos otros combines,
+layouts, callbacks y la comparación de framebuffer, por lo que #326/#329/#567
+siguen parciales.
+
 ### #326/#329/#567-AIRPORT-TILE-DIRECT-TRANSPARENT — paleta directa 802
 
 Actualización (2026-09-16, `c753924f`): el consumidor visual de

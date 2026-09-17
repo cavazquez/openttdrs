@@ -6612,3 +6612,18 @@ depósito sigue siendo `AE=0`. Pasan 1.585 tests del cliente, 2 ignorados y
 Clippy estricto. Esto valida una escena y su estado inicial, no cierra
 #326/#329/#567: permanecen la matriz amplia de depósitos/vecinos, callbacks,
 otros producers y el compositor global.
+
+Corrección #326/#329/#567-BRIDGE-SPECIFIC-ORPHAN (`9b0bfbd3`, 2026-09-16):
+cuando un grupo específico NewGRF de puente (`ROTSG_BRIDGE`, `ROTSG_OVERLAY` o
+catenaria) sí resuelve una imagen pero la fachada trasera combinada no pudo
+materializarse, el fallback ya no deja el sprite fuera del compositor. La
+imagen conserva su ancla visual y pasa a ser un `ViewportSortableParent`
+autónomo con la misma caja `AddSortableSpriteToDraw`, profundidad e índice de
+inserción; la ruta normal continúa usando `ViewportSortableChild` segmentado
+del parent trasero. La regresión
+`orphan_bridge_specific_group_becomes_sortable_parent` comprueba bounds
+`16×16×1`, Z de origen y ausencia de child artificial; las cuatro regresiones
+de `bridge_middle` existentes también pasan. La suite del cliente queda en
+1.586 tests, 2 ignorados y Clippy estricto verde. Es un fallback acotado: no
+cierra #326/#329/#567, que aún requieren la matriz global de bridges, otros
+combines, callbacks y comparación raster.

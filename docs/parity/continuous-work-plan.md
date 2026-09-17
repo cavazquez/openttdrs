@@ -9284,6 +9284,23 @@ puente y Clippy estricto; los grupos específicos NewGRF que todavía pasan por
 `spawn_bridge_specific_child` siguen pendientes. La fila continúa parcial y
 no se cierran #326/#329/#567.
 
+### #326/#329/#567-BRIDGE-SPECIFIC-ORPHAN — fallback sortable de grupos custom
+
+Actualizado: 2026-09-16 (`9b0bfbd3`). Si `ROTSG_BRIDGE`, `ROTSG_OVERLAY` o una
+catenaria específica de `DrawBridgeRoadBits` resuelve una imagen pero no hay
+fachada trasera combinada a la que adjuntarla, el renderer conserva ahora la
+imagen como `ViewportSortableParent` autónomo. Reutiliza el prisma nativo de
+`AddSortableSpriteToDraw`, la profundidad de origen y el ordinal de inserción;
+no crea un `ViewportSortableChild` falso. Cuando existe la fachada, el camino
+normal no cambia: el sprite sigue siendo child `Promotable`/`Segmented` con
+fuente completa para el clipping por banda. La regresión
+`orphan_bridge_specific_group_becomes_sortable_parent` verifica bounds
+`16×16×1`, Z y ausencia de child; las cuatro pruebas existentes de
+`bridge_middle` pasan junto con la suite completa del cliente (1.586 tests, 2
+ignorados) y Clippy estricto. Esta etapa cubre sólo el fallback huérfano; la
+composición global, otros combines, callbacks y el framebuffer mantienen
+abierto #326/#329/#567.
+
 ### #326/#329/#567-PALETTE-INITIAL-PHASE — fase inicial y boyas congeladas
 
 Actualizado: 2026-09-16 (`5aa725c7`). `PaletteAnimationClock::default()`

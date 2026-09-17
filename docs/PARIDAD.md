@@ -6929,10 +6929,10 @@ un píxel completo deja `89450` diferencias crudas/alineadas, delta medio
 `6,516969`, banda `>64` de `41657` y traslación `[0,0]`.
 
 La misma regla se validó en el borde espejo `(2,132)`: `61030` diferencias,
-delta medio `4,073873`, `24062` por encima de `64` y traslación `[0,0]`. En el
-borde opuesto `(253,253)` quedan `133861` crudas y `58977` alineadas, delta
-medio alineado `4,574144` y traslación `[1,0]`; ese residual pertenece a
-composición/muestreo de productores, no habilita un cierre global. Se descartó
-la prueba de cuarto de píxel porque empeoró simultáneamente agua y estructuras.
+delta medio `4,073873`, `24062` por encima de `64` y traslación `[0,0]`. La
+captura `(253,253)` no activa el clamp en este mapa y queda fuera de esta A/B.
+Se descartó la prueba de cuarto de píxel porque empeoró simultáneamente agua y
+estructuras; el residual que permanece pertenece a composición/muestreo de
+productores y no habilita un cierre global.
 Las issues `#326/#561/#567` permanecen abiertas: todavía faltan otras escenas,
 orientaciones, productores y el gate exacto completo.

@@ -9767,3 +9767,28 @@ queda pendiente aislar el muestreo/composición de ese nivel y validar las
 orientaciones restantes. Los controles interiores no cambian porque el sesgo
 está condicionado a `clamped`. La suite queda en `1599` tests del cliente, 2
 ignorados, y `2829` del core, 1 ignorado. #326/#561/#567 permanecen abiertas.
+
+### #326/#567-OPENTTD-VIEWPORT-RASTER-BIAS-OUT8 — fase nativa del bloque Out8x
+
+Actualizado: 2026-09-17. La fase del borde no puede extrapolarse con la misma
+fracción para todos los zooms. En `Out2x`/`Out4x` se conserva la compensación de
+media pantalla; en `Out8x`, donde el atlas nativo ya agrupa la raíz en bloques
+de ocho, la captura necesita un píxel completo en unidades de mundo
+(`capture_scale`) para coincidir con `MakeScreenshotAtZoom`. La decisión sigue
+acotada a la cámara de captura y no cambia el paneo interactivo.
+
+En `Kale_TitleGame.sav`, borde `(132,2)`, 800×600, `llvmpipe`, la variante
+publicada de media pantalla daba `401460` diferencias crudas y `242339`
+alineadas, con delta medio alineado `17,861238` y traslación `[1,0]`. Sin sesgo
+la alineación bajaba a `90140`, pero quedaba una traslación `[1,1]`. El ajuste de
+un píxel completo deja `89450` diferencias crudas/alineadas, delta medio
+`6,516969`, banda `>64` de `41657` y traslación `[0,0]`.
+
+La misma regla se validó en el borde espejo `(2,132)`: `61030` diferencias,
+delta medio `4,073873`, `24062` por encima de `64` y traslación `[0,0]`. En el
+borde opuesto `(253,253)` quedan `133861` crudas y `58977` alineadas, delta
+medio alineado `4,574144` y traslación `[1,0]`; ese residual pertenece a
+composición/muestreo de productores, no habilita un cierre global. Se descartó
+la prueba de cuarto de píxel porque empeoró simultáneamente agua y estructuras.
+Las issues `#326/#561/#567` permanecen abiertas: todavía faltan otras escenas,
+orientaciones, productores y el gate exacto completo.

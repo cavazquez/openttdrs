@@ -108,12 +108,19 @@ fn openttd_inverse_remap(point: IVec2) -> IVec2 {
     )
 }
 
-/// Compensa el medio píxel de pantalla que introduce el clamp del viewport.
+/// Compensa la fase de pantalla que introduce el clamp del viewport.
 /// Con `ScalingMode::WindowSize`, `capture_scale` son unidades de mundo por
 /// píxel; el desplazamiento se activa sólo para capturas que tocaron el mapa.
+/// Out2x/Out4x necesitan media pantalla. En Out8x la cuantización del recorte
+/// y la del atlas nativo se encuentran en un límite de bloque, y la referencia
+/// requiere un píxel completo para conservar el mismo origen raster.
 fn map_shot_edge_screen_bias(clamped: bool, capture_scale: f32) -> Vec2 {
     if !clamped {
         return Vec2::ZERO;
+    }
+    if capture_scale >= 8.0 {
+        let screen_pixel_world = capture_scale;
+        return Vec2::new(-screen_pixel_world, screen_pixel_world);
     }
     let half_screen_pixel_world = capture_scale * 0.5;
     Vec2::new(-half_screen_pixel_world, half_screen_pixel_world)
@@ -932,10 +939,10 @@ mod tests {
     }
 
     #[test]
-    fn map_shot_edge_bias_is_half_a_pixel_and_only_for_clamped_views() {
+    fn map_shot_edge_bias_matches_fixed_zoom_phase() {
         assert_eq!(map_shot_edge_screen_bias(false, 2.0), Vec2::ZERO);
         assert_eq!(map_shot_edge_screen_bias(true, 2.0), Vec2::new(-1.0, 1.0));
-        assert_eq!(map_shot_edge_screen_bias(true, 8.0), Vec2::new(-4.0, 4.0));
+        assert_eq!(map_shot_edge_screen_bias(true, 8.0), Vec2::new(-8.0, 8.0));
     }
 
     #[test]

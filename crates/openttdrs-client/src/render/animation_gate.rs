@@ -11,9 +11,19 @@ use crate::state::{SimRunState, sim_is_paused};
 /// conserva sólo el `u16` que consumen las macros `EXTR`/`EXTR2`; así el cliente
 /// comparte fase exacta entre todos los ciclos y una pausa no consume tiempo
 /// de presentación.
-#[derive(Resource, Debug, Clone, Copy, Default)]
+#[derive(Resource, Debug, Clone, Copy)]
 pub(crate) struct PaletteAnimationClock {
     counter: u16,
+}
+
+impl Default for PaletteAnimationClock {
+    fn default() -> Self {
+        // `GfxInitPalettes` ejecuta una primera pasada de
+        // `DoPaletteAnimations` antes de que OpenTTD dibuje la escena.
+        Self {
+            counter: PALETTE_ANIMATION_COUNTER_STEP,
+        }
+    }
 }
 
 impl PaletteAnimationClock {
@@ -149,5 +159,13 @@ mod tests {
         assert_eq!(palette_animation_phase_reverse(0, 512, 5), 4);
         assert_eq!(palette_animation_phase_reverse(64, 512, 5), 2);
         assert_eq!(palette_animation_phase_reverse(64, 512, 7), 3);
+    }
+
+    #[test]
+    fn palette_clock_starts_after_native_palette_initialization() {
+        assert_eq!(
+            PaletteAnimationClock::default().counter(),
+            PALETTE_ANIMATION_COUNTER_STEP
+        );
     }
 }

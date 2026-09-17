@@ -2737,3 +2737,15 @@ fallbacks de industria/objeto. La regresión plana comprueba bounds, inserción 
 profundidad y la inclinada conserva el parent de foundation. Pasan 1.591 tests
 del cliente, 2 ignorados y Clippy estricto. Esto no implica soporte completo de
 layouts `TileSeq`, callbacks, paletas/Action5 ni cierre de las issues madre.
+
+### #326/#329/#567-NEWGRF-ROADSTOP-FLAT-BUILDING-SORT — fallback de depósitos
+
+Actualizado (2026-09-16, `3bf99f08`): la vista simple Action1/3 de un
+`RoadStopSpecDef` se registra como `sortable` en terreno plano y se materializa
+con `ViewportSortableParent`, bounds derivados del ancla NFO, profundidad de
+fuente y ordinal BUILD después de la catenaria. Una foundation conserva la
+relación child y el offset de pantalla del draw inclinado. La regresión
+`flat_newgrf_road_stop_view_joins_global_sort` cubre bounds, inserción y
+profundidad; la suite completa pasa con 1.592 tests, 2 ignorados y Clippy
+estricto. Layouts `TileSeq`, callbacks, paletas/Action5 y la validación raster
+siguen fuera de este subalcance, por lo que no se cierran las issues madre.

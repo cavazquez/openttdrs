@@ -9541,3 +9541,15 @@ confirma que no se abre un parent independiente. Pasan 1.591 tests del cliente,
 2 ignorados y Clippy estricto. La fila sigue parcial: faltan layouts `TileSeq`,
 callbacks, paletas/Action5 y comparación raster; las issues madre permanecen
 abiertas.
+
+### #326/#329/#567-NEWGRF-ROADSTOP-FLAT-BUILDING-SORT — depósitos simples
+
+Actualizado (2026-09-16, `3bf99f08`): el fallback Action1/3 de
+`RoadStopSpecDef` entra al compositor global en plano, conservando el ancla
+NFO, bounds derivados de `DecodedSprite`, profundidad de fuente y el ordinal
+BUILD posterior a la catenaria. En pendiente mantiene el child de
+`FOUNDATION_LEVELED`, en lugar de abrir un parent independiente. La regresión
+`flat_newgrf_road_stop_view_joins_global_sort` comprueba el prisma, la
+inserción y la profundidad. El cambio no cubre layouts `TileSeq`, callbacks,
+paletas/Action5 ni comparación raster; pasan 1.592 tests del cliente, 2
+ignorados y Clippy estricto. Las issues madre continúan parciales y abiertas.

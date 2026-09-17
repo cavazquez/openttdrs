@@ -6701,3 +6701,14 @@ la relación con la foundation. Pasan 1.591 tests del cliente, 2 ignorados,
 Clippy estricto y `git diff --check`. El subalcance no completa layouts
 `TileSeq`, callbacks, paletas/Action5 ni la comparación raster global; no se
 cierran #326/#329/#567.
+
+Corrección #326/#329/#567-NEWGRF-ROADSTOP-FLAT-BUILDING-SORT (`3bf99f08`,
+2026-09-16): el fallback simple Action1/3 de `RoadStopSpecDef` ya no queda como
+sprite directo en terreno plano. La vista conserva el ancla y las dimensiones
+NFO en un `ViewportSortableParent`, con profundidad de fuente y ordinal BUILD
+posterior a la catenaria; en pendiente sigue como child de la foundation
+nivelada. La regresión `flat_newgrf_road_stop_view_joins_global_sort` fija el
+prisma `(13,11,0)` a `(18,17,6)`, la inserción y la profundidad. Los layouts
+`TileSeq`, callbacks, paletas/Action5 y la comparación raster global siguen
+pendientes; la suite completa pasa con 1.592 tests del cliente, 2 ignorados y
+Clippy estricto. No se cierran #326/#329/#567.

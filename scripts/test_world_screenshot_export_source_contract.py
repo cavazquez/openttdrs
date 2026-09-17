@@ -79,6 +79,14 @@ class WorldScreenshotExportSourceContractTest(unittest.TestCase):
             comparator,
         )
         self.assertIn('--pixel-tolerances "$PIXEL_TOLERANCES"', comparator)
+        self.assertIn(
+            'ACCEPT_PIXEL_TOLERANCE="${OPENTTDRS_WORLD_SCREENSHOT_ACCEPT_PIXEL_TOLERANCE:-}"',
+            comparator,
+        )
+        self.assertIn(
+            'ACCEPT_ARGS=(--accept-pixel-tolerance "$ACCEPT_PIXEL_TOLERANCE")',
+            comparator,
+        )
 
     def test_optional_sort_trace_uses_the_real_screenshot_viewport(self) -> None:
         source = compact(SOURCE.read_text(encoding="utf-8"))

@@ -35,6 +35,24 @@ capturadores con esta convención compartida:
 | `4` | `Out4x` |
 | `8` | `Out8x` |
 
+El comparador conserva siempre el estado exacto (`status`) y la tabla completa
+de tolerancias. Para usar una tolerancia como criterio provisional de una etapa,
+se puede activar un gate explícito:
+
+```bash
+OPENTTDRS_WORLD_SCREENSHOT_ACCEPT_PIXEL_TOLERANCE=32 \
+  ./scripts/compare_focused_world_screenshot.sh "$SAV" /tmp/kale-tolerance \
+    189,126 1280x720 4
+```
+
+El gate también se puede pasar directamente como
+`--accept-pixel-tolerance 32`. Si queda algún píxel con delta máximo de canal
+mayor que el umbral, el comando termina con código `1`; el `report.json` se
+escribe igual y su bloque `acceptance` queda en `passed: false`. Cuando se
+reduce el umbral, el informe permite comprobar el siguiente escalón sin
+confundir una aceptación provisional con paridad exacta. La cobertura fuera de
+la candidata cuenta como diferencia y nunca se tolera por accidente.
+
 El exportador nativo acepta sólo esos seis valores; una escala inválida aborta
 en vez de degradar silenciosamente a zoom normal. Por defecto activa el perfil
 `clean-static`: pausa ambas partidas,

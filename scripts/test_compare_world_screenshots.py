@@ -19,6 +19,7 @@ from compare_world_screenshots import (
     best_candidate_translation,
     image_metrics,
     openttd_zoom_for_orthographic_scale,
+    parse_pixel_tolerance,
     parse_pixel_tolerances,
     pixel_tolerance_metrics,
     raster_hotspots,
@@ -104,11 +105,16 @@ def main() -> int:
     tolerance_report = pixel_tolerance_metrics(
         reference, PngImage(40, 32, bytes(subtle)), 0, 0, [0, 1, 2]
     )
+    outside_tolerance_report = pixel_tolerance_metrics(reference, candidate, -2, 1, [255])
     if (
         tolerance_report["0"]["changed_pixels"] != 1
         or tolerance_report["1"]["changed_pixels"] != 0
         or tolerance_report["2"]["changed_pixels"] != 0
         or parse_pixel_tolerances("0,2,16") != [0, 2, 16]
+        or parse_pixel_tolerance("16") != 16
+        or outside_tolerance_report["255"]["outside_candidate_pixels"] == 0
+        or outside_tolerance_report["255"]["changed_pixels"]
+        != outside_tolerance_report["255"]["outside_candidate_pixels"]
     ):
         print(f"FAIL: tolerancias raster inesperadas: {tolerance_report}", file=sys.stderr)
         return 1
@@ -181,6 +187,97 @@ def main() -> int:
             return 1
         if report["hotspots"]["cell_size_px"] != 64 or not report["hotspots"]["reported_cells"]:
             print(f"FAIL: reporte sin hotspots raster: {report}", file=sys.stderr)
+            return 1
+        if report["acceptance"] != {
+            "changed_pixels": None,
+            "changed_ratio": None,
+            "enabled": False,
+            "meaning": (
+                "si está habilitado, exige que ningún píxel alineado supere el "
+                "delta máximo indicado; no reemplaza la métrica exacta"
+            ),
+            "outside_candidate_pixels": None,
+            "passed": None,
+            "pixel_tolerance": None,
+        }:
+            print(f"FAIL: gate deshabilitado inesperado: {report['acceptance']}", file=sys.stderr)
+            return 1
+
+        gated_report_path = root / "gated-report.json"
+        gated = run(
+            str(reference_path),
+            str(candidate_path),
+            "--diff",
+            str(diff_path),
+            "--report",
+            str(gated_report_path),
+            "--center",
+            "189,126",
+            "--resolution",
+            "40x32",
+            "--candidate-graphics",
+            "OpenGFX · 8bpp",
+            "--openttdrs-scale",
+            "4",
+            "--alignment-radius",
+            "4",
+            "--alignment-stride",
+            "1",
+            "--accept-pixel-tolerance",
+            "0",
+        )
+        if gated.returncode != 1 or not gated_report_path.is_file():
+            print(gated.stdout, gated.stderr, file=sys.stderr)
+            print("FAIL: el gate estricto debía rechazar la captura", file=sys.stderr)
+            return 1
+        gated_report = json.loads(gated_report_path.read_text(encoding="utf-8"))
+        if (
+            gated_report["status"] != "different"
+            or gated_report["acceptance"]["enabled"] is not True
+            or gated_report["acceptance"]["pixel_tolerance"] != 0
+            or gated_report["acceptance"]["passed"] is not False
+            or gated_report["acceptance"]["changed_pixels"] == 0
+            or gated_report["acceptance"]["outside_candidate_pixels"] == 0
+        ):
+            print(f"FAIL: rechazo del gate no quedó documentado: {gated_report}", file=sys.stderr)
+            return 1
+
+        permissive_candidate_path = root / "permissive-candidate.png"
+        write_png(permissive_candidate_path, PngImage(40, 32, bytes(subtle)))
+        permissive_report_path = root / "permissive-report.json"
+        permissive = run(
+            str(reference_path),
+            str(permissive_candidate_path),
+            "--diff",
+            str(diff_path),
+            "--report",
+            str(permissive_report_path),
+            "--center",
+            "189,126",
+            "--resolution",
+            "40x32",
+            "--candidate-graphics",
+            "OpenGFX · 8bpp",
+            "--openttdrs-scale",
+            "4",
+            "--alignment-radius",
+            "4",
+            "--alignment-stride",
+            "1",
+            "--accept-pixel-tolerance",
+            "255",
+        )
+        if permissive.returncode != 0 or not permissive_report_path.is_file():
+            print(permissive.stdout, permissive.stderr, file=sys.stderr)
+            print("FAIL: el gate permisivo debía aceptar la captura", file=sys.stderr)
+            return 1
+        permissive_report = json.loads(permissive_report_path.read_text(encoding="utf-8"))
+        if (
+            permissive_report["status"] != "different"
+            or permissive_report["acceptance"]["passed"] is not True
+            or permissive_report["acceptance"]["changed_pixels"] != 0
+        ):
+            print(f"FAIL: aceptación tolerante no quedó documentada: {permissive_report}", file=sys.stderr)
             return 1
 
         bad_resolution = run(

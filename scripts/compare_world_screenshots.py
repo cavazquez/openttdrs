@@ -134,11 +134,9 @@ def pixel_tolerance_metrics(
         for x in range(width):
             source_x = x - dx
             if not (0 <= source_x < candidate.width and 0 <= source_y < candidate.height):
-                pixel_delta = 255
                 for index in range(len(tolerances)):
-                    if pixel_delta > tolerances[index]:
-                        changed[index] += 1
-                        outside[index] += 1
+                    changed[index] += 1
+                    outside[index] += 1
                 continue
 
             overlap += 1
@@ -162,7 +160,10 @@ def pixel_tolerance_metrics(
                 (changed[index] - outside[index]) / overlap if overlap else None
             ),
             "outside_candidate_pixels": outside[index],
-            "meaning": f"píxeles con delta máximo de canal > {tolerance}",
+            "meaning": (
+                f"píxeles con delta máximo de canal > {tolerance}, incluyendo "
+                "cobertura ausente"
+            ),
         }
         for index, tolerance in enumerate(tolerances)
     }
@@ -321,6 +322,17 @@ def parse_pixel_tolerances(raw: str) -> list[int]:
     return values
 
 
+def parse_pixel_tolerance(raw: str, option: str = "--accept-pixel-tolerance") -> int:
+    """Valida un umbral individual usado por el gate opcional."""
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise GateError(f"{option} debe ser un entero entre 0 y 255") from exc
+    if not 0 <= value <= 255:
+        raise GateError(f"{option} debe estar entre 0 y 255")
+    return value
+
+
 def artifact(path: Path) -> dict[str, str]:
     return {"path": relative(path), "sha256": sha256(path)}
 
@@ -379,6 +391,13 @@ def main(argv: list[str]) -> int:
         default="0,2,4,8,16,32,64",
         help="umbrales de delta máximo por canal para el reporte, separados por coma",
     )
+    parser.add_argument(
+        "--accept-pixel-tolerance",
+        help=(
+            "activa un gate opcional: falla si algún píxel alineado supera este "
+            "delta máximo por canal; el status exacto no se altera"
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -394,6 +413,11 @@ def main(argv: list[str]) -> int:
         center = parse_center(args.center)
         requested_resolution = parse_resolution(args.resolution)
         pixel_tolerances = parse_pixel_tolerances(args.pixel_tolerances)
+        accept_pixel_tolerance = (
+            None
+            if args.accept_pixel_tolerance is None
+            else parse_pixel_tolerance(args.accept_pixel_tolerance)
+        )
         reference, candidate = read_png(args.reference), read_png(args.candidate)
         if (reference.width, reference.height) != (candidate.width, candidate.height):
             raise GateError(
@@ -419,6 +443,30 @@ def main(argv: list[str]) -> int:
         aligned_metrics["by_pixel_tolerance"] = pixel_tolerance_metrics(
             reference, candidate, dx, dy, pixel_tolerances
         )
+        acceptance: dict[str, Any] = {
+            "enabled": accept_pixel_tolerance is not None,
+            "pixel_tolerance": accept_pixel_tolerance,
+            "passed": None,
+            "changed_pixels": None,
+            "changed_ratio": None,
+            "outside_candidate_pixels": None,
+            "meaning": (
+                "si está habilitado, exige que ningún píxel alineado supere el "
+                "delta máximo indicado; no reemplaza la métrica exacta"
+            ),
+        }
+        if accept_pixel_tolerance is not None:
+            gate_metrics = pixel_tolerance_metrics(
+                reference, candidate, dx, dy, [accept_pixel_tolerance]
+            )[str(accept_pixel_tolerance)]
+            acceptance.update(
+                {
+                    "passed": gate_metrics["changed_pixels"] == 0,
+                    "changed_pixels": gate_metrics["changed_pixels"],
+                    "changed_ratio": gate_metrics["changed_ratio"],
+                    "outside_candidate_pixels": gate_metrics["outside_candidate_pixels"],
+                }
+            )
         args.diff.parent.mkdir(parents=True, exist_ok=True)
         write_png(args.diff, diff)
 
@@ -426,6 +474,7 @@ def main(argv: list[str]) -> int:
             "schema_version": 1,
             "kind": "focused-world-screenshot",
             "status": "identical" if aligned_metrics["changed_pixels"] == 0 else "different",
+            "acceptance": acceptance,
             "capture": {
                 "center": center,
                 "requested_resolution": requested_resolution,
@@ -468,7 +517,7 @@ def main(argv: list[str]) -> int:
         return 2
 
     print(json.dumps(report, indent=2, sort_keys=True))
-    return 0
+    return 0 if report["acceptance"]["passed"] is not False else 1
 
 
 if __name__ == "__main__":

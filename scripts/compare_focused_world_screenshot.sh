@@ -19,6 +19,7 @@ MODE_FILE="${ROOT}/assets/opengfx/.graphics_mode"
 MODE="${OPENTTDRS_WORLD_SCREENSHOT_CANDIDATE_GFX_MODE:-}"
 CLEAN="${OPENTTDRS_WORLD_SCREENSHOT_CLEAN:-1}"
 PIXEL_TOLERANCES="${OPENTTDRS_WORLD_SCREENSHOT_PIXEL_TOLERANCES:-0,2,4,8,16,32,64}"
+ACCEPT_PIXEL_TOLERANCE="${OPENTTDRS_WORLD_SCREENSHOT_ACCEPT_PIXEL_TOLERANCE:-}"
 
 if [[ ! -f "$SAV" ]]; then
   echo "error: no existe $SAV" >&2
@@ -46,6 +47,10 @@ case "$SCALE" in
 esac
 
 mkdir -p "$OUT_DIR"
+ACCEPT_ARGS=()
+if [[ -n "$ACCEPT_PIXEL_TOLERANCE" ]]; then
+  ACCEPT_ARGS=(--accept-pixel-tolerance "$ACCEPT_PIXEL_TOLERANCE")
+fi
 export OPENTTDRS_WORLD_SCREENSHOT_CLEAN="$CLEAN"
 if [[ "$CLEAN" == "0" || "$CLEAN" == "false" || "$CLEAN" == "no" || "$CLEAN" == "off" ]]; then
   CAPTURE_PROFILE="dynamic"
@@ -74,7 +79,8 @@ python3 "${ROOT}/scripts/compare_world_screenshots.py" \
   --capture-profile "$CAPTURE_PROFILE" \
   --alignment-radius "${OPENTTDRS_WORLD_SCREENSHOT_ALIGNMENT_RADIUS:-8}" \
   --alignment-stride "${OPENTTDRS_WORLD_SCREENSHOT_ALIGNMENT_STRIDE:-8}" \
-  --pixel-tolerances "$PIXEL_TOLERANCES"
+  --pixel-tolerances "$PIXEL_TOLERANCES" \
+  "${ACCEPT_ARGS[@]}"
 
 echo "OK: comparación focalizada escrita en $OUT_DIR"
 echo "  referencia: $REFERENCE"
@@ -82,3 +88,6 @@ echo "  candidata:  $CANDIDATE"
 echo "  diff:       $DIFF"
 echo "  reporte:    $REPORT"
 echo "  tolerancias: $PIXEL_TOLERANCES"
+if [[ -n "$ACCEPT_PIXEL_TOLERANCE" ]]; then
+  echo "  gate:       delta máximo $ACCEPT_PIXEL_TOLERANCE"
+fi

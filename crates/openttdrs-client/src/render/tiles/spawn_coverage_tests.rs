@@ -4644,6 +4644,126 @@ fn road_stop_no_catenary_flag_suppresses_road_and_tram_wires() {
 }
 
 #[test]
+fn flat_newgrf_road_stop_view_joins_global_sort() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(3, 3, 0);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m5: 0,
+            m6: 3 << 3, // StationType::Bus.
+            ..tile_template()
+        },
+    )
+    .expect("flat road stop");
+
+    let view = DecodedSprite {
+        width: 6,
+        height: 7,
+        x_offs: -3,
+        y_offs: -5,
+        rgba: [80, 160, 220, 255].repeat(6 * 7),
+        mask: Vec::new(),
+    };
+    let spec = RoadStopSpecDef {
+        id: 7,
+        class: 0,
+        label: "Plano road stop".into(),
+        short_label: "RS".into(),
+        stop_type: openttdrs_core::ROADSTOP_TYPE_BUS,
+        from_newgrf: true,
+        grfid: 0x5253_504C,
+        newgrf_local_id: 0,
+        newgrf_grf_version: 8,
+        draw_mode: openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+        random_cargo_triggers: 0,
+        flags: 0,
+        build_cost_multiplier: 16,
+        clear_cost_multiplier: 16,
+        bridgeable_info: [openttdrs_core::road_stop_spec::RoadStopBridgeableInfo::default();
+            openttdrs_core::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
+        callback_mask: 0,
+        animation_status: 0xFF,
+        animation_frames: 0,
+        animation_speed: 2,
+        animation_triggers: 0,
+        newgrf_views: vec![view],
+        newgrf_runtime: None,
+        newgrf_type_tables: None,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
+    };
+    let mut station = Station::new_with_kind(coord, StopKind::BusStop);
+    station.road_stop_spec = Some(spec.id);
+    let stations = vec![station];
+
+    let grid = RenderGrid::from_map(&map, 3, 3);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfAction5SpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: ResMut<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    &stations,
+                    4.0,
+                    true,
+                    &[],
+                    std::slice::from_ref(&spec),
+                    None,
+                    Some(&mut images),
+                    &[],
+                    None,
+                    &[],
+                    Some(&mut cache),
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+            },
+        )
+        .expect("flat NewGRF road stop");
+
+    let (parent, transform) = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .find(|(parent, _)| parent.sprite_id == 7)
+        .expect("parent sortable de road stop NewGRF plano");
+    assert_eq!(
+        parent.bounds,
+        ParentSpriteBounds::new(13, 11, 0, 18, 17, 6),
+        "la vista simple usa offsets y dimensiones NFO como prisma sortable"
+    );
+    assert_eq!(
+        parent.insertion_key,
+        viewport_insertion_key(1, 1, 12),
+        "el parent usa el ordinal BUILD posterior a la catenaria"
+    );
+    assert_eq!(
+        parent.source_depth, transform.translation.z,
+        "el parent de road stop conserva su profundidad fuente"
+    );
+}
+
+#[test]
 fn drive_through_waypoint_and_road_depot_grounds_keep_opengfx_xrel_center() {
     let assets = boot_assets_app();
     let drive_through_ground =

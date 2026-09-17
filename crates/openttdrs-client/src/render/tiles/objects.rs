@@ -4584,16 +4584,72 @@ fn spawn_road_stop_buildings(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
             );
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                destination_mask_building_sprite(Sprite {
-                    image: handle,
-                    color: Color::WHITE,
-                    ..default()
-                }),
-                Transform::from_translation(pos3),
-            ));
+            let sprite_id = u32::from(spec_id);
+            let trace_bounds = TraceSpriteBounds::new(
+                i32::from(view.x_offs),
+                i32::from(view.y_offs),
+                0,
+                i32::from(view.width).max(1),
+                i32::from(view.height).max(1),
+                i32::from(view.height).max(1),
+            );
+            if foundation_child_parent.is_some() {
+                WorldDrawTrace::record_foundation_child_sprite_with_palette(
+                    "station-road-stop-newgrf",
+                    sprite_id,
+                    station_company_palette(owner_colour),
+                    false,
+                    (i32::from(view.x_offs), i32::from(view.y_offs), 0),
+                );
+            } else {
+                WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+                    "station-road-stop-newgrf",
+                    "sortable",
+                    sprite_id,
+                    station_company_palette(owner_colour),
+                    false,
+                    (0, 0),
+                    0,
+                    (i32::from(view.x_offs), i32::from(view.y_offs), 0),
+                    Some(trace_bounds),
+                );
+            }
+            let sprite = destination_mask_building_sprite(Sprite {
+                image: handle,
+                color: Color::WHITE,
+                ..default()
+            });
+            if let Some(parent) = foundation_child_parent {
+                let position = pos3;
+                spawn_foundation_child_sprite_at(
+                    commands,
+                    sprite,
+                    ctx,
+                    position,
+                    map.dimensions().0,
+                    parent,
+                );
+            } else {
+                let source_depth = viewport_source_depth(pos3.z, ctx.tx, map.dimensions().0);
+                let mut position = pos3;
+                position.z = source_depth;
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(position),
+                    ViewportSortableParent {
+                        sprite_id,
+                        bounds: newgrf_flat_parent_bounds(ctx, &view, base_z),
+                        insertion_key: viewport_insertion_key(
+                            ctx.tx,
+                            ctx.ty,
+                            vanilla_parent_ordinal,
+                        ),
+                        source_depth,
+                    },
+                ));
+            }
             return;
         }
         // El índice sintético no puede saturarse sin aliasar otro spec.

@@ -7026,7 +7026,7 @@ fn river_ship_depot_consumes_flat_feature_ground_in_ground_pass() {
 }
 
 #[test]
-fn forest_combined_layers_attach_to_the_global_sort_parent() {
+fn forest_combined_layers_attach_to_the_global_sort_parent_without_band_split() {
     let assets = boot_assets_app();
     let mut map = Map::new_flat(4, 4, 0);
     let mut tree = tile_template();
@@ -7083,8 +7083,8 @@ fn forest_combined_layers_attach_to_the_global_sort_parent() {
         .iter(&world)
         .count();
     assert_eq!(
-        segmented_layers, 2,
-        "las capas combinadas del árbol publican el contrato de clipping por banda"
+        segmented_layers, 0,
+        "las capas combinadas del árbol conservan el parent y se recortan por el framebuffer"
     );
 }
 

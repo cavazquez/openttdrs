@@ -7031,3 +7031,21 @@ combinados; vidrio y otros productores siguen en el residual.
 La mejora es una corrección del compositor, no paridad global. Las issues
 `#326/#561/#567` permanecen abiertas hasta completar las escenas, escalas,
 orientaciones y el gate exacto de todos los productores.
+
+### Corrección publicada — 2026-09-17 — #326/#567-CHILD-BAND-CLIPPING
+
+Los children combinados de `DrawTile_Trees` conservan ahora el bloque atómico
+de `SpriteCombine` y ya no se recortan mediante proxies por banda. El clipping
+del framebuffer se aplica sobre el bloque ordenado, como en OpenTTD; partir la
+copa en cada frontera de scanlines introducía bordes de una línea y cambios de
+paleta en los árboles. Los children siguen siendo promocionables cuando el
+parent queda fuera del alcance visible.
+
+En `Kale_TitleGame.sav`, foco `(132,2)`, 800×600, `Normal`, OpenGFX 8bpp y
+perfil `clean-static`, la A/B baja de `1010` a `768` diferencias alineadas
+(`0,210417% → 0,160000%`, `-24,0%`). El delta medio pasa de `0,056100` a
+`0,042593`, el máximo de `152` a `137`, y las bandas `>16/>32/>64` quedan en
+`712/473/153`. La corrección del orden de entrada de proxies también deja la
+secuencia por banda idéntica a las ocho secuencias del sorter nativo. El
+residual ferroviario/vidrio y otros productores siguen pendientes; no se
+cierra ningún issue.

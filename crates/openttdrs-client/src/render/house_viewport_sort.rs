@@ -901,8 +901,15 @@ fn segment_proxy_depths_for_band(
     global_sorted_parents: &[(Entity, ViewportSortableParent, f32)],
     parent_states: &HashMap<Entity, ViewportParentSortState>,
 ) -> Vec<f32> {
-    let mut entries: Vec<(Option<usize>, ParentSprite, Option<f32>)> = Vec::new();
-    for &(entity, parent, depth) in global_sorted_parents {
+    // El sorter nativo recibe los parents en el barrido de
+    // `ViewportAddLandscape`, no en el orden ya resultante del sorter global.
+    // Esto sólo se nota cuando dos cajas no se solapan: el algoritmo conserva
+    // entonces el orden de inserción. Los proxies se crean después del pase
+    // global, así que agregarlos al final cambia el desempate entre teselas.
+    // La clave recupera la misma fila diagonal, ordinal local y ordinal del
+    // child que dio origen a la promoción.
+    let mut entries: Vec<(Option<usize>, ParentSprite, Option<f32>, u64, u8, u64)> = Vec::new();
+    for (global_index, &(entity, parent, depth)) in global_sorted_parents.iter().enumerate() {
         let reaches_band = parent_states
             .get(&entity)
             .map(|state| {
@@ -920,7 +927,14 @@ fn segment_proxy_depths_for_band(
         } else {
             ParentSprite::sprite(entity.to_bits(), parent.sprite_id, parent.bounds)
         };
-        entries.push((None, sprite, Some(depth)));
+        entries.push((
+            None,
+            sprite,
+            Some(depth),
+            parent.insertion_key,
+            (parent.insertion_key & u64::from(u8::MAX)) as u8,
+            global_index as u64,
+        ));
     }
     for (index, candidate) in candidates.iter().enumerate() {
         entries.push((
@@ -931,12 +945,19 @@ fn segment_proxy_depths_for_band(
                 candidate.candidate.promoted_parent.bounds,
             ),
             None,
+            candidate.candidate.promoted_parent.insertion_key,
+            candidate.candidate.combine_ordinal,
+            candidate.candidate.entity_bits,
         ));
     }
 
+    entries.sort_unstable_by_key(|(_, _, _, insertion_key, ordinal, tie_breaker)| {
+        (*insertion_key, *ordinal, *tie_breaker)
+    });
+
     let parents: Vec<_> = entries
         .iter()
-        .map(|(_, parent, _)| parent.clone())
+        .map(|(_, parent, _, _, _, _)| parent.clone())
         .collect();
     let order = viewport_sort_parent_sprites(&parents);
     let mut depths = vec![0.0; candidates.len()];
@@ -1423,9 +1444,8 @@ pub(crate) fn sort_viewport_sortable_parents(
         let screen_band_range = precise_scope.map(|precise_scope| {
             sprite_bounds.map_or_else(
                 || {
-                    precise_scope.sprite_band_range(
-                        precise_scope.parent_bounds_screen_bounds(parent.bounds),
-                    )
+                    precise_scope
+                        .sprite_band_range(precise_scope.parent_bounds_screen_bounds(parent.bounds))
                 },
                 |sprite| precise_scope.sprite_band_range(sprite),
             )
@@ -2580,6 +2600,65 @@ mod tests {
 
         assign_segment_proxy_depths(&[0], Some(4.0), None, &mut depths);
         assert_eq!(depths[0], 4.0 + VIEWPORT_SEGMENT_PROXY_EDGE_STEP);
+    }
+
+    #[test]
+    fn segment_proxy_sort_uses_native_insertion_order_for_disjoint_entries() {
+        let low_entity = Entity::from_bits(1);
+        let proxy_entity = Entity::from_bits(2);
+        let high_entity = Entity::from_bits(3);
+        let low_parent = ViewportSortableParent {
+            sprite_id: 1,
+            bounds: ParentSpriteBounds::new(0, 0, 0, 0, 0, 0),
+            insertion_key: 10,
+            source_depth: 1.0,
+        };
+        let high_parent = ViewportSortableParent {
+            sprite_id: 2,
+            bounds: ParentSpriteBounds::new(10, 10, 10, 10, 10, 10),
+            insertion_key: 30,
+            source_depth: 3.0,
+        };
+        let proxy_parent = ViewportSortableParent {
+            sprite_id: 3,
+            bounds: ParentSpriteBounds::new(5, 5, 5, 5, 5, 5),
+            insertion_key: 20,
+            source_depth: 2.0,
+        };
+        let state = ViewportParentSortState {
+            included: true,
+            can_promote_child: false,
+            screen_band_range: Some((0, 1)),
+        };
+        let parent_states = HashMap::from([(low_entity, state), (high_entity, state)]);
+        let candidate = ViewportSegmentProxyCandidate {
+            candidate: ViewportPromotionCandidate {
+                original_parent: low_entity,
+                child_entity: proxy_entity,
+                combine_ordinal: 1,
+                entity_bits: proxy_entity.to_bits(),
+                promoted_parent: proxy_parent,
+                current_depth: 2.0,
+            },
+            band: 0,
+            sprite: Sprite::default(),
+            anchor: Anchor::CENTER,
+            transform: Transform::default(),
+            chunk: None,
+        };
+
+        // `global_sorted_parents` llega en el orden final del pase global;
+        // debe reordenarse por la clave de inserción antes del sorter local.
+        let depths = segment_proxy_depths_for_band(
+            0,
+            &[candidate],
+            &[
+                (high_entity, high_parent, 3.0),
+                (low_entity, low_parent, 1.0),
+            ],
+            &parent_states,
+        );
+        assert_eq!(depths, vec![2.0]);
     }
 
     #[test]

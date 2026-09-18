@@ -3921,14 +3921,8 @@ fn sort_tree_layers_like_openttd(layers: &mut [(usize, u8, u8, u16)]) {
     let mut remaining_len = len;
     for output in ordered.iter_mut().take(len) {
         let mut minimum_index = 0;
-        let mut minimum = u16::from(layers[remaining[0]].1)
-            + u16::from(layers[remaining[0]].2);
-        for (index, &candidate) in remaining
-            .iter()
-            .enumerate()
-            .take(remaining_len)
-            .skip(1)
-        {
+        let mut minimum = u16::from(layers[remaining[0]].1) + u16::from(layers[remaining[0]].2);
+        for (index, &candidate) in remaining.iter().enumerate().take(remaining_len).skip(1) {
             let value = u16::from(layers[candidate].1) + u16::from(layers[candidate].2);
             if value < minimum {
                 minimum = value;
@@ -4145,6 +4139,12 @@ pub(crate) fn push_forest_tree(
                 Transform::from_translation(pos3),
             ));
             if let Some(parent) = parent_entity {
+                // `AddCombinedSprite` mantiene la copa dentro del bloque del
+                // parent. No segmentarla por las bandas del framebuffer: el
+                // clipping nativo se aplica al bloque ya ordenado y partir
+                // aquí el PNG introduce bordes de una línea en cada cambio
+                // de banda. La promoción sigue disponible si el parent
+                // completo queda fuera del alcance de la vista.
                 entity.insert((
                     ViewportSortableChild {
                         parent,
@@ -4155,11 +4155,6 @@ pub(crate) fn push_forest_tree(
                         bounds: tree_parent_bounds(ctx, slope_z_offset),
                         insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 1),
                         combine_ordinal: draw_order as u8,
-                    },
-                    ViewportSortableSegmentedChild,
-                    ViewportSortableSegmentedSource {
-                        sprite: sprite.clone(),
-                        transform: Transform::from_translation(pos3),
                     },
                 ));
             }

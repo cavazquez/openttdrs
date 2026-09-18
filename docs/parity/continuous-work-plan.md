@@ -9877,3 +9877,19 @@ limpio es `2859 → 1010` diferencias alineadas, con delta medio `0,161401 →
 0,056100` y bandas `>16/>32/>64` de `951/653/222`. La traza y la comparación
 visual conservan `[0,0]`; el vidrio y los productores no cubiertos continúan
 pendientes. No se cierra ningún issue.
+
+### Etapa completada — 2026-09-17 — clipping atómico de árboles y orden de proxies
+
+Los children de `DrawTile_Trees` ya no publican `ViewportSortableSegmentedChild`
+ni una fuente recortable. `SpriteCombine` conserva un único bloque y el
+clipping natural del framebuffer evita duplicar bordes al cruzar bandas. La
+promoción del primer child continúa activa para el caso en que el parent no
+alcance la vista. En paralelo, los proxies que sí necesitan segmentación se
+insertan en el sorter local por `insertion_key`, ordinal del child y desempate
+estable, en vez de anexarse después de los parents globales.
+
+La prueba dirigida de cobertura forestal pasa y la captura de Kale baja de
+`1010` a `768` diferencias alineadas (`0,210417% → 0,160000%`), con delta
+medio `0,056100 → 0,042593` y `>16/>32/>64` `951/653/222 → 712/473/153`.
+La comparación de secuencias reconstruye las ocho bandas nativas sin
+inversiones ni faltantes. #326/#561/#567 permanecen abiertas.

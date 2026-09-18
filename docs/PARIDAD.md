@@ -7098,3 +7098,22 @@ Sobre la misma captura limpia de `Kale_TitleGame.sav` (`132,2`, 800×600,
 `147/108/60`, con traslación `[0,0]`. La A/B fija `153` píxeles y no agrega
 ninguno. El depósito ya no es el hotspot dominante; vidrio y productores
 ferroviarios menores siguen dentro de #326/#561 y no se cierra ninguna issue.
+
+### Matriz de zoom actual — checkpoint para la siguiente etapa
+
+Actualizado: 2026-09-18. Se repitió el mismo foco de `Kale_TitleGame.sav`
+(`132,2`, 800×600, OpenGFX 8bpp, perfil `clean-static`) con la referencia
+OpenTTD y la candidata Bevy compiladas desde el estado publicado.
+
+| escala | diferencias exactas | proporción | delta medio | `>16 / >32 / >64` |
+| --- | ---: | ---: | ---: | ---: |
+| Normal | 45 | 0,009375% | 0,00243906 | 43 / 16 / 5 |
+| Out2x | 15.237 | 3,174375% | 1,18805990 | 14.256 / 11.316 / 6.670 |
+| Out4x | 87.289 | 18,185208% | 6,23965000 | 83.131 / 66.183 / 35.053 |
+
+Las tres capturas conservan traslación `[0,0]`. Las A/B de esta etapa
+descartaron quitar el atlas nativo `_out2`, quitar el redondeo `floor` de
+Out2x, invertir `Ceil` en Out4x y alterar el depth del proxy de vidrio: cada
+variante empeoró la evidencia correspondiente. #326/#561/#567 permanecen
+abiertas; la próxima corrección debe aislar productores o fase de raster en
+Out2x/Out4x y repetirse luego en las seis escalas y cuatro orientaciones.

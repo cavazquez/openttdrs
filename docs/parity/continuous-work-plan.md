@@ -9938,3 +9938,21 @@ En el foco Kale `Normal`, 800×600 y perfil limpio, el residual pasa de `198` a
 traslación permanece `[0,0]`. El depósito SW deja de dominar el diff; quedan
 hotspots pequeños de vidrio/infraestructura y las matrices completas de
 escala/escena, por lo que #326/#561/#567 siguen abiertas.
+
+### Checkpoint publicado — 2026-09-18 — matriz de zoom de Kale
+
+Con `Kale_TitleGame.sav`, foco `(132,2)`, 800×600, OpenGFX 8bpp y
+`clean-static`, la medición actual queda:
+
+| nivel | exactos | proporción | delta medio | `>16 / >32 / >64` |
+| --- | ---: | ---: | ---: | ---: |
+| Normal | 45 | 0,009375% | 0,00243906 | 43 / 16 / 5 |
+| Out2x | 15.237 | 3,174375% | 1,18805990 | 14.256 / 11.316 / 6.670 |
+| Out4x | 87.289 | 18,185208% | 6,23965000 | 83.131 / 66.183 / 35.053 |
+
+Todas las capturas quedan con traslación `[0,0]`. Se descartaron por A/B las
+variantes de atlas sin muestreo nativo, el redondeo alternativo de posiciones y
+un sesgo de depth del proxy ferroviario: cada una aumentó la discrepancia. El
+siguiente frente medible es la fase/productor que domina Out2x y Out4x; se
+mantienen pendientes las seis escalas, cuatro orientaciones y escenas con
+vehículos/depósitos. No se cierra #326/#561/#567.

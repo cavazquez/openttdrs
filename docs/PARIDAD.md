@@ -7138,3 +7138,21 @@ referencia idéntica, baja `57.191 → 57.172`. Out2x permanece en `15.237` y
 la rama no alcanza Normal ni Out8x. No se cierra ninguna issue: #326/#561/#567
 siguen abiertas para las restantes fases, productores, orientaciones y
 escalas.
+
+### Corrección focal publicada — 2026-09-18 — cuantización de imágenes directas Out2x
+
+La cuantización de borde de Out2x ahora también resuelve sprites `Image`
+directos, que no tienen `TextureAtlas`: árboles, casas recoloreadas y otros
+productores de paleta reciben el tamaño de su `Image` (o de `Sprite::rect`) al
+calcular la huella visible. La regla sigue limitada a capturas, sólo al
+`Floor` de Out2x clamped; los `custom_size` quedan fuera. Una A/B que extendía
+la misma regla a Out4x empeoró `87.289 → 95.691`, por lo que ese nivel no se
+modifica.
+
+En `Kale_TitleGame.sav`, foco `(132,2)`, 800×600, OpenGFX 8bpp y
+`clean-static`, Out2x baja de `15.237` a `4.427` diferencias (`-71,0%`), el
+delta medio de `1,18805990` a `0,35921146` y las bandas `>16/>32/>64` de
+`14.256/11.316/6.670` a `4.347/3.750/2.132`. En el espejo `(2,132)` baja de
+`9.367` a `1.591`, con delta medio `0,559923 → 0,13686094` y traslación
+`[0,0]`. Normal conserva `45`, Out4x `87.289` y Out8x `71.239`; no se cierra
+ninguna issue.

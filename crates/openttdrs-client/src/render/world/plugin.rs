@@ -120,9 +120,24 @@ fn native_map_sprite_visible_size(sprite: &Sprite, atlas_rect: Rect) -> Vec2 {
         .map_or_else(|| atlas_rect.size(), |rect| rect.size())
 }
 
+/// Las imágenes directas sólo tienen una regla probada para el `Floor` de
+/// Out2x clamped; extenderlas al `Ceil` de Out4x altera la huella nativa.
+#[must_use]
+fn native_map_direct_sprite_source_size(
+    sprite: &Sprite,
+    rounding: NativeMapSpritePositionRounding,
+    image_size: Option<Vec2>,
+) -> Option<Vec2> {
+    if rounding != NativeMapSpritePositionRounding::Floor {
+        return None;
+    }
+    sprite.rect.map(|rect| rect.size()).or(image_size)
+}
+
 fn sync_native_map_sprite_position(
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
     camera_state: Res<MapShotCameraState>,
+    images: Res<Assets<Image>>,
     layouts: Res<Assets<TextureAtlasLayout>>,
     mut queries: ParamSet<(
         Query<
@@ -172,13 +187,23 @@ fn sync_native_map_sprite_position(
         {
             continue;
         }
-        let Some(atlas) = sprite.texture_atlas.as_ref() else {
-            continue;
+        let source_size = if let Some(atlas) = sprite.texture_atlas.as_ref() {
+            let Some(rect) = atlas.texture_rect(&layouts) else {
+                continue;
+            };
+            native_map_sprite_visible_size(sprite, rect.as_rect())
+        } else {
+            let Some(source_size) = native_map_direct_sprite_source_size(
+                sprite,
+                rounding,
+                images
+                    .get(&sprite.image)
+                    .map(|image| image.size().as_vec2()),
+            ) else {
+                continue;
+            };
+            source_size
         };
-        let Some(rect) = atlas.texture_rect(&layouts) else {
-            continue;
-        };
-        let source_size = native_map_sprite_visible_size(sprite, rect.as_rect());
         let current_left = transform.translation.x - source_size.x * 0.5;
         let current_top = transform.translation.y + source_size.y * 0.5;
         let screen_left = match rounding {
@@ -658,6 +683,38 @@ mod tests {
                 Rect::new(0.0, 0.0, 64.0, 31.0)
             ),
             Vec2::new(64.0, 31.0)
+        );
+    }
+
+    #[test]
+    fn native_map_direct_sprite_size_is_only_used_for_floor_capture() {
+        let cropped = Sprite {
+            rect: Some(Rect::new(3.0, 5.0, 19.0, 22.0)),
+            ..Sprite::default()
+        };
+        assert_eq!(
+            super::native_map_direct_sprite_source_size(
+                &cropped,
+                super::NativeMapSpritePositionRounding::Floor,
+                Some(Vec2::new(64.0, 31.0)),
+            ),
+            Some(Vec2::new(16.0, 17.0))
+        );
+        assert_eq!(
+            super::native_map_direct_sprite_source_size(
+                &Sprite::default(),
+                super::NativeMapSpritePositionRounding::Floor,
+                Some(Vec2::new(64.0, 31.0)),
+            ),
+            Some(Vec2::new(64.0, 31.0))
+        );
+        assert_eq!(
+            super::native_map_direct_sprite_source_size(
+                &Sprite::default(),
+                super::NativeMapSpritePositionRounding::Ceil,
+                Some(Vec2::new(64.0, 31.0)),
+            ),
+            None
         );
     }
 

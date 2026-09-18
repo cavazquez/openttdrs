@@ -9976,3 +9976,26 @@ interior `(189,126)` el cambio es `53.857 → 53.733`; en el espejo `(2,132)`
 La regresión unitaria cubre el tamaño visible del recorte y el fallback al
 rectángulo completo del atlas. #326/#561/#567 siguen abiertas: todavía faltan
 las matrices completas, más productores y escenas con vehículos/depósitos.
+
+### Etapa siguiente — 2026-09-18 — cuantización de imágenes directas en Out2x
+
+La ruta de cuantización de borde ya no ignora sprites sin `TextureAtlas`.
+Cuando el raster nativo selecciona `Floor` para Out2x clamped, los sprites
+`Image` directos usan el tamaño de su imagen; un `Sprite::rect` conserva el
+tamaño visible del recorte. `custom_size` sigue fuera de la corrección. Una
+variante que aplicaba el fallback a Out4x empeoró la captura focal de `87.289`
+a `95.691` diferencias, así que la compuerta queda limitada al caso validado.
+
+La evidencia reproducible sobre `Kale_TitleGame.sav`, 800×600, OpenGFX 8bpp y
+`clean-static` es:
+
+- `(132,2)`, Out2x: `15.237 → 4.427` diferencias alineadas, delta medio
+  `1,18805990 → 0,35921146`, bandas `>16/>32/>64`
+  `14.256/11.316/6.670 → 4.347/3.750/2.132`, traslación `[0,0]`;
+- `(2,132)`, Out2x: `9.367 → 1.591` diferencias, delta medio
+  `0,559923 → 0,13686094`, traslación `[0,0]`;
+- Normal permanece en `45`, Out4x en `87.289` y Out8x en `71.239`.
+
+La regresión unitaria cubre el fallback directo, el recorte `Sprite::rect` y
+la exclusión de `Ceil`. #326/#561/#567 siguen abiertas para productores,
+fases, orientaciones y escalas restantes.

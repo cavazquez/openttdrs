@@ -7118,3 +7118,23 @@ Out2x, invertir `Ceil` en Out4x y alterar el depth del proxy de vidrio: cada
 variante empeoró la evidencia correspondiente. #326/#561/#567 permanecen
 abiertas; la próxima corrección debe aislar productores o fase de raster en
 Out2x/Out4x/Out8x y repetirse luego en las seis escalas y cuatro orientaciones.
+
+### Corrección focal publicada — 2026-09-18 — cuantización de recortes Out4x
+
+La cuantización de posiciones de las capturas nativas ya no descarta sprites
+que tienen `Sprite::rect`. Para esos sprites se usa el tamaño visible del
+recorte, no el rectángulo completo del atlas; los `custom_size` siguen fuera
+de esta corrección porque ya declaran una huella lógica explícita. La regla
+continúa limitada a la captura, a los zooms que ya selecciona (Out2x en borde
+y Out4x) y al caso de anclaje/rotación que coincide con el raster nativo.
+
+La A/B con la misma referencia de `Kale_TitleGame.sav`, foco `(132,2)`,
+800×600, OpenGFX 8bpp y `clean-static`, baja Out4x de `91.245` a `87.289`
+diferencias (`-4,3%`), el delta medio de
+`6,30223594` a `6,23965000` y las bandas `>16/>32/>64` de
+`86.478/69.430/38.018` a `83.131/66.183/35.053`. En el interior
+`(189,126)` baja `53.857 → 53.733`; en el espejo `(2,132)`, con una
+referencia idéntica, baja `57.191 → 57.172`. Out2x permanece en `15.237` y
+la rama no alcanza Normal ni Out8x. No se cierra ninguna issue: #326/#561/#567
+siguen abiertas para las restantes fases, productores, orientaciones y
+escalas.

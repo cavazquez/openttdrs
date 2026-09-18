@@ -9958,3 +9958,21 @@ siguiente frente medible es la fase/productor que domina Out2x y Out4x; se
 mantienen pendientes las seis escalas, cuatro orientaciones y escenas con
 vehículos/depósitos. La prueba `Floor` sólo en el borde Out8x también se
 descartó (`71.239 → 366.865`). No se cierra #326/#561/#567.
+
+### Etapa siguiente — 2026-09-18 — cuantización de recortes Out4x
+
+La cuantización de posiciones para capturas nativas incorpora ahora el tamaño
+visible de `Sprite::rect` cuando el sprite es un recorte del atlas. Los
+`custom_size` permanecen excluidos porque representan una huella lógica
+explícita. El ajuste sólo actúa en Out4x (y mantiene la regla ya validada de
+Out2x en el borde), sin tocar el juego normal ni Out8x.
+
+La A/B con referencia fija de `Kale_TitleGame.sav`, `(132,2)`, 800×600,
+OpenGFX 8bpp y `clean-static` reduce Out4x de `91.245` a `87.289` diferencias,
+`-4,3%`; el delta medio pasa de `6,30223594` a `6,23965000` y las bandas
+`>16/>32/>64` de `86.478/69.430/38.018` a `83.131/66.183/35.053`. En el
+interior `(189,126)` el cambio es `53.857 → 53.733`; en el espejo `(2,132)`
+`57.191 → 57.172`, ambos con traslación `[0,0]`. Out2x permanece en `15.237`.
+La regresión unitaria cubre el tamaño visible del recorte y el fallback al
+rectángulo completo del atlas. #326/#561/#567 siguen abiertas: todavía faltan
+las matrices completas, más productores y escenas con vehículos/depósitos.

@@ -90,9 +90,11 @@ fn sync_flat_water_raster_footprint(
 ///
 /// La cuantización depende del nivel y de la fase del clamp: Out2x en borde
 /// conserva el redondeo hacia abajo del recorte nativo, mientras Out4x usa
-/// redondeo hacia arriba. Out8x ya agrupa la raíz en bloques de ocho y aplicar
-/// una regla global empeora escenas interiores. Es una corrección exclusiva
-/// de capturas de mapa hasta disponer de una matriz de fase completa.
+/// redondeo hacia arriba. Los recortes de textura usan su tamaño visible;
+/// los tamaños explícitos quedan fuera porque ya expresan una huella lógica.
+/// Out8x ya agrupa la raíz en bloques de ocho y aplicar una regla global
+/// empeora escenas interiores. Es una corrección exclusiva de capturas de
+/// mapa hasta disponer de una matriz de fase completa.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NativeMapSpritePositionRounding {
     Floor,
@@ -109,6 +111,13 @@ fn native_map_sprite_position_rounding(
         Some(4) => Some(NativeMapSpritePositionRounding::Ceil),
         _ => None,
     }
+}
+
+#[must_use]
+fn native_map_sprite_visible_size(sprite: &Sprite, atlas_rect: Rect) -> Vec2 {
+    sprite
+        .rect
+        .map_or_else(|| atlas_rect.size(), |rect| rect.size())
 }
 
 fn sync_native_map_sprite_position(
@@ -157,7 +166,6 @@ fn sync_native_map_sprite_position(
     };
     for (sprite, mut transform, anchor) in &mut queries.p1() {
         if sprite.custom_size.is_some()
-            || sprite.rect.is_some()
             || *anchor != Anchor::CENTER
             || transform.rotation != Quat::IDENTITY
             || transform.scale != Vec3::ONE
@@ -170,7 +178,7 @@ fn sync_native_map_sprite_position(
         let Some(rect) = atlas.texture_rect(&layouts) else {
             continue;
         };
-        let source_size = rect.as_rect().size();
+        let source_size = native_map_sprite_visible_size(sprite, rect.as_rect());
         let current_left = transform.translation.x - source_size.x * 0.5;
         let current_top = transform.translation.y + source_size.y * 0.5;
         let screen_left = match rounding {
@@ -560,7 +568,7 @@ mod tests {
     use std::collections::HashSet;
 
     use bevy::ecs::system::RunSystemOnce;
-    use bevy::prelude::{OrthographicProjection, Projection, Sprite, Vec2, World};
+    use bevy::prelude::{OrthographicProjection, Projection, Rect, Sprite, Vec2, World};
 
     use super::{
         FLAT_WATER_RASTER_FOOTPRINT, FlatWaterRasterFootprintState, LoadedMapTileChunks,
@@ -631,6 +639,25 @@ mod tests {
         assert_eq!(
             super::native_map_sprite_position_rounding(true, 8.0, true),
             None
+        );
+    }
+
+    #[test]
+    fn native_map_visible_size_follows_a_texture_crop() {
+        let sprite = Sprite {
+            rect: Some(Rect::new(3.0, 5.0, 19.0, 22.0)),
+            ..Sprite::default()
+        };
+        assert_eq!(
+            super::native_map_sprite_visible_size(&sprite, Rect::new(0.0, 0.0, 64.0, 31.0)),
+            Vec2::new(16.0, 17.0)
+        );
+        assert_eq!(
+            super::native_map_sprite_visible_size(
+                &Sprite::default(),
+                Rect::new(0.0, 0.0, 64.0, 31.0)
+            ),
+            Vec2::new(64.0, 31.0)
         );
     }
 

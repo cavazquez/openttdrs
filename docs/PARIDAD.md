@@ -7065,3 +7065,19 @@ perfil `clean-static`, la A/B baja de `768` a `376` diferencias alineadas
 `712/473/153`, con traslación `[0,0]` en ambos casos. La línea diagonal de
 cercas deja de ser el hotspot dominante; el residuo del depósito/vidrio y los
 productores no cubiertos siguen pendientes. No se cierra ningún issue.
+
+### Corrección focal publicada — 2026-09-18 — #326/#567-RAIL-1008-NFO-ANCHOR
+
+El overlay ferroviario `1008` (`rail_1008.png`) usaba una geometría de
+`38×7` con `yrel=21`, aunque el NFO y el PNG OpenGFX declaran `40×7` y
+`yrel=20`. La discrepancia desplazaba una fila de vía bajo el depósito SW y
+dejaba que esa capa cubriera píxeles que el raster nativo conserva del tile
+vecino. La tabla vuelve a usar el anclaje NFO; la prueba de offsets fija el
+resultado `y=-8`.
+
+En `Kale_TitleGame.sav`, foco `(132,2)`, 800×600, `Normal`, OpenGFX 8bpp y
+perfil `clean-static`, la comparación exacta baja de `376` a `198` píxeles
+(`0,0783333% → 0,04125%`, `-47,3%`). El delta medio pasa de `0,0239448` a
+`0,0114188`; las bandas `>16/>32/>64` quedan en `147/108/60` frente a
+`320/225/153`, sin traslación y sin empeorar ningún píxel del foco. El residual
+ferroviario/vidrio permanece dentro de #326/#561; no se cierra ninguna issue.

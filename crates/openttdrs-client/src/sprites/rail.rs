@@ -2356,7 +2356,8 @@ pub fn rail_ghost_overlay_offset(sprite_id: u32) -> Vec2 {
         1005 => (-19.0, 5.0, 40.0, 21.0),
         1006 => (-19.0, 5.0, 40.0, 21.0),
         1007 => (-19.0, 5.0, 40.0, 7.0),
-        1008 => (-18.0, 21.0, 38.0, 7.0),
+        // OpenGFX NFO: 40x7, xrel=-19, yrel=20.
+        1008 => (-19.0, 20.0, 40.0, 7.0),
         1009 => (11.0, 5.0, 12.0, 19.0),
         1010 => (-21.0, 5.0, 12.0, 20.0),
         _ => return Vec2::ZERO,
@@ -3437,7 +3438,7 @@ mod tests {
         assert_eq!(rail_ghost_overlay_offset(1005), Vec2::ZERO);
         assert_eq!(rail_ghost_overlay_offset(1006), Vec2::ZERO);
         assert_eq!(rail_ghost_overlay_offset(1007), Vec2::new(0.0, 7.0));
-        assert_eq!(rail_ghost_overlay_offset(1008), Vec2::new(0.0, -9.0));
+        assert_eq!(rail_ghost_overlay_offset(1008), Vec2::new(0.0, -8.0));
         assert_eq!(rail_ghost_overlay_offset(1009), Vec2::new(16.0, 1.0));
         assert_eq!(rail_ghost_overlay_offset(1010), Vec2::new(-16.0, 0.5));
     }

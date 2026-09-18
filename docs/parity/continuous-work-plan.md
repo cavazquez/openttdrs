@@ -9907,3 +9907,18 @@ Resultado limpio en `(132,2)`, 800×600, `Normal`, OpenGFX 8bpp:
 `768 → 376` diferencias alineadas, delta medio `0,042593 → 0,023945` y
 `>16/>32/>64` `712/473/153 → 320/225/153`, sin traslación. El residual del
 depósito/vidrio continúa como el siguiente foco; #326/#561/#567 siguen abiertas.
+
+### Etapa siguiente — 2026-09-18 — anclaje NFO de `rail_1008`
+
+La vía `1008` del depósito SW estaba centrada con una tabla que no coincidía
+con su recurso OpenGFX: `rail_1008.png` mide `40×7` y su NFO usa `yrel=20`,
+pero el cliente calculaba el centro como `38×7`, `yrel=21`. Se corrigió el
+offset a `(-19,20,40,7)` y se actualizó la regresión de
+`rail_ghost_overlay_offset`.
+
+En la misma captura Kale `Normal`, 800×600 y perfil limpio, el residual pasa
+de `376` a `198` píxeles (`0,0783333% → 0,04125%`), con delta medio
+`0,0239448 → 0,0114188` y bandas `>16/>32/>64` de
+`320/225/153 → 147/108/60`. La etapa no introduce píxeles nuevos y no cierra
+#326/#561/#567: todavía faltan productores ferroviarios/vidrio y las matrices
+completas de escalas y escenas.

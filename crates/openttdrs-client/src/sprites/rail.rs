@@ -2355,11 +2355,14 @@ pub fn rail_ghost_overlay_offset(sprite_id: u32) -> Vec2 {
     let (xrel, yrel, w, h) = match base_id {
         1005 => (-19.0, 5.0, 40.0, 21.0),
         1006 => (-19.0, 5.0, 40.0, 21.0),
-        1007 => (-19.0, 5.0, 40.0, 7.0),
+        // OpenGFX NFO: 40x7, xrel=-19, yrel=4.
+        1007 => (-19.0, 4.0, 40.0, 7.0),
         // OpenGFX NFO: 40x7, xrel=-19, yrel=20.
         1008 => (-19.0, 20.0, 40.0, 7.0),
-        1009 => (11.0, 5.0, 12.0, 19.0),
-        1010 => (-21.0, 5.0, 12.0, 20.0),
+        // OpenGFX NFO: 12x19, xrel=11, yrel=6.
+        1009 => (11.0, 6.0, 12.0, 19.0),
+        // OpenGFX NFO: 12x19, xrel=-21, yrel=6.
+        1010 => (-21.0, 6.0, 12.0, 19.0),
         _ => return Vec2::ZERO,
     };
     let cx = xrel + w / 2.0;
@@ -3437,10 +3440,10 @@ mod tests {
     fn rail_ghost_overlay_offset_matches_opengfx_nfo() {
         assert_eq!(rail_ghost_overlay_offset(1005), Vec2::ZERO);
         assert_eq!(rail_ghost_overlay_offset(1006), Vec2::ZERO);
-        assert_eq!(rail_ghost_overlay_offset(1007), Vec2::new(0.0, 7.0));
+        assert_eq!(rail_ghost_overlay_offset(1007), Vec2::new(0.0, 8.0));
         assert_eq!(rail_ghost_overlay_offset(1008), Vec2::new(0.0, -8.0));
-        assert_eq!(rail_ghost_overlay_offset(1009), Vec2::new(16.0, 1.0));
-        assert_eq!(rail_ghost_overlay_offset(1010), Vec2::new(-16.0, 0.5));
+        assert_eq!(rail_ghost_overlay_offset(1009), Vec2::new(16.0, 0.0));
+        assert_eq!(rail_ghost_overlay_offset(1010), Vec2::new(-16.0, 0.0));
     }
 
     #[test]

@@ -9922,3 +9922,19 @@ de `376` a `198` píxeles (`0,0783333% → 0,04125%`), con delta medio
 `320/225/153 → 147/108/60`. La etapa no introduce píxeles nuevos y no cierra
 #326/#561/#567: todavía faltan productores ferroviarios/vidrio y las matrices
 completas de escalas y escenas.
+
+### Etapa siguiente — 2026-09-18 — familia NFO de overlays ferroviarios
+
+La corrección anterior de `rail_1008` reveló que la misma tabla conservaba
+anclas antiguas para `1007`, `1009` y `1010`. Se restauraron las dimensiones y
+los offsets declarados por OpenGFX (`1007: 40×7, -19/4`; `1008: 40×7,
+-19/20`; `1009: 12×19, 11/6`; `1010: 12×19, -21/6`) y se actualizaron las
+regresiones unitarias.
+
+En el foco Kale `Normal`, 800×600 y perfil limpio, el residual pasa de `198` a
+`45` píxeles (`0,04125% → 0,009375%`), con delta medio
+`0,01141875 → 0,00243906` y bandas `>16/>32/>64` de
+`147/108/60 → 43/16/5`. Se corrigen `153` píxeles sin empeorar ninguno y la
+traslación permanece `[0,0]`. El depósito SW deja de dominar el diff; quedan
+hotspots pequeños de vidrio/infraestructura y las matrices completas de
+escala/escena, por lo que #326/#561/#567 siguen abiertas.

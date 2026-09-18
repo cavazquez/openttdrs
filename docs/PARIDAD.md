@@ -7081,3 +7081,20 @@ perfil `clean-static`, la comparación exacta baja de `376` a `198` píxeles
 `0,0114188`; las bandas `>16/>32/>64` quedan en `147/108/60` frente a
 `320/225/153`, sin traslación y sin empeorar ningún píxel del foco. El residual
 ferroviario/vidrio permanece dentro de #326/#561; no se cierra ninguna issue.
+
+### Corrección focal publicada — 2026-09-18 — #326/#567-RAIL-OVERLAY-NFO-FAMILY
+
+La tabla de anclajes de overlays ferroviarios se alineó por completo con
+`ogfx1_base.nfo`: `1007` usa `40×7, (-19,4)`, `1008` `40×7, (-19,20)`,
+`1009` `12×19, (11,6)` y `1010` `12×19, (-21,6)`. Las entradas históricas
+tenían alturas o dimensiones distintas; el error era especialmente visible
+en la fachada SW del depósito y en las vías de salida contiguas. Las pruebas
+de `rail_ghost_overlay_offset` fijan los cuatro contratos.
+
+Sobre la misma captura limpia de `Kale_TitleGame.sav` (`132,2`, 800×600,
+`Normal`, OpenGFX 8bpp), el residual baja de `198` a `45` píxeles
+(`0,04125% → 0,009375%`, `-77,3%`). El delta medio pasa de `0,01141875` a
+`0,00243906`; las bandas `>16/>32/>64` quedan en `43/16/5` frente a
+`147/108/60`, con traslación `[0,0]`. La A/B fija `153` píxeles y no agrega
+ninguno. El depósito ya no es el hotspot dominante; vidrio y productores
+ferroviarios menores siguen dentro de #326/#561 y no se cierra ninguna issue.

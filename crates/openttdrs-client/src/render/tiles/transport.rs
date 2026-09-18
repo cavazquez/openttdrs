@@ -30,8 +30,8 @@ use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     CompanyColoredSprites, MapVisualLayer, TileRenderContext, ViewportSortableChild,
-    ViewportSortableParent, WaterTile, WorldAssets, sprite_from_atlas_or_company_white_colour,
-    viewport_insertion_key, viewport_source_depth,
+    ViewportSortableParent, ViewportSortableSegmentedSource, WaterTile, WorldAssets,
+    sprite_from_atlas_or_company_white_colour, viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
     CatenarySpriteDraw, CatenaryWireDraw, CompanyColour, ONEWAY_ROAD_SPRITE_META,
@@ -3572,11 +3572,14 @@ pub(crate) fn spawn_rail_tile(
             pos3.y += corner_z as f32;
             pos3.z += corner_z as f32 * 0.0001;
             let source_depth = viewport_source_depth(pos3.z, ctx.tx, map_dims.0);
-            commands.spawn((
+            let sprite =
+                sprite_from_atlas_or_company_white_colour(company, owner_colour, img, &filename);
+            let transform = Transform::from_translation(Vec3::new(pos3.x, pos3.y, source_depth));
+            let mut entity = commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                sprite_from_atlas_or_company_white_colour(company, owner_colour, img, &filename),
-                Transform::from_translation(Vec3::new(pos3.x, pos3.y, source_depth)),
+                sprite.clone(),
+                transform,
                 ViewportSortableParent {
                     sprite_id,
                     bounds: rail_track_fence_parent_bounds(
@@ -3595,6 +3598,9 @@ pub(crate) fn spawn_rail_tile(
                     source_depth,
                 },
             ));
+            if fence_bounds.oy == 15 {
+                entity.insert(ViewportSortableSegmentedSource { sprite, transform });
+            }
         }
     }
 

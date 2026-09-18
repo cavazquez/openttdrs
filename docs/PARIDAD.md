@@ -7049,3 +7049,19 @@ perfil `clean-static`, la A/B baja de `1010` a `768` diferencias alineadas
 secuencia por banda idéntica a las ocho secuencias del sorter nativo. El
 residual ferroviario/vidrio y otros productores siguen pendientes; no se
 cierra ningún issue.
+
+### Corrección publicada — 2026-09-17 — #326/#567-RAIL-FENCE-BAND-CLIPPING
+
+Las cercas ferroviarias del borde SE (`SpriteBounds.oy = 15`) conservan ahora
+una fuente segmentable para que el compositor las recorte y ordene por banda,
+igual que las llamadas locales de `ViewportDoDraw`. El borde NW permanece como
+parent atómico: segmentarlo introduce una cerca espuria sobre la vía en este
+foco. La regresión cubre la caja SE y la presencia de la fuente completa.
+
+En `Kale_TitleGame.sav`, foco `(132,2)`, 800×600, `Normal`, OpenGFX 8bpp y
+perfil `clean-static`, la A/B baja de `768` a `376` diferencias alineadas
+(`0,160000% → 0,078333%`, `-51,0%`). El delta medio pasa de `0,042593` a
+`0,023945`; las bandas `>16/>32/>64` quedan en `320/225/153` frente a
+`712/473/153`, con traslación `[0,0]` en ambos casos. La línea diagonal de
+cercas deja de ser el hotspot dominante; el residuo del depósito/vidrio y los
+productores no cubiertos siguen pendientes. No se cierra ningún issue.

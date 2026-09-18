@@ -9893,3 +9893,17 @@ La prueba dirigida de cobertura forestal pasa y la captura de Kale baja de
 medio `0,056100 → 0,042593` y `>16/>32/>64` `951/653/222 → 712/473/153`.
 La comparación de secuencias reconstruye las ocho bandas nativas sin
 inversiones ni faltantes. #326/#561/#567 permanecen abiertas.
+
+### Etapa siguiente — 2026-09-17 — cercas ferroviarias por banda
+
+La comparación focal de Kale aisló el siguiente productor grande: las cercas
+SE de `DrawTrackDetails` cruzan vegetación y vía, pero un parent completo las
+dejaba detrás de otros sprites en una parte de la diagonal. Se agregó
+`ViewportSortableSegmentedSource` sólo a ese borde (`oy=15`); segmentar también
+NW no es equivalente y empeora la escena. La prueba de cobertura fija la caja
+SE y la fuente segmentable.
+
+Resultado limpio en `(132,2)`, 800×600, `Normal`, OpenGFX 8bpp:
+`768 → 376` diferencias alineadas, delta medio `0,042593 → 0,023945` y
+`>16/>32/>64` `712/473/153 → 320/225/153`, sin traslación. El residual del
+depósito/vidrio continúa como el siguiente foco; #326/#561/#567 siguen abiertas.

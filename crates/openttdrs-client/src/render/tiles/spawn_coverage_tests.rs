@@ -5338,11 +5338,12 @@ fn rail_fence_and_signal_join_the_global_viewport_sorter() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();
     let m5 = ((RAIL_TILE_NORMAL | RAIL_TILE_SIGNALS) << 6) | RAIL_TB_X;
-    // Señal X hacia SW (bit 3) y FenceNW en el nibble bajo de m3hi. Los
+    // Señal X hacia SW (bit 3) y FenceSE en el nibble bajo de m3hi. Los
     // estados de señal viven en el nibble alto, por lo que ambos contratos
-    // pueden coexistir en una única tesela plana.
+    // pueden coexistir en una única tesela plana. La cerca SE usa la misma
+    // prueba de recorte por banda que la vía real.
     let m3 = 1 << 7;
-    let m3hi = 2;
+    let m3hi = 3;
     let signal_sprite_id = crate::sprites::collect_signal_sprite_draws(0, m3, m3hi, m5)
         .into_iter()
         .next()
@@ -5419,8 +5420,17 @@ fn rail_fence_and_signal_join_the_global_viewport_sorter() {
         .expect("signal parent");
     assert_eq!(
         fence.bounds,
-        ParentSpriteBounds::new(48, 33, 0, 63, 33, 3),
-        "FenceNW conserva la caja _fence_offsets de DrawTrackDetails"
+        ParentSpriteBounds::new(48, 47, 0, 63, 47, 3),
+        "FenceSE conserva la caja _fence_offsets de DrawTrackDetails"
+    );
+    assert_eq!(
+        world
+            .query::<(&ViewportSortableParent, &ViewportSortableSegmentedSource)>()
+            .iter(&world)
+            .filter(|(parent, _)| parent.sprite_id == 1301)
+            .count(),
+        1,
+        "FenceSE debe conservar la fuente completa para clipping por banda"
     );
     assert_eq!(
         signal.bounds,

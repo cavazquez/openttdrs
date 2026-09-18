@@ -7110,10 +7110,11 @@ OpenTTD y la candidata Bevy compiladas desde el estado publicado.
 | Normal | 45 | 0,009375% | 0,00243906 | 43 / 16 / 5 |
 | Out2x | 15.237 | 3,174375% | 1,18805990 | 14.256 / 11.316 / 6.670 |
 | Out4x | 87.289 | 18,185208% | 6,23965000 | 83.131 / 66.183 / 35.053 |
+| Out8x | 71.239 | 14,841458% | 5,17159844 | 68.526 / 58.515 / 32.987 |
 
 Las tres capturas conservan traslación `[0,0]`. Las A/B de esta etapa
 descartaron quitar el atlas nativo `_out2`, quitar el redondeo `floor` de
 Out2x, invertir `Ceil` en Out4x y alterar el depth del proxy de vidrio: cada
 variante empeoró la evidencia correspondiente. #326/#561/#567 permanecen
 abiertas; la próxima corrección debe aislar productores o fase de raster en
-Out2x/Out4x y repetirse luego en las seis escalas y cuatro orientaciones.
+Out2x/Out4x/Out8x y repetirse luego en las seis escalas y cuatro orientaciones.

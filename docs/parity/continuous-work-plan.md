@@ -9949,10 +9949,12 @@ Con `Kale_TitleGame.sav`, foco `(132,2)`, 800×600, OpenGFX 8bpp y
 | Normal | 45 | 0,009375% | 0,00243906 | 43 / 16 / 5 |
 | Out2x | 15.237 | 3,174375% | 1,18805990 | 14.256 / 11.316 / 6.670 |
 | Out4x | 87.289 | 18,185208% | 6,23965000 | 83.131 / 66.183 / 35.053 |
+| Out8x | 71.239 | 14,841458% | 5,17159844 | 68.526 / 58.515 / 32.987 |
 
 Todas las capturas quedan con traslación `[0,0]`. Se descartaron por A/B las
 variantes de atlas sin muestreo nativo, el redondeo alternativo de posiciones y
 un sesgo de depth del proxy ferroviario: cada una aumentó la discrepancia. El
 siguiente frente medible es la fase/productor que domina Out2x y Out4x; se
 mantienen pendientes las seis escalas, cuatro orientaciones y escenas con
-vehículos/depósitos. No se cierra #326/#561/#567.
+vehículos/depósitos. La prueba `Floor` sólo en el borde Out8x también se
+descartó (`71.239 → 366.865`). No se cierra #326/#561/#567.

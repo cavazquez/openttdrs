@@ -826,7 +826,7 @@ fn auto_place_candidate_fits(
         candidate.pos.x >= -(candidate.size.x * 0.25)
             && candidate.pos.x <= viewport.x - candidate.size.x * 0.5
             && candidate.pos.y >= TOOLBAR_AVOID
-            && candidate.pos.y <= viewport_bottom - candidate.size.y * 0.25
+            && candidate.pos.y <= viewport_bottom - candidate.size.y * 0.75
     } else {
         candidate.pos.x >= 0.0
             && candidate.pos.y >= TOOLBAR_AVOID
@@ -1868,6 +1868,34 @@ mod tests {
         let second = auto_place_window(size, viewport, &occupied);
         assert_eq!(second, Vec2::new(250.0, TOOLBAR_AVOID));
         assert!(!WindowPlacementRect { pos: second, size }.overlaps(occupied[0]));
+    }
+
+    #[test]
+    fn partial_auto_placement_keeps_three_quarters_vertical_visible() {
+        let viewport = Vec2::new(1_280.0, 720.0);
+        let size = Vec2::new(440.0, 400.0);
+        let viewport_bottom = viewport.y - STATUSBAR_AVOID;
+        let lowest_accessible = WindowPlacementRect {
+            pos: Vec2::new(0.0, viewport_bottom - size.y * 0.75),
+            size,
+        };
+        assert!(auto_place_candidate_fits(
+            lowest_accessible,
+            viewport,
+            &[],
+            true
+        ));
+
+        let mostly_hidden = WindowPlacementRect {
+            pos: lowest_accessible.pos + Vec2::Y,
+            size,
+        };
+        assert!(!auto_place_candidate_fits(
+            mostly_hidden,
+            viewport,
+            &[],
+            true
+        ));
     }
 
     #[test]

@@ -11,6 +11,8 @@
 //! Escala opcional: `OPENTTDRS_SHOT_UI_SCALE=1` o `2`.
 //! `OPENTTDRS_MAIN_MENU_SHOT=/ruta/captura.png` guarda el menú real sin
 //! arrancar una partida; es el smoke visual de sus accesos localizados.
+//! `OPENTTDRS_FIRST_ROUTE_GUIDE_SHOT=/ruta/captura.png` guarda la guía de
+//! «Primera ruta» sobre un JSON de ese fixture ya cargado y termina el proceso.
 //! En captura individual, `OPENTTDRS_MAP_SHOT_SCALE=1/2/4/8` fija además el
 //! zoom de la cámara del mapa antes de abrir la ventana (UI sin escalar).
 //! `OPENTTDRS_WINDOW_SHOT_DEPOT_KIND=road|rail|ship` selecciona la familia
@@ -1240,7 +1242,8 @@ impl Plugin for WindowsShotPlugin {
         let windows_shot = std::env::var_os("OPENTTDRS_WINDOWS_SHOT").is_some();
         let map_shot = std::env::var_os("OPENTTDRS_MAP_SHOT").is_some();
         let main_menu_shot = std::env::var_os("OPENTTDRS_MAIN_MENU_SHOT").is_some();
-        if windows_shot || map_shot || main_menu_shot {
+        let first_route_guide_shot = std::env::var_os("OPENTTDRS_FIRST_ROUTE_GUIDE_SHOT").is_some();
+        if windows_shot || map_shot || main_menu_shot || first_route_guide_shot {
             app.add_systems(Startup, apply_shot_settings);
         }
         if main_menu_shot {
@@ -1248,6 +1251,21 @@ impl Plugin for WindowsShotPlugin {
                 Update,
                 main_menu_shot_driver
                     .run_if(in_state(ClientScreen::MainMenu))
+                    .after(UpdateSet::Ui),
+            );
+        }
+        if first_route_guide_shot {
+            // El JSON de la primera ruta entra por su ruta normal de carga.
+            // Sólo congelamos y capturamos la UI ya materializada; el driver
+            // no construye infraestructura ni simula acciones del jugador.
+            app.add_systems(
+                OnEnter(ClientScreen::InGame),
+                pause_simulation_for_visual_capture,
+            );
+            app.add_systems(
+                Update,
+                first_route_guide_shot_driver
+                    .run_if(in_state(ClientScreen::InGame))
                     .after(UpdateSet::Ui),
             );
         }
@@ -1336,6 +1354,27 @@ fn main_menu_shot_driver(
         && let Ok(path) = std::env::var("OPENTTDRS_MAIN_MENU_SHOT")
     {
         info!("main_menu_shot: guardando captura en {path}");
+        commands
+            .spawn(Screenshot::primary_window())
+            .observe(save_to_disk(path));
+    }
+    if *frame == EXIT_FRAME {
+        exit.write(AppExit::Success);
+    }
+}
+
+/// Captura el panel de objetivo después de que el JSON cargado haya pasado por
+/// la misma sincronización UI que usaría el jugador.
+fn first_route_guide_shot_driver(
+    mut commands: Commands,
+    mut frame: Local<u32>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    *frame += 1;
+    if *frame == SHOT_FRAME
+        && let Ok(path) = std::env::var("OPENTTDRS_FIRST_ROUTE_GUIDE_SHOT")
+    {
+        info!("first_route_guide_shot: guardando captura en {path}");
         commands
             .spawn(Screenshot::primary_window())
             .observe(save_to_disk(path));

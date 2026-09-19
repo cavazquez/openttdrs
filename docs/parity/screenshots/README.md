@@ -110,6 +110,34 @@ El flujo se usó en #574 para comprobar «Primera ruta»/“First route”; la a
 de menú no depende de variables, archivos privados ni consola para abrir el
 escenario en el cliente.
 
+## Guía de Primera ruta
+
+La guía se verifica sobre el JSON real del fixture, que permite comprobar que
+la detección se recompone después de cargar y no depende del menú ni de clics
+previos. Primero se exporta el fixture vacío a un directorio temporal:
+
+```bash
+cargo run -p openttdrs-core --bin dev_bot -- \
+  --scenario first_route --ticks 0 \
+  --export-json /tmp/openttdrs-first-route.json \
+  --out /tmp/openttdrs-first-route-probe.json
+```
+
+Con un display real o compositor compatible, la captura abre ese JSON mediante
+la ruta normal, congela la simulación y toma el panel ya sincronizado:
+
+```bash
+OTTDJSON_LOAD=/tmp/openttdrs-first-route.json \
+OPENTTDRS_LANGUAGE=es \
+OPENTTDRS_SHOT_RES=1280x720 \
+OPENTTDRS_FIRST_ROUTE_GUIDE_SHOT=/tmp/openttdrs-first-route-guide-es.png \
+  cargo run -p openttdrs-client --features dynamic_linking
+```
+
+Cambiar `OPENTTDRS_LANGUAGE=en` verifica el contenido inglés. El gancho sólo
+captura una sesión que ya se cargó: no construye la ruta ni automatiza ninguna
+acción del jugador.
+
 ## Gate visual por familia (#297, #299, #300, #301, #302)
 
 La fase 1 cubre `Vehicle`, `Orders`, `Timetable`, `Depot`, `Town` e `Industry`.

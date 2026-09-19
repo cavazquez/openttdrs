@@ -69,6 +69,7 @@ done
 for required in \
   assets/music \
   assets/sounds \
+  assets/shaders/rail_glass_post_process.wgsl \
   assets/opengfx/tiles \
   assets/opengfx/atlas \
   static/fonts/DejaVuSansMono.ttf \
@@ -96,6 +97,7 @@ cp "${binary_dir}/openttdrs-client${suffix}" "${package_dir}/"
 cp "${binary_dir}/openttdrs-dedicated${suffix}" "${package_dir}/"
 cp -R "${ROOT}/assets/music" "${package_dir}/assets/"
 cp -R "${ROOT}/assets/sounds" "${package_dir}/assets/"
+cp -R "${ROOT}/assets/shaders" "${package_dir}/assets/"
 cp -R "${ROOT}/assets/opengfx/tiles" "${package_dir}/assets/opengfx/"
 cp -R "${ROOT}/assets/opengfx/atlas" "${package_dir}/assets/opengfx/"
 cp -R "${ROOT}/static" "${package_dir}/"

@@ -138,6 +138,39 @@ Cambiar `OPENTTDRS_LANGUAGE=en` verifica el contenido inglés. El gancho sólo
 captura una sesión que ya se cargó: no construye la ruta ni automatiza ninguna
 acción del jugador.
 
+## Smoke gráfico del paquete Linux
+
+El workflow de release también prueba el ejecutable **ya empaquetado**, no el
+checkout. En Linux extrae el `.tar.gz`, arranca desde un cwd temporal sin
+`assets/` ni `reference/`, fija `OPENTTDRS_ASSET_ROOT` al directorio extraído y
+usa `Xvfb` con Lavapipe (`WGPU_BACKEND=vulkan`) y un perfil XDG aislado. Toma:
+
+- el menú real en español, que debe componer «Primera ruta»;
+- el escenario tras invocar la misma transición que usa ese botón, con la guía
+  visible; no carga un fixture ni sintetiza un `SimWorld` alternativo.
+
+Ambos PNG deben tener 1280×720, contenido no plano y diferencias materiales;
+[`check_release_graphical_smoke.py`](../../../scripts/check_release_graphical_smoke.py)
+rechaza pantalla vacía, timeout, panic, captura ausente o frames iguales. El
+smoke también exige el shader
+`assets/shaders/rail_glass_post_process.wgsl`, además de fuente, OpenGFX,
+música y sonidos, por lo que un paquete incompleto falla antes de llamarse
+usable.
+
+Para repetirlo sobre un paquete Linux local:
+
+```bash
+OPENTTDRS_RELEASE_GRAPHICAL_SMOKE=1 \
+OPENTTDRS_RELEASE_SMOKE_ARTIFACT_DIR=/tmp/openttdrs-release-smoke \
+  ./scripts/smoke_release_package.sh \
+  dist/openttdrs-0.1.0-alpha.1-linux-x86_64.tar.gz
+```
+
+El directorio de evidencia conserva `menu.png`, `first-route.png`, sus logs,
+el log dedicated y `package.sha256`. El workflow los sube incluso si falla el
+smoke; la sesión de aceptación humana de la ruta sigue siendo una evidencia
+separada del recorrido visual automatizado.
+
 ## Gate visual por familia (#297, #299, #300, #301, #302)
 
 La fase 1 cubre `Vehicle`, `Orders`, `Timetable`, `Depot`, `Town` e `Industry`.

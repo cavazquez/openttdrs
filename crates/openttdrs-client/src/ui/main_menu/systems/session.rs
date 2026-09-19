@@ -104,7 +104,11 @@ pub(in crate::ui::main_menu) fn enter_new_game(
     leave_main_menu(commands, q_menu, q_menu_cam, intro_layers, next_screen);
 }
 
-pub(in crate::ui::main_menu) fn enter_first_route(
+/// Inicia la sesión acotada desde la misma transición que usa el botón del menú.
+///
+/// La captura de aceptación del paquete reutiliza este punto para comprobar la
+/// acción real sin sintetizar un `SimWorld` paralelo.
+pub(crate) fn enter_first_route(
     commands: &mut Commands,
     q_menu: &Query<Entity, With<MainMenuUi>>,
     q_menu_cam: &Query<Entity, With<MainMenuCamera>>,

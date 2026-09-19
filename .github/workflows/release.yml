@@ -244,7 +244,27 @@ jobs:
           "dist/openttdrs-${{ needs.validate.outputs.version }}-${{ matrix.platform }}/openttdrs-client"
           "dist/openttdrs-${{ needs.validate.outputs.version }}-${{ matrix.platform }}/openttdrs-dedicated"
 
+      - name: Smoke gráfico del paquete Linux extraído
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          OPENTTDRS_RELEASE_GRAPHICAL_SMOKE: "1"
+          OPENTTDRS_RELEASE_SMOKE_ARTIFACT_DIR: dist/release-smoke-${{ needs.validate.outputs.version }}-${{ matrix.platform }}
+        run: >-
+          ./scripts/smoke_release_package.sh
+          "dist/openttdrs-${{ needs.validate.outputs.version }}-${{ matrix.platform }}.${{ matrix.archive }}"
+
+      - name: Subir evidencia del smoke gráfico Linux
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-linux-graphics-smoke-${{ needs.validate.outputs.version }}
+          retention-days: 14
+          if-no-files-found: error
+          path: dist/release-smoke-${{ needs.validate.outputs.version }}-${{ matrix.platform }}
+
       - name: Smoke del paquete extraído
+        if: runner.os != 'Linux'
         shell: bash
         run: >-
           ./scripts/smoke_release_package.sh

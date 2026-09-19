@@ -13,3 +13,5 @@ libssl-dev
 libasound2-dev
 libvulkan1
 mesa-vulkan-drivers
+xauth
+xvfb

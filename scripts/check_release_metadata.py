@@ -42,6 +42,8 @@ def main() -> None:
     network_smoke = (
         ROOT / "crates/openttdrs-client/src/network/smoke.rs"
     ).read_text(encoding="utf-8")
+    package_smoke = (ROOT / "scripts" / "smoke_release_package.sh").read_text(encoding="utf-8")
+    package_builder = (ROOT / "scripts" / "package_release.sh").read_text(encoding="utf-8")
 
     require(f"## [{version}]" in changelog, "falta la versión en CHANGELOG.md")
     require(f"# openttdrs {version}" in notes, "RELEASE_NOTES.md tiene otra versión")
@@ -61,6 +63,19 @@ def main() -> None:
     require(
         "parse_handshake_smoke" in main_rs and "--network-smoke" in network_smoke,
         "el binario no ofrece smoke --network-smoke",
+    )
+    for marker in (
+        "assets/shaders/rail_glass_post_process.wgsl",
+        "OPENTTDRS_RELEASE_GRAPHICAL_SMOKE",
+        "check_release_graphical_smoke.py",
+    ):
+        require(
+            marker in package_smoke,
+            f"smoke_release_package.sh no cubre {marker!r}",
+        )
+    require(
+        "assets/shaders/rail_glass_post_process.wgsl" in package_builder,
+        "package_release.sh no incluye el shader requerido por el cliente",
     )
 
     for script_name in (

@@ -21,5 +21,6 @@ pub(crate) use scenarios::{
     sync_main_menu_heightmap_slots,
 };
 pub(crate) use session::{
-    auto_start_preloaded_json, leave_main_menu, prepare_first_route_session, return_to_main_menu,
+    auto_start_preloaded_json, enter_first_route, leave_main_menu, prepare_first_route_session,
+    return_to_main_menu,
 };

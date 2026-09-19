@@ -1,15 +1,16 @@
 name: openttdrs
 title: openttdrs
 version: "0.1.0-alpha.1"
-summary: Simulador de transporte isométrico inspirado en OpenTTD
+summary: Isometric transport simulation inspired by OpenTTD
 description: |
-  openttdrs es un simulador de transporte escrito en Rust y renderizado con Bevy.
-  Esta alpha permite construir y operar rutas, mover vehículos, transportar carga,
-  cobrar y guardar/cargar partidas. Incluye el cliente gráfico, un servidor
-  dedicado experimental y los assets libres necesarios para ejecutarlo.
+  openttdrs is an isometric transport simulation written in Rust and built with
+  the Bevy game engine. This alpha lets you build and operate routes, move
+  vehicles, deliver cargo, earn income, and save or load games. It includes the
+  graphical client, an experimental dedicated server, and the free assets needed
+  to run it.
 
-  Es una alpha para pruebas: no promete paridad ni compatibilidad total con
-  OpenTTD, NewGRF, partidas .sav ni multijugador.
+  This is a testing alpha: it does not claim feature parity or full compatibility
+  with OpenTTD, NewGRF, .sav savegames, or multiplayer.
 website:
   - https://github.com/cavazquez/openttdrs
 source-code:

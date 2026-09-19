@@ -15,14 +15,14 @@ use super::widgets::{
 };
 use super::{
     MainMenuBackButton, MainMenuContinueButton, MainMenuContinueWrap, MainMenuDemoButton,
-    MainMenuDensityTarget, MainMenuEditorButton, MainMenuFirstRouteButton, MainMenuHeightmapSlot,
-    MainMenuHighscoresButton, MainMenuHighscoresText, MainMenuHintsText, MainMenuLanguageButton,
-    MainMenuLanguageLabel, MainMenuLoadButton, MainMenuLocalizedText, MainMenuMapSizeButton,
-    MainMenuNewGameButton, MainMenuOpenHeightmapsDirButton, MainMenuOpenScenariosDirButton,
-    MainMenuPanel, MainMenuPreferencesButton, MainMenuQuitButton, MainMenuQuitConfirmNo,
-    MainMenuQuitConfirmYes, MainMenuResolutionButton, MainMenuScenariosButton,
-    MainMenuSeedDecButton, MainMenuSeedIncButton, MainMenuSoundButton, MainMenuStartButton,
-    MainMenuSubPanel, MainMenuSummaryText, MainMenuTitleText, MainMenuToggle, MainMenuUi,
+    MainMenuDensityTarget, MainMenuEditorButton, MainMenuHeightmapSlot, MainMenuHighscoresButton,
+    MainMenuHighscoresText, MainMenuHintsText, MainMenuLanguageButton, MainMenuLanguageLabel,
+    MainMenuLoadButton, MainMenuLocalizedText, MainMenuMapSizeButton, MainMenuNewGameButton,
+    MainMenuOpenHeightmapsDirButton, MainMenuOpenScenariosDirButton, MainMenuPanel,
+    MainMenuPreferencesButton, MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes,
+    MainMenuResolutionButton, MainMenuScenariosButton, MainMenuSeedDecButton,
+    MainMenuSeedIncButton, MainMenuSoundButton, MainMenuStartButton, MainMenuSubPanel,
+    MainMenuSummaryText, MainMenuTitleText, MainMenuToggle, MainMenuUi,
 };
 
 const MAIN_MENU_BACKDROP_ALPHA: f32 = 0.28;
@@ -209,11 +209,6 @@ fn spawn_root_panel(parent: &mut ChildSpawnerCommands) {
                 ));
             });
             menu.spawn(primary_button(MainMenuNewGameButton, "Nueva partida", 50.0));
-            menu.spawn(primary_button(
-                MainMenuFirstRouteButton,
-                "Primera ruta",
-                50.0,
-            ));
             menu.spawn(primary_button(MainMenuLoadButton, "Cargar partida", 50.0));
             menu.spawn(secondary_button(
                 MainMenuScenariosButton,

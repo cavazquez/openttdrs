@@ -101,8 +101,6 @@ pub(crate) fn visual_capture_requested() -> bool {
     std::env::var_os("OPENTTDRS_WINDOWS_SHOT").is_some()
         || std::env::var_os("OPENTTDRS_MAP_SHOT").is_some()
         || std::env::var_os("OPENTTDRS_MAIN_MENU_SHOT").is_some()
-        || std::env::var_os("OPENTTDRS_FIRST_ROUTE_GUIDE_SHOT").is_some()
-        || std::env::var_os("OPENTTDRS_FIRST_ROUTE_SHOT").is_some()
 }
 
 /// Indica si la captura de mapa debe excluir todo overlay que no pertenezca al

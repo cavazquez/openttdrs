@@ -3,10 +3,10 @@
 **Publicada el 2026-09-19.** La alpha está disponible como
 [prerelease de GitHub](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
 y como [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) para Linux
-amd64. El [corte Primera ruta](docs/parity/continuous-work-plan.md), su smoke
-gráfico y la sesión de aceptación ya están completados; el
-[workflow de release](https://github.com/cavazquez/openttdrs/actions/runs/35453383079)
-publicó los paquetes de escritorio.
+amd64. El smoke gráfico y la sesión de aceptación de la alpha ya están
+completados; el [workflow de release](https://github.com/cavazquez/openttdrs/actions/runs/35453383079)
+publicó los paquetes de escritorio. El código actual mantiene las validaciones
+de carretera como fixtures internos, sin exponer un modo guiado específico.
 
 Incluye un cliente isométrico jugable, servidor dedicado lockstep y herramientas
 headless de paridad con OpenTTD 15.3.

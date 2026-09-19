@@ -18,12 +18,12 @@ use super::super::labels::{
 use super::super::widgets::{hover_primary, hover_secondary};
 use super::super::{
     MainMenuBackButton, MainMenuCamera, MainMenuContinueButton, MainMenuContinueWrap,
-    MainMenuDemoButton, MainMenuDynamicText, MainMenuEditorButton, MainMenuFirstRouteButton,
-    MainMenuHintsText, MainMenuLoadButton, MainMenuLocalizedText, MainMenuNewGameButton,
-    MainMenuPanel, MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes,
-    MainMenuStartButton, MainMenuSubPanel, MainMenuTitleText, MainMenuUi,
+    MainMenuDemoButton, MainMenuDynamicText, MainMenuEditorButton, MainMenuHintsText,
+    MainMenuLoadButton, MainMenuLocalizedText, MainMenuNewGameButton, MainMenuPanel,
+    MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuStartButton,
+    MainMenuSubPanel, MainMenuTitleText, MainMenuUi,
 };
-use super::session::{enter_editor, enter_first_route, enter_new_game, resume_suspended_game};
+use super::session::{enter_editor, enter_new_game, resume_suspended_game};
 
 pub(crate) fn sync_main_menu_panel_visibility(
     panel: Res<MainMenuPanel>,
@@ -190,41 +190,6 @@ pub(crate) fn main_menu_editor_interaction(
             return;
         }
         hover_secondary(interaction, &mut bg);
-    }
-}
-
-/// Abre el escenario limitado de la primera ruta sin reutilizar una partida suspendida.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn main_menu_first_route_interaction(
-    panel: Res<MainMenuPanel>,
-    save_window: Res<SaveWindowState>,
-    mut next_screen: ResMut<NextState<ClientScreen>>,
-    mut suspended: ResMut<SuspendedGameSession>,
-    q_menu: Query<Entity, With<MainMenuUi>>,
-    q_menu_cam: Query<Entity, With<MainMenuCamera>>,
-    intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
-    mut buttons: Query<
-        (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<MainMenuFirstRouteButton>),
-    >,
-    mut commands: Commands,
-) {
-    if save_window.open || *panel != MainMenuPanel::Root {
-        return;
-    }
-    for (interaction, mut bg) in &mut buttons {
-        if *interaction == Interaction::Pressed {
-            enter_first_route(
-                &mut commands,
-                &q_menu,
-                &q_menu_cam,
-                &intro_layers,
-                &mut next_screen,
-                &mut suspended,
-            );
-            return;
-        }
-        hover_primary(interaction, &mut bg);
     }
 }
 

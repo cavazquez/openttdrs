@@ -8,9 +8,9 @@ use crate::map::TileCoord;
 use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
 use crate::{Climate, GameState, IndustrySpec, PathNetwork, find_path};
 
-/// Semilla fija del escenario inicial de la primera ruta jugable.
+/// Semilla fija del fixture vial inicial.
 pub const FIRST_ROUTE_WORLD_SEED: u64 = 0xC0A1_1950;
-/// Año de inicio del escenario inicial de la primera ruta jugable.
+/// Año de inicio del fixture vial inicial.
 pub const FIRST_ROUTE_YEAR: u32 = 1950;
 /// Origen de la mina de carbón del escenario `first_route`.
 pub const FIRST_ROUTE_COAL_MINE: TileCoord = TileCoord::new(8, 8);
@@ -44,7 +44,7 @@ pub const TRUCK_BAY_DELIVER_ROAD: TileCoord = TileCoord::new(16, 12);
 /// Id del camión del escenario.
 pub const TRUCK_BAY_VEHICLE_ID: u32 = 1;
 
-/// Mundo inicial, plano y determinista para construir la primera ruta de carbón.
+/// Mundo inicial, plano y determinista para construir un servicio de carbón.
 ///
 /// Incluye únicamente la mina y la central eléctrica visibles; deja al jugador
 /// construir por comandos la carretera, el depósito, las dos paradas y el

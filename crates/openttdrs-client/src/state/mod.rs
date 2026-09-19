@@ -230,25 +230,6 @@ impl SimWorld {
         Self::new_procedural(settings)
     }
 
-    /// Escenario inicial acotado para construir la primera ruta de carbón.
-    ///
-    /// Comparte la semilla y las dos industrias del fixture de paridad, pero
-    /// no crea red, estaciones ni vehículos: la sesión la construye el jugador.
-    #[must_use]
-    pub fn first_route() -> Self {
-        let mut state = openttdrs_core::parity::build_first_route();
-        // Los catálogos estáticos de OpenGFX no se serializan como runtime;
-        // reaplicarlos mantiene disponibles los controles de construcción.
-        openttdrs_core::apply_newgrf_stack_catalogs_default_dirs(&mut state);
-        apply_test_company_colour(&mut state);
-        state.runtime.pending_sim_events.discard_all();
-        Self {
-            state,
-            loaded_file: false,
-            ottdmap_extras: None,
-        }
-    }
-
     /// Mundo procedural sin I/O de save.
     #[must_use]
     pub fn new_procedural(settings: &NewGameSettings) -> Self {

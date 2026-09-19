@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regresiones del validador de capturas del smoke gráfico de release (#577)."""
+"""Regresiones del validador del menú en el smoke gráfico de release (#577)."""
 
 from __future__ import annotations
 
@@ -29,15 +29,13 @@ def patterned_image(width: int, height: int, offset: int) -> PngImage:
     return PngImage(width, height, bytes(pixels))
 
 
-def run(menu: Path, scenario: Path, width: int = 128, height: int = 72) -> subprocess.CompletedProcess[str]:
+def run(menu: Path, width: int = 128, height: int = 72) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             sys.executable,
             str(CHECKER),
             "--menu",
             str(menu),
-            "--scenario",
-            str(scenario),
             "--width",
             str(width),
             "--height",
@@ -54,39 +52,31 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
         menu = root / "menu.png"
-        scenario = root / "scenario.png"
         write_png(menu, patterned_image(128, 72, 0))
-        write_png(scenario, patterned_image(128, 72, 3))
 
-        passed = run(menu, scenario)
+        passed = run(menu)
         if passed.returncode != 0:
             print(passed.stdout, passed.stderr, file=sys.stderr)
-            print("FAIL: dos frames compuestos y distintos deben pasar", file=sys.stderr)
+            print("FAIL: un menú compuesto debe pasar", file=sys.stderr)
             return 1
 
         blank = root / "blank.png"
         write_png(blank, PngImage(128, 72, bytes((0, 0, 0, 255)) * (128 * 72)))
-        empty = run(blank, scenario)
+        empty = run(blank)
         if empty.returncode != 1 or "plana" not in empty.stderr:
             print(empty.stdout, empty.stderr, file=sys.stderr)
             print("FAIL: una pantalla plana debe fallar", file=sys.stderr)
             return 1
 
-        same = run(menu, menu)
-        if same.returncode != 1 or "parecidos" not in same.stderr:
-            print(same.stdout, same.stderr, file=sys.stderr)
-            print("FAIL: menú y escenario idénticos deben fallar", file=sys.stderr)
-            return 1
-
         wrong_size = root / "wrong-size.png"
         write_png(wrong_size, patterned_image(127, 72, 4))
-        geometry = run(menu, wrong_size)
+        geometry = run(wrong_size)
         if geometry.returncode != 1 or "dimensiones" not in geometry.stderr:
             print(geometry.stdout, geometry.stderr, file=sys.stderr)
             print("FAIL: una resolución distinta debe fallar", file=sys.stderr)
             return 1
 
-    print("OK: el smoke gráfico rechaza frames vacíos, iguales o de otra geometría")
+    print("OK: el smoke gráfico rechaza menús vacíos o de otra geometría")
     return 0
 
 

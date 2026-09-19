@@ -1,9 +1,9 @@
 # Documentación — openttdrs
 
 Un archivo vivo por temática. **Dirección actual (2026-09-19):** el corte de
-[Primera ruta jugable](parity/continuous-work-plan.md) está completado después
-de las entregas #568–#577; no queda una tarea atómica activa.
-[Auditoría y decisiones de backlog](audits/2026-09-18-direction.md).
+validación de la alpha está completado después de las entregas #568–#577. El
+escenario guiado usado entonces fue retirado del cliente; sus fixtures técnicos
+permanecen internos. [Auditoría y decisiones de backlog](audits/2026-09-18-direction.md).
 Orden sugerido al entrar:
 
 1. [ARCHITECTURE.md](ARCHITECTURE.md) · [adr/](adr/) — gobierno y capas

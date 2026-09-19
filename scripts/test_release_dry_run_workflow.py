@@ -174,9 +174,7 @@ class ReleaseDryRunWorkflowTest(unittest.TestCase):
             package = root / "openttdrs-0.0.0-linux-x86_64"
             fixture_dir = root / "fixtures"
             menu = fixture_dir / "menu.png"
-            scenario = fixture_dir / "scenario.png"
             write_graphical_frame(menu, 0)
-            write_graphical_frame(scenario, 4)
             write_file(
                 package / "openttdrs-client",
                 "#!/usr/bin/env bash\n"
@@ -192,12 +190,7 @@ class ReleaseDryRunWorkflowTest(unittest.TestCase):
                 "test -n \"${XDG_CONFIG_HOME:-}\"\n"
                 "if [[ -n \"${OPENTTDRS_MAIN_MENU_SHOT:-}\" ]]; then\n"
                 "  cp \"$MOCK_MENU\" \"$OPENTTDRS_MAIN_MENU_SHOT\"\n"
-                "  echo 'main_menu_shot: acción localizada de Primera ruta lista'\n"
-                "  exit 0\n"
-                "fi\n"
-                "if [[ -n \"${OPENTTDRS_FIRST_ROUTE_SHOT:-}\" ]]; then\n"
-                "  cp \"$MOCK_SCENARIO\" \"$OPENTTDRS_FIRST_ROUTE_SHOT\"\n"
-                "  echo 'first_route_shot: escenario activado por la acción Primera ruta'\n"
+                "  echo 'main_menu_shot: menú localizado sin escenario guiado listo'\n"
                 "  exit 0\n"
                 "fi\n"
                 "exit 64\n",
@@ -242,7 +235,6 @@ class ReleaseDryRunWorkflowTest(unittest.TestCase):
             env = os.environ | {
                 "PATH": f"{tools}:{os.environ['PATH']}",
                 "MOCK_MENU": str(menu),
-                "MOCK_SCENARIO": str(scenario),
                 "OPENTTDRS_RELEASE_GRAPHICAL_SMOKE": "1",
                 "OPENTTDRS_RELEASE_SMOKE_ARTIFACT_DIR": str(artifact_dir),
                 "OPENTTDRS_RELEASE_SMOKE_PORT": "39002",
@@ -264,9 +256,7 @@ class ReleaseDryRunWorkflowTest(unittest.TestCase):
                 "dedicated.log",
                 "network.log",
                 "menu.log",
-                "first-route.log",
                 "menu.png",
-                "first-route.png",
             ):
                 self.assertTrue((artifact_dir / name).is_file(), name)
             self.assertIn(

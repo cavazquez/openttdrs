@@ -3,8 +3,9 @@
 Contrato del repo: capas, reglas duras, diseño incremental, inventarios de determinismo/mutaciones y mapa de la arquitectura upstream OpenTTD. Planificación y paridad: [PLANIFICACION.md](PLANIFICACION.md), [PARIDAD.md](PARIDAD.md).
 
 El [plan vigente desde 2026-09-18](parity/continuous-work-plan.md) aplica el
-principio incremental de este documento a una primera ruta vial verificable.
-Las fases y prioridades históricas posteriores no reemplazan ese corte.
+principio incremental de este documento a una entrega vial verificable como
+fixture interno. Las fases y prioridades históricas posteriores no reemplazan
+ese corte.
 
 ## Índice
 

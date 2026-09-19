@@ -1,21 +1,13 @@
-use bevy::prelude::*;
-use openttdrs_core::TileCoord;
-use openttdrs_core::parity::{FIRST_ROUTE_COAL_MINE, FIRST_ROUTE_POWER_STATION};
-
-use crate::camera::{CameraFocusRequest, tile_camera_world_pos};
 use crate::render::{MapVisualLayer, ShoreTile, WaterTile};
 use crate::state::bootstrap::NewGameSettings;
 use crate::state::{
-    ClientScreen, EditorSession, SimRunState, SimWorld, SuspendedGameSession, apply_editor_sandbox,
+    ClientScreen, EditorSession, SimWorld, SuspendedGameSession, apply_editor_sandbox,
     editor_new_game_settings,
 };
 use crate::ui::main_menu_intro::despawn_main_menu_intro_layers;
+use bevy::prelude::*;
 
 use super::super::{MainMenuCamera, MainMenuUi};
-
-/// Señala que el próximo `InGame` debe encuadrar y pausar la primera ruta.
-#[derive(Resource, Default)]
-pub(crate) struct PendingFirstRouteSession;
 
 pub(crate) fn leave_main_menu(
     commands: &mut Commands,
@@ -102,47 +94,6 @@ pub(in crate::ui::main_menu) fn enter_new_game(
     commands.insert_resource(EditorSession::inactive());
     commands.insert_resource(SimWorld::from_new_game(&settings.sanitized()));
     leave_main_menu(commands, q_menu, q_menu_cam, intro_layers, next_screen);
-}
-
-/// Inicia la sesión acotada desde la misma transición que usa el botón del menú.
-///
-/// La captura de aceptación del paquete reutiliza este punto para comprobar la
-/// acción real sin sintetizar un `SimWorld` paralelo.
-pub(crate) fn enter_first_route(
-    commands: &mut Commands,
-    q_menu: &Query<Entity, With<MainMenuUi>>,
-    q_menu_cam: &Query<Entity, With<MainMenuCamera>>,
-    intro_layers: &Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
-    next_screen: &mut NextState<ClientScreen>,
-    suspended: &mut SuspendedGameSession,
-) {
-    suspended.active = false;
-    suspended.editor = false;
-    commands.insert_resource(EditorSession::inactive());
-    commands.insert_resource(SimWorld::first_route());
-    commands.insert_resource(PendingFirstRouteSession);
-    leave_main_menu(commands, q_menu, q_menu_cam, intro_layers, next_screen);
-}
-
-/// Termina el arranque visual de la primera ruta cuando ya existe el mundo.
-pub(crate) fn prepare_first_route_session(
-    mut commands: Commands,
-    launch: Option<Res<PendingFirstRouteSession>>,
-    sim: Res<SimWorld>,
-    mut next_simulation: ResMut<NextState<SimRunState>>,
-    mut focus: ResMut<CameraFocusRequest>,
-) {
-    if launch.is_none() {
-        return;
-    }
-
-    next_simulation.set(SimRunState::Paused);
-    let target = TileCoord::new(
-        (FIRST_ROUTE_COAL_MINE.x + FIRST_ROUTE_POWER_STATION.x) / 2,
-        (FIRST_ROUTE_COAL_MINE.y + FIRST_ROUTE_POWER_STATION.y) / 2,
-    );
-    focus.target = Some(tile_camera_world_pos(&sim.state.map, target));
-    commands.remove_resource::<PendingFirstRouteSession>();
 }
 
 pub(in crate::ui::main_menu) fn enter_editor(

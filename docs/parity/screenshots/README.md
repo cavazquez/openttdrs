@@ -106,52 +106,19 @@ OPENTTDRS_MAIN_MENU_SHOT=/tmp/openttdrs-menu-es.png \
   cargo run -p openttdrs-client --features dynamic_linking
 ```
 
-El flujo se usó en #574 para comprobar «Primera ruta»/“First route”; la acción
-de menú no depende de variables, archivos privados ni consola para abrir el
-escenario en el cliente.
-
-## Guía de Primera ruta
-
-La guía se verifica sobre el JSON real del fixture, que permite comprobar que
-la detección se recompone después de cargar y no depende del menú ni de clics
-previos. Primero se exporta el fixture vacío a un directorio temporal:
-
-```bash
-cargo run -p openttdrs-core --bin dev_bot -- \
-  --scenario first_route --ticks 0 \
-  --export-json /tmp/openttdrs-first-route.json \
-  --out /tmp/openttdrs-first-route-probe.json
-```
-
-Con un display real o compositor compatible, la captura abre ese JSON mediante
-la ruta normal, congela la simulación y toma el panel ya sincronizado:
-
-```bash
-OTTDJSON_LOAD=/tmp/openttdrs-first-route.json \
-OPENTTDRS_LANGUAGE=es \
-OPENTTDRS_SHOT_RES=1280x720 \
-OPENTTDRS_FIRST_ROUTE_GUIDE_SHOT=/tmp/openttdrs-first-route-guide-es.png \
-  cargo run -p openttdrs-client --features dynamic_linking
-```
-
-Cambiar `OPENTTDRS_LANGUAGE=en` verifica el contenido inglés. El gancho sólo
-captura una sesión que ya se cargó: no construye la ruta ni automatiza ninguna
-acción del jugador.
+El flujo comprueba que el menú actual se compone sin depender de variables,
+archivos privados ni consola. Los escenarios de carretera usados por pruebas
+de simulación son fixtures internos y no tienen una captura de menú dedicada.
 
 ## Smoke gráfico del paquete Linux
 
 El workflow de release también prueba el ejecutable **ya empaquetado**, no el
 checkout. En Linux extrae el `.tar.gz`, arranca desde un cwd temporal sin
 `assets/` ni `reference/`, fija `OPENTTDRS_ASSET_ROOT` al directorio extraído y
-usa `Xvfb` con Lavapipe (`WGPU_BACKEND=vulkan`) y un perfil XDG aislado. Toma:
-
-- el menú real en español, que debe componer «Primera ruta»;
-- el escenario tras invocar la misma transición que usa ese botón, con la guía
-  visible; no carga un fixture ni sintetiza un `SimWorld` alternativo.
-
-Ambos PNG deben tener 1280×720, contenido no plano y diferencias materiales;
-[`check_release_graphical_smoke.py`](../../../scripts/check_release_graphical_smoke.py)
-rechaza pantalla vacía, timeout, panic, captura ausente o frames iguales. El
+usa `Xvfb` con Lavapipe (`WGPU_BACKEND=vulkan`) y un perfil XDG aislado. Toma el
+menú real en español y exige que esté compuesto a 1280×720 con contenido no
+plano. [`check_release_graphical_smoke.py`](../../../scripts/check_release_graphical_smoke.py)
+rechaza pantalla vacía, timeout, panic o captura ausente. El
 smoke también exige el shader
 `assets/shaders/rail_glass_post_process.wgsl`, además de fuente, OpenGFX,
 música y sonidos, por lo que un paquete incompleto falla antes de llamarse
@@ -166,10 +133,8 @@ OPENTTDRS_RELEASE_SMOKE_ARTIFACT_DIR=/tmp/openttdrs-release-smoke \
   dist/openttdrs-0.1.0-alpha.1-linux-x86_64.tar.gz
 ```
 
-El directorio de evidencia conserva `menu.png`, `first-route.png`, sus logs,
-el log dedicated y `package.sha256`. El workflow los sube incluso si falla el
-smoke; la sesión de aceptación humana de la ruta sigue siendo una evidencia
-separada del recorrido visual automatizado.
+El directorio de evidencia conserva `menu.png`, su log, el log dedicated y
+`package.sha256`. El workflow los sube incluso si falla el smoke.
 
 ## Gate visual por familia (#297, #299, #300, #301, #302)
 

@@ -11,11 +11,6 @@
 //! Escala opcional: `OPENTTDRS_SHOT_UI_SCALE=1` o `2`.
 //! `OPENTTDRS_MAIN_MENU_SHOT=/ruta/captura.png` guarda el menú real sin
 //! arrancar una partida; es el smoke visual de sus accesos localizados.
-//! `OPENTTDRS_FIRST_ROUTE_GUIDE_SHOT=/ruta/captura.png` guarda la guía de
-//! «Primera ruta» sobre un JSON de ese fixture ya cargado y termina el proceso.
-//! `OPENTTDRS_FIRST_ROUTE_SHOT=/ruta/captura.png` activa esa acción desde el
-//! menú y captura el escenario resultante; el smoke de paquete lo usa sin
-//! necesitar un fixture del checkout.
 //! En captura individual, `OPENTTDRS_MAP_SHOT_SCALE=1/2/4/8` fija además el
 //! zoom de la cámara del mapa antes de abrir la ventana (UI sin escalar).
 //! `OPENTTDRS_WINDOW_SHOT_DEPOT_KIND=road|rail|ship` selecciona la familia
@@ -40,7 +35,7 @@ use crate::render::{
     VehicleSprite, WaterTile, clamp_ortho_scale, large_map_viewport_cull_enabled,
 };
 use crate::settings::ClientPreferences;
-use crate::state::{ClientScreen, SimRunState, SimWorld, SuspendedGameSession};
+use crate::state::{ClientScreen, SimRunState, SimWorld};
 use crate::ui::ai_settings_window::AiSettingsWindowState;
 use crate::ui::audio_settings_window::SoundMusicWindowState;
 use crate::ui::autoreplace_window::AutoreplaceWindowState;
@@ -58,9 +53,6 @@ use crate::ui::dialog_windows::{
 use crate::ui::display_options_window::DisplayOptionsWindowState;
 use crate::ui::extra_viewport_window::ExtraViewportWindowState;
 use crate::ui::finances_window::FinancesWindowState;
-use crate::ui::first_route_guide::{
-    FirstRouteGuideRoot, FirstRouteGuideText, first_route_progress,
-};
 use crate::ui::floating_window::{FloatingWindow, FloatingWindowId, WindowKey};
 use crate::ui::genland_window::GenLandWindowState;
 use crate::ui::goal_list_window::GoalListWindowState;
@@ -71,9 +63,7 @@ use crate::ui::industry_directory::IndustryDirectoryState;
 use crate::ui::industry_panel::IndustryPanelState;
 use crate::ui::industry_production_window::IndustryProductionWindowState;
 use crate::ui::league_window::LeagueWindowState;
-use crate::ui::main_menu::{
-    MainMenuCamera, MainMenuLocalizedText, MainMenuUi, enter_first_route, leave_main_menu,
-};
+use crate::ui::main_menu::{MainMenuCamera, MainMenuLocalizedText, MainMenuUi, leave_main_menu};
 use crate::ui::modal_stack::ModalStack;
 use crate::ui::newgrf_window::NewGrfWindowState;
 use crate::ui::news_settings_window::NewsSettingsWindowState;
@@ -1250,10 +1240,7 @@ impl Plugin for WindowsShotPlugin {
         let windows_shot = std::env::var_os("OPENTTDRS_WINDOWS_SHOT").is_some();
         let map_shot = std::env::var_os("OPENTTDRS_MAP_SHOT").is_some();
         let main_menu_shot = std::env::var_os("OPENTTDRS_MAIN_MENU_SHOT").is_some();
-        let first_route_guide_shot = std::env::var_os("OPENTTDRS_FIRST_ROUTE_GUIDE_SHOT").is_some();
-        let first_route_shot = std::env::var_os("OPENTTDRS_FIRST_ROUTE_SHOT").is_some();
-        if windows_shot || map_shot || main_menu_shot || first_route_guide_shot || first_route_shot
-        {
+        if windows_shot || map_shot || main_menu_shot {
             app.add_systems(Startup, apply_shot_settings);
         }
         if main_menu_shot {
@@ -1262,41 +1249,6 @@ impl Plugin for WindowsShotPlugin {
                 main_menu_shot_driver
                     .run_if(in_state(ClientScreen::MainMenu))
                     .after(UpdateSet::Ui),
-            );
-        }
-        if first_route_guide_shot {
-            // El JSON de la primera ruta entra por su ruta normal de carga.
-            // Sólo congelamos y capturamos la UI ya materializada; el driver
-            // no construye infraestructura ni simula acciones del jugador.
-            app.add_systems(
-                OnEnter(ClientScreen::InGame),
-                pause_simulation_for_visual_capture,
-            );
-            app.add_systems(
-                Update,
-                first_route_guide_shot_driver
-                    .run_if(in_state(ClientScreen::InGame))
-                    .after(UpdateSet::Ui),
-            );
-        }
-        if first_route_shot {
-            // El driver invoca la misma transición compartida por el botón de
-            // menú. No carga un fixture ni construye infraestructura: sólo
-            // verifica que la acción real materialice el escenario empaquetado.
-            app.add_systems(
-                OnEnter(ClientScreen::InGame),
-                pause_simulation_for_visual_capture,
-            );
-            app.add_systems(
-                Update,
-                (
-                    first_route_shot_start
-                        .run_if(in_state(ClientScreen::MainMenu))
-                        .after(UpdateSet::Ui),
-                    first_route_shot_driver
-                        .run_if(in_state(ClientScreen::InGame))
-                        .after(UpdateSet::Ui),
-                ),
             );
         }
         if windows_shot {
@@ -1385,104 +1337,17 @@ fn main_menu_shot_driver(
     if *frame == SHOT_FRAME
         && let Ok(path) = std::env::var("OPENTTDRS_MAIN_MENU_SHOT")
     {
-        let expected = crate::i18n::text(prefs.locale(), "Primera ruta");
-        if !labels
+        let expected = crate::i18n::text(prefs.locale(), "Nueva partida");
+        let new_game_is_localized = labels
             .iter()
-            .any(|(key, text)| key.0 == "Primera ruta" && text.as_str() == expected)
-        {
-            error!("main_menu_shot: no se compuso la acción localizada de Primera ruta");
+            .any(|(key, text)| key.0 == "Nueva partida" && text.as_str() == expected);
+        if !new_game_is_localized {
+            error!("main_menu_shot: el menú no refleja la navegación actual");
             exit.write(AppExit::error());
             return;
         }
-        info!("main_menu_shot: acción localizada de Primera ruta lista");
+        info!("main_menu_shot: menú localizado sin escenario guiado listo");
         info!("main_menu_shot: guardando captura en {path}");
-        commands
-            .spawn(Screenshot::primary_window())
-            .observe(save_to_disk(path));
-    }
-    if *frame == EXIT_FRAME {
-        exit.write(AppExit::Success);
-    }
-}
-
-/// Activa la entrada real de «Primera ruta» una sola vez durante el smoke.
-#[allow(clippy::too_many_arguments)]
-fn first_route_shot_start(
-    mut commands: Commands,
-    q_menu: Query<Entity, With<MainMenuUi>>,
-    q_menu_cam: Query<Entity, With<MainMenuCamera>>,
-    intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
-    mut next_screen: ResMut<NextState<ClientScreen>>,
-    mut suspended: ResMut<SuspendedGameSession>,
-    mut launched: Local<bool>,
-) {
-    if *launched {
-        return;
-    }
-    *launched = true;
-    info!("first_route_shot: activando la acción Primera ruta del menú");
-    enter_first_route(
-        &mut commands,
-        &q_menu,
-        &q_menu_cam,
-        &intro_layers,
-        &mut next_screen,
-        &mut suspended,
-    );
-}
-
-/// Captura el escenario únicamente si la transición de menú creó la guía y el
-/// mundo determinista esperados. Eso evita que una ventana vacía se interprete
-/// como éxito del smoke gráfico.
-fn first_route_shot_driver(
-    mut commands: Commands,
-    mut frame: Local<u32>,
-    mut exit: MessageWriter<AppExit>,
-    sim: Res<SimWorld>,
-    prefs: Res<ClientPreferences>,
-    guide_roots: Query<&Visibility, With<FirstRouteGuideRoot>>,
-    guide_texts: Query<(&FirstRouteGuideText, &Text)>,
-) {
-    *frame += 1;
-    if *frame == SHOT_FRAME
-        && let Ok(path) = std::env::var("OPENTTDRS_FIRST_ROUTE_SHOT")
-    {
-        let title = crate::i18n::text(prefs.locale(), "Primera ruta");
-        let ready = first_route_progress(&sim.state).is_some()
-            && guide_roots
-                .iter()
-                .any(|visibility| *visibility == Visibility::Visible)
-            && guide_texts
-                .iter()
-                .any(|(kind, text)| *kind == FirstRouteGuideText::Title && text.as_str() == title);
-        if !ready {
-            error!("first_route_shot: la acción de menú no materializó el escenario esperado");
-            exit.write(AppExit::error());
-            return;
-        }
-        info!("first_route_shot: escenario activado por la acción Primera ruta");
-        info!("first_route_shot: guardando captura en {path}");
-        commands
-            .spawn(Screenshot::primary_window())
-            .observe(save_to_disk(path));
-    }
-    if *frame == EXIT_FRAME {
-        exit.write(AppExit::Success);
-    }
-}
-
-/// Captura el panel de objetivo después de que el JSON cargado haya pasado por
-/// la misma sincronización UI que usaría el jugador.
-fn first_route_guide_shot_driver(
-    mut commands: Commands,
-    mut frame: Local<u32>,
-    mut exit: MessageWriter<AppExit>,
-) {
-    *frame += 1;
-    if *frame == SHOT_FRAME
-        && let Ok(path) = std::env::var("OPENTTDRS_FIRST_ROUTE_GUIDE_SHOT")
-    {
-        info!("first_route_guide_shot: guardando captura en {path}");
         commands
             .spawn(Screenshot::primary_window())
             .observe(save_to_disk(path));

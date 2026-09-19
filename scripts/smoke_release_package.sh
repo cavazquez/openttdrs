@@ -44,9 +44,7 @@ server_log="${workdir}/dedicated.log"
 asset_log="${workdir}/check-assets.log"
 network_log="${workdir}/network.log"
 menu_log="${workdir}/menu.log"
-first_route_log="${workdir}/first-route.log"
 menu_shot="${workdir}/menu.png"
-first_route_shot="${workdir}/first-route.png"
 
 collect_artifacts() {
   [[ -n "$artifact_dir" ]] || return 0
@@ -57,9 +55,7 @@ collect_artifacts() {
     "$network_log" \
     "$server_log" \
     "$menu_log" \
-    "$first_route_log" \
-    "$menu_shot" \
-    "$first_route_shot"; do
+    "$menu_shot"; do
     [[ -f "$source" ]] || continue
     cp "$source" "${artifact_dir}/$(basename "$source")"
   done
@@ -203,29 +199,17 @@ run_graphical_smoke() {
     tail -n 100 "$menu_log" >&2 || true
     return 1
   fi
-  if ! grep -Fq "main_menu_shot: acción localizada de Primera ruta lista" "$menu_log"; then
-    echo "El menú empaquetado no confirmó la acción Primera ruta." >&2
+  if ! grep -Fq "main_menu_shot: menú localizado sin escenario guiado listo" "$menu_log"; then
+    echo "El menú empaquetado no confirmó la navegación actual." >&2
     tail -n 100 "$menu_log" >&2 || true
-    return 1
-  fi
-
-  if ! capture_graphical_frame OPENTTDRS_FIRST_ROUTE_SHOT "$first_route_shot" "$first_route_log" "$lavapipe_icd"; then
-    echo "El paquete no pudo capturar el escenario Primera ruta:" >&2
-    tail -n 100 "$first_route_log" >&2 || true
-    return 1
-  fi
-  if ! grep -Fq "first_route_shot: escenario activado por la acción Primera ruta" "$first_route_log"; then
-    echo "El escenario empaquetado no confirmó la transición Primera ruta." >&2
-    tail -n 100 "$first_route_log" >&2 || true
     return 1
   fi
 
   python3 "$GRAPHICAL_CHECKER" \
     --menu "$menu_shot" \
-    --scenario "$first_route_shot" \
     --width "$SHOT_WIDTH" \
     --height "$SHOT_HEIGHT"
-  echo "Smoke gráfico Linux OK: menú y Primera ruta desde cwd/configuración aislados."
+  echo "Smoke gráfico Linux OK: menú desde cwd/configuración aislados."
 }
 
 run_graphical_smoke

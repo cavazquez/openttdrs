@@ -1,4 +1,4 @@
-# Corte cerrado — primera ruta jugable
+# Corte cerrado — validación jugable de la alpha
 
 Actualizado: **2026-09-19**. Base auditada: `ca698e50`.
 
@@ -6,6 +6,9 @@ La instrucción del usuario del 2026-09-18 reemplaza el orden anterior de
 perseguir paridad por subsistemas. El objetivo inmediato es entregar una
 experiencia acotada que pueda jugarse y verificarse de principio a fin.
 La paridad con OpenTTD sigue siendo una referencia técnica de largo plazo.
+El escenario guiado usado para esa validación fue retirado después del cierre:
+los fixtures de carretera continúan como evidencia interna, pero no son un modo
+del cliente.
 
 La entrega está publicada como
 [prerelease `v0.1.0-alpha.1`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
@@ -14,18 +17,19 @@ Linux amd64). No convierte las brechas históricas de paridad en tareas activas.
 
 ## Entrega comprometida (cumplida)
 
-Desde el menú, abrir **Primera ruta**, construir un servicio de camiones
-entre una mina de carbón y una central eléctrica, recibir el primer pago,
-guardar JSON, cargar y completar otra entrega. El paquete Linux debe funcionar
-fuera del checkout. Escenario Temperate plano 64×64, año 1950, una compañía,
-OpenGFX, sin NewGRF, IA, desastres ni averías.
+La validación construyó un servicio de camiones entre una mina de carbón y una
+central eléctrica, recibió el primer pago, guardó JSON, cargó y completó otra
+entrega. El paquete Linux debía funcionar fuera del checkout. El fixture usa un
+escenario Temperate plano 64×64, año 1950, una compañía y OpenGFX, sin NewGRF,
+IA, desastres ni averías.
 
-Se reutilizan comandos, simulación, UI, persistencia y empaquetado existentes.
-Demo, Nueva partida y las demás capacidades permanecen disponibles; esta
-entrega sólo certifica el recorrido descrito. No requiere paridad raster
-perfecta ni equivalencia universal de saves o generación.
+Se reutilizaron comandos, simulación, persistencia y empaquetado existentes.
+La entrada exclusiva de menú y su guía se retiraron tras la aceptación: Nueva
+partida, carga, escenarios, editor y demo son las vías actuales. La evidencia
+interna no requiere paridad raster perfecta ni equivalencia universal de saves
+o generación.
 
-## Entrega publicada desde el corte
+## Evidencia publicada del corte
 
 - Distribución alpha — el tag
   [`v0.1.0-alpha.1`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
@@ -47,27 +51,22 @@ perfecta ni equivalencia universal de saves o generación.
   de fuzz, cerrado con `5565e802`; el
   [job remoto](https://github.com/cavazquez/openttdrs/actions/runs/35410088491)
   pasó con nightly fijado, corpus, sanitizers y ancla SAV.
-- [#572](https://github.com/cavazquez/openttdrs/issues/572) — escenario
-  `first_route` y ruta de carbón construida sólo mediante comandos, cerrado con
-  `53d727c9`; la entrega, el pago y el hash canónico se verifican dos veces y
-  el estado posterior conserva ese hash al serializar y recuperar JSON.
+- [#572](https://github.com/cavazquez/openttdrs/issues/572) — fixture vial y
+  ruta de carbón construida sólo mediante comandos, cerrado con `53d727c9`; la
+  entrega, el pago y el hash canónico se verifican dos veces y el estado
+  posterior conserva ese hash al serializar y recuperar JSON.
 - [#573](https://github.com/cavazquez/openttdrs/issues/573) — continuación
-  productiva de esa ruta tras guardar JSON, cerrada con `d55686ae`; con carga
+  productiva de ese fixture tras guardar JSON, cerrada con `d55686ae`; con carga
   a bordo, ambas ramas conservan hash, vehículo, órdenes, carga, stocks,
   ingresos y RNG durante 2.000 ticks, y la recargada vuelve a entregar y cobrar.
-- [#574](https://github.com/cavazquez/openttdrs/issues/574) — entrada
-  localizada «Primera ruta»/“First route” desde el menú, cerrada con
-  `64ee70db`; abre el escenario vacío de infraestructura y vehículos, pausado
-  y enfocado entre mina y central. La regresión ECS cubre dos entradas y la
-  limpieza entre sesiones; el binario real produjo capturas ES/EN a 1280×720
-  bajo Weston headless.
-- [#575](https://github.com/cavazquez/openttdrs/issues/575) — guía visible de
-  objetivo y avance, cerrada con `ff1b4730`; el panel específico de la sesión
-  deriva carretera, paradas/depósito, camión a carbón, órdenes, marcha y el
-  hito final de `GameState`. Éste exige que la central haya aceptado carbón y
-  que la compañía activa haya cobrado; los tests recorren estado incompleto,
-  entrega real, ausencia de ingreso/recepción y reconstrucción tras JSON. El
-  binario real produjo capturas ES/EN a 1280×720 del panel cargado.
+- [#574](https://github.com/cavazquez/openttdrs/issues/574) — la entrada de
+  menú temporal usada en la aceptación se cerró con `64ee70db`. Fue retirada
+  del cliente al cerrar este corte; el fixture no se expone como una sesión
+  separada.
+- [#575](https://github.com/cavazquez/openttdrs/issues/575) — el panel de
+  objetivo y avance usado durante la aceptación se cerró con `ff1b4730`. Se
+  retiró junto con esa entrada; la cobertura de simulación permanece en tests
+  internos de comandos y persistencia.
 - [#576](https://github.com/cavazquez/openttdrs/issues/576) — resultado visible
   de F5/F9, cerrado con `77589c67`; guardar, cargar y sus errores generan un
   aviso temporal ES/EN con el nombre de archivo y diagnóstico legible. El toast
@@ -80,10 +79,8 @@ perfecta ni equivalencia universal de saves o generación.
 - [#577](https://github.com/cavazquez/openttdrs/issues/577) — smoke gráfico del
   paquete Linux y sesión de aceptación, completado con `4aef9c22` y el runtime
   `97f69b2a`. El [dry-run de release](https://github.com/cavazquez/openttdrs/actions/runs/35431897233)
-  aprobó sus gates en Linux, macOS y Windows, incluido el smoke gráfico Linux.
-  La sesión manual del paquete aislado recorrió construcción, primera entrega,
-  F5, F9, recarga y una entrega posterior: 2 entregas, 28 unidades de carbón
-  cargadas/entregadas e ingreso 1064, sin errores ECS ni de despawn.
+  aprobó sus gates en Linux, macOS y Windows. El smoke actual comprueba el menú
+  empaquetado y la presencia de sus assets desde un cwd aislado.
 
 ## Backlog ejecutable
 

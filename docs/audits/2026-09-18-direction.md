@@ -51,7 +51,7 @@ el código ni una nueva corrida de todas las matrices de paridad.
 | Mundo procedural | `random-map-matrix.md` contiene una cohorte exacta de 15 mapas; RMAP conserva gaps fuera de ella | Reutilizar lo existente y congelar la expansión multiclima durante este corte |
 | Persistencia | JSON versionado, SAV parcial y tests de hotkeys; `save_load_after_n_steps` sólo compara el tick de un mundo 5×5 | Verificar continuación de una ruta cargada; mantener límites SAV explícitos |
 | Render | Herramientas raw/semántica/draw/raster y muchos arreglos focales; paridad global pendiente | Retener regresiones y corregir bloqueos visibles del recorrido; suspender exploración raster abierta |
-| UI y bootstrap | Menú, herramientas, showcase, objetivos/historia y ES/EN ya existen; demo mezcla transportes; F5/F9 sólo reportan por log | Entrada Primera ruta, objetivo visible y feedback de persistencia |
+| UI y bootstrap | Menú, herramientas, showcase, objetivos/historia y ES/EN ya existen; demo mezcla transportes; F5/F9 sólo reportan por log | Navegación principal, feedback de persistencia y smoke gráfico del paquete |
 | Red | `tcp_lockstep.rs` y `host_migration.rs` cubren integración; algunos tests permiten salir si sockets están prohibidos | Mantener soporte existente; no certificarlo por una ejecución restringida ni ampliar su alcance |
 | NewGRF | Matrices Action0/callback distinguen parseado y runtime; quedan scopes, FTA y persistencia residuales | Fuera del escenario; mantener cobertura existente sin prometer soporte universal |
 | Distribución | Release workflow, assets, checks SAV y smoke de handshake ya implementados | Extender el smoke Linux al menú/render del paquete real; aprovechar el workflow existente |
@@ -72,9 +72,9 @@ anteriores se convierten en #568–#571; no se ocultan bajo checks parciales.
 
 ## Decisión y alternativas
 
-El siguiente corte certificará **primera ruta jugable en solitario**:
+El siguiente corte certificará un **recorrido vial jugable en solitario**:
 Temperate 64×64, carretera, carbón mina → central, compra y órdenes por comandos,
-guardado JSON y continuación. Menú/guía ES/EN, OpenGFX y paquete Linux.
+guardado JSON y continuación. OpenGFX y paquete Linux.
 
 Seguir reduciendo el diff de Kale aporta fidelidad, pero no resuelve los gates
 rotos ni certifica ese recorrido. Abrir todos los contratos SAV/NewGRF/mapa a

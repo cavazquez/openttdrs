@@ -1,11 +1,12 @@
 # Planificación y roadmaps
 
-El plan ejecutable es [Primera ruta jugable](parity/continuous-work-plan.md),
-actualizado el **2026-09-19**, con entregas #568–#577 y sin tarea pendiente. La
-[auditoría de dirección](audits/2026-09-18-direction.md) explica la selección,
-el retiro de las épicas anteriores y la regla para definir un corte nuevo. Este
-documento conserva roadmaps, checklists y guías técnicas históricas; sus
-prioridades no activan trabajo.
+El plan ejecutable documenta el [corte de validación de la alpha](parity/continuous-work-plan.md),
+actualizado el **2026-09-19**, con entregas #568–#577. El escenario guiado de
+ese corte fue retirado del cliente; las pruebas de carretera que lo sustentaban
+siguen como fixtures internos. La [auditoría de dirección](audits/2026-09-18-direction.md)
+explica la selección, el retiro de las épicas anteriores y la regla para definir
+un corte nuevo. Este documento conserva roadmaps, checklists y guías técnicas
+históricas; sus prioridades no activan trabajo.
 
 Estado de madurez técnica: [PARIDAD.md](PARIDAD.md). Alcance SAV:
 [parity/sav-compatibility.md](parity/sav-compatibility.md). Cobertura NewGRF:

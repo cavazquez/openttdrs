@@ -90,7 +90,7 @@ impl RouteContinuationSnapshot {
             .vehicles
             .iter()
             .find(|vehicle| vehicle.id == FIRST_ROUTE_VEHICLE_ID)
-            .expect("camión de la primera ruta");
+            .expect("camión del fixture vial");
 
         Self {
             canonical_hash: state.canonical_hash(),
@@ -231,7 +231,7 @@ fn configured_first_route() -> GameState {
     assert!(state.stations.is_empty(), "el fixture no inyecta paradas");
 
     for command in first_route_command_log() {
-        apply_command(&mut state, &command).expect("comando de primera ruta");
+        apply_command(&mut state, &command).expect("comando del fixture vial");
     }
     state
 }

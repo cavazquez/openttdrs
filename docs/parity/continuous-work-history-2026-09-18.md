@@ -131,7 +131,7 @@ La fixture `mvp_openttd_ship.sav` coincide con OpenTTD 15.3 en `initial` más
 300 ticks (`301` muestras) para la proyección naval completa: posición de
 tesela y subtesela, altura, progreso, velocidad, `subspeed`, dirección, estado,
 rotación, ejecución, ruta y contador interno. El escenario nativo se activa
-de forma opt-in para no modificar el save base. La primera ruta hasta la boya
+de forma opt-in para no modificar el save base. El tramo inicial hasta la boya
 se conserva, pero cuando una orden `Station` apunta a una boya se mantiene el
 estado de ruta perdida después de consumirla, igual que el controlador nativo;
 el pathfinder genérico no vuelve a girar el barco hacia la misma tesela.
@@ -685,7 +685,7 @@ persistencia `PATS`/JSON, frontera `SLV_39` y aplicación exclusiva a cargas
 freight. `5e0938ff` expone presets del setting en Ajustes y refresca los
 consist de inmediato. Quedan pendientes la edición arbitraria tipo slider, CTT
 completa y el resto de settings económicos. `d6b4c5fc` completa ahora la
-primera ruta de CTT de vehículos: default cargo y listas include/exclude de los
+ruta inicial de CTT de vehículos: default cargo y listas include/exclude de los
 cuatro features de vehículos se traducen contra GlobalVar `0x09` y el catálogo
 `CargoSpec`; refit y la UI ya consumen esos cargos custom. `97571c10` añade las
 clases Action0 `allowed`/`disallowed`/`required` de trenes, vehículos de

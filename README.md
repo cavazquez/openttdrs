@@ -29,16 +29,16 @@ La alpha pública actual es [`0.1.0-alpha.1`](https://github.com/cavazquez/opent
 > Dirección actualizada: 2026-09-19. Las capacidades técnicas conservan sus
 > matrices de evidencia; completar este corte no certifica paridad global.
 
-**Corte completado: Primera ruta.** Desde el menú se puede abrir el escenario,
-construir un servicio de camiones mina → central eléctrica, cobrar, guardar y
-reanudar en Temperate 64×64 con OpenGFX y ES/EN. #572–#576 entregaron la ruta
-por comandos, continuación JSON, entrada de menú, guía y feedback visible de
-F5/F9; [#577](https://github.com/cavazquez/openttdrs/issues/577) certificó el
-arranque gráfico del paquete Linux fuera del checkout y la sesión completa de
-aceptación. El [plan ejecutable](docs/parity/continuous-work-plan.md) registra
-el cierre: no queda un issue activo en este corte. La
-[auditoría](docs/audits/2026-09-18-direction.md) explica la selección original.
-La distribución de ese corte está publicada como
+**Estado jugable actual.** El menú ofrece nueva partida, carga, escenarios o
+heightmaps, editor y demo. La alpha permite construir y operar servicios,
+cobrar, guardar y reanudar en mapas procedurales con OpenGFX y ES/EN. Las
+validaciones de carretera por comandos y continuación JSON siguen como fixtures
+internos; ya no se presentan como un modo o guía independiente. [#576](https://github.com/cavazquez/openttdrs/issues/576)
+añadió feedback visible de F5/F9 y [#577](https://github.com/cavazquez/openttdrs/issues/577)
+certificó el arranque gráfico del paquete Linux fuera del checkout. El
+[plan ejecutable](docs/parity/continuous-work-plan.md) conserva la evidencia
+del corte; la [auditoría](docs/audits/2026-09-18-direction.md) explica la
+selección original. La distribución alpha publicada está disponible como
 [prerelease de GitHub](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
 y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs).
 
@@ -110,8 +110,8 @@ cd openttdrs
 cargo run
 ```
 
-Eso abre el menú con **Nueva partida / Primera ruta / Cargar / Demo / Salir**. En el primer
-inicio se crean bajo `assets/opengfx/tiles/` los PNG derivados del atlas
+Eso abre el menú con **Nueva partida**, **Cargar partida**, escenarios, editor,
+demo y salida. En el primer inicio se crean bajo `assets/opengfx/tiles/` los PNG derivados del atlas
 versionado; no se usa red, `grfcodec`, Python ni un script de preparación. La
 carpeta derivada está ignorada por Git y se reconstruye automáticamente si falta.
 

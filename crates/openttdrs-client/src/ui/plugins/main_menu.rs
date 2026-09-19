@@ -12,12 +12,12 @@ use crate::ui::audio_settings_window::{
 use crate::ui::hud::{HudSfxHandles, load_hud_sfx};
 use crate::ui::main_menu::{
     auto_start_preloaded_json, main_menu_continue_interaction, main_menu_editor_interaction,
-    main_menu_first_route_interaction, main_menu_highscores_interaction, main_menu_interaction,
-    main_menu_options_interaction, main_menu_preferences_interaction,
-    main_menu_roughness_interaction, main_menu_scenarios_interaction, main_menu_sound_interaction,
-    prepare_first_route_session, setup_main_menu, sync_main_menu_continue_button,
-    sync_main_menu_heightmap_slots, sync_main_menu_highscores, sync_main_menu_localized_labels,
-    sync_main_menu_panel_visibility, sync_main_menu_preferences, sync_main_menu_summary,
+    main_menu_highscores_interaction, main_menu_interaction, main_menu_options_interaction,
+    main_menu_preferences_interaction, main_menu_roughness_interaction,
+    main_menu_scenarios_interaction, main_menu_sound_interaction, setup_main_menu,
+    sync_main_menu_continue_button, sync_main_menu_heightmap_slots, sync_main_menu_highscores,
+    sync_main_menu_localized_labels, sync_main_menu_panel_visibility, sync_main_menu_preferences,
+    sync_main_menu_summary,
 };
 use crate::ui::main_menu_intro::{
     animate_main_menu_intro_traffic, cleanup_main_menu_on_exit, pan_main_menu_intro_camera,
@@ -39,7 +39,6 @@ impl Plugin for MainMenuUiPlugin {
             .init_resource::<SaveWindowState>()
             .init_resource::<ToolbarState>()
             .add_systems(OnExit(ClientScreen::MainMenu), cleanup_main_menu_on_exit)
-            .add_systems(OnEnter(ClientScreen::InGame), prepare_first_route_session)
             .add_systems(
                 OnEnter(ClientScreen::MainMenu),
                 (
@@ -56,12 +55,7 @@ impl Plugin for MainMenuUiPlugin {
                     pan_main_menu_intro_camera,
                     animate_main_menu_intro_traffic,
                     auto_start_preloaded_json,
-                    (
-                        main_menu_interaction,
-                        main_menu_continue_interaction,
-                        main_menu_first_route_interaction,
-                    )
-                        .chain(),
+                    (main_menu_interaction, main_menu_continue_interaction).chain(),
                     main_menu_editor_interaction,
                     main_menu_highscores_interaction,
                     main_menu_scenarios_interaction,

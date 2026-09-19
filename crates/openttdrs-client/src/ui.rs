@@ -24,7 +24,6 @@ mod display_options_window;
 mod endscreen;
 mod extra_viewport_window;
 mod finances_window;
-mod first_route_guide;
 mod floating_window;
 pub(crate) mod font;
 mod genland_window;

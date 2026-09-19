@@ -56,7 +56,7 @@ pub(crate) fn push_build_command_error(
 }
 
 /// Crea el toast una vez por sesión. El panel se posiciona sobre la barra de
-/// estado, lejos del toolbar y del panel de «Primera ruta».
+/// estado, lejos del toolbar y de los paneles principales.
 pub(crate) fn setup_hud_feedback_toast(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
         .spawn((

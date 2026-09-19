@@ -6,14 +6,13 @@ compatibilidad `.sav` está en
 [`parity/sav-compatibility.md`](parity/sav-compatibility.md); pin JSON y
 capturas siguen en `docs/parity/`.
 
-**Dirección vigente (2026-09-19):** el corte de [primera ruta
-jugable](parity/continuous-work-plan.md) está completado. #568–#576 entregaron
-los ajustes P0 iniciales, la ruta de carbón por comandos, su continuación JSON,
-la entrada localizada desde el menú, la guía reconstruible de avance y el
-feedback visible de F5/F9; [#577](https://github.com/cavazquez/openttdrs/issues/577)
-certificó el paquete Linux y su sesión de aceptación. No queda backlog activo
-en este corte: una dirección nueva requiere otra auditoría y una tarea atómica.
-Los quince issues anteriores se retiran como `not planned`; sus brechas técnicas
+**Dirección vigente (2026-09-19):** el corte de validación de la alpha está
+completado. #568–#576 entregaron ajustes P0, una ruta de carbón por comandos,
+su continuación JSON y feedback visible de F5/F9; [#577](https://github.com/cavazquez/openttdrs/issues/577)
+certificó el paquete Linux y su sesión de aceptación. El acceso guiado y su
+panel fueron retirados del cliente; la evidencia de carretera queda como fixture
+interno. Una dirección nueva requiere otra auditoría y una tarea atómica. Los
+quince issues anteriores se retiran como `not planned`; sus brechas técnicas
 siguen existiendo. Las menciones posteriores a padres «abiertos» son registros
 del corte de evidencia de cada sección, no instrucciones para reactivarlos. Ver
 la [auditoría y disposición completa](audits/2026-09-18-direction.md).

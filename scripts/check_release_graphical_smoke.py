@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Valida las capturas del smoke gráfico de un paquete Linux (#577).
+"""Valida la captura del menú en el smoke gráfico de un paquete Linux (#577).
 
 El lector PNG compartido es stdlib-only. Este control no compara píxeles con un
-golden: comprueba que el menú y el escenario empaquetados hayan producido
-superficies de la resolución solicitada, con contenido visible y distinto.
+golden: comprueba que el menú empaquetado haya producido una superficie de la
+resolución solicitada y con contenido visible.
 """
 
 from __future__ import annotations
@@ -30,7 +30,6 @@ class ImageStats:
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--menu", type=Path, required=True, help="PNG del menú principal")
-    result.add_argument("--scenario", type=Path, required=True, help="PNG tras Primera ruta")
     result.add_argument("--width", type=int, default=1280)
     result.add_argument("--height", type=int, default=720)
     return result
@@ -74,13 +73,6 @@ def require_visible_frame(label: str, image: PngImage, width: int, height: int) 
     return stats
 
 
-def changed_pixels(left: PngImage, right: PngImage) -> int:
-    return sum(
-        left.rgba[offset : offset + 4] != right.rgba[offset : offset + 4]
-        for offset in range(0, len(left.rgba), 4)
-    )
-
-
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     if args.width <= 0 or args.height <= 0:
@@ -88,24 +80,14 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         menu = read_png(args.menu)
-        scenario = read_png(args.scenario)
         menu_stats = require_visible_frame("menú", menu, args.width, args.height)
-        scenario_stats = require_visible_frame("escenario", scenario, args.width, args.height)
-        changed = changed_pixels(menu, scenario)
-        minimum_changed = max(1_024, args.width * args.height // 100)
-        if changed < minimum_changed:
-            raise SmokeCaptureError(
-                "menú y escenario son demasiado parecidos "
-                f"({changed} píxeles distintos; mínimo {minimum_changed})"
-            )
     except (GateError, OSError, SmokeCaptureError) as error:
         print(f"FAIL: smoke gráfico de paquete: {error}", file=sys.stderr)
         return 1
 
     print(
         "OK: smoke gráfico de paquete "
-        f"({args.width}x{args.height}; menú={menu_stats.varied_pixels} variados, "
-        f"escenario={scenario_stats.varied_pixels} variados, distintos={changed})"
+        f"({args.width}x{args.height}; menú={menu_stats.varied_pixels} variados)"
     )
     return 0
 

@@ -1425,7 +1425,7 @@ pub(crate) fn ship_station_order_to_buoy(v: &Vehicle, map: Option<&Map>) -> bool
 /// Conserva el estado de ruta perdida después de pasar una boya usada como
 /// destino de una orden `Station`.
 ///
-/// La primera ruta hasta la boya sí debe ser calculada por el pathfinder. Una
+/// El tramo inicial hasta la boya sí debe ser calculado por el pathfinder. Una
 /// vez consumido ese último tile, `YapfShip` no vuelve a inyectar una ruta al
 /// mismo destino inválido: deja que `CreateRandomPath` mantenga el rumbo. El
 /// flag existente `no_network_route_to_order` representa exactamente ese

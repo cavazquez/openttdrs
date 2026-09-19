@@ -4,7 +4,6 @@ use bevy::prelude::*;
 
 use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::state::ClientScreen;
-use crate::ui::first_route_guide::{setup_first_route_guide, sync_first_route_guide};
 use crate::ui::hud::{
     HoveredTileCoord, HudBuildFeedback, HudSfxHandles, HudVisibility, PlayHudSfx, SelectedTileInfo,
     SimHudControls, animate_build_place_flash, animate_income_popups, flush_hud_sfx, load_hud_sfx,
@@ -42,7 +41,6 @@ impl Plugin for HudUiPlugin {
                     setup_hud_feedback_toast,
                     setup_status_bar,
                     setup_news_history_window,
-                    setup_first_route_guide,
                     load_hud_sfx,
                 )
                     .in_set(StartupSet::Ui),
@@ -61,7 +59,6 @@ impl Plugin for HudUiPlugin {
                     handle_news_history_row_click,
                     news_history_on_closed,
                     sync_news_history_window,
-                    sync_first_route_guide,
                     sync_hud_feedback_toast.before(update_tile_info_text),
                 )
                     .in_set(UpdateSet::Ui)

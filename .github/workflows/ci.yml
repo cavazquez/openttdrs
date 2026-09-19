@@ -84,7 +84,7 @@ jobs:
         run: cargo deny check
 
       - name: Instalar cargo-llvm-cov
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: tests (nextest)

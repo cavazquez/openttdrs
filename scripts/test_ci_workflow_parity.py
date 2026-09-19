@@ -53,6 +53,8 @@ def main() -> int:
         errors.append("ci.yml no permite revalidar manualmente un SHA candidato")
     if "github.ref == 'refs/heads/main'" not in yml:
         errors.append("ci.yml no conserva la cobertura para una revalidación manual en main")
+    if "- name: Instalar cargo-llvm-cov\n        if: github.ref == 'refs/heads/main'" not in yml:
+        errors.append("ci.yml no instala cargo-llvm-cov durante la revalidación manual en main")
     if "scripts/check.sh ci-python" not in yml:
         errors.append("ci.yml no invoca ./scripts/check.sh ci-python")
     if "scripts/check.sh tnbp" not in yml:

@@ -62,7 +62,7 @@ los sonidos y la música están versionados. `cargo run` selecciona el cliente y
 en el primer inicio, materializa localmente los PNG que necesita la UI desde el
 atlas incluido. No descarga assets ni requiere ejecutar scripts auxiliares.
 
-**Prioridad de implementación:** #570–#571 (CI), después #572–#577
+**Prioridad de implementación:** #571 (CI), después #572–#577
 (ruta, continuación JSON, menú/guía, feedback y paquete). La paridad global
 de raster/SAV/NewGRF y la expansión multiclima quedan fuera de este corte.
 Sus límites técnicos siguen documentados. Editor #42 ✅ · GameScript-lite
@@ -271,9 +271,9 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 | Multijugador (I8) | 🟡 | MVP lockstep + dedicated + host migration; desync/UI OOS |
 | IA rivales / GameScript / editor | 🟡 | TransCargo + editor #42 ✅; GS-lite #43 ✅; Squirrel OOS |
 
-Backlog vivo al 2026-09-18: ocho [issues del repo](https://github.com/cavazquez/openttdrs/issues)
-(#570–#577), con orden y aceptación en el [plan vigente](docs/parity/continuous-work-plan.md).
-Los ajustes P0 de formato #568 y Clippy del core #569 ya fueron entregados.
+Backlog vivo al 2026-09-18: siete [issues del repo](https://github.com/cavazquez/openttdrs/issues)
+(#571–#577), con orden y aceptación en el [plan vigente](docs/parity/continuous-work-plan.md).
+Los ajustes P0 de formato #568 y Clippy de core/cliente #569–#570 ya fueron entregados.
 Los quince anteriores se retiran como `not planned`, no como paridad lograda.
 [PARIDAD.md](docs/PARIDAD.md) conserva las capacidades y brechas técnicas.
 

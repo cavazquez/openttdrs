@@ -7,8 +7,8 @@ compatibilidad `.sav` está en
 capturas siguen en `docs/parity/`.
 
 **Dirección vigente (2026-09-18):** [primera ruta jugable](parity/continuous-work-plan.md).
-El backlog ejecutable es #570–#577; #568 y #569 entregaron los ajustes P0
-iniciales de formato y Clippy del core.
+El backlog ejecutable es #571–#577; #568–#570 entregaron los ajustes P0
+iniciales de formato y Clippy de core y cliente.
 Los quince issues anteriores se retiran
 como `not planned`; sus brechas técnicas siguen existiendo. Las menciones
 posteriores a padres «abiertos» son registros del corte de evidencia de cada
@@ -1530,7 +1530,6 @@ incluidos offsets relativos.
 
 <!-- active-parity-backlog:start -->
 
-- [#570](https://github.com/cavazquez/openttdrs/issues/570) — Clippy de tests del cliente.
 - [#571](https://github.com/cavazquez/openttdrs/issues/571) — lockfile y replay de fuzz.
 - [#572](https://github.com/cavazquez/openttdrs/issues/572) — ruta de carbón por comandos.
 - [#573](https://github.com/cavazquez/openttdrs/issues/573) — continuación JSON de la ruta.

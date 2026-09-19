@@ -28,27 +28,29 @@ perfecta ni equivalencia universal de saves o generación.
 - [#569](https://github.com/cavazquez/openttdrs/issues/569) — Clippy estricto
   de los tests del core, cerrado con `6cf0513b`; las excepciones quedaron
   acotadas a módulos de prueba y el crate pasa Clippy y sus tests.
+- [#570](https://github.com/cavazquez/openttdrs/issues/570) — Clippy estricto
+  de los tests del cliente, cerrado con `6567b735`; también pasa el chequeo
+  estricto de todos los targets del workspace.
 
 ## Backlog ejecutable
 
 Cada fila es un resultado independiente. El issue contiene alcance, aceptación,
 dependencias y exclusiones; no se mantienen épicas abiertas como tareas.
-Las ocho tareas pendientes están agrupadas en el hito existente
+Las siete tareas pendientes están agrupadas en el hito existente
 [0.1 — vertical slice](https://github.com/cavazquez/openttdrs/milestone/1).
 
 | Orden | Issue | Entrega | Dependencia funcional |
 |---:|---|---|---|
-| 1 | [#570](https://github.com/cavazquez/openttdrs/issues/570) | Clippy estricto de tests del cliente | #569 completado para el chequeo final del workspace |
-| 2 | [#571](https://github.com/cavazquez/openttdrs/issues/571) | Lockfile de fuzz y replay reproducible | — |
-| 3 | [#572](https://github.com/cavazquez/openttdrs/issues/572) | Escenario compartido y ruta operada mediante comandos | — |
-| 4 | [#573](https://github.com/cavazquez/openttdrs/issues/573) | Continuación de la ruta después de guardar JSON | #572 |
-| 5 | [#574](https://github.com/cavazquez/openttdrs/issues/574) | Entrada «Primera ruta» en el menú | #572 |
-| 6 | [#575](https://github.com/cavazquez/openttdrs/issues/575) | Objetivo y avance visibles de esa ruta | #573, #574 |
-| 7 | [#576](https://github.com/cavazquez/openttdrs/issues/576) | Confirmación y errores visibles de F5/F9 | — |
-| 8 | [#577](https://github.com/cavazquez/openttdrs/issues/577) | Smoke gráfico del paquete Linux y sesión de aceptación | #570–#576 |
+| 1 | [#571](https://github.com/cavazquez/openttdrs/issues/571) | Lockfile de fuzz y replay reproducible | — |
+| 2 | [#572](https://github.com/cavazquez/openttdrs/issues/572) | Escenario compartido y ruta operada mediante comandos | — |
+| 3 | [#573](https://github.com/cavazquez/openttdrs/issues/573) | Continuación de la ruta después de guardar JSON | #572 |
+| 4 | [#574](https://github.com/cavazquez/openttdrs/issues/574) | Entrada «Primera ruta» en el menú | #572 |
+| 5 | [#575](https://github.com/cavazquez/openttdrs/issues/575) | Objetivo y avance visibles de esa ruta | #573, #574 |
+| 6 | [#576](https://github.com/cavazquez/openttdrs/issues/576) | Confirmación y errores visibles de F5/F9 | — |
+| 7 | [#577](https://github.com/cavazquez/openttdrs/issues/577) | Smoke gráfico del paquete Linux y sesión de aceptación | #571–#576 |
 
-**Próxima implementación: #570.** La reorganización de issues y documentación
-no cuenta como implementación de las ocho tareas pendientes.
+**Próxima implementación: #571.** La reorganización de issues y documentación
+no cuenta como implementación de las siete tareas pendientes.
 
 ## Cómo trabajar y cerrar
 

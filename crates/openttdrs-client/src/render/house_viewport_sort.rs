@@ -2093,6 +2093,7 @@ fn child_depth_in_parent_interval(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use bevy::window::PrimaryWindow;

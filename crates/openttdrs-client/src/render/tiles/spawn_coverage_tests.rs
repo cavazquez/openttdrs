@@ -1,5 +1,7 @@
 //! Tests de integración: rutas principales de spawn de tiles (carretera, vía, agua, etc.).
 
+#![allow(clippy::explicit_iter_loop)]
+
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::asset::AssetPlugin;
 use bevy::ecs::system::RunSystemOnce;

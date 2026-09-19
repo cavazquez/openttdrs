@@ -1174,6 +1174,7 @@ fn animate_train_smoke(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use openttdrs_core::{
         Action2VarAdjust, Action2VarEntry, Action2VarTerm, ENGINE_TRAIN_ASIASTAR,

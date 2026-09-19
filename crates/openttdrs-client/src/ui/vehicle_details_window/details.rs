@@ -218,6 +218,7 @@ pub(crate) fn vehicle_details_body(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

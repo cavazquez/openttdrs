@@ -569,6 +569,7 @@ impl CompanyColoredSprites {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::implicit_clone)]
 mod tests {
     use super::*;
 

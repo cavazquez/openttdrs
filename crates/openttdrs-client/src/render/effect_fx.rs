@@ -504,6 +504,7 @@ fn animate_ephemeral_fx(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use bevy::ecs::system::RunSystemOnce;
     use openttdrs_core::{GameState, GameTick, Map, TileCoord};

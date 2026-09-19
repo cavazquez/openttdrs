@@ -1814,6 +1814,7 @@ pub(crate) fn close_top_visible_floating_window(
 }
 
 #[cfg(test)]
+#[allow(clippy::drop_non_drop, clippy::expect_used)]
 mod tests {
     use super::*;
 

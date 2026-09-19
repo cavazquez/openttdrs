@@ -423,7 +423,7 @@ pub(crate) fn animate_industry_building_layers(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use bevy::ecs::schedule::Schedule;
 

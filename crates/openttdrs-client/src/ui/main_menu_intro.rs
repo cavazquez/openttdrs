@@ -400,6 +400,7 @@ pub(crate) fn cleanup_main_menu_on_exit(mut commands: Commands) {
 }
 
 #[cfg(test)]
+#[allow(clippy::assertions_on_constants, clippy::expect_used)]
 mod tests {
     use openttdrs_core::{GameState, TileCoord, TileKind};
 

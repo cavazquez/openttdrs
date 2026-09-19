@@ -1569,6 +1569,7 @@ pub(crate) fn push_object_water_ground_with_action5(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::{
         SPR_CANAL_DIKES_BASE, SPR_FLAT_WATER_TILE, WateredFrom, action5_canal_sprite,

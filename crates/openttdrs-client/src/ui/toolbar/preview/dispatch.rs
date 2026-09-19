@@ -413,6 +413,7 @@ fn road_preview_at(
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::ui::toolbar::{DragBuildState, StationBuildState};

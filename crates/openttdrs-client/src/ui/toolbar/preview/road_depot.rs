@@ -325,6 +325,7 @@ fn preview_layer_asset(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::useless_vec)]
 mod tests {
     use super::*;
 

@@ -549,6 +549,7 @@ fn dispatch_sim_events(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod aircraft_sound_tests {
     use super::*;
 
@@ -633,6 +634,7 @@ mod aircraft_sound_tests {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 

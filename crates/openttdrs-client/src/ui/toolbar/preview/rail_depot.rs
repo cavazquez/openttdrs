@@ -365,6 +365,7 @@ fn rail_depot_catenary_parent_bounds(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::useless_vec)]
 mod tests {
     use super::{
         NewGrfSignalSpriteCache, custom_rail_depot_preview_layer, rail_depot_build_layers,

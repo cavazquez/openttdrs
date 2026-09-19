@@ -333,7 +333,7 @@ fn animate_airport_station_overlays(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use bevy::ecs::schedule::Schedule;
 

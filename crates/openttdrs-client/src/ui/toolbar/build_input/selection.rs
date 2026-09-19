@@ -136,6 +136,7 @@ pub(crate) fn open_station_panel(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use openttdrs_core::ship_depot_footprint;

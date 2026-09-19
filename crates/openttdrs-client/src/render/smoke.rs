@@ -399,7 +399,7 @@ pub(crate) fn animate_copper_mine_smoke(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use bevy::ecs::system::RunSystemOnce;
     use openttdrs_core::{GameState, GameTick, SLOPE_NE, TileKind};

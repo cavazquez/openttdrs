@@ -322,6 +322,7 @@ pub(crate) fn decoded_sprite_image_with_twocc_map(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

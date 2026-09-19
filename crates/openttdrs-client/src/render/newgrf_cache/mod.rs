@@ -1485,6 +1485,7 @@ pub(crate) mod vars {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use openttdrs_core::DecodedSprite;

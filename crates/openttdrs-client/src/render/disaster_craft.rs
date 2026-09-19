@@ -426,6 +426,7 @@ fn sync_disaster_crafts(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use bevy::ecs::change_detection::DetectChanges;
     use bevy::ecs::system::RunSystemOnce;

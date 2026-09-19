@@ -1610,6 +1610,11 @@ pub(crate) fn spawn_bridge_span_preview(
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::cloned_ref_to_slice_refs,
+    clippy::expect_used,
+    clippy::useless_vec
+)]
 mod tests {
     use super::*;
 

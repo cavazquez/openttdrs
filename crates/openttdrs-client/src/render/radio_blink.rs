@@ -95,6 +95,7 @@ pub(crate) fn animate_radio_blink(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::needless_borrow, clippy::unwrap_used)]
 mod tests {
     use bevy::ecs::system::RunSystemOnce;
 

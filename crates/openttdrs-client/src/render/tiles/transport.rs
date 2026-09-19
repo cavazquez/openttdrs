@@ -3774,6 +3774,7 @@ pub(crate) fn spawn_rail_tile(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use bevy::prelude::{Rect, Vec2, Vec3};
 

@@ -191,6 +191,7 @@ pub(crate) fn rail_signal_tint(valid: bool) -> Color {
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
 

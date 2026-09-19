@@ -8324,6 +8324,7 @@ fn spawn_rail_depot_tile(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::{Assets, Commands, Image, Res, ResMut, Resource, Sprite, Vec2, World};

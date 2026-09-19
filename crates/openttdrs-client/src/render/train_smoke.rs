@@ -525,7 +525,7 @@ fn advanced_effect_should_emit(
     )
 }
 
-/// Igual que [`advanced_effect_should_emit`], usando `_random` para las
+/// Igual que `advanced_effect_should_emit`, usando `_random` para las
 /// comprobaciones `Chance16` del tick visual real.
 #[allow(clippy::too_many_arguments)]
 fn advanced_effect_should_emit_with_random(

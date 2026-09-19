@@ -884,7 +884,8 @@ impl NewGrfStringCatalog {
     /// `⟦grf-string:0xNNNN⟧` para no mezclar el parseo de pseudo-sprites con el
     /// catálogo. Al resolverlo, los IDs menores a `GRF_STRING_GENERIC_BASE` se
     /// mapean al rango genérico del GRF y los IDs ya genéricos se conservan.
-    /// Cada referencia se busca con el mismo fallback de idioma que [`lookup`].
+    /// Cada referencia se busca con el mismo fallback de idioma que
+    /// [`Self::lookup`].
     /// Las cadenas faltantes permanecen como marcadores visibles y los ciclos
     /// se cortan sin panic.
     #[must_use]

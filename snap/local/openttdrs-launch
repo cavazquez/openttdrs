@@ -1,0 +1,16 @@
+#!/bin/sh
+# El paquete es de sólo lectura. Mantener saves y rutas relativas en el área
+# persistente del usuario evita que una actualización de la revisión los pierda.
+set -eu
+
+mkdir -p "$SNAP_USER_COMMON/save"
+cd "$SNAP_USER_COMMON"
+
+if [ -z "${OPENTTDRS_ASSET_ROOT:-}" ]; then
+  export OPENTTDRS_ASSET_ROOT="$SNAP"
+fi
+if [ -z "${OPENTTDRS_JSON_SAVE:-}" ]; then
+  export OPENTTDRS_JSON_SAVE="$SNAP_USER_COMMON/save/openttdrs_sim.json"
+fi
+
+exec "$SNAP/bin/openttdrs-client" "$@"

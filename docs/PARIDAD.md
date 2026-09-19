@@ -18,6 +18,12 @@ siguen existiendo. Las menciones posteriores a padres «abiertos» son registros
 del corte de evidencia de cada sección, no instrucciones para reactivarlos. Ver
 la [auditoría y disposición completa](audits/2026-09-18-direction.md).
 
+**Distribución alpha (2026-09-19):** el corte se publicó como
+[prerelease `v0.1.0-alpha.1`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
+y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) para Linux amd64
+(revisión 1). Distribuir el cliente no certifica paridad global, compatibilidad
+universal de saves, NewGRF ni multijugador.
+
 Para investigar una discrepancia de render de una partida `.sav`, seguir la
 [metodología de paridad raw → semántica → draw](parity/METODOLOGIA_RENDER_SAV.md).
 Cuando esa evidencia ya coincide pero el resultado compuesto difiere, usar el

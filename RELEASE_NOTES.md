@@ -1,14 +1,15 @@
 # openttdrs 0.1.0-alpha.1
 
-**Borrador de notas; no acredita una release publicada.** Al revisar GitHub el
-2026-09-19 no hay publicaciones. El candidato ya cumplió el [corte Primera
-ruta](docs/parity/continuous-work-plan.md), incluido su smoke gráfico y sesión
-de aceptación; el [dry-run de release](https://github.com/cavazquez/openttdrs/actions/runs/35431897233)
-también aprobó. Publicar el tag y la release sigue requiriendo una decisión
-explícita.
+**Publicada el 2026-09-19.** La alpha está disponible como
+[prerelease de GitHub](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
+y como [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) para Linux
+amd64. El [corte Primera ruta](docs/parity/continuous-work-plan.md), su smoke
+gráfico y la sesión de aceptación ya están completados; el
+[workflow de release](https://github.com/cavazquez/openttdrs/actions/runs/35453383079)
+publicó los paquetes de escritorio.
 
-Notas preparadas para la primera alpha pública. Incluye un cliente isométrico jugable,
-servidor dedicado lockstep y herramientas headless de paridad con OpenTTD 15.3.
+Incluye un cliente isométrico jugable, servidor dedicado lockstep y herramientas
+headless de paridad con OpenTTD 15.3.
 
 ## Qué probar
 
@@ -20,12 +21,29 @@ servidor dedicado lockstep y herramientas headless de paridad con OpenTTD 15.3.
 
 ## Instalación
 
-1. Descargá el archivo de tu plataforma y verificá el `.sha256` asociado.
+Para Linux amd64, el canal alpha del Snap Store es:
+
+~~~bash
+sudo snap install openttdrs --channel=latest/edge
+openttdrs
+~~~
+
+El Snap incluye assets y conserva las partidas JSON en
+`~/snap/openttdrs/common/save/`. El servidor dedicado se inicia con
+`openttdrs.dedicated`.
+
+Para Linux x86_64, Windows x86_64 o macOS arm64:
+
+1. Descargá el archivo de tu plataforma desde la
+   [prerelease](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
+   y verificá el `.sha256` asociado.
 2. Extraelo completo; `assets/` y `static/` deben quedar junto al ejecutable.
 3. Ejecutá `openttdrs-client` (`openttdrs-client.exe` en Windows).
 
-En Linux se requieren las bibliotecas de ventana/audio indicadas en el README.
-Los binarios de esta alpha no están firmados ni notarizados.
+Los archivos de GitHub para Linux requieren las bibliotecas de ventana/audio
+indicadas en el README. El Snap usa confinamiento estricto; `latest/edge` es
+un canal de pruebas, no estable. Los binarios de GitHub de esta alpha no están
+notarizados.
 
 ## Estado y límites
 

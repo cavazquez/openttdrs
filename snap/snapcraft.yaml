@@ -1,0 +1,100 @@
+name: openttdrs
+title: openttdrs
+version: "0.1.0-alpha.1"
+summary: Simulador de transporte isométrico inspirado en OpenTTD
+description: |
+  openttdrs es un simulador de transporte escrito en Rust y renderizado con Bevy.
+  Esta alpha permite construir y operar rutas, mover vehículos, transportar carga,
+  cobrar y guardar/cargar partidas. Incluye el cliente gráfico, un servidor
+  dedicado experimental y los assets libres necesarios para ejecutarlo.
+
+  Es una alpha para pruebas: no promete paridad ni compatibilidad total con
+  OpenTTD, NewGRF, partidas .sav ni multijugador.
+website:
+  - https://github.com/cavazquez/openttdrs
+source-code:
+  - https://github.com/cavazquez/openttdrs
+issues:
+  - https://github.com/cavazquez/openttdrs/issues
+license: GPL-2.0-only
+icon: static/app/icons/256x256.png
+
+base: core24
+grade: devel
+confinement: strict
+
+platforms:
+  amd64:
+
+apps:
+  openttdrs:
+    command: bin/openttdrs-launch
+    extensions: [gnome]
+    plugs:
+      - audio-playback
+      - home
+      - network
+      - network-bind
+
+  dedicated:
+    command: bin/openttdrs-dedicated
+    plugs:
+      - network
+      - network-bind
+
+parts:
+  # Snapcraft no distribuye rustup en todos los builders core24. Instalamos la
+  # misma toolchain fijada por rust-toolchain.toml, con checksum oficial, sólo
+  # para compilar; prime la excluye del snap final.
+  rust-deps:
+    plugin: nil
+    source: https://static.rust-lang.org/dist/rust-1.98.0-x86_64-unknown-linux-gnu.tar.xz
+    source-checksum: sha256/ed8ee2df70909c88cbaf87a6cfa3920dac00b537de12a6abe6906641e0f5952f
+    override-build: |
+      ./install.sh --prefix="$CRAFT_PART_INSTALL" --disable-ldconfig
+    prime:
+      - -*
+
+  openttdrs:
+    plugin: rust
+    source: .
+    # Usar el checkout Git evita copiar el target/ local (decenas de GB) al
+    # contenedor de build. El manifiesto sigue siendo el del árbol actual.
+    source-type: git
+    after:
+      - rust-deps
+    rust-channel: none
+    build-environment:
+      - PATH: $CRAFT_STAGE/bin:$PATH
+    build-packages:
+      - clang
+      - mold
+      - libasound2-dev
+      - libwayland-dev
+      - libx11-dev
+      - libxcursor-dev
+      - libxi-dev
+      - libxkbcommon-dev
+    stage-packages:
+      - libasound2t64
+      - libffi8
+      - libvulkan1
+      - libwayland-client0
+      - libx11-6
+      - libxcursor1
+      - libxi6
+      - libxkbcommon0
+      - libxkbcommon-x11-0
+    override-build: |
+      cargo build --locked --release \
+        -p openttdrs-client --bin openttdrs-client \
+        -p openttdrs-net --bin openttdrs-dedicated
+
+      install -Dm755 target/release/openttdrs-client \
+        "$CRAFT_PART_INSTALL/bin/openttdrs-client"
+      install -Dm755 target/release/openttdrs-dedicated \
+        "$CRAFT_PART_INSTALL/bin/openttdrs-dedicated"
+      install -Dm755 "$CRAFT_PROJECT_DIR/snap/local/openttdrs-launch" \
+        "$CRAFT_PART_INSTALL/bin/openttdrs-launch"
+      cp -a assets "$CRAFT_PART_INSTALL/assets"
+      cp -a static "$CRAFT_PART_INSTALL/static"

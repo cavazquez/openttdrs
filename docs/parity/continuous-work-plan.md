@@ -1,4 +1,4 @@
-# Plan vigente — primera ruta jugable
+# Corte cerrado — primera ruta jugable
 
 Actualizado: **2026-09-19**. Base auditada: `ca698e50`.
 
@@ -7,7 +7,12 @@ perseguir paridad por subsistemas. El objetivo inmediato es entregar una
 experiencia acotada que pueda jugarse y verificarse de principio a fin.
 La paridad con OpenTTD sigue siendo una referencia técnica de largo plazo.
 
-## Entrega comprometida
+La entrega está publicada como
+[prerelease `v0.1.0-alpha.1`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
+y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) (revisión 1,
+Linux amd64). No convierte las brechas históricas de paridad en tareas activas.
+
+## Entrega comprometida (cumplida)
 
 Desde el menú, abrir **Primera ruta**, construir un servicio de camiones
 entre una mina de carbón y una central eléctrica, recibir el primer pago,
@@ -22,6 +27,13 @@ perfecta ni equivalencia universal de saves o generación.
 
 ## Entrega publicada desde el corte
 
+- Distribución alpha — el tag
+  [`v0.1.0-alpha.1`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
+  produjo los paquetes de GitHub para Linux x86_64, Windows x86_64 y macOS
+  arm64. El Snap estricto `core24` se compiló con la misma versión, pasó los
+  linters de Snapcraft con sólo avisos de bibliotecas X11 preventivas y se
+  publicó como revisión 1 de `latest/edge`. El launcher y los assets incluidos
+  pasaron `--check-assets` desde el árbol empaquetado.
 - [#568](https://github.com/cavazquez/openttdrs/issues/568) — `rustfmt` de
   `station_tile_anim.rs`, cerrado con el commit `87114d5a` tras `cargo fmt
   --all -- --check` y revisión del diff.
@@ -113,13 +125,17 @@ históricas como tareas por defecto.
    15 minutos desde el paquete Linux: construcción → pago → guardar → cargar
    → nueva entrega. Conservar commit, configuración, reporte y artefactos.
 4. Dry-run del workflow de release con smoke gráfico y gates existentes
-   aprobados. La publicación de una release es una decisión posterior; no se
-   etiqueta una versión durante esta reorganización.
+   aprobados. La publicación posterior requiere un tag con la versión exacta y
+   una revisión de sus artefactos.
 
 **Resultado (2026-09-19):** los cuatro criterios se satisficieron. La
 [CI de `aa8fe3d9`](https://github.com/cavazquez/openttdrs/actions/runs/35433985317),
 plataformas y fuzz quedaron verdes; el dry-run de release y la sesión manual
-del paquete quedan enlazados en #577. No se publicó un tag ni una release.
+del paquete quedan enlazados en #577. Después se creó el tag
+[`v0.1.0-alpha.1`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1),
+el [workflow de release](https://github.com/cavazquez/openttdrs/actions/runs/35453383079)
+publicó la prerelease y el Snap Store recibió la revisión 1 en
+[`latest/edge`](https://snapcraft.io/openttdrs).
 
 El avance se mide por estos resultados y tareas aceptadas, no por cantidad de
 commits, páginas de documentación o reducción de píxeles en una sola captura.

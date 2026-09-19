@@ -9,9 +9,12 @@
 [![Licencia GPL-2.0-only](https://img.shields.io/badge/licencia-GPL--2.0--only-blue.svg)](LICENSE)
 [![Rust MSRV](https://img.shields.io/badge/rust-1.98%2B-orange.svg)](https://doc.rust-lang.org/stable/releases.html)
 [![Bevy](https://img.shields.io/badge/Bevy-0.19.0-C659D4.svg)](https://bevyengine.org/)
+[![Snap Store](https://snapcraft.io/openttdrs/badge.svg)](https://snapcraft.io/openttdrs)
 [![Inspiración OpenTTD](https://img.shields.io/badge/inspiración-OpenTTD-5a3.svg)](https://www.openttd.org/)
 
 Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrito en **Rust** con cliente [Bevy](https://bevyengine.org/). El desarrollo es **incremental**: siempre hay algo jugable; la paridad total (NewGRF completo, red, saves idénticos al original) se aborda por cortes documentados, no de golpe.
+
+La alpha pública actual es [`0.1.0-alpha.1`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1): hay paquetes de escritorio en GitHub y un [Snap para Linux amd64](https://snapcraft.io/openttdrs) en `latest/edge`. Es un canal de pruebas, no una promesa de estabilidad ni de paridad con OpenTTD.
 
 > Compilar Bevy puede saturar CPU/RAM. Si hace falta: `cargo build -j 1`, o dejá que [CI](.github/workflows/ci.yml) valide el build. Las ejecuciones repetidas de `./scripts/check.sh` aprovechan `sccache` automáticamente cuando está instalado.
 
@@ -35,6 +38,9 @@ arranque gráfico del paquete Linux fuera del checkout y la sesión completa de
 aceptación. El [plan ejecutable](docs/parity/continuous-work-plan.md) registra
 el cierre: no queda un issue activo en este corte. La
 [auditoría](docs/audits/2026-09-18-direction.md) explica la selección original.
+La distribución de ese corte está publicada como
+[prerelease de GitHub](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
+y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs).
 
 | Capa | Qué hay |
 |------|---------|
@@ -42,7 +48,7 @@ el cierre: no queda un issue activo en este corte. La
 | **Cliente** (`openttdrs-client`) | Vista isométrica OpenGFX, menú de inicio, toolbar, listas UI, noticias; `--server` / `--client` (I8) |
 | **Red** (`openttdrs-net`) | TCP lockstep + bin `openttdrs-dedicated` ([ADR 0001](docs/adr/0001-multiplayer-v1.md)) |
 | **NewGRF** | Catálogos Action0/3/5 y runtime parcial; las matrices de [propiedades](docs/parity/newgrf-action0-matrix.md) y [callbacks](docs/parity/newgrf-callback-matrix.md) distinguen parseado, almacenado y ejecutado |
-| **Hito 0.1** | `0.1.0-alpha.1` preparada; solitario jugable. **I8 red** MVP ([#21](https://github.com/cavazquez/openttdrs/issues/21) ✅) + host migration ([#171](https://github.com/cavazquez/openttdrs/issues/171), [ADR 0004](docs/adr/0004-host-migration-post-v1.md)) |
+| **Hito 0.1** | [`0.1.0-alpha.1` publicada](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1); solitario jugable y [Snap `latest/edge`](https://snapcraft.io/openttdrs) para Linux amd64. **I8 red** MVP ([#21](https://github.com/cavazquez/openttdrs/issues/21) ✅) + host migration ([#171](https://github.com/cavazquez/openttdrs/issues/171), [ADR 0004](docs/adr/0004-host-migration-post-v1.md)) |
 
 **Antecedentes de worldgen (cortes hasta septiembre 2026):** se alinearon las fases del generador
 procedural (`landscape` → `clear` → `towns` → `industries` → `objects` →
@@ -55,9 +61,10 @@ alinear `TileLoopTreesAlps`, el escalado de faros con bordes fluviales y el
 rechazo de `MP_VOID`/preservación de `RoughSnow` en `MAP2`; la cohorte Arctic
 512² `1330935378`–`1330935381` también queda exacta tras validar las cabezas de
 puente con `CheckBridgeSlope`; la generalización a otras semillas, tamaños,
-climas y configuraciones sigue abierta. El detalle y
-el alcance pendiente viven en el [plan continuo de
-paridad](docs/parity/continuous-work-plan.md) y en los [issues abiertos](https://github.com/cavazquez/openttdrs/issues).
+climas y configuraciones sigue abierta. Los detalles y
+alcances pendientes viven en el [plan continuo de
+paridad](docs/parity/continuous-work-plan.md) y sus matrices; al 2026-09-19 no
+hay [issues de producto abiertos](https://github.com/cavazquez/openttdrs/issues).
 
 **Arranque desde checkout (septiembre 2026):** el atlas OpenGFX 8bpp, la fuente,
 los sonidos y la música están versionados. `cargo run` selecciona el cliente y,
@@ -74,7 +81,28 @@ documentados. Editor #42 ✅ · GameScript-lite #43 ✅ · IA TransCargo ✅
 
 ## Arranque rápido
 
-> Actualizado: 2026-09-08.
+> Actualizado: 2026-09-19.
+
+### Instalar la alpha publicada
+
+En Linux **amd64**, la vía más corta es el [Snap Store](https://snapcraft.io/openttdrs):
+
+~~~bash
+sudo snap install openttdrs --channel=latest/edge
+openttdrs
+~~~
+
+`latest/edge` es el canal alpha del proyecto. El Snap es estricto, incluye los
+assets libres y guarda sus partidas JSON por defecto en
+`~/snap/openttdrs/common/save/`; una actualización de revisión no borra esa
+carpeta. El servidor dedicado queda disponible como `openttdrs.dedicated`.
+
+También hay paquetes para Linux x86_64, Windows x86_64 y macOS arm64 en la
+[prerelease `v0.1.0-alpha.1`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1).
+Descargá el archivo de tu plataforma y verificá el `.sha256` asociado antes de
+extraerlo completo.
+
+### Ejecutar desde el checkout
 
 ```bash
 git clone https://github.com/cavazquez/openttdrs.git
@@ -89,7 +117,7 @@ carpeta derivada está ignorada por Git y se reconstruye automáticamente si fal
 
 ### Dependencias (máquina nueva)
 
-> Actualizado: 2026-09-08.
+> Actualizado: 2026-09-19.
 
 Para jugar desde el checkout hacen falta Rust **1.98+** y las bibliotecas nativas
 de ventana/audio que use tu distribución. En Ubuntu/Debian, la misma lista que
@@ -128,13 +156,16 @@ OTTDJSON_LOAD=save/openttdrs_sim.json cargo run
 OPENTTDRS_WORLD_GEN=1 OPENTTDRS_WORLD_ISLAND=1 OPENTTDRS_WORLD_SEED=42 cargo run
 ```
 
-En juego: **F5** guardar · **F9** cargar · pausa/velocidad en toolbar · preferencias en `~/.config/com.github.cavazquez.openttdrs/`.
+En juego: **F5** guarda · **F9** carga · pausa/velocidad están en la toolbar.
+Desde el checkout, las preferencias viven en
+`~/.config/com.github.cavazquez.openttdrs/`; desde el Snap, la partida JSON
+predeterminada vive en `~/snap/openttdrs/common/save/`.
 
 ---
 
 ## Desarrollo
 
-> Actualizado: 2026-09-08.
+> Actualizado: 2026-09-19.
 
 Flujo de PRs y DoD: [CONTRIBUTING.md](CONTRIBUTING.md). Capas: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -166,9 +197,30 @@ cargo deny check       # licencias + advisories + sources + bans (deny.toml)
 # Actualizar excepciones: editar deny.toml [advisories].ignore con justificación
 ```
 
+### Empaquetar el Snap (Linux amd64)
+
+La receta está en [`snap/snapcraft.yaml`](snap/snapcraft.yaml). Construye en
+una base `core24` mediante LXD y fija la toolchain Rust 1.98, `clang` y
+`mold` para reproducir el perfil de enlace del proyecto:
+
+~~~bash
+snapcraft pack --use-lxd --output .
+~~~
+
+El resultado se llama `openttdrs_0.1.0-alpha.1_amd64.snap`. Sólo un
+mantenedor autenticado debe subir una nueva revisión, después de comprobar el
+artefacto:
+
+~~~bash
+snapcraft upload --release=latest/edge openttdrs_0.1.0-alpha.1_amd64.snap
+~~~
+
+El canal `latest/edge` es la distribución alpha; no publicar desde ese
+comando en `stable` sin una decisión de release independiente.
+
 ### Caché de compilación (`sccache`)
 
-> Actualizado: 2026-09-08.
+> Actualizado: 2026-09-19.
 
 GitHub Actions activa `sccache` con el backend de caché de Actions en todos los
 jobs que compilan Rust. En local es opcional: `./scripts/check.sh` lo detecta y
@@ -208,7 +260,7 @@ Detalle: [docs/PARIDAD.md](docs/PARIDAD.md).
 
 ## CI y calidad
 
-> Actualizado: 2026-09-08.
+> Actualizado: 2026-09-19.
 
 Un job en [.github/workflows/ci.yml](.github/workflows/ci.yml) (sccache + caché Cargo + APT):
 
@@ -223,7 +275,8 @@ Un job en [.github/workflows/ci.yml](.github/workflows/ci.yml) (sccache + caché
 | extras | `tnbp` + `ci-python` (#120) + `generated-tables-ci` (#119) |
 | plataformas | `cargo check` en macOS y Windows |
 | fuzz | replay determinista en PR + exploración semanal de `.sav`, NewGRF y frames de red |
-| release | tag SemVer exacto → Linux x86_64, Windows x86_64 y macOS arm64 + SHA-256 |
+| release | tag SemVer exacto → prerelease con Linux x86_64, Windows x86_64 y macOS arm64 + SHA-256 |
+| Snap | empaquetado manual `core24` validado con lint; revisión 1 publicada en `latest/edge` para Linux amd64 |
 
 `check.sh ci` replica fmt/clippy/rustdoc/tests/TNBP/Python/tablas (hash; regen si hay upstream). Solo en GHA: audit, deny, cobertura en `main` y fetch OpenTTD para regen.
 
@@ -231,12 +284,21 @@ Cobertura manual: [.github/workflows/coverage.yml](.github/workflows/coverage.ym
 
 ### Release alpha
 
-> Actualizado: 2026-09-08.
+> Actualizado: 2026-09-19.
 
-El workflow [release.yml](.github/workflows/release.yml) se puede ejecutar manualmente
-para probar artefactos sin publicar. Un tag que coincida exactamente con la versión
-del workspace (actualmente `v0.1.0-alpha.1`) crea una prerelease con binarios,
-assets libres, servidor dedicado y checksums SHA-256. El empaquetado local equivalente:
+El tag `v0.1.0-alpha.1` ya produjo la
+[prerelease pública](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
+mediante [release.yml](.github/workflows/release.yml): binarios, assets libres,
+servidor dedicado y checksums SHA-256 para Linux x86_64, Windows x86_64 y macOS
+arm64. El workflow también permite comprobar artefactos manualmente sin crear
+otro tag.
+
+| Vía | Plataforma | Estado |
+|-----|------------|--------|
+| [GitHub Releases](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1) | Linux x86_64, Windows x86_64, macOS arm64 | prerelease publicada |
+| [Snap Store](https://snapcraft.io/openttdrs) | Linux amd64 | revisión 1, `latest/edge` (alpha) |
+
+El empaquetado local de los paquetes de escritorio equivalente es:
 
 ```bash
 cargo build --locked --release \
@@ -246,14 +308,16 @@ cargo build --locked --release \
   0.1.0-alpha.1 x86_64-unknown-linux-gnu linux-x86_64 tar.gz
 ```
 
-Notas: [CHANGELOG.md](CHANGELOG.md) · [RELEASE_NOTES.md](RELEASE_NOTES.md) ·
+Para el paquete Snap y su publicación, usar la receta documentada en
+[Desarrollo](#empaquetar-el-snap-linux-amd64). Notas:
+[CHANGELOG.md](CHANGELOG.md) · [RELEASE_NOTES.md](RELEASE_NOTES.md) ·
 [atribuciones de assets](THIRD_PARTY_ASSETS.md).
 
 ---
 
 ## Qué está hecho / qué falta (resumen)
 
-> Actualizado: 2026-09-08. Las matrices canónicas enlazadas abajo tienen
+> Actualizado: 2026-09-19. Las matrices canónicas enlazadas abajo tienen
 > prioridad sobre cualquier resumen de esta tabla.
 
 Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
@@ -272,6 +336,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 | Aviones | 🟡 | Airport FTA, compra/vuelo/ruido/crash; render y casos límite incompletos |
 | Multijugador (I8) | 🟡 | MVP lockstep + dedicated + host migration; desync/UI OOS |
 | IA rivales / GameScript / editor | 🟡 | TransCargo + editor #42 ✅; GS-lite #43 ✅; Squirrel OOS |
+| Distribución alpha | ✅ | [GitHub prerelease](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1) + [Snap Store](https://snapcraft.io/openttdrs) `latest/edge` (Linux amd64) |
 
 Al 2026-09-19 no hay [issues activos](https://github.com/cavazquez/openttdrs/issues)
 en este corte. Los ajustes P0 #568–#571, la ruta por comandos #572, su
@@ -284,7 +349,7 @@ Los quince anteriores se retiran como `not planned`, no como paridad lograda.
 
 ## Documentación
 
-> Actualizado: 2026-09-08.
+> Actualizado: 2026-09-19.
 
 | Documento | Uso |
 |-----------|-----|
@@ -296,6 +361,7 @@ Los quince anteriores se retiran como `not planned`, no como paridad lograda.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Capas + diseño I0–I8 |
 | [docs/GRAFICOS.md](docs/GRAFICOS.md) | OpenGFX |
 | [docs/RENDIMIENTO.md](docs/RENDIMIENTO.md) | Benches y mapas grandes |
+| [snap/snapcraft.yaml](snap/snapcraft.yaml) | Paquete Linux amd64, canal alpha y runtime estricto |
 
 Saves OpenTTD → mapa del cliente:
 
@@ -310,7 +376,7 @@ Detalle de planos/chunks: [docs/MAPA_Y_FERROCARRIL.md](docs/MAPA_Y_FERROCARRIL.m
 
 ## Stack
 
-> Actualizado: 2026-09-08.
+> Actualizado: 2026-09-19.
 
 | Tecnología | Rol |
 |------------|-----|
@@ -320,12 +386,13 @@ Detalle de planos/chunks: [docs/MAPA_Y_FERROCARRIL.md](docs/MAPA_Y_FERROCARRIL.m
 | Python 3 + Pillow | `parse_sav`, goldens, recorte OpenGFX |
 | OpenGFX / OpenSFX / OpenMSX | Arte, SFX y música |
 | GitHub Actions + Dependabot | CI y deps mensuales |
+| Snapcraft 9 + `core24` / LXD | Snap estricto Linux amd64 publicado en `latest/edge` |
 
 ---
 
 ## Estructura del repo
 
-> Actualizado: 2026-09-08.
+> Actualizado: 2026-09-19.
 
 ```
 Cargo.toml                 # Workspace
@@ -334,6 +401,7 @@ crates/openttdrs-client/   # Binario Bevy (--server / --client)
 crates/openttdrs-net/      # TCP I8 + openttdrs-dedicated
 docs/                      # Roadmaps e informes
 scripts/                   # check, assets, parse_sav, fetch upstream
+snap/                      # receta Snap, launcher y desktop entry
 tests/fixtures/            # .sav + goldens
 .github/                   # CI + Dependabot
 reference/                 # Clon OpenTTD (gitignored)
@@ -343,6 +411,6 @@ reference/                 # Clon OpenTTD (gitignored)
 
 ## Licencia
 
-> Actualizado: 2026-09-08.
+> Actualizado: 2026-09-19.
 
 **GPL-2.0-only** (ver `LICENSE`). El código de OpenTTD usado como referencia conserva su propia licencia y copyright.

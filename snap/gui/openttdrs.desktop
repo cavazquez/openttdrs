@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=openttdrs
+GenericName=Transport tycoon sandbox
+Comment=Simulador de transporte isométrico inspirado en OpenTTD
+Exec=openttdrs %U
+Icon=${SNAP}/static/app/icons/256x256.png
+Terminal=false
+Categories=Game;Simulation;
+StartupWMClass=openttdrs
+Keywords=openttd;transport;simulation;train;rail;

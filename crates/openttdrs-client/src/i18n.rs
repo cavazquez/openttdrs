@@ -183,6 +183,7 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Multijugador" => "Multiplayer",
         "Continuar partida" => "Continue game",
         "Nueva partida" => "New game",
+        "Primera ruta" => "First route",
         "Escenarios / heightmap" => "Scenarios / heightmap",
         "Editor de escenarios" => "Scenario editor",
         "Demo completa (mapa plano)" => "Full demo (flat map)",
@@ -1695,6 +1696,7 @@ mod tests {
         assert_eq!(text(Locale::Es, "Guardar partida"), "Guardar partida");
         assert_eq!(text(Locale::En, "Guardar partida"), "Save game");
         assert_eq!(text(Locale::En, "Nueva partida"), "New game");
+        assert_eq!(text(Locale::En, "Primera ruta"), "First route");
         assert_eq!(text(Locale::En, "Idioma"), "Language");
         assert_eq!(text(Locale::En, "Densidad de pueblos"), "Town density");
         assert_eq!(text(Locale::En, "Esc cancelar"), "Esc cancel");

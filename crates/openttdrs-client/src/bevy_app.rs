@@ -100,6 +100,7 @@ fn parse_capture_window_resolution(raw: &str) -> Option<(u32, u32)> {
 pub(crate) fn visual_capture_requested() -> bool {
     std::env::var_os("OPENTTDRS_WINDOWS_SHOT").is_some()
         || std::env::var_os("OPENTTDRS_MAP_SHOT").is_some()
+        || std::env::var_os("OPENTTDRS_MAIN_MENU_SHOT").is_some()
 }
 
 /// Indica si la captura de mapa debe excluir todo overlay que no pertenezca al

@@ -9,6 +9,8 @@
 //!
 //! Resolución opcional: `OPENTTDRS_SHOT_RES=1280x720` o `1920x1080`.
 //! Escala opcional: `OPENTTDRS_SHOT_UI_SCALE=1` o `2`.
+//! `OPENTTDRS_MAIN_MENU_SHOT=/ruta/captura.png` guarda el menú real sin
+//! arrancar una partida; es el smoke visual de sus accesos localizados.
 //! En captura individual, `OPENTTDRS_MAP_SHOT_SCALE=1/2/4/8` fija además el
 //! zoom de la cámara del mapa antes de abrir la ventana (UI sin escalar).
 //! `OPENTTDRS_WINDOW_SHOT_DEPOT_KIND=road|rail|ship` selecciona la familia
@@ -1235,12 +1237,21 @@ pub(crate) struct WindowsShotPlugin;
 impl Plugin for WindowsShotPlugin {
     fn build(&self, app: &mut App) {
         export_window_parity_matrix_if_requested();
-        if std::env::var_os("OPENTTDRS_WINDOWS_SHOT").is_some()
-            || std::env::var_os("OPENTTDRS_MAP_SHOT").is_some()
-        {
+        let windows_shot = std::env::var_os("OPENTTDRS_WINDOWS_SHOT").is_some();
+        let map_shot = std::env::var_os("OPENTTDRS_MAP_SHOT").is_some();
+        let main_menu_shot = std::env::var_os("OPENTTDRS_MAIN_MENU_SHOT").is_some();
+        if windows_shot || map_shot || main_menu_shot {
             app.add_systems(Startup, apply_shot_settings);
         }
-        if std::env::var_os("OPENTTDRS_WINDOWS_SHOT").is_some() {
+        if main_menu_shot {
+            app.add_systems(
+                Update,
+                main_menu_shot_driver
+                    .run_if(in_state(ClientScreen::MainMenu))
+                    .after(UpdateSet::Ui),
+            );
+        }
+        if windows_shot {
             // La captura debe medir la misma partida, no un frame que depende de
             // cuánto tarde en iniciar el renderer. `OnEnter` ocurre antes del
             // primer `FixedUpdate` ya dentro de la partida.
@@ -1263,7 +1274,7 @@ impl Plugin for WindowsShotPlugin {
                         .after(UpdateSet::Ui),
                 ),
             );
-        } else if std::env::var_os("OPENTTDRS_MAP_SHOT").is_some() {
+        } else if map_shot {
             app.init_resource::<MapShotProgress>()
                 .init_resource::<MapShotPreferenceGuard>()
                 .init_resource::<MapShotCameraState>();
@@ -1311,6 +1322,26 @@ impl Plugin for WindowsShotPlugin {
                 ),
             );
         }
+    }
+}
+
+/// Captura el menú ya compuesto; no usa el atajo de partida de los otros shots.
+fn main_menu_shot_driver(
+    mut commands: Commands,
+    mut frame: Local<u32>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    *frame += 1;
+    if *frame == SHOT_FRAME
+        && let Ok(path) = std::env::var("OPENTTDRS_MAIN_MENU_SHOT")
+    {
+        info!("main_menu_shot: guardando captura en {path}");
+        commands
+            .spawn(Screenshot::primary_window())
+            .observe(save_to_disk(path));
+    }
+    if *frame == EXIT_FRAME {
+        exit.write(AppExit::Success);
     }
 }
 

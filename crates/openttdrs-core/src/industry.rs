@@ -942,7 +942,7 @@ pub struct Industry {
     pub newgrf_accepted_cargo_waiting: CargoStock,
     /// Historial mensual nativo por cargo aceptado (`INDY.accepted[].history`).
     /// El índice cero es el mes actual, como en `HistoryData` de `OpenTTD`.
-    #[serde(default)]
+    #[serde(default, with = "cargo_history_map_serde")]
     pub accepted_history: std::collections::HashMap<
         CargoType,
         Vec<crate::entity_history::IndustryAcceptedHistorySample>,
@@ -950,7 +950,7 @@ pub struct Industry {
     /// Historial mensual nativo por cargo producido (`INDY.produced[].history`).
     /// El índice cero es el mes actual; las posiciones restantes son meses,
     /// trimestres y años anteriores en el orden que espera `OpenTTD`.
-    #[serde(default)]
+    #[serde(default, with = "cargo_history_map_serde")]
     pub produced_history: std::collections::HashMap<
         CargoType,
         Vec<crate::entity_history::IndustryProducedHistorySample>,
@@ -1130,6 +1130,58 @@ pub struct Industry {
     /// `[input][extra_output]`.
     #[serde(default)]
     pub newgrf_processing_extra_multipliers: Vec<u16>,
+}
+
+/// Serialización de historiales por cargo.
+///
+/// `CargoType` admite variantes con datos para `NewGRF`, por lo que no puede ser
+/// una clave JSON. Una secuencia ordenada conserva todas las variantes y no
+/// deja el resultado a merced del orden de `HashMap`.
+mod cargo_history_map_serde {
+    use std::collections::{BTreeMap, HashMap};
+
+    use serde::de::Error as _;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use crate::CargoType;
+
+    type CargoMap<T> = HashMap<CargoType, T>;
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum CargoMapWire<T> {
+        Entries(Vec<(CargoType, T)>),
+        /// Antes de haber historial, el mapa vacío era JSON válido. Se admite
+        /// para conservar los saves propios que lo guardaron como `{}`.
+        LegacyEmpty(BTreeMap<String, T>),
+    }
+
+    pub fn serialize<S, T>(history: &CargoMap<T>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: Serialize,
+    {
+        let mut entries: Vec<_> = history
+            .iter()
+            .map(|(cargo, samples)| (*cargo, samples))
+            .collect();
+        entries.sort_unstable_by_key(|(cargo, _)| *cargo);
+        entries.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<CargoMap<T>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: Deserialize<'de>,
+    {
+        match CargoMapWire::deserialize(deserializer)? {
+            CargoMapWire::Entries(entries) => Ok(entries.into_iter().collect()),
+            CargoMapWire::LegacyEmpty(entries) if entries.is_empty() => Ok(CargoMap::new()),
+            CargoMapWire::LegacyEmpty(_) => Err(D::Error::custom(
+                "historial de industria legado con claves de carga no recuperable",
+            )),
+        }
+    }
 }
 
 const fn default_prod_level() -> u8 {

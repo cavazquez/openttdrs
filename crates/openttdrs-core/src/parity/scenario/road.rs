@@ -6,7 +6,32 @@ use crate::command::{Command, apply_command};
 use crate::industry::{Industry, IndustryKind};
 use crate::map::TileCoord;
 use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
-use crate::{GameState, PathNetwork, find_path};
+use crate::{Climate, GameState, IndustrySpec, PathNetwork, find_path};
+
+/// Semilla fija del escenario inicial de la primera ruta jugable.
+pub const FIRST_ROUTE_WORLD_SEED: u64 = 0xC0A1_1950;
+/// Año de inicio del escenario inicial de la primera ruta jugable.
+pub const FIRST_ROUTE_YEAR: u32 = 1950;
+/// Origen de la mina de carbón del escenario `first_route`.
+pub const FIRST_ROUTE_COAL_MINE: TileCoord = TileCoord::new(8, 8);
+/// Origen de la central eléctrica del escenario `first_route`.
+pub const FIRST_ROUTE_POWER_STATION: TileCoord = TileCoord::new(48, 8);
+/// Parada de carga prevista junto a la mina.
+pub const FIRST_ROUTE_LOAD_STOP: TileCoord = TileCoord::new(12, 11);
+/// Parada de descarga prevista junto a la central eléctrica.
+pub const FIRST_ROUTE_DELIVER_STOP: TileCoord = TileCoord::new(52, 11);
+/// Depósito previsto para comprar el primer camión.
+pub const FIRST_ROUTE_DEPOT: TileCoord = TileCoord::new(5, 12);
+/// Dirección del depósito: salida hacia el este, sobre la carretera principal.
+pub const FIRST_ROUTE_DEPOT_DIRECTION: u8 = 2;
+/// Fila de la carretera que une las dos paradas previstas.
+pub const FIRST_ROUTE_ROAD_Y: i32 = 12;
+/// Primer `x` de la carretera prevista.
+pub const FIRST_ROUTE_ROAD_START_X: i32 = 6;
+/// Último `x` de la carretera prevista.
+pub const FIRST_ROUTE_ROAD_END_X: i32 = 56;
+/// Id que recibe el único vehículo comprado en el escenario vacío.
+pub const FIRST_ROUTE_VEHICLE_ID: u32 = 1;
 
 /// Tesela de la parada de carga (bahía camión) del escenario `truck_bay`.
 pub const TRUCK_BAY_LOAD_STOP: TileCoord = TileCoord::new(4, 5);
@@ -18,6 +43,44 @@ pub const TRUCK_BAY_DELIVER_STOP: TileCoord = TileCoord::new(16, 11);
 pub const TRUCK_BAY_DELIVER_ROAD: TileCoord = TileCoord::new(16, 12);
 /// Id del camión del escenario.
 pub const TRUCK_BAY_VEHICLE_ID: u32 = 1;
+
+/// Mundo inicial, plano y determinista para construir la primera ruta de carbón.
+///
+/// Incluye únicamente la mina y la central eléctrica visibles; deja al jugador
+/// construir por comandos la carretera, el depósito, las dos paradas y el
+/// camión. Conserva sólo la entrada estática de `OpenGFX`: no carga `NewGRF`
+/// dinámicos que puedan alterar la simulación.
+///
+/// # Panics
+///
+/// Si la siembra fija de industrias falla (bug del propio escenario).
+#[must_use]
+#[allow(clippy::expect_used)] // fixture fijo: un fallo de construcción es un bug del escenario
+pub fn build_first_route() -> GameState {
+    let mut state = GameState::new(64, 64);
+    state.world_seed = FIRST_ROUTE_WORLD_SEED;
+    state.climate = Climate::Temperate;
+    state.tick = crate::news::tick_for_calendar_year(FIRST_ROUTE_YEAR);
+    state.sync_timers_from_tick();
+    state.ai.enabled = false;
+    state.disasters_enabled = false;
+    state.vehicle_breakdowns = 0;
+    state.newgrf_stack.retain(|entry| entry.is_static);
+
+    // El fixture puede sembrar industrias; no crea transporte, carga ni rutas.
+    apply_command(
+        &mut state,
+        &Command::PlaceIndustrySpecLayout(FIRST_ROUTE_COAL_MINE, IndustrySpec::CoalMine, 0),
+    )
+    .expect("mina de carbón first_route");
+    apply_command(
+        &mut state,
+        &Command::PlaceIndustrySpecLayout(FIRST_ROUTE_POWER_STATION, IndustrySpec::PowerStation, 1),
+    )
+    .expect("central eléctrica first_route");
+
+    state
+}
 
 pub(crate) fn place_road_polyline(
     state: &mut GameState,

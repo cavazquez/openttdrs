@@ -54,11 +54,57 @@ impl LinkFlowSample {
 /// Estadísticas de flujos observados.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LinkGraphStats {
-    #[serde(default)]
+    #[serde(default, with = "edge_map_serde")]
     pub edges: HashMap<LinkEdgeKey, LinkFlowSample>,
     /// Runtime `LGRJ`/`LGRS` original, solo válido hasta integrar o mutar el grafo.
     #[serde(skip)]
     pub(crate) runtime_chunks: Vec<LinkGraphRuntimeChunk>,
+}
+
+/// JSON no puede usar una clave estructurada como nombre de propiedad. Guardar
+/// el mapa como una secuencia ordenada mantiene los flujos persistibles y hace
+/// estable el hash canónico aun cuando el orden interno de `HashMap` cambie.
+mod edge_map_serde {
+    use std::collections::{BTreeMap, HashMap};
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
+
+    use super::{LinkEdgeKey, LinkFlowSample};
+
+    type EdgeMap = HashMap<LinkEdgeKey, LinkFlowSample>;
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum EdgeMapWire {
+        Entries(Vec<(LinkEdgeKey, LinkFlowSample)>),
+        /// El mapa vacío era el único JSON legado representable antes de que
+        /// hubiera flujos: se mantiene para no romper saves de ese estado.
+        LegacyEmpty(BTreeMap<String, LinkFlowSample>),
+    }
+
+    pub fn serialize<S>(edges: &EdgeMap, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut entries: Vec<_> = edges.iter().map(|(key, sample)| (*key, *sample)).collect();
+        entries.sort_unstable_by_key(|(key, _)| {
+            (key.from.x, key.from.y, key.to.x, key.to.y, key.cargo)
+        });
+        entries.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<EdgeMap, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        match EdgeMapWire::deserialize(deserializer)? {
+            EdgeMapWire::Entries(entries) => Ok(entries.into_iter().collect()),
+            EdgeMapWire::LegacyEmpty(entries) if entries.is_empty() => Ok(EdgeMap::new()),
+            EdgeMapWire::LegacyEmpty(_) => Err(D::Error::custom(
+                "legacy link_graph.edges con claves estructuradas no es recuperable",
+            )),
+        }
+    }
 }
 
 impl LinkGraphStats {
@@ -196,6 +242,24 @@ mod tests {
         }];
         assert_eq!(sample.units_month, 0);
         assert_eq!(sample.units_total, 15);
+    }
+
+    #[test]
+    fn json_roundtrip_keeps_structured_edge_keys() {
+        let mut graph = LinkGraphStats::default();
+        graph.record_trip(
+            TileCoord::new(8, 10),
+            TileCoord::new(20, 10),
+            CargoType::Coal,
+            15,
+            22,
+            120,
+        );
+
+        let json = serde_json::to_value(&graph).unwrap();
+        assert!(json["edges"].is_array());
+        let decoded: LinkGraphStats = serde_json::from_value(json).unwrap();
+        assert_eq!(decoded, graph);
     }
 
     #[test]

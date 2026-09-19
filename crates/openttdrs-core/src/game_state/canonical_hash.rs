@@ -54,9 +54,10 @@ impl GameState {
     /// Si la serialización serde falla (no debería con el esquema actual).
     #[must_use]
     pub fn canonical_hash(&self) -> u64 {
-        let Ok(value) = serde_json::to_value(self) else {
+        let value = match serde_json::to_value(self) {
+            Ok(value) => value,
             // El esquema de `GameState` es serializable; un fallo indica bug de tipos.
-            panic!("GameState serializable for canonical_hash");
+            Err(error) => panic!("GameState serializable for canonical_hash: {error}"),
         };
         let mut hasher = Fnv1a64::new();
         hasher.write_bytes(DOMAIN);

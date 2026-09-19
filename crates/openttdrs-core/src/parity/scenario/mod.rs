@@ -37,8 +37,12 @@ pub use rail::{
     build_train_supply_signal_snapshot, rail_signals_mixed_coord,
 };
 pub use road::{
-    TRUCK_BAY_DELIVER_ROAD, TRUCK_BAY_DELIVER_STOP, TRUCK_BAY_LOAD_ROAD, TRUCK_BAY_LOAD_STOP,
-    TRUCK_BAY_VEHICLE_ID, build_truck_bay,
+    FIRST_ROUTE_COAL_MINE, FIRST_ROUTE_DELIVER_STOP, FIRST_ROUTE_DEPOT,
+    FIRST_ROUTE_DEPOT_DIRECTION, FIRST_ROUTE_LOAD_STOP, FIRST_ROUTE_POWER_STATION,
+    FIRST_ROUTE_ROAD_END_X, FIRST_ROUTE_ROAD_START_X, FIRST_ROUTE_ROAD_Y, FIRST_ROUTE_VEHICLE_ID,
+    FIRST_ROUTE_WORLD_SEED, FIRST_ROUTE_YEAR, TRUCK_BAY_DELIVER_ROAD, TRUCK_BAY_DELIVER_STOP,
+    TRUCK_BAY_LOAD_ROAD, TRUCK_BAY_LOAD_STOP, TRUCK_BAY_VEHICLE_ID, build_first_route,
+    build_truck_bay,
 };
 
 use crate::GameState;
@@ -47,6 +51,7 @@ use crate::GameState;
 #[must_use]
 pub fn build_scenario(name: &str) -> Option<GameState> {
     match name {
+        "first_route" => Some(build_first_route()),
         "truck_bay" => Some(build_truck_bay()),
         "train_line" => Some(build_train_line()),
         "train_supply" => Some(build_train_supply()),
@@ -67,6 +72,7 @@ pub fn build_scenario(name: &str) -> Option<GameState> {
 #[must_use]
 pub fn scenario_names() -> &'static [&'static str] {
     &[
+        "first_route",
         "truck_bay",
         "train_line",
         "train_supply",

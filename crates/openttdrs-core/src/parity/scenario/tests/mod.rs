@@ -51,6 +51,7 @@ fn truck_bay_layout_is_consistent() {
 #[test]
 fn unknown_scenario_returns_none() {
     assert!(build_scenario("nope").is_none());
+    assert!(build_scenario("first_route").is_some());
     assert!(build_scenario("truck_bay").is_some());
     assert!(build_scenario("train_line").is_some());
     assert!(build_scenario("train_supply").is_some());
@@ -63,6 +64,7 @@ fn unknown_scenario_returns_none() {
     assert_eq!(
         scenario_names(),
         &[
+            "first_route",
             "truck_bay",
             "train_line",
             "train_supply",
@@ -76,6 +78,33 @@ fn unknown_scenario_returns_none() {
             "town_growth",
             "breakdown",
         ]
+    );
+}
+
+#[test]
+fn first_route_starts_without_transport_or_dynamic_newgrf() {
+    let state = build_first_route();
+    assert_eq!(state.map.dimensions(), (64, 64));
+    assert_eq!(state.world_seed, FIRST_ROUTE_WORLD_SEED);
+    assert_eq!(state.calendar.year, FIRST_ROUTE_YEAR);
+    assert!(!state.ai.enabled);
+    assert!(!state.disasters_enabled);
+    assert_eq!(state.vehicle_breakdowns, 0);
+    assert!(state.newgrf_stack.iter().all(|entry| entry.is_static));
+    assert!(state.vehicles.is_empty());
+    assert!(state.stations.is_empty());
+    assert_eq!(state.industries.len(), 2);
+    assert!(
+        state
+            .industries
+            .iter()
+            .any(|industry| industry.pos == FIRST_ROUTE_COAL_MINE)
+    );
+    assert!(
+        state
+            .industries
+            .iter()
+            .any(|industry| industry.pos == FIRST_ROUTE_POWER_STATION)
     );
 }
 

@@ -170,7 +170,7 @@ impl From<Option<TileCoord>> for StationHopKey {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StationCargoList {
     /// `MultiMap` `next_hop` → packets (FIFO por hop).
-    #[serde(default)]
+    #[serde(default, with = "ordered_map_serde")]
     pub by_next_hop: BTreeMap<StationHopKey, VecDeque<CargoPacket>>,
     /// Cantidad reservada para carga (`reserved_count`).
     #[serde(default)]
@@ -181,16 +181,59 @@ pub struct StationCargoList {
     /// antiguos que no podían expresar el cargo de la reserva. Cuando existe
     /// esta tabla, sus entradas representan la parte conocida del total y el
     /// remanente legacy se trata de forma conservadora para cualquier cargo.
-    #[serde(default)]
+    #[serde(default, with = "ordered_map_serde")]
     pub reserved_by_cargo: BTreeMap<CargoType, u32>,
     /// Parte de `reserved_by_cargo` que ya fue movida físicamente a un vehículo
     /// como `MTA_LOAD`. Se mantiene separada porque el contador legacy también
     /// representa reservas virtuales cuyos packets siguen en esta cola.
-    #[serde(default)]
+    #[serde(default, with = "ordered_map_serde")]
     pub reserved_physically_by_cargo: BTreeMap<CargoType, u32>,
     /// Campo legacy `packets` (saves / JSON antiguos); se migra a [`Self::by_next_hop`].
     #[serde(default, alias = "packets")]
     legacy_packets: VecDeque<CargoPacket>,
+}
+
+/// JSON no admite claves estructuradas de mapas. Las colas usan tanto
+/// `StationHopKey` como `CargoType` (que puede ser un cargo `NewGRF`), así que
+/// se guardan como secuencias de entradas ordenadas.
+mod ordered_map_serde {
+    use std::collections::BTreeMap;
+
+    use serde::de::Error as _;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OrderedMapWire<K, V> {
+        Entries(Vec<(K, V)>),
+        /// Compatibilidad con los mapas vacíos que el formato JSON anterior
+        /// sí podía expresar como `{}`.
+        LegacyEmpty(BTreeMap<String, V>),
+    }
+
+    pub fn serialize<S, K, V>(map: &BTreeMap<K, V>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        K: Serialize + Ord,
+        V: Serialize,
+    {
+        map.iter().collect::<Vec<_>>().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D, K, V>(deserializer: D) -> Result<BTreeMap<K, V>, D::Error>
+    where
+        D: Deserializer<'de>,
+        K: Deserialize<'de> + Ord,
+        V: Deserialize<'de>,
+    {
+        match OrderedMapWire::deserialize(deserializer)? {
+            OrderedMapWire::Entries(entries) => Ok(entries.into_iter().collect()),
+            OrderedMapWire::LegacyEmpty(entries) if entries.is_empty() => Ok(BTreeMap::new()),
+            OrderedMapWire::LegacyEmpty(_) => Err(D::Error::custom(
+                "mapa de cola de carga legado con claves no recuperable",
+            )),
+        }
+    }
 }
 
 impl StationCargoList {

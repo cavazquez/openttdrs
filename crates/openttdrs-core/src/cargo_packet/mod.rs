@@ -235,6 +235,21 @@ mod tests {
     }
 
     #[test]
+    fn station_cargo_list_json_roundtrip_keeps_structured_keys() {
+        let mut list = StationCargoList::default();
+        let source = TileCoord::new(1, 1);
+        let next_hop = TileCoord::new(4, 1);
+        list.push(CargoPacket::new(CargoType::Coal, 5, source).with_next_hop(Some(next_hop)));
+        assert_eq!(list.reserve_for(CargoType::Coal, 2), 2);
+
+        let json = serde_json::to_value(&list).unwrap();
+        assert!(json["by_next_hop"].is_array());
+        assert!(json["reserved_by_cargo"].is_array());
+        let decoded: StationCargoList = serde_json::from_value(json).unwrap();
+        assert_eq!(decoded, list);
+    }
+
+    #[test]
     fn station_reservations_are_scoped_to_cargo_type() {
         let mut list = StationCargoList::default();
         let source = TileCoord::new(1, 1);

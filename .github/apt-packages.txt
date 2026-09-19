@@ -8,6 +8,9 @@ libx11-dev
 libxcursor-dev
 libxi-dev
 libxkbcommon-dev
+# Runtime X11 backend loaded dynamically by winit/xkbcommon during the
+# extracted-package graphical smoke (the -dev package alone does not install it).
+libxkbcommon-x11-0
 libwayland-dev
 libssl-dev
 libasound2-dev

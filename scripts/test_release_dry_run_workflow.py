@@ -97,7 +97,10 @@ class ReleaseDryRunWorkflowTest(unittest.TestCase):
         ):
             self.assertIn(marker, smoke)
         apt_packages = set(APT_PACKAGES.read_text(encoding="utf-8").split())
-        self.assertTrue({"mesa-vulkan-drivers", "xauth", "xvfb"} <= apt_packages)
+        self.assertTrue(
+            {"mesa-vulkan-drivers", "xauth", "xvfb", "libxkbcommon-x11-0"}
+            <= apt_packages
+        )
 
     def test_smoke_accepts_a_complete_extracted_package_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

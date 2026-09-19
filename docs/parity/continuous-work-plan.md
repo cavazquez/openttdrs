@@ -1,6 +1,6 @@
 # Plan vigente — primera ruta jugable
 
-Actualizado: **2026-09-18**. Base auditada: `ca698e50`.
+Actualizado: **2026-09-19**. Base auditada: `ca698e50`.
 
 La instrucción del usuario del 2026-09-18 reemplaza el orden anterior de
 perseguir paridad por subsistemas. El objetivo inmediato es entregar una
@@ -65,20 +65,20 @@ perfecta ni equivalencia universal de saves o generación.
   preservación de estado/fuente, captura de la ventana de partidas y vencimiento
   del aviso; pasaron formato, Clippy estricto, 1.618 tests de cliente (2
   ignorados) y `sp1_playable_cycle` (2/2).
+- [#577](https://github.com/cavazquez/openttdrs/issues/577) — smoke gráfico del
+  paquete Linux y sesión de aceptación, completado con `4aef9c22` y el runtime
+  `97f69b2a`. El [dry-run de release](https://github.com/cavazquez/openttdrs/actions/runs/35431897233)
+  aprobó sus gates en Linux, macOS y Windows, incluido el smoke gráfico Linux.
+  La sesión manual del paquete aislado recorrió construcción, primera entrega,
+  F5, F9, recarga y una entrega posterior: 2 entregas, 28 unidades de carbón
+  cargadas/entregadas e ingreso 1064, sin errores ECS ni de despawn.
 
 ## Backlog ejecutable
 
-Cada fila es un resultado independiente. El issue contiene alcance, aceptación,
-dependencias y exclusiones; no se mantienen épicas abiertas como tareas. La
-tarea pendiente está agrupada en el hito existente
-[0.1 — vertical slice](https://github.com/cavazquez/openttdrs/milestone/1).
-
-| Orden | Issue | Entrega | Dependencia funcional |
-|---:|---|---|---|
-| 1 | [#577](https://github.com/cavazquez/openttdrs/issues/577) | Smoke gráfico del paquete Linux y sesión de aceptación | #572–#576 ✅ |
-
-**Próxima implementación: #577.** La reorganización de issues y documentación
-no cuenta como implementación de las tareas pendientes.
+El corte no tiene tareas ejecutables abiertas. Cada trabajo futuro debe volver a
+pasar por una auditoría de dirección y abrir un issue independiente, con
+alcance, aceptación, dependencias y exclusiones propios; no se reactivan épicas
+históricas como tareas por defecto.
 
 ## Cómo trabajar y cerrar
 
@@ -115,6 +115,11 @@ no cuenta como implementación de las tareas pendientes.
 4. Dry-run del workflow de release con smoke gráfico y gates existentes
    aprobados. La publicación de una release es una decisión posterior; no se
    etiqueta una versión durante esta reorganización.
+
+**Resultado (2026-09-19):** los cuatro criterios se satisficieron. La
+[CI de `aa8fe3d9`](https://github.com/cavazquez/openttdrs/actions/runs/35433985317),
+plataformas y fuzz quedaron verdes; el dry-run de release y la sesión manual
+del paquete quedan enlazados en #577. No se publicó un tag ni una release.
 
 El avance se mide por estos resultados y tareas aceptadas, no por cantidad de
 commits, páginas de documentación o reducción de píxeles en una sola captura.

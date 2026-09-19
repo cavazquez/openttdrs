@@ -17,24 +17,24 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 
 **Gobierno:** [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [ADRs](docs/adr/)
 
-**Última actualización:** 2026-09-18
+**Última actualización:** 2026-09-19
 
 ---
 
 ## Estado del proyecto
 
-> Dirección actualizada: 2026-09-18. Las capacidades técnicas conservan sus
-> matrices de evidencia; este cambio no certifica una nueva versión jugable.
+> Dirección actualizada: 2026-09-19. Las capacidades técnicas conservan sus
+> matrices de evidencia; completar este corte no certifica paridad global.
 
-**Próxima entrega: Primera ruta.** Abrir un escenario desde el menú, construir
-un servicio de camiones mina → central eléctrica, cobrar, guardar y reanudar.
-Temperate 64×64, OpenGFX, ES/EN y paquete Linux. La ruta por comandos #572 y
-su continuación JSON #573, junto con la entrada de menú #574, ya están
-entregadas; la guía y su avance reconstruible #575 también, igual que el
-feedback visible de guardar/cargar #576. El
-[plan ejecutable](docs/parity/continuous-work-plan.md) contiene una tarea
-atómica pendiente. La
-[auditoría](docs/audits/2026-09-18-direction.md) explica el cambio.
+**Corte completado: Primera ruta.** Desde el menú se puede abrir el escenario,
+construir un servicio de camiones mina → central eléctrica, cobrar, guardar y
+reanudar en Temperate 64×64 con OpenGFX y ES/EN. #572–#576 entregaron la ruta
+por comandos, continuación JSON, entrada de menú, guía y feedback visible de
+F5/F9; [#577](https://github.com/cavazquez/openttdrs/issues/577) certificó el
+arranque gráfico del paquete Linux fuera del checkout y la sesión completa de
+aceptación. El [plan ejecutable](docs/parity/continuous-work-plan.md) registra
+el cierre: no queda un issue activo en este corte. La
+[auditoría](docs/audits/2026-09-18-direction.md) explica la selección original.
 
 | Capa | Qué hay |
 |------|---------|
@@ -64,11 +64,11 @@ los sonidos y la música están versionados. `cargo run` selecciona el cliente y
 en el primer inicio, materializa localmente los PNG que necesita la UI desde el
 atlas incluido. No descarga assets ni requiere ejecutar scripts auxiliares.
 
-**Prioridad de implementación:** #577
-(paquete). La paridad global
-de raster/SAV/NewGRF y la expansión multiclima quedan fuera de este corte.
-Sus límites técnicos siguen documentados. Editor #42 ✅ · GameScript-lite
-#43 ✅ · IA TransCargo ✅ (Squirrel OOS).
+**Próxima dirección:** no hay una tarea activa. El siguiente corte requiere una
+nueva auditoría y un issue atómico, sin reactivar por defecto brechas de
+raster/SAV/NewGRF o expansión multiclima. Sus límites técnicos siguen
+documentados. Editor #42 ✅ · GameScript-lite #43 ✅ · IA TransCargo ✅
+(Squirrel OOS).
 
 ---
 
@@ -273,11 +273,10 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 | Multijugador (I8) | 🟡 | MVP lockstep + dedicated + host migration; desync/UI OOS |
 | IA rivales / GameScript / editor | 🟡 | TransCargo + editor #42 ✅; GS-lite #43 ✅; Squirrel OOS |
 
-Backlog vivo al 2026-09-18: un [issue del repo](https://github.com/cavazquez/openttdrs/issues)
-(#577), con orden y aceptación en el [plan vigente](docs/parity/continuous-work-plan.md).
-Los ajustes P0 #568–#571, la ruta por comandos #572, su continuación JSON #573 y
-la entrada de menú #574, su guía de avance #575 y el feedback de F5/F9 #576
-ya fueron entregados.
+Al 2026-09-19 no hay [issues activos](https://github.com/cavazquez/openttdrs/issues)
+en este corte. Los ajustes P0 #568–#571, la ruta por comandos #572, su
+continuación JSON #573, la entrada de menú #574, la guía #575, el feedback de
+F5/F9 #576 y el smoke/aceptación de paquete #577 ya fueron entregados.
 Los quince anteriores se retiran como `not planned`, no como paridad lograda.
 [PARIDAD.md](docs/PARIDAD.md) conserva las capacidades y brechas técnicas.
 

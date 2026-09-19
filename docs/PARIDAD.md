@@ -6,15 +6,17 @@ compatibilidad `.sav` está en
 [`parity/sav-compatibility.md`](parity/sav-compatibility.md); pin JSON y
 capturas siguen en `docs/parity/`.
 
-**Dirección vigente (2026-09-18):** [primera ruta jugable](parity/continuous-work-plan.md).
-El backlog ejecutable es #577; #568–#576 entregaron los ajustes P0 iniciales,
-la ruta de carbón por comandos, su continuación JSON, la entrada localizada
-desde el menú, la guía reconstruible de avance y el feedback visible de F5/F9.
-Los quince issues anteriores se retiran
-como `not planned`; sus brechas técnicas siguen existiendo. Las menciones
-posteriores a padres «abiertos» son registros del corte de evidencia de cada
-sección, no instrucciones para reactivarlos. Ver la
-[auditoría y disposición completa](audits/2026-09-18-direction.md).
+**Dirección vigente (2026-09-19):** el corte de [primera ruta
+jugable](parity/continuous-work-plan.md) está completado. #568–#576 entregaron
+los ajustes P0 iniciales, la ruta de carbón por comandos, su continuación JSON,
+la entrada localizada desde el menú, la guía reconstruible de avance y el
+feedback visible de F5/F9; [#577](https://github.com/cavazquez/openttdrs/issues/577)
+certificó el paquete Linux y su sesión de aceptación. No queda backlog activo
+en este corte: una dirección nueva requiere otra auditoría y una tarea atómica.
+Los quince issues anteriores se retiran como `not planned`; sus brechas técnicas
+siguen existiendo. Las menciones posteriores a padres «abiertos» son registros
+del corte de evidencia de cada sección, no instrucciones para reactivarlos. Ver
+la [auditoría y disposición completa](audits/2026-09-18-direction.md).
 
 Para investigar una discrepancia de render de una partida `.sav`, seguir la
 [metodología de paridad raw → semántica → draw](parity/METODOLOGIA_RENDER_SAV.md).
@@ -50,14 +52,15 @@ se cuenta como evidencia.
 
 ## Estado canónico actual
 
-**Corte de dirección: 2026-09-18 · `main` publicado `ca698e50`.**
+**Corte de auditoría histórico: 2026-09-18 · `main` publicado `ca698e50`.**
 Referencia: OpenTTD 15.3, commit
-`14ec60f248547d4d062a1160f0fc26d742319888`.
-CI falla en formato y fuzz falla por su lockfile; la auditoría local también
-detecta 261 diagnósticos de Clippy en tests del core y 266 en tests del cliente.
-No se declara validación completa de este corte ni paridad nueva. El plan
-vigente comienza por esos cuatro bloqueos y después certifica una ruta vial
-con guardado JSON. [Evidencia y alcance de revisión](audits/2026-09-18-direction.md).
+`14ec60f248547d4d062a1160f0fc26d742319888`. En esa base, CI fallaba en formato
+y fuzz por su lockfile; la auditoría local también detectó 261 diagnósticos de
+Clippy en tests del core y 266 en tests del cliente. No se declara validación
+completa ni paridad nueva para aquella base. Sus cuatro bloqueos se resolvieron
+en #568–#571; el corte de producto posterior se confirmó con la
+[CI verde de `aa8fe3d9`](https://github.com/cavazquez/openttdrs/actions/runs/35433985317).
+[Evidencia y alcance de revisión](audits/2026-09-18-direction.md).
 
 El manifiesto [`active-backlog.json`](parity/active-backlog.json) fija esta fecha,
 base auditada, referencia y lista de tareas. Su checker comprueba consistencia
@@ -1531,7 +1534,7 @@ incluidos offsets relativos.
 
 <!-- active-parity-backlog:start -->
 
-- [#577](https://github.com/cavazquez/openttdrs/issues/577) — smoke gráfico del paquete Linux.
+- No hay issues activos en este corte.
 
 <!-- active-parity-backlog:end -->
 

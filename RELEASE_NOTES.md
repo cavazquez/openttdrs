@@ -1,9 +1,11 @@
 # openttdrs 0.1.0-alpha.1
 
-**Borrador de notas; no acredita una release publicada.** Al revisar GitHub
-el 2026-09-18 no hay publicaciones. El próximo candidato debe cumplir el
-[plan Primera ruta](docs/parity/continuous-work-plan.md), incluido su smoke
-gráfico y sesión de aceptación.
+**Borrador de notas; no acredita una release publicada.** Al revisar GitHub el
+2026-09-19 no hay publicaciones. El candidato ya cumplió el [corte Primera
+ruta](docs/parity/continuous-work-plan.md), incluido su smoke gráfico y sesión
+de aceptación; el [dry-run de release](https://github.com/cavazquez/openttdrs/actions/runs/35431897233)
+también aprobó. Publicar el tag y la release sigue requiriendo una decisión
+explícita.
 
 Notas preparadas para la primera alpha pública. Incluye un cliente isométrico jugable,
 servidor dedicado lockstep y herramientas headless de paridad con OpenTTD 15.3.

@@ -1,8 +1,8 @@
 # Documentación — openttdrs
 
 Un archivo vivo por temática. **Dirección actual (2026-09-18):**
-[Primera ruta jugable](parity/continuous-work-plan.md), con tres tareas
-atómicas pendientes después de las entregas #568–#574.
+[Primera ruta jugable](parity/continuous-work-plan.md), con dos tareas
+atómicas pendientes después de las entregas #568–#575.
 [Auditoría y decisiones de backlog](audits/2026-09-18-direction.md).
 Orden sugerido al entrar:
 

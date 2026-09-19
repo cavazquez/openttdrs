@@ -39,24 +39,27 @@ perfecta ni equivalencia universal de saves o generación.
   `first_route` y ruta de carbón construida sólo mediante comandos, cerrado con
   `53d727c9`; la entrega, el pago y el hash canónico se verifican dos veces y
   el estado posterior conserva ese hash al serializar y recuperar JSON.
+- [#573](https://github.com/cavazquez/openttdrs/issues/573) — continuación
+  productiva de esa ruta tras guardar JSON, cerrada con `d55686ae`; con carga
+  a bordo, ambas ramas conservan hash, vehículo, órdenes, carga, stocks,
+  ingresos y RNG durante 2.000 ticks, y la recargada vuelve a entregar y cobrar.
 
 ## Backlog ejecutable
 
 Cada fila es un resultado independiente. El issue contiene alcance, aceptación,
 dependencias y exclusiones; no se mantienen épicas abiertas como tareas.
-Las cinco tareas pendientes están agrupadas en el hito existente
+Las cuatro tareas pendientes están agrupadas en el hito existente
 [0.1 — vertical slice](https://github.com/cavazquez/openttdrs/milestone/1).
 
 | Orden | Issue | Entrega | Dependencia funcional |
 |---:|---|---|---|
-| 1 | [#573](https://github.com/cavazquez/openttdrs/issues/573) | Continuación de la ruta después de guardar JSON | #572 ✅ |
-| 2 | [#574](https://github.com/cavazquez/openttdrs/issues/574) | Entrada «Primera ruta» en el menú | #572 ✅ |
-| 3 | [#575](https://github.com/cavazquez/openttdrs/issues/575) | Objetivo y avance visibles de esa ruta | #573, #574 |
-| 4 | [#576](https://github.com/cavazquez/openttdrs/issues/576) | Confirmación y errores visibles de F5/F9 | — |
-| 5 | [#577](https://github.com/cavazquez/openttdrs/issues/577) | Smoke gráfico del paquete Linux y sesión de aceptación | #572 ✅, #573–#576 |
+| 1 | [#574](https://github.com/cavazquez/openttdrs/issues/574) | Entrada «Primera ruta» en el menú | #572 ✅ |
+| 2 | [#575](https://github.com/cavazquez/openttdrs/issues/575) | Objetivo y avance visibles de esa ruta | #573 ✅, #574 |
+| 3 | [#576](https://github.com/cavazquez/openttdrs/issues/576) | Confirmación y errores visibles de F5/F9 | — |
+| 4 | [#577](https://github.com/cavazquez/openttdrs/issues/577) | Smoke gráfico del paquete Linux y sesión de aceptación | #572–#573 ✅, #574–#576 |
 
-**Próxima implementación: #573.** La reorganización de issues y documentación
-no cuenta como implementación de las cinco tareas pendientes.
+**Próxima implementación: #574.** La reorganización de issues y documentación
+no cuenta como implementación de las tareas pendientes.
 
 ## Cómo trabajar y cerrar
 
@@ -84,10 +87,9 @@ no cuenta como implementación de las cinco tareas pendientes.
 1. CI, plataformas, documentación y replay de fuzz verdes para el commit
    candidato, sin omitir pasos. Si aparece otro fallo, aislarlo antes de
    considerar listo el corte.
-2. La ruta construida mediante comandos ya entrega y cobra antes de 40.000
-   ticks con replay idéntico. Falta que #573 pruebe que, tras cargar JSON con
-   carga a bordo, 2.000 ticks coinciden con la rama continua y completan otra
-   entrega.
+2. La ruta construida mediante comandos entrega y cobra antes de 40.000 ticks
+   con replay idéntico; tras cargar JSON con carga a bordo, sus dos ramas
+   continúan 2.000 ticks sin divergir y la recargada completa otra entrega.
 3. Menú y guía ES/EN, confirmación visible de guardar/cargar y una sesión de
    15 minutos desde el paquete Linux: construcción → pago → guardar → cargar
    → nueva entrega. Conservar commit, configuración, reporte y artefactos.
@@ -115,5 +117,5 @@ existentes se conservan en las matrices; no se presentan como resueltas.
 - [Historial anterior de 10.001 líneas](continuous-work-history-2026-09-18.md).
 
 `AGENTS.md` conserva las reglas de trabajo y la autorización de publicación.
-Su referencia a este archivo ahora resuelve a este plan. El pedido actual es
-auditar y reorganizar; no ejecutar anticipadamente el nuevo backlog.
+Su referencia a este archivo ahora resuelve a este plan. El backlog se ejecuta
+de a una tarea atómica, con evidencia y documentación actualizada al cerrar.

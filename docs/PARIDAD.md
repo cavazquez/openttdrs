@@ -6,6 +6,13 @@ compatibilidad `.sav` está en
 [`parity/sav-compatibility.md`](parity/sav-compatibility.md); pin JSON y
 capturas siguen en `docs/parity/`.
 
+**Dirección vigente (2026-09-18):** [primera ruta jugable](parity/continuous-work-plan.md).
+El backlog ejecutable es #568–#577. Los quince issues anteriores se retiran
+como `not planned`; sus brechas técnicas siguen existiendo. Las menciones
+posteriores a padres «abiertos» son registros del corte de evidencia de cada
+sección, no instrucciones para reactivarlos. Ver la
+[auditoría y disposición completa](audits/2026-09-18-direction.md).
+
 Para investigar una discrepancia de render de una partida `.sav`, seguir la
 [metodología de paridad raw → semántica → draw](parity/METODOLOGIA_RENDER_SAV.md).
 Cuando esa evidencia ya coincide pero el resultado compuesto difiere, usar el
@@ -40,7 +47,27 @@ se cuenta como evidencia.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-05 · `main`, validado localmente hasta el commit
+**Corte de dirección: 2026-09-18 · `main` publicado `ca698e50`.**
+Referencia: OpenTTD 15.3, commit
+`14ec60f248547d4d062a1160f0fc26d742319888`.
+CI falla en formato y fuzz falla por su lockfile; la auditoría local también
+detecta 261 diagnósticos de Clippy en tests del core y 266 en tests del cliente.
+No se declara validación completa de este corte ni paridad nueva. El plan
+vigente comienza por esos cuatro bloqueos y después certifica una ruta vial
+con guardado JSON. [Evidencia y alcance de revisión](audits/2026-09-18-direction.md).
+
+El manifiesto [`active-backlog.json`](parity/active-backlog.json) fija esta fecha,
+base auditada, referencia y lista de tareas. Su checker comprueba consistencia
+local; el estado remoto se contrastó al reorganizar los issues. La base es un
+commit anterior al cambio documental para evitar autorreferencia.
+
+### Evidencia técnica acumulada
+
+Las capacidades de las matrices mantienen su evidencia fechada. Los siguientes
+conteos y afirmaciones de validación pertenecen al corte histórico indicado;
+no sustituyen el resultado de CI del 2026-09-18.
+
+**Corte técnico histórico: 2026-09-05 · `main`, validado localmente hasta el commit
 publicado `ad369c46` (base funcional `25d026a7`; el runtime de cargos custom,
 la frontera SAV, el monitor de carga, los pesos vial y ferroviario, la CTT de
 scopes de estación/parada e `IndustryTile`, la CTT de vehículos/refit y las
@@ -48,22 +75,13 @@ scopes de estación/parada e `IndustryTile`, la CTT de vehículos/refit y las
 en este corte; RMAP-147–152 además observan pools, estado constructor y la
 traza ordenada de intentos industriales por fase).
 Referencia: OpenTTD 15.3, commit
-`14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
-verdad para el estado vigente. Las tablas detalladas posteriores conservan el
-mapeo y la evidencia de auditorías anteriores; fechas anteriores son contexto
-histórico. Ante una contradicción prevalece este bloque y debe corregirse la
-fila antigua en el mismo cambio.
+`14ec60f248547d4d062a1160f0fc26d742319888`.** Este corte y sus adendas
+conservan el mapeo y la evidencia técnica; no definen la prioridad de producto.
 
 Validación de este corte: formatter y clippy estricto en core/cliente, **2.048**
 tests de core y **1.081** tests ejecutados del cliente (2 ignorados), además de
 la regresión integrada de CTT de vehículos y RMAP-152; los conteos anteriores
 son históricos.
-
-El manifiesto [`active-backlog.json`](parity/active-backlog.json) registra la
-misma fecha, pin y `main_commit`. Ese hash siempre refiere al último commit ya
-publicado cuya validación sostiene el corte; el commit documental que lo cita
-no se auto-referencia. El gate comprueba el formato y la coincidencia de esa
-procedencia con este bloque antes de aceptar el backlog activo.
 
 El pin es la referencia de evidencia: un checkout local de OpenTTD con otro
 commit o cambios sin confirmar sirve para investigar, pero no para declarar
@@ -1510,11 +1528,26 @@ incluidos offsets relativos.
 
 <!-- active-parity-backlog:start -->
 
-- [#326](https://github.com/cavazquez/openttdrs/issues/326) — integrar composición global y cerrar paridad de framebuffer.
-- [#328](https://github.com/cavazquez/openttdrs/issues/328) — interoperabilidad residual de VEHS, ORDL, GRPS y ERNW.
-- [#329](https://github.com/cavazquez/openttdrs/issues/329) — callbacks runtime y persistencia NewGRF residual.
-- [#330](https://github.com/cavazquez/openttdrs/issues/330) — ampliar oráculos externos de movimiento y composición.
-- [#331](https://github.com/cavazquez/openttdrs/issues/331) — catálogo de idiomas y selección de locale.
+- [#568](https://github.com/cavazquez/openttdrs/issues/568) — rustfmt de station_tile_anim.
+- [#569](https://github.com/cavazquez/openttdrs/issues/569) — Clippy de tests del core.
+- [#570](https://github.com/cavazquez/openttdrs/issues/570) — Clippy de tests del cliente.
+- [#571](https://github.com/cavazquez/openttdrs/issues/571) — lockfile y replay de fuzz.
+- [#572](https://github.com/cavazquez/openttdrs/issues/572) — ruta de carbón por comandos.
+- [#573](https://github.com/cavazquez/openttdrs/issues/573) — continuación JSON de la ruta.
+- [#574](https://github.com/cavazquez/openttdrs/issues/574) — Primera ruta desde el menú.
+- [#575](https://github.com/cavazquez/openttdrs/issues/575) — objetivo y avance visibles.
+- [#576](https://github.com/cavazquez/openttdrs/issues/576) — feedback de F5/F9.
+- [#577](https://github.com/cavazquez/openttdrs/issues/577) — smoke gráfico del paquete Linux.
+
+<!-- active-parity-backlog:end -->
+
+Orden y aceptación en el [plan vigente](parity/continuous-work-plan.md).
+
+### Registro técnico de los padres retirados
+
+El siguiente texto conserva avances de #328/#329 anteriores al cambio de
+dirección. Sus contratos generales siguen sin certificarse; esos issues están
+retirados de la planificación, no completados por esta reorganización.
 
 El tramo de identidad básica de #328 ya está implementado: `VEHS.common`
 conserva y reemite compañía propietaria, nombre personalizado y el
@@ -1582,8 +1615,6 @@ desconocido/incompatible sin defaults seguros para una entrada nueva, cambio de
 forma, struct fijo, filas, índices o pools nativos no modelados sigue usando el
 writer canónico; la agregación runtime completa de esos historiales pertenece a
 #329/#330. Por eso #328/#329 continúan abiertos.
-
-<!-- active-parity-backlog:end -->
 
 Los issues #275–#289 son entregas cerradas y no son backlog activo. #290 y
 #291 también están cerrados: recuperaron CI/protección de `main` y endurecieron

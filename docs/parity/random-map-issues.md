@@ -1,5 +1,12 @@
 # Issues de la matriz de mapas aleatorios
 
+**Planificación desde 2026-09-18:** este archivo es un inventario técnico,
+no una cola de implementación. «Abierto» en una fila RMAP significa que la
+brecha no está resuelta, aunque su issue de planificación se haya retirado.
+El próximo corte y sus únicos issues activos están en el
+[plan vigente](continuous-work-plan.md). No se amplía la matriz multiclima en
+ese corte ni se declara paridad por cerrar #338/#499/#512/#527 como `not planned`.
+
 Este registro conserva issues reproducibles aun cuando la sesión local no
 tenga un token válido para abrirlos automáticamente en GitHub. Cada issue
 tiene un criterio verificable y apunta a la evidencia; no se declaran como

@@ -1,6 +1,11 @@
 # openttdrs 0.1.0-alpha.1
 
-Primera alpha pública del simulador. Incluye un cliente isométrico jugable,
+**Borrador de notas; no acredita una release publicada.** Al revisar GitHub
+el 2026-09-18 no hay publicaciones. El próximo candidato debe cumplir el
+[plan Primera ruta](docs/parity/continuous-work-plan.md), incluido su smoke
+gráfico y sesión de aceptación.
+
+Notas preparadas para la primera alpha pública. Incluye un cliente isométrico jugable,
 servidor dedicado lockstep y herramientas headless de paridad con OpenTTD 15.3.
 
 ## Qué probar

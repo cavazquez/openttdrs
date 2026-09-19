@@ -1,9 +1,12 @@
 # Documentación — openttdrs
 
-Un archivo vivo por temática. Orden sugerido al entrar:
+Un archivo vivo por temática. **Dirección actual (2026-09-18):**
+[Primera ruta jugable](parity/continuous-work-plan.md), con diez tareas
+atómicas. [Auditoría y decisiones de backlog](audits/2026-09-18-direction.md).
+Orden sugerido al entrar:
 
 1. [ARCHITECTURE.md](ARCHITECTURE.md) · [adr/](adr/) — gobierno y capas
-2. [PLANIFICACION.md](PLANIFICACION.md) — roadmaps, gaps, sprints, checklists
+2. [Plan vigente](parity/continuous-work-plan.md) — entrega, orden y aceptación; [PLANIFICACION.md](PLANIFICACION.md) conserva guías históricas
 3. [PARIDAD.md](PARIDAD.md) — madurez, mapeos, oráculos
 4. [MAPA_Y_FERROCARRIL.md](MAPA_Y_FERROCARRIL.md) — saves, tiles, señales, vías
 5. [GRAFICOS.md](GRAFICOS.md) — OpenGFX y bugs visuales
@@ -17,6 +20,7 @@ Un archivo vivo por temática. Orden sugerido al entrar:
 
 | Tema | Fuente canónica | Documentos de apoyo |
 |---|---|---|
+| Dirección y backlog ejecutable | [parity/continuous-work-plan.md](parity/continuous-work-plan.md) | [Auditoría](audits/2026-09-18-direction.md); GitHub contiene el alcance de cada tarea |
 | Madurez global, road y rail | [PARIDAD.md](PARIDAD.md) | Roadmaps y guía de mapa sólo enlazan este estado |
 | Compatibilidad `.sav` import/export | [parity/sav-compatibility.md](parity/sav-compatibility.md) | [PLANIFICACION.md](PLANIFICACION.md#export-sav) explica el writer; [MAPA_Y_FERROCARRIL.md](MAPA_Y_FERROCARRIL.md) el formato/pipeline |
 | NewGRF Action0/3/5 | [parity/newgrf-action0-matrix.md](parity/newgrf-action0-matrix.md) | Propiedades de catálogos y render |
@@ -76,4 +80,4 @@ Planes y roadmaps cerrados o absorbidos en esta consolidación:
 
 ---
 
-*Última actualización: 2026-08-14 (propiedad explícita de estado SAV/NewGRF/road/rail)*
+*Última actualización: 2026-09-18 (dirección y backlog atómico)*

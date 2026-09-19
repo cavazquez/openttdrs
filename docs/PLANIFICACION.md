@@ -1,8 +1,16 @@
 # Planificación y roadmaps
 
-Fuente viva de roadmaps, gaps de producto, sprints, checklists y herramientas de sonda. Estado de madurez técnica road/rail y oráculos: [PARIDAD.md](PARIDAD.md). Alcance de import/export `.sav`: [parity/sav-compatibility.md](parity/sav-compatibility.md). Cobertura NewGRF: sus [matrices](parity/newgrf-action0-matrix.md).
+El plan ejecutable es [Primera ruta jugable](parity/continuous-work-plan.md),
+actualizado el **2026-09-18**, con tareas #568–#577. La
+[auditoría de dirección](audits/2026-09-18-direction.md) explica la selección y
+el retiro de las épicas anteriores. Este documento conserva roadmaps,
+checklists y guías técnicas históricas; sus prioridades no activan trabajo.
 
-**Corte canónico: 2026-08-21 · `main` `288ba794` · referencia OpenTTD 15.3 `14ec60f`.** Los hitos y fechas anteriores que aparecen más abajo son registro histórico; el estado vigente y los issues abiertos viven en [PARIDAD.md](PARIDAD.md#backlog-sucesor-activo).
+Estado de madurez técnica: [PARIDAD.md](PARIDAD.md). Alcance SAV:
+[parity/sav-compatibility.md](parity/sav-compatibility.md). Cobertura NewGRF:
+sus [matrices](parity/newgrf-action0-matrix.md).
+
+**Corte histórico de las secciones siguientes: 2026-08-21 · `main` `288ba794` · referencia OpenTTD 15.3 `14ec60f`.** El backlog vigente está en el plan enlazado arriba.
 
 ## Índice
 

@@ -1,12 +1,13 @@
 {
   "schema_version": 1,
   "cutoff": {
-    "date": "2026-09-05",
-    "main_commit": "ad369c46",
-    "main_commit_role": "Último commit publicado con validación local completa antes de registrar este corte; un commit documental posterior lo cita y no se auto-referencia.",
+    "date": "2026-09-18",
+    "main_commit": "ca698e50",
+    "main_commit_role": "Base publicada de la auditoría de dirección; CI y fuzz fallan y no se afirma validación completa. El commit documental posterior no se auto-referencia.",
     "openttd_tag": "15.3",
     "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888"
   },
-  "active_issues": [326, 328, 329, 330, 331],
+  "active_issues": [568, 569, 570, 571, 572, 573, 574, 575, 576, 577],
+  "retired_not_planned": [326, 328, 329, 330, 331, 338, 499, 512, 527, 561, 563, 564, 565, 566, 567],
   "closed_delivery_range": [275, 291]
 }

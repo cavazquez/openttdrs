@@ -28,11 +28,10 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 
 **Próxima entrega: Primera ruta.** Abrir un escenario desde el menú, construir
 un servicio de camiones mina → central eléctrica, cobrar, guardar y reanudar.
-Temperate 64×64, OpenGFX, ES/EN y paquete Linux. El
-[plan ejecutable](docs/parity/continuous-work-plan.md) contiene diez tareas
-atómicas; la [auditoría](docs/audits/2026-09-18-direction.md) explica el cambio.
-Los primeros cuatro issues recuperan formato, Clippy y fuzz: el CI de la base
-auditada `ca698e50` no está completamente verde.
+Temperate 64×64, OpenGFX, ES/EN y paquete Linux. La ruta por comandos #572 ya
+está entregada; el [plan ejecutable](docs/parity/continuous-work-plan.md)
+contiene cinco tareas atómicas pendientes. La
+[auditoría](docs/audits/2026-09-18-direction.md) explica el cambio.
 
 | Capa | Qué hay |
 |------|---------|
@@ -62,8 +61,8 @@ los sonidos y la música están versionados. `cargo run` selecciona el cliente y
 en el primer inicio, materializa localmente los PNG que necesita la UI desde el
 atlas incluido. No descarga assets ni requiere ejecutar scripts auxiliares.
 
-**Prioridad de implementación:** #572–#577
-(ruta, continuación JSON, menú/guía, feedback y paquete). La paridad global
+**Prioridad de implementación:** #573–#577
+(continuación JSON, menú/guía, feedback y paquete). La paridad global
 de raster/SAV/NewGRF y la expansión multiclima quedan fuera de este corte.
 Sus límites técnicos siguen documentados. Editor #42 ✅ · GameScript-lite
 #43 ✅ · IA TransCargo ✅ (Squirrel OOS).
@@ -271,9 +270,9 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 | Multijugador (I8) | 🟡 | MVP lockstep + dedicated + host migration; desync/UI OOS |
 | IA rivales / GameScript / editor | 🟡 | TransCargo + editor #42 ✅; GS-lite #43 ✅; Squirrel OOS |
 
-Backlog vivo al 2026-09-18: seis [issues del repo](https://github.com/cavazquez/openttdrs/issues)
-(#572–#577), con orden y aceptación en el [plan vigente](docs/parity/continuous-work-plan.md).
-Los ajustes P0 de formato #568, Clippy #569–#570 y replay de fuzz #571 ya fueron entregados.
+Backlog vivo al 2026-09-18: cinco [issues del repo](https://github.com/cavazquez/openttdrs/issues)
+(#573–#577), con orden y aceptación en el [plan vigente](docs/parity/continuous-work-plan.md).
+Los ajustes P0 #568–#571 y la ruta por comandos #572 ya fueron entregados.
 Los quince anteriores se retiran como `not planned`, no como paridad lograda.
 [PARIDAD.md](docs/PARIDAD.md) conserva las capacidades y brechas técnicas.
 

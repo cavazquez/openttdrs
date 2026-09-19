@@ -35,32 +35,35 @@ perfecta ni equivalencia universal de saves o generación.
   de fuzz, cerrado con `5565e802`; el
   [job remoto](https://github.com/cavazquez/openttdrs/actions/runs/35410088491)
   pasó con nightly fijado, corpus, sanitizers y ancla SAV.
+- [#572](https://github.com/cavazquez/openttdrs/issues/572) — escenario
+  `first_route` y ruta de carbón construida sólo mediante comandos, cerrado con
+  `53d727c9`; la entrega, el pago y el hash canónico se verifican dos veces y
+  el estado posterior conserva ese hash al serializar y recuperar JSON.
 
 ## Backlog ejecutable
 
 Cada fila es un resultado independiente. El issue contiene alcance, aceptación,
 dependencias y exclusiones; no se mantienen épicas abiertas como tareas.
-Las seis tareas pendientes están agrupadas en el hito existente
+Las cinco tareas pendientes están agrupadas en el hito existente
 [0.1 — vertical slice](https://github.com/cavazquez/openttdrs/milestone/1).
 
 | Orden | Issue | Entrega | Dependencia funcional |
 |---:|---|---|---|
-| 1 | [#572](https://github.com/cavazquez/openttdrs/issues/572) | Escenario compartido y ruta operada mediante comandos | — |
-| 2 | [#573](https://github.com/cavazquez/openttdrs/issues/573) | Continuación de la ruta después de guardar JSON | #572 |
-| 3 | [#574](https://github.com/cavazquez/openttdrs/issues/574) | Entrada «Primera ruta» en el menú | #572 |
-| 4 | [#575](https://github.com/cavazquez/openttdrs/issues/575) | Objetivo y avance visibles de esa ruta | #573, #574 |
-| 5 | [#576](https://github.com/cavazquez/openttdrs/issues/576) | Confirmación y errores visibles de F5/F9 | — |
-| 6 | [#577](https://github.com/cavazquez/openttdrs/issues/577) | Smoke gráfico del paquete Linux y sesión de aceptación | #572–#576 |
+| 1 | [#573](https://github.com/cavazquez/openttdrs/issues/573) | Continuación de la ruta después de guardar JSON | #572 ✅ |
+| 2 | [#574](https://github.com/cavazquez/openttdrs/issues/574) | Entrada «Primera ruta» en el menú | #572 ✅ |
+| 3 | [#575](https://github.com/cavazquez/openttdrs/issues/575) | Objetivo y avance visibles de esa ruta | #573, #574 |
+| 4 | [#576](https://github.com/cavazquez/openttdrs/issues/576) | Confirmación y errores visibles de F5/F9 | — |
+| 5 | [#577](https://github.com/cavazquez/openttdrs/issues/577) | Smoke gráfico del paquete Linux y sesión de aceptación | #572 ✅, #573–#576 |
 
-**Próxima implementación: #572.** La reorganización de issues y documentación
-no cuenta como implementación de las seis tareas pendientes.
+**Próxima implementación: #573.** La reorganización de issues y documentación
+no cuenta como implementación de las cinco tareas pendientes.
 
 ## Cómo trabajar y cerrar
 
 - Una tarea en implementación a la vez. Cerrar al satisfacer su aceptación
   original, con commit y evidencia; no ampliar su contrato después.
-- Primero recuperar los cuatro gates P0. No llamar «CI verde» a un chequeo de
-  binario si `--all-targets`, fuzz o el workflow siguen fallando.
+- Los cuatro gates P0 ya están recuperados. No llamar «CI verde» a un chequeo
+  de binario si `--all-targets`, fuzz o el workflow siguen fallando.
 - Una tarea debe poder revisarse como un PR. Si aparecen dos causas
   independientes, dividir antes de continuar; el nuevo issue debe ser necesario
   para esta entrega, con reproducción y criterio de cierre propios.
@@ -81,9 +84,10 @@ no cuenta como implementación de las seis tareas pendientes.
 1. CI, plataformas, documentación y replay de fuzz verdes para el commit
    candidato, sin omitir pasos. Si aparece otro fallo, aislarlo antes de
    considerar listo el corte.
-2. Ruta construida mediante comandos, entrega pagada antes de 40.000 ticks y
-   replay idéntico. Tras cargar JSON con carga a bordo, 2.000 ticks coinciden
-   con la rama continua, además de completar otra entrega.
+2. La ruta construida mediante comandos ya entrega y cobra antes de 40.000
+   ticks con replay idéntico. Falta que #573 pruebe que, tras cargar JSON con
+   carga a bordo, 2.000 ticks coinciden con la rama continua y completan otra
+   entrega.
 3. Menú y guía ES/EN, confirmación visible de guardar/cargar y una sesión de
    15 minutos desde el paquete Linux: construcción → pago → guardar → cargar
    → nueva entrega. Conservar commit, configuración, reporte y artefactos.

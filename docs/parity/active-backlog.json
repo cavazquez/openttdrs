@@ -7,7 +7,7 @@
     "openttd_tag": "15.3",
     "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888"
   },
-  "active_issues": [574, 575, 576, 577],
+  "active_issues": [575, 576, 577],
   "retired_not_planned": [326, 328, 329, 330, 331, 338, 499, 512, 527, 561, 563, 564, 565, 566, 567],
   "closed_delivery_range": [275, 291]
 }

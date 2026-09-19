@@ -43,22 +43,27 @@ perfecta ni equivalencia universal de saves o generación.
   productiva de esa ruta tras guardar JSON, cerrada con `d55686ae`; con carga
   a bordo, ambas ramas conservan hash, vehículo, órdenes, carga, stocks,
   ingresos y RNG durante 2.000 ticks, y la recargada vuelve a entregar y cobrar.
+- [#574](https://github.com/cavazquez/openttdrs/issues/574) — entrada
+  localizada «Primera ruta»/“First route” desde el menú, cerrada con
+  `64ee70db`; abre el escenario vacío de infraestructura y vehículos, pausado
+  y enfocado entre mina y central. La regresión ECS cubre dos entradas y la
+  limpieza entre sesiones; el binario real produjo capturas ES/EN a 1280×720
+  bajo Weston headless.
 
 ## Backlog ejecutable
 
 Cada fila es un resultado independiente. El issue contiene alcance, aceptación,
 dependencias y exclusiones; no se mantienen épicas abiertas como tareas.
-Las cuatro tareas pendientes están agrupadas en el hito existente
+Las tres tareas pendientes están agrupadas en el hito existente
 [0.1 — vertical slice](https://github.com/cavazquez/openttdrs/milestone/1).
 
 | Orden | Issue | Entrega | Dependencia funcional |
 |---:|---|---|---|
-| 1 | [#574](https://github.com/cavazquez/openttdrs/issues/574) | Entrada «Primera ruta» en el menú | #572 ✅ |
-| 2 | [#575](https://github.com/cavazquez/openttdrs/issues/575) | Objetivo y avance visibles de esa ruta | #573 ✅, #574 |
-| 3 | [#576](https://github.com/cavazquez/openttdrs/issues/576) | Confirmación y errores visibles de F5/F9 | — |
-| 4 | [#577](https://github.com/cavazquez/openttdrs/issues/577) | Smoke gráfico del paquete Linux y sesión de aceptación | #572–#573 ✅, #574–#576 |
+| 1 | [#575](https://github.com/cavazquez/openttdrs/issues/575) | Objetivo y avance visibles de esa ruta | #573–#574 ✅ |
+| 2 | [#576](https://github.com/cavazquez/openttdrs/issues/576) | Confirmación y errores visibles de F5/F9 | — |
+| 3 | [#577](https://github.com/cavazquez/openttdrs/issues/577) | Smoke gráfico del paquete Linux y sesión de aceptación | #572–#574 ✅, #575–#576 |
 
-**Próxima implementación: #574.** La reorganización de issues y documentación
+**Próxima implementación: #575.** La reorganización de issues y documentación
 no cuenta como implementación de las tareas pendientes.
 
 ## Cómo trabajar y cerrar

@@ -7,8 +7,9 @@ compatibilidad `.sav` está en
 capturas siguen en `docs/parity/`.
 
 **Dirección vigente (2026-09-18):** [primera ruta jugable](parity/continuous-work-plan.md).
-El backlog ejecutable es #574–#577; #568–#573 entregaron los ajustes P0
-iniciales, la ruta de carbón por comandos y su continuación JSON.
+El backlog ejecutable es #575–#577; #568–#574 entregaron los ajustes P0
+iniciales, la ruta de carbón por comandos, su continuación JSON y la entrada
+localizada desde el menú.
 Los quince issues anteriores se retiran
 como `not planned`; sus brechas técnicas siguen existiendo. Las menciones
 posteriores a padres «abiertos» son registros del corte de evidencia de cada
@@ -1530,7 +1531,6 @@ incluidos offsets relativos.
 
 <!-- active-parity-backlog:start -->
 
-- [#574](https://github.com/cavazquez/openttdrs/issues/574) — Primera ruta desde el menú.
 - [#575](https://github.com/cavazquez/openttdrs/issues/575) — objetivo y avance visibles.
 - [#576](https://github.com/cavazquez/openttdrs/issues/576) — feedback de F5/F9.
 - [#577](https://github.com/cavazquez/openttdrs/issues/577) — smoke gráfico del paquete Linux.

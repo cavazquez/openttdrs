@@ -93,6 +93,23 @@ Las salidas quedan como `1280x720/window_<id>_<scale>x.png` y
 informa como error; antes de incorporar una referencia se debe usar una clave
 presente en la matriz. Las escalas aceptadas van de 0.5× a 4×.
 
+## Menú principal
+
+El smoke de la portada no inicia una partida. Con un display real o Weston
+headless, `OPENTTDRS_MAIN_MENU_SHOT` guarda el menú ya compuesto y termina el
+proceso; `OPENTTDRS_LANGUAGE` permite verificar los textos ES/EN:
+
+```bash
+OPENTTDRS_LANGUAGE=es \
+OPENTTDRS_SHOT_RES=1280x720 \
+OPENTTDRS_MAIN_MENU_SHOT=/tmp/openttdrs-menu-es.png \
+  cargo run -p openttdrs-client --features dynamic_linking
+```
+
+El flujo se usó en #574 para comprobar «Primera ruta»/“First route”; la acción
+de menú no depende de variables, archivos privados ni consola para abrir el
+escenario en el cliente.
+
 ## Gate visual por familia (#297, #299, #300, #301, #302)
 
 La fase 1 cubre `Vehicle`, `Orders`, `Timetable`, `Depot`, `Town` e `Industry`.

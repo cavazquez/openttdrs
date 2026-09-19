@@ -1,6 +1,8 @@
 name: Platform check
 
 on:
+  # Revalida el SHA de un candidato que sólo modificó documentación antes del tag.
+  workflow_dispatch:
   push:
     branches: [main]
     paths-ignore:

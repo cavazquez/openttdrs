@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "scripts" / "ci_python_manifest.json"
 CHECK_SH = ROOT / "scripts" / "check.sh"
 CI_YML = ROOT / ".github" / "workflows" / "ci.yml"
+PLATFORMS_YML = ROOT / ".github" / "workflows" / "platforms.yml"
 APT_PACKAGES = ROOT / ".github" / "apt-packages.txt"
 
 # Invocaciones directas que no deben reaparecer en ci.yml (listas duplicadas).
@@ -48,6 +49,10 @@ def main() -> int:
         errors.append("check.sh no expone el modo ci-python")
 
     yml = CI_YML.read_text(encoding="utf-8")
+    if "workflow_dispatch:" not in yml:
+        errors.append("ci.yml no permite revalidar manualmente un SHA candidato")
+    if "github.ref == 'refs/heads/main'" not in yml:
+        errors.append("ci.yml no conserva la cobertura para una revalidación manual en main")
     if "scripts/check.sh ci-python" not in yml:
         errors.append("ci.yml no invoca ./scripts/check.sh ci-python")
     if "scripts/check.sh tnbp" not in yml:
@@ -85,6 +90,10 @@ def main() -> int:
         errors.append(
             "apt-packages.txt no instala python3-pil, requerido por los checks Python OpenGFX"
         )
+
+    platforms = PLATFORMS_YML.read_text(encoding="utf-8")
+    if "workflow_dispatch:" not in platforms:
+        errors.append("platforms.yml no permite revalidar manualmente un SHA candidato")
 
     if errors:
         print("FAIL: drift CI local/remoto (#120)", file=sys.stderr)

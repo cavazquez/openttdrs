@@ -478,17 +478,17 @@ fn trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog_impl<S: 
 ) -> bool {
     let Some((station_index, def, mut ctx)) =
         airport_animation_context_with_towns_and_snow_line_and_overrides(
-        map,
-        stations,
-        towns,
-        catalog,
-        airport_catalog,
-        climate,
-        snow_line_height,
-        airport_tile_overrides,
-        newgrf_stack,
-        coord,
-    )
+            map,
+            stations,
+            towns,
+            catalog,
+            airport_catalog,
+            climate,
+            snow_line_height,
+            airport_tile_overrides,
+            newgrf_stack,
+            coord,
+        )
     else {
         active_tiles.remove(&coord);
         return false;
@@ -1172,17 +1172,17 @@ fn advance_newgrf_airport_tile<S: BuildHasher>(
 ) -> bool {
     let Some((station_index, def, mut ctx)) =
         airport_animation_context_with_towns_and_snow_line_and_overrides(
-        map,
-        stations,
-        towns,
-        catalog,
-        airport_catalog,
-        climate,
-        snow_line_height,
-        airport_tile_overrides,
-        newgrf_stack,
-        coord,
-    )
+            map,
+            stations,
+            towns,
+            catalog,
+            airport_catalog,
+            climate,
+            snow_line_height,
+            airport_tile_overrides,
+            newgrf_stack,
+            coord,
+        )
     else {
         active_tiles.remove(&coord);
         return false;
@@ -1226,12 +1226,7 @@ fn advance_newgrf_airport_tile<S: BuildHasher>(
             0,
         );
         if result != CALLBACK_FAILED {
-            capture_station_animation_sound(
-                result,
-                def.newgrf_grfid,
-                coord,
-                sound_events,
-            );
+            capture_station_animation_sound(result, def.newgrf_grfid, coord, sound_events);
             match (result & 0xFF) as u8 {
                 0xFF => {
                     active_tiles.remove(&coord);

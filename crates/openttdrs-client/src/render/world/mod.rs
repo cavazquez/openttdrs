@@ -22,6 +22,7 @@ mod tests {
     use super::*;
     use bevy::app::ScheduleRunnerPlugin;
     use bevy::asset::AssetPlugin;
+    use bevy::ecs::error::{FallbackErrorHandler, panic};
     use bevy::ecs::system::RunSystemOnce;
     use bevy::image::ImagePlugin;
     use bevy::prelude::*;
@@ -87,6 +88,23 @@ mod tests {
         world
             .run_system_once(remap::apply_remap_map_visuals)
             .unwrap();
+    }
+
+    #[test]
+    fn sync_camera_remap_despawns_each_static_visual_once() {
+        let mut app = with_assets_app();
+        let world = app.world_mut();
+
+        world.run_system_once(setup).expect("setup del mapa");
+        // Un error de comando ECS no debe quedar sólo como log: la carga que
+        // sincroniza cámara no puede encolar dos despawns para el mismo sprite.
+        world.insert_resource(FallbackErrorHandler(panic));
+        world
+            .resource_mut::<RemapMapVisualsPending>()
+            .request_full_and_sync_camera();
+        world
+            .run_system_once(remap::apply_remap_map_visuals)
+            .expect("remapeo de carga sin despawns duplicados");
     }
 
     #[test]

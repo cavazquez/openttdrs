@@ -277,9 +277,15 @@ pub(crate) fn apply_remap_map_visuals(
             );
         }
     } else {
-        for (entity, dynamic, _) in &q_vis {
-            if dynamic.is_none() {
-                commands.entity(entity).despawn();
+        // Una carga/cambio de mapa ya retiró todos los visuales arriba. En el
+        // remapeo normal sólo se reemplazan los estáticos y se conservan las
+        // entidades dinámicas; repetir el recorrido tras una carga encolaba
+        // `despawn` dos veces para cada visual estático.
+        if preserve_dynamic_visuals {
+            for (entity, dynamic, _) in &q_vis {
+                if dynamic.is_none() {
+                    commands.entity(entity).despawn();
+                }
             }
         }
         vehicle_index.rebuild(&sim.state.vehicles);

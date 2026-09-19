@@ -8,8 +8,8 @@ mod place_flash;
 mod sound_ping;
 
 pub(crate) use feedback::{
-    push_build_command_error, push_object_slope_error, push_station_slope_error,
-    push_vehicle_start_stop_error,
+    push_build_command_error, push_hud_feedback, push_object_slope_error, push_station_slope_error,
+    push_vehicle_start_stop_error, setup_hud_feedback_toast, sync_hud_feedback_toast,
 };
 
 pub(crate) use display::{setup_tile_info_ui, update_tile_info_text};
@@ -95,7 +95,11 @@ pub(crate) struct SelectedTileInfo {
 #[derive(Component)]
 pub(crate) struct TileInfoText;
 
-/// Mensaje temporal tras errores de construcción (HUD superior).
+/// Mensaje temporal de acciones del juego.
+///
+/// El HUD técnico puede espejarlo cuando está activo, pero el toast siempre se
+/// muestra durante su vencimiento para que confirmaciones y errores no queden
+/// ocultos por la preferencia `Ctrl+H`.
 #[derive(Resource, Default)]
 pub(crate) struct HudBuildFeedback {
     pub(crate) message: Option<String>,

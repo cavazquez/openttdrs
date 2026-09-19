@@ -7,9 +7,11 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{sav, save};
 
 use crate::bevy_app::UpdateSet;
+use crate::i18n::Locale;
 use crate::render::{RemapMapVisualsPending, VehicleIndex};
+use crate::settings::ClientPreferences;
 use crate::state::{ClientScreen, SimRunState, SimWorld};
-use crate::ui::{SaveWindowState, SimHudControls};
+use crate::ui::{HudBuildFeedback, SaveWindowState, SimHudControls, push_hud_feedback};
 
 pub(crate) struct PersistencePlugin;
 
@@ -102,6 +104,78 @@ pub(crate) fn apply_loaded_state(
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PersistenceAction {
+    Save,
+    Load,
+}
+
+/// Texto de resultado de los atajos rápidos. Se limita al nombre del archivo
+/// activo (no su ruta completa) y aplana diagnósticos multilínea para que el
+/// toast pueda mostrarlos sin invadir la pantalla.
+fn persistence_feedback_text(
+    locale: Locale,
+    action: PersistenceAction,
+    path: &Path,
+    error: Option<&str>,
+) -> String {
+    let filename = persistence_feedback_filename(path);
+    let Some(error) = error else {
+        return match (locale, action) {
+            (Locale::Es, PersistenceAction::Save) => format!("Partida guardada: {filename}"),
+            (Locale::Es, PersistenceAction::Load) => format!("Partida cargada: {filename}"),
+            (Locale::En, PersistenceAction::Save) => format!("Game saved: {filename}"),
+            (Locale::En, PersistenceAction::Load) => format!("Game loaded: {filename}"),
+        };
+    };
+    let detail = one_line_persistence_error(locale, error);
+    match (locale, action) {
+        (Locale::Es, PersistenceAction::Save) => {
+            format!("No se pudo guardar {filename}: {detail}")
+        }
+        (Locale::Es, PersistenceAction::Load) => {
+            format!("No se pudo cargar {filename}: {detail}")
+        }
+        (Locale::En, PersistenceAction::Save) => format!("Could not save {filename}: {detail}"),
+        (Locale::En, PersistenceAction::Load) => format!("Could not load {filename}: {detail}"),
+    }
+}
+
+fn persistence_feedback_filename(path: &Path) -> String {
+    let name = path
+        .file_name()
+        .filter(|name| !name.is_empty())
+        .unwrap_or(path.as_os_str())
+        .to_string_lossy();
+    let sanitized: String = name
+        .chars()
+        .map(|character| {
+            if matches!(character, '\n' | '\r') {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect();
+    if sanitized.trim().is_empty() {
+        "(sin nombre)".to_owned()
+    } else {
+        sanitized
+    }
+}
+
+fn one_line_persistence_error(locale: Locale, error: &str) -> String {
+    let detail = error.split_whitespace().collect::<Vec<_>>().join(" ");
+    if detail.is_empty() {
+        match locale {
+            Locale::Es => "error sin detalle".to_owned(),
+            Locale::En => "unspecified error".to_owned(),
+        }
+    } else {
+        detail
+    }
+}
+
 fn pause_after_load(
     pause_requested: Option<Res<PauseAfterLoad>>,
     mut commands: Commands,
@@ -115,6 +189,7 @@ fn pause_after_load(
     }
 }
 
+#[allow(clippy::too_many_arguments)] // recursos ECS de guardado, UI y feedback.
 pub(crate) fn handle_sim_save_hotkeys(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut sim: ResMut<SimWorld>,
@@ -122,6 +197,9 @@ pub(crate) fn handle_sim_save_hotkeys(
     mut remap: ResMut<RemapMapVisualsPending>,
     mut commands: Commands,
     hud: Res<SimHudControls>,
+    prefs: Res<ClientPreferences>,
+    mut feedback: ResMut<HudBuildFeedback>,
+    time: Res<Time>,
     save_window: Option<Res<SaveWindowState>>,
 ) {
     // Con la ventana de partidas abierta el teclado edita el nombre del archivo.
@@ -136,13 +214,36 @@ pub(crate) fn handle_sim_save_hotkeys(
         keyboard.just_pressed(KeyCode::F9) || (ctrl && keyboard.just_pressed(KeyCode::KeyL));
 
     if save_shortcut {
-        match save_state_to_path(&sim.state, Path::new(&save_path)) {
-            Ok(()) => info!("Guardado en {save_path}"),
-            Err(e) => error!("No se pudo guardar en {save_path}: {e}"),
+        let path = Path::new(&save_path);
+        match save_state_to_path(&sim.state, path) {
+            Ok(()) => {
+                push_hud_feedback(
+                    &mut feedback,
+                    persistence_feedback_text(prefs.locale(), PersistenceAction::Save, path, None),
+                    time.elapsed_secs(),
+                    false,
+                );
+                info!("Guardado en {save_path}");
+            }
+            Err(error) => {
+                push_hud_feedback(
+                    &mut feedback,
+                    persistence_feedback_text(
+                        prefs.locale(),
+                        PersistenceAction::Save,
+                        path,
+                        Some(&error),
+                    ),
+                    time.elapsed_secs(),
+                    true,
+                );
+                error!("No se pudo guardar en {save_path}: {error}");
+            }
         }
     }
     if load_shortcut {
-        match load_state_from_path(Path::new(&save_path)) {
+        let path = Path::new(&save_path);
+        match load_state_from_path(path) {
             Ok(loaded) => {
                 apply_loaded_state(
                     &mut sim,
@@ -151,9 +252,28 @@ pub(crate) fn handle_sim_save_hotkeys(
                     &mut commands,
                     loaded,
                 );
+                push_hud_feedback(
+                    &mut feedback,
+                    persistence_feedback_text(prefs.locale(), PersistenceAction::Load, path, None),
+                    time.elapsed_secs(),
+                    false,
+                );
                 info!("Estado cargado desde {save_path}; recarga visual.");
             }
-            Err(e) => error!("Carga: no se pudo cargar {save_path}: {e}"),
+            Err(error) => {
+                push_hud_feedback(
+                    &mut feedback,
+                    persistence_feedback_text(
+                        prefs.locale(),
+                        PersistenceAction::Load,
+                        path,
+                        Some(&error),
+                    ),
+                    time.elapsed_secs(),
+                    true,
+                );
+                error!("Carga: no se pudo cargar {save_path}: {error}");
+            }
         }
     }
 }
@@ -161,30 +281,73 @@ pub(crate) fn handle_sim_save_hotkeys(
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
-    use super::{ActiveSaveFormat, PauseAfterLoad, active_save_format, handle_sim_save_hotkeys};
+    use std::path::Path;
+
+    use super::{
+        ActiveSaveFormat, PauseAfterLoad, PersistenceAction, active_save_format,
+        handle_sim_save_hotkeys, persistence_feedback_text,
+    };
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
 
+    use crate::i18n::Locale;
     use crate::render::{RemapMapVisualsPending, VehicleIndex};
+    use crate::settings::ClientPreferences;
     use crate::state::SimWorld;
-    use crate::ui::SimHudControls;
+    use crate::ui::{HudBuildFeedback, SaveWindowState, SimHudControls};
 
-    #[test]
-    fn save_and_load_json_shortcuts_work() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let save_path = dir.path().join("sim.json");
-        let save_path_s = save_path.to_string_lossy().to_string();
-
+    fn shortcut_world(save_path: &Path) -> World {
         let mut world = World::new();
         world.insert_resource(SimWorld::default());
         world.insert_resource(VehicleIndex::default());
         world.insert_resource(RemapMapVisualsPending::default());
         world.insert_resource(SimHudControls {
-            json_save_path: save_path_s,
+            json_save_path: save_path.to_string_lossy().to_string(),
             minimap_visible: true,
             sfx_volume: 0.22,
             ..Default::default()
         });
+        world.insert_resource(ClientPreferences::default());
+        world.insert_resource(HudBuildFeedback::default());
+        world.insert_resource(Time::<()>::default());
+        world
+    }
+
+    #[test]
+    fn persistence_feedback_is_localized_and_keeps_filename_and_error() {
+        let path = Path::new("/tmp/mi_partida.json");
+        assert_eq!(
+            persistence_feedback_text(Locale::Es, PersistenceAction::Save, path, None),
+            "Partida guardada: mi_partida.json"
+        );
+        assert_eq!(
+            persistence_feedback_text(Locale::En, PersistenceAction::Load, path, None),
+            "Game loaded: mi_partida.json"
+        );
+        assert_eq!(
+            persistence_feedback_text(
+                Locale::Es,
+                PersistenceAction::Load,
+                path,
+                Some("archivo\nilegible"),
+            ),
+            "No se pudo cargar mi_partida.json: archivo ilegible"
+        );
+        assert_eq!(
+            persistence_feedback_text(Locale::En, PersistenceAction::Save, path, Some("disk full"),),
+            "Could not save mi_partida.json: disk full"
+        );
+        assert_eq!(
+            persistence_feedback_text(Locale::Es, PersistenceAction::Save, path, Some("")),
+            "No se pudo guardar mi_partida.json: error sin detalle"
+        );
+    }
+
+    #[test]
+    fn save_and_load_json_shortcuts_work() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let save_path = dir.path().join("sim.json");
+        let mut world = shortcut_world(&save_path);
 
         let mut save_keys = ButtonInput::<KeyCode>::default();
         save_keys.press(KeyCode::F5);
@@ -197,6 +360,11 @@ mod tests {
                 .expect("JSON save")
                 .contains("version")
         );
+        assert_eq!(
+            world.resource::<HudBuildFeedback>().message.as_deref(),
+            Some("Partida guardada: sim.json")
+        );
+        assert!(world.resource::<HudBuildFeedback>().expires_at_secs > 0.0);
 
         let mut load_keys = ButtonInput::<KeyCode>::default();
         load_keys.press(KeyCode::F9);
@@ -208,30 +376,29 @@ mod tests {
         assert!(remap.is_full());
         assert!(remap.sync_camera_requested());
         assert!(world.contains_resource::<PauseAfterLoad>());
+        assert_eq!(
+            world.resource::<HudBuildFeedback>().message.as_deref(),
+            Some("Partida cargada: sim.json")
+        );
+        assert!(!world.resource::<HudBuildFeedback>().pending_soft_ping);
     }
 
     #[test]
     fn ctrl_shortcuts_preserve_json_roundtrip() {
         let dir = tempfile::tempdir().expect("tempdir");
         let save_path = dir.path().join("roundtrip.json");
-        let save_path_s = save_path.to_string_lossy().to_string();
-
-        let mut world = World::new();
-        world.insert_resource(SimWorld::default());
-        world.insert_resource(VehicleIndex::default());
-        world.insert_resource(RemapMapVisualsPending::default());
-        world.insert_resource(SimHudControls {
-            json_save_path: save_path_s,
-            minimap_visible: true,
-            sfx_volume: 0.22,
-            ..Default::default()
-        });
+        let mut world = shortcut_world(&save_path);
+        world.resource_mut::<ClientPreferences>().language = "en".into();
 
         let mut ctrl_save = ButtonInput::<KeyCode>::default();
         ctrl_save.press(KeyCode::ControlLeft);
         ctrl_save.press(KeyCode::KeyS);
         world.insert_resource(ctrl_save);
         world.run_system_once(handle_sim_save_hotkeys).unwrap();
+        assert_eq!(
+            world.resource::<HudBuildFeedback>().message.as_deref(),
+            Some("Game saved: roundtrip.json")
+        );
 
         let mut ctrl_load = ButtonInput::<KeyCode>::default();
         ctrl_load.press(KeyCode::ControlLeft);
@@ -251,6 +418,10 @@ mod tests {
             saved
         );
         assert!(world.contains_resource::<PauseAfterLoad>());
+        assert_eq!(
+            world.resource::<HudBuildFeedback>().message.as_deref(),
+            Some("Game loaded: roundtrip.json")
+        );
     }
 
     #[test]
@@ -260,17 +431,8 @@ mod tests {
         let source = b"not an OpenTTD save";
         std::fs::write(&save_path, source).expect("write invalid SAV");
 
-        let mut world = World::new();
-        world.insert_resource(SimWorld::default());
+        let mut world = shortcut_world(&save_path);
         world.resource_mut::<SimWorld>().state.economy.money = 9_999;
-        world.insert_resource(VehicleIndex::default());
-        world.insert_resource(RemapMapVisualsPending::default());
-        world.insert_resource(SimHudControls {
-            json_save_path: save_path.to_string_lossy().to_string(),
-            minimap_visible: true,
-            sfx_volume: 0.22,
-            ..Default::default()
-        });
 
         let mut load_keys = ButtonInput::<KeyCode>::default();
         load_keys.press(KeyCode::F9);
@@ -280,25 +442,22 @@ mod tests {
         assert_eq!(world.resource::<SimWorld>().state.economy.money, 9_999);
         assert_eq!(std::fs::read(&save_path).expect("source remains"), source);
         assert!(!world.contains_resource::<PauseAfterLoad>());
+        let feedback = world.resource::<HudBuildFeedback>();
+        assert!(
+            feedback
+                .message
+                .as_deref()
+                .is_some_and(|message| message.starts_with("No se pudo cargar broken.sav: "))
+        );
+        assert!(feedback.pending_soft_ping);
     }
 
     #[test]
     fn save_and_load_sav_shortcuts_preserve_container_and_state() {
         let dir = tempfile::tempdir().expect("tempdir");
         let save_path = dir.path().join("sim.SAV");
-        let save_path_s = save_path.to_string_lossy().to_string();
-
-        let mut world = World::new();
-        world.insert_resource(SimWorld::default());
+        let mut world = shortcut_world(&save_path);
         world.resource_mut::<SimWorld>().state.economy.money = 246_810;
-        world.insert_resource(VehicleIndex::default());
-        world.insert_resource(RemapMapVisualsPending::default());
-        world.insert_resource(SimHudControls {
-            json_save_path: save_path_s,
-            minimap_visible: true,
-            sfx_volume: 0.22,
-            ..Default::default()
-        });
 
         let mut save_keys = ButtonInput::<KeyCode>::default();
         save_keys.press(KeyCode::F5);
@@ -322,5 +481,54 @@ mod tests {
         assert_eq!(world.resource::<SimWorld>().state.economy.money, 246_810);
         assert!(world.resource::<RemapMapVisualsPending>().is_pending());
         assert!(world.contains_resource::<PauseAfterLoad>());
+    }
+
+    #[test]
+    fn failed_save_reports_the_filename_and_preserves_the_active_game() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let blocker = dir.path().join("not_a_directory");
+        std::fs::write(&blocker, "not a directory").expect("write blocker");
+        let save_path = blocker.join("slot.json");
+        let mut world = shortcut_world(&save_path);
+        world.resource_mut::<SimWorld>().state.economy.money = 321;
+
+        let mut save_keys = ButtonInput::<KeyCode>::default();
+        save_keys.press(KeyCode::F5);
+        world.insert_resource(save_keys);
+        world.run_system_once(handle_sim_save_hotkeys).unwrap();
+
+        assert!(!save_path.exists());
+        assert_eq!(world.resource::<SimWorld>().state.economy.money, 321);
+        let feedback = world.resource::<HudBuildFeedback>();
+        assert!(
+            feedback
+                .message
+                .as_deref()
+                .is_some_and(|message| message.starts_with("No se pudo guardar slot.json: "))
+        );
+        assert!(feedback.pending_soft_ping);
+    }
+
+    #[test]
+    fn open_save_window_captures_quick_save_and_load_keys() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let save_path = dir.path().join("captured.json");
+        let mut world = shortcut_world(&save_path);
+        world.resource_mut::<SimWorld>().state.economy.money = 654;
+        world.insert_resource(SaveWindowState {
+            open: true,
+            ..Default::default()
+        });
+
+        let mut keys = ButtonInput::<KeyCode>::default();
+        keys.press(KeyCode::F5);
+        keys.press(KeyCode::F9);
+        world.insert_resource(keys);
+        world.run_system_once(handle_sim_save_hotkeys).unwrap();
+
+        assert!(!save_path.exists());
+        assert_eq!(world.resource::<SimWorld>().state.economy.money, 654);
+        assert!(world.resource::<HudBuildFeedback>().message.is_none());
+        assert!(!world.contains_resource::<PauseAfterLoad>());
     }
 }

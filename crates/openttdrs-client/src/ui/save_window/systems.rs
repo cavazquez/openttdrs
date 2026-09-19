@@ -404,8 +404,9 @@ mod tests {
 
     use crate::persistence::{PauseAfterLoad, handle_sim_save_hotkeys};
     use crate::render::{RemapMapVisualsPending, VehicleIndex};
+    use crate::settings::ClientPreferences;
     use crate::state::SimWorld;
-    use crate::ui::SimHudControls;
+    use crate::ui::{HudBuildFeedback, SimHudControls};
 
     use super::super::{
         SaveWindowButton, SaveWindowMode, SaveWindowNameText, SaveWindowRow, SaveWindowState,
@@ -419,6 +420,9 @@ mod tests {
         world.insert_resource(VehicleIndex::default());
         world.insert_resource(RemapMapVisualsPending::default());
         world.insert_resource(SaveWindowState::default());
+        world.insert_resource(ClientPreferences::default());
+        world.insert_resource(HudBuildFeedback::default());
+        world.insert_resource(Time::<()>::default());
         world.insert_resource(SimHudControls {
             sim_speed: 1.0,
             json_save_path: save_path.to_string(),
@@ -470,6 +474,9 @@ mod tests {
         world.insert_resource(VehicleIndex::default());
         world.insert_resource(RemapMapVisualsPending::default());
         world.insert_resource(SaveWindowState::default());
+        world.insert_resource(ClientPreferences::default());
+        world.insert_resource(HudBuildFeedback::default());
+        world.insert_resource(Time::<()>::default());
         world.insert_resource(SimHudControls {
             sim_speed: 1.0,
             json_save_path: save_path.clone(),

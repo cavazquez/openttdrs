@@ -331,8 +331,7 @@ pub(crate) fn update_tile_info_text(
     hud: Res<SimHudControls>,
     prefs: Res<ClientPreferences>,
     station_state: Res<StationBuildState>,
-    mut feedback: ResMut<HudBuildFeedback>,
-    time: Res<Time>,
+    feedback: Res<HudBuildFeedback>,
     tool_state: Res<UiToolState>,
     order_state: Res<OrderEditState>,
     asset_status: Option<Res<ClientAssetStatus>>,
@@ -365,10 +364,6 @@ pub(crate) fn update_tile_info_text(
     // Deja espacio para barra/toolbar superior (varias líneas de estado).
     text_transform.translation.y = cam_transform.translation.y + half_h - 88.0 * proj.scale;
     text_transform.scale = Vec3::splat(proj.scale);
-
-    if feedback.message.is_some() && time.elapsed_secs() >= feedback.expires_at_secs {
-        feedback.message = None;
-    }
 
     let locale = prefs.locale();
     // El feedback de construcción se produce en comandos muy alejados del

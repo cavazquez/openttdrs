@@ -1,11 +1,45 @@
+use bevy::prelude::*;
+use bevy::ui::FocusPolicy;
 use openttdrs_core::CommandError;
 
 use super::HudBuildFeedback;
-use crate::i18n::Locale;
+use crate::i18n::{Locale, localized_text};
 use crate::state::SimWorld;
+use crate::state::ingame_lifecycle::InGameUi;
 use crate::ui::command_error_text::command_error_message;
+use crate::ui::floating_window::window_text_font;
+use crate::ui::font::UiFontRole;
 
-const BUILD_ERROR_DISPLAY_SECS: f32 = 5.0;
+const HUD_FEEDBACK_DISPLAY_SECS: f32 = 5.0;
+const HUD_FEEDBACK_BOTTOM: f32 = 42.0;
+const HUD_FEEDBACK_Z: i32 = 2200;
+const FEEDBACK_BG: Color = Color::srgba(0.08, 0.075, 0.055, 0.96);
+const FEEDBACK_BORDER: Color = Color::srgb(0.72, 0.64, 0.39);
+const FEEDBACK_TEXT: Color = Color::srgb(0.98, 0.91, 0.67);
+
+/// Raíz del aviso temporal que se muestra incluso si el HUD técnico está
+/// oculto. No recibe foco ni clics: sólo hace visible el contenido de
+/// [`HudBuildFeedback`] durante su vencimiento.
+#[derive(Component)]
+pub(crate) struct HudFeedbackToastRoot;
+
+#[derive(Component)]
+pub(crate) struct HudFeedbackToastText;
+
+/// Inserta un aviso temporal compartido por acciones de HUD.
+///
+/// Los errores pueden pedir el pitido suave existente; las confirmaciones no
+/// producen sonido para no competir con la partida.
+pub(crate) fn push_hud_feedback(
+    feedback: &mut HudBuildFeedback,
+    message: String,
+    elapsed_secs: f32,
+    is_error: bool,
+) {
+    feedback.message = Some(message);
+    feedback.expires_at_secs = elapsed_secs + HUD_FEEDBACK_DISPLAY_SECS;
+    feedback.pending_soft_ping = is_error;
+}
 
 /// Muestra un mensaje temporal en el HUD y encola pitido suave.
 pub(crate) fn push_build_command_error(
@@ -13,9 +47,97 @@ pub(crate) fn push_build_command_error(
     err: CommandError,
     elapsed_secs: f32,
 ) {
-    feedback.message = Some(command_error_message(err).to_string());
-    feedback.expires_at_secs = elapsed_secs + BUILD_ERROR_DISPLAY_SECS;
-    feedback.pending_soft_ping = true;
+    push_hud_feedback(
+        feedback,
+        command_error_message(err).to_string(),
+        elapsed_secs,
+        true,
+    );
+}
+
+/// Crea el toast una vez por sesión. El panel se posiciona sobre la barra de
+/// estado, lejos del toolbar y del panel de «Primera ruta».
+pub(crate) fn setup_hud_feedback_toast(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands
+        .spawn((
+            InGameUi,
+            HudFeedbackToastRoot,
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                right: Val::Px(0.0),
+                bottom: Val::Px(HUD_FEEDBACK_BOTTOM),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            FocusPolicy::Pass,
+            GlobalZIndex(HUD_FEEDBACK_Z),
+            Visibility::Hidden,
+        ))
+        .with_children(|root| {
+            root.spawn((
+                Node {
+                    width: Val::Percent(92.0),
+                    max_width: Val::Px(680.0),
+                    padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)),
+                    border: UiRect::all(Val::Px(2.0)),
+                    ..default()
+                },
+                BackgroundColor(FEEDBACK_BG),
+                BorderColor::all(FEEDBACK_BORDER),
+                FocusPolicy::Pass,
+            ))
+            .with_children(|panel| {
+                panel.spawn((
+                    HudFeedbackToastText,
+                    Text::new(""),
+                    window_text_font(&asset_server, UiFontRole::Body),
+                    TextColor(FEEDBACK_TEXT),
+                    Node {
+                        width: Val::Percent(100.0),
+                        ..default()
+                    },
+                    FocusPolicy::Pass,
+                ));
+            });
+        });
+}
+
+/// Sincroniza y vence el aviso temporal. Esta ruta no depende de
+/// [`crate::ui::hud::HudVisibility`], por eso guardar/cargar se confirma aun
+/// cuando el jugador eligió ocultar el HUD informativo o pausó la simulación.
+pub(crate) fn sync_hud_feedback_toast(
+    mut feedback: ResMut<HudBuildFeedback>,
+    time: Res<Time>,
+    prefs: Res<crate::settings::ClientPreferences>,
+    mut roots: Query<&mut Visibility, With<HudFeedbackToastRoot>>,
+    mut texts: Query<&mut Text, With<HudFeedbackToastText>>,
+) {
+    if feedback.message.is_some() && time.elapsed_secs() >= feedback.expires_at_secs {
+        feedback.message = None;
+        feedback.pending_soft_ping = false;
+    }
+
+    let message = feedback
+        .message
+        .as_deref()
+        .map(|message| localized_text(prefs.locale(), message));
+    for mut visibility in &mut roots {
+        *visibility = if message.is_some() {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+    let Some(message) = message else {
+        return;
+    };
+    for mut text in &mut texts {
+        if text.as_str() != message {
+            *text = Text::new(message.clone());
+        }
+    }
 }
 
 /// Muestra un rechazo CB31 con el texto del catálogo activo cuando está
@@ -69,7 +191,7 @@ pub(crate) fn push_vehicle_start_stop_error(
 
     feedback.message =
         Some(dynamic_message.unwrap_or_else(|| command_error_message(err).to_string()));
-    feedback.expires_at_secs = elapsed_secs + BUILD_ERROR_DISPLAY_SECS;
+    feedback.expires_at_secs = elapsed_secs + HUD_FEEDBACK_DISPLAY_SECS;
     feedback.pending_soft_ping = true;
 }
 
@@ -119,7 +241,7 @@ pub(crate) fn push_station_slope_error(
 
     feedback.message =
         Some(dynamic_message.unwrap_or_else(|| command_error_message(err).to_string()));
-    feedback.expires_at_secs = elapsed_secs + BUILD_ERROR_DISPLAY_SECS;
+    feedback.expires_at_secs = elapsed_secs + HUD_FEEDBACK_DISPLAY_SECS;
     feedback.pending_soft_ping = true;
 }
 
@@ -169,7 +291,7 @@ pub(crate) fn push_object_slope_error(
 
     feedback.message =
         Some(dynamic_message.unwrap_or_else(|| command_error_message(err).to_string()));
-    feedback.expires_at_secs = elapsed_secs + BUILD_ERROR_DISPLAY_SECS;
+    feedback.expires_at_secs = elapsed_secs + HUD_FEEDBACK_DISPLAY_SECS;
     feedback.pending_soft_ping = true;
 }
 
@@ -216,13 +338,67 @@ fn standard_object_slope_error(code: u16, locale: Locale) -> Option<String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use std::time::Duration;
+
+    use super::super::HudVisibility;
     use super::*;
+    use bevy::ecs::system::RunSystemOnce;
     use openttdrs_core::{
         NewGrfString, ObjectSlopeCallbackDiagnostic, ObjectSlopeCallbackOutcome,
         StationSlopeCallbackDiagnostic, StationSlopeCallbackOutcome,
         VehicleStartStopCallbackDiagnostic, VehicleStartStopCallbackOutcome,
     };
+
+    use crate::settings::ClientPreferences;
+    use crate::state::SimRunState;
+
+    #[test]
+    fn toast_is_visible_while_paused_and_hides_after_expiring() {
+        let mut world = World::new();
+        world.insert_resource(ClientPreferences {
+            language: "en".into(),
+            ..ClientPreferences::default()
+        });
+        world.insert_resource(HudVisibility::default());
+        world.insert_resource(HudBuildFeedback {
+            message: Some("Game saved: paused.json".into()),
+            expires_at_secs: 5.0,
+            ..Default::default()
+        });
+        world.insert_resource(Time::<()>::default());
+        world.insert_resource(State::new(SimRunState::Paused));
+        let root = world.spawn((HudFeedbackToastRoot, Visibility::Hidden)).id();
+        let text = world.spawn((HudFeedbackToastText, Text::new(""))).id();
+
+        world.run_system_once(sync_hud_feedback_toast).unwrap();
+
+        assert_eq!(
+            world.resource::<State<SimRunState>>().get(),
+            &SimRunState::Paused
+        );
+        assert!(!world.resource::<HudVisibility>().visible);
+        assert!(matches!(
+            world.get::<Visibility>(root),
+            Some(Visibility::Visible)
+        ));
+        assert_eq!(
+            world.get::<Text>(text).expect("toast text").as_str(),
+            "Game saved: paused.json"
+        );
+
+        world
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_secs(5));
+        world.run_system_once(sync_hud_feedback_toast).unwrap();
+
+        assert!(world.resource::<HudBuildFeedback>().message.is_none());
+        assert!(matches!(
+            world.get::<Visibility>(root),
+            Some(Visibility::Hidden)
+        ));
+    }
 
     #[test]
     fn vehicle_start_stop_error_uses_expanded_catalog_text_and_consumes_diagnostic() {

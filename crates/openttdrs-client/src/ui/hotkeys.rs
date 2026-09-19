@@ -213,7 +213,10 @@ fn defaults() -> HashMap<UiCommandId, HotkeyBinding> {
         (C::Settings, HotkeyBinding::plain(KeyCode::F2)),
         (C::SaveLoad, HotkeyBinding::plain(KeyCode::F3)),
         (C::SmallMap, HotkeyBinding::plain(KeyCode::F4)),
-        (C::TownDirectory, HotkeyBinding::plain(KeyCode::F5)),
+        // F5/F9 pertenecen al guardado/cargado rápido global. Los comandos de
+        // toolbar no pueden usarlos, ni siquiera con modificadores, porque la
+        // persistencia observa la tecla base para conservar esos atajos.
+        (C::TownDirectory, HotkeyBinding::plain(KeyCode::F6)),
         (C::StationList, HotkeyBinding::plain(KeyCode::F7)),
         (C::Finances, HotkeyBinding::plain(KeyCode::F8)),
         (C::Graphs, HotkeyBinding::plain(KeyCode::F10)),
@@ -223,7 +226,7 @@ fn defaults() -> HashMap<UiCommandId, HotkeyBinding> {
         (C::BuildRoad, HotkeyBinding::shift(KeyCode::F2)),
         (C::BuildWater, HotkeyBinding::shift(KeyCode::F3)),
         (C::BuildAir, HotkeyBinding::shift(KeyCode::F4)),
-        (C::Terraform, HotkeyBinding::shift(KeyCode::F5)),
+        (C::Terraform, HotkeyBinding::shift(KeyCode::F7)),
         (C::BuildTrees, HotkeyBinding::shift(KeyCode::F6)),
         (C::Music, HotkeyBinding::shift(KeyCode::F11)),
         (C::Help, HotkeyBinding::shift(KeyCode::F12)),
@@ -332,10 +335,22 @@ fn key_label(key: KeyCode) -> &'static str {
     }
 }
 
+fn reserved_persistence_hotkey(binding: HotkeyBinding) -> bool {
+    matches!(binding.key, KeyCode::F5 | KeyCode::F9)
+}
+
 fn rebuild_bindings(hotkeys: &mut UiHotkeys, overrides: &str) {
     hotkeys.bindings = defaults();
     hotkeys.conflicts.clear();
     for (command, binding) in parse_overrides(overrides) {
+        if reserved_persistence_hotkey(binding) {
+            warn!(
+                command = command.stable_id(),
+                binding = %binding.label(),
+                "se ignoró un atajo de toolbar reservado para guardado/cargado rápido"
+            );
+            continue;
+        }
         if let Some((&other, _)) = hotkeys
             .bindings
             .iter()
@@ -543,15 +558,52 @@ mod tests {
     #[test]
     fn overrides_are_parsed_and_conflicts_rejected() {
         let mut hotkeys = UiHotkeys::default();
-        rebuild_bindings(&mut hotkeys, "pause=Ctrl+F9;settings=Ctrl+F9");
+        rebuild_bindings(&mut hotkeys, "pause=Ctrl+F8;settings=Ctrl+F8");
         assert_eq!(
             hotkeys.label(UiCommandId::Pause).as_deref(),
-            Some("Ctrl+F9")
+            Some("Ctrl+F8")
         );
         assert_eq!(hotkeys.conflicts.len(), 1);
         assert_ne!(
             hotkeys.bindings[&UiCommandId::Settings],
-            HotkeyBinding::ctrl(KeyCode::F9)
+            HotkeyBinding::ctrl(KeyCode::F8)
+        );
+    }
+
+    #[test]
+    fn quick_save_load_bindings_are_reserved_from_toolbar_commands() {
+        let defaults = defaults();
+        assert_eq!(
+            defaults[&UiCommandId::TownDirectory],
+            HotkeyBinding::plain(KeyCode::F6)
+        );
+        assert_eq!(
+            defaults[&UiCommandId::Terraform],
+            HotkeyBinding::shift(KeyCode::F7)
+        );
+        assert!(
+            defaults
+                .values()
+                .all(|binding| !reserved_persistence_hotkey(*binding))
+        );
+
+        let mut hotkeys = UiHotkeys::default();
+        rebuild_bindings(
+            &mut hotkeys,
+            "town_directory=F5;terraform=Shift+F5;station_list=Alt+F9",
+        );
+
+        assert_eq!(
+            hotkeys.label(UiCommandId::TownDirectory).as_deref(),
+            Some("F6")
+        );
+        assert_eq!(
+            hotkeys.label(UiCommandId::Terraform).as_deref(),
+            Some("Shift+F7")
+        );
+        assert_eq!(
+            hotkeys.label(UiCommandId::StationList).as_deref(),
+            Some("F7")
         );
     }
 

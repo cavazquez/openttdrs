@@ -1000,7 +1000,7 @@ fn check_aircraft_needs_service(state: &mut crate::GameState, idx: usize) {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::cast_possible_truncation, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::map::TileCoord;

@@ -3097,7 +3097,12 @@ fn station_has_industry_waiting(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)] // Fixtures de mapa acotado construidos en cada prueba.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::expect_used,
+    clippy::iter_next_slice,
+    clippy::unwrap_used
+)] // Fixtures de mapa acotado construidos en cada prueba.
 mod tests {
     use super::*;
 

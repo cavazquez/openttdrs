@@ -1,5 +1,7 @@
 //! Tests de aeropuerto, canal y esclusa.
 
+#![allow(clippy::expect_used)]
+
 use crate::economy::station_build_cost;
 use crate::{
     AircraftPhase, Command, CommandError, DEPOT_BUILD_COST, ENGINE_AIRCRAFT_DAKOTA,

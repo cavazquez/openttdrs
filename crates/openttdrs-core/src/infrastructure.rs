@@ -773,7 +773,7 @@ pub fn rail_infrastructure_for_company(map: &Map, owner: CompanyId) -> RailInfra
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::if_same_then_else, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::map::Map;

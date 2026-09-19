@@ -4987,7 +4987,7 @@ pub fn apply_industry_tile_anim_callback(def: &IndustryTileSpecDef) -> u16 {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::engine::engines_table;

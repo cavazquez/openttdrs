@@ -370,6 +370,7 @@ pub fn terraform_cost_per_corner_inflated(inflation_prices: u64) -> i64 {
 }
 
 #[cfg(test)]
+#[allow(clippy::too_many_lines)]
 mod tests {
     use super::*;
     use crate::economy::pricebase::PriceIndex;

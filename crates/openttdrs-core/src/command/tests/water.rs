@@ -1,5 +1,12 @@
 //! Tests de construcción acuática (depósito, muelle, boya, acueducto).
 
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::expect_used,
+    clippy::manual_assert_eq,
+    clippy::too_many_lines
+)]
+
 use crate::economy::{
     airport_clear_cost, buoy_build_cost, buoy_clear_cost, canal_build_cost, canal_clear_cost,
     dock_build_cost, dock_clear_cost, lock_build_cost, lock_clear_cost, rail_station_clear_cost,

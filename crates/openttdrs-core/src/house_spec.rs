@@ -1101,7 +1101,7 @@ pub fn grow_town_at_road_iterations(layout: TownLayout, num_houses: u16) -> i32 
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::map::TileCoord;

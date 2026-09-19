@@ -674,7 +674,11 @@ fn tile_kind_as_ottd(map: &Map, stations: &[Station], coord: TileCoord, tile: Ti
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::too_many_lines)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::expect_used,
+    clippy::too_many_lines
+)]
 mod tests {
     use super::*;
     use crate::airport_class::{AirportClassId, AirportSpecId, NewgrfAirportSpecDef};

@@ -3172,6 +3172,7 @@ fn remove_closed_industries_with_neutral_stations_impl(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::station::StopKind;

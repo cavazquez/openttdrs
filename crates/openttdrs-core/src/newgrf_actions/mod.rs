@@ -1329,7 +1329,11 @@ pub fn build_grf_v2_with_action0_and_action8(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::expect_used,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
     use crate::GameState;

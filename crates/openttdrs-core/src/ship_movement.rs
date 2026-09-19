@@ -1758,7 +1758,12 @@ fn ship_controller_tick_inner(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, deprecated)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::useless_conversion,
+    deprecated
+)]
 mod tests {
     use crate::GameState;
     use crate::engine::ENGINE_SHIP_MPS;

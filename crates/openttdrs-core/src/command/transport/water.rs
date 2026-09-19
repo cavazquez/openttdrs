@@ -2756,7 +2756,11 @@ pub(crate) fn check_place_dock_or_station(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::expect_used,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
     use crate::world_gen::{CLEAR_GROUND_DESERT, clear_ground_m5};

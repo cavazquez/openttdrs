@@ -1949,6 +1949,7 @@ impl super::model::Vehicle {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::{aircraft_progress_step_for_plane_speed, train_breakdown_speed_cap};
     use crate::{DIR_SW, Map, TileCoord, TileKind, Vehicle, VehicleKind};

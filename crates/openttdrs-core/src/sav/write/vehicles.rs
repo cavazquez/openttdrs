@@ -1630,7 +1630,13 @@ pub(crate) fn ensure_sea_tile(state: &mut GameState, pos: TileCoord) {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(
+    clippy::cast_sign_loss,
+    clippy::expect_used,
+    clippy::items_after_statements,
+    clippy::too_many_lines,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
     use crate::station::{Station, StopKind};

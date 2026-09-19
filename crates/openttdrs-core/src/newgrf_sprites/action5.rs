@@ -936,7 +936,7 @@ pub fn airport_preview_action5_slot(spec: crate::airport_class::AirportSpecId) -
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::cast_possible_truncation, clippy::unwrap_used)]
 mod slot_helper_tests {
     use super::*;
     use crate::airport_class::AirportSpecId;

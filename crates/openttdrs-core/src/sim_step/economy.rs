@@ -1301,7 +1301,7 @@ pub(super) fn apply_vehicle_running_costs(state: &mut GameState) {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
+#[allow(clippy::expect_used, clippy::too_many_lines)]
 mod tests {
     use super::*;
     use crate::cargodist::parity::Randomizer;

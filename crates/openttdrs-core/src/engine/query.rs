@@ -626,7 +626,7 @@ pub fn engine_for_vehicle(kind: VehicleKind, id: u16) -> &'static EngineDef {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::vehicle::{Vehicle, VehicleKind};

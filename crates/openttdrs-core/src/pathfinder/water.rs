@@ -734,6 +734,7 @@ fn heuristic(from: TileCoord, to: TileCoord, ship_cost: Option<ShipPathCost>) ->
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::map::{Map, WaterClass, make_water_tile};

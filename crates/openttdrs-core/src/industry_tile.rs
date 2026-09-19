@@ -269,7 +269,7 @@ pub fn resolve_industry_tile_draw_gfx(gfx: u16, catalog: &[IndustryTileSpecDef])
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::newgrf_sprites::{

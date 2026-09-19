@@ -137,6 +137,7 @@ pub fn canal_feature_def(catalog: &[CanalFeatureDef], id: u8) -> Option<&CanalFe
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
     use crate::newgrf_sprites::{

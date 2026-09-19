@@ -288,7 +288,11 @@ pub fn find_ship_path_cached_with_trackdirs(
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used)]
+#[allow(
+    clippy::expect_used,
+    clippy::field_reassign_with_default,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
     use crate::engine::{ENGINE_SHIP_MPS, ENGINE_TRAIN_KIRBY, NEWGRF_ENGINE_ID_BASE, engine_by_id};

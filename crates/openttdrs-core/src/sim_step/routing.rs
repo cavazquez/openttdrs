@@ -1072,6 +1072,11 @@ pub(super) fn dir_from_vehicle(vehicle: &crate::Vehicle, prev: Option<TileCoord>
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::expect_used,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
     use crate::rail_pbs::ReservedRailStep;

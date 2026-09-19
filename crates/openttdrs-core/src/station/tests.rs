@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation)]
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod coherence_tests {

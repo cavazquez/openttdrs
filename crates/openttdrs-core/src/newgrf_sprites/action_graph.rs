@@ -1113,6 +1113,7 @@ pub fn collect_cargo_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics,
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::manual_assert_eq, clippy::unwrap_used)]
 mod tests {
     use crate::newgrf_sprites::Action2EvalCtx;
 

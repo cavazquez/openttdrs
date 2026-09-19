@@ -214,6 +214,7 @@ pub fn consist_occupied_tiles_indexed(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

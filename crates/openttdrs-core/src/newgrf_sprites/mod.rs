@@ -134,7 +134,12 @@ pub use fixture::{
     compress_grf_lz77_literals,
 };
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(
+    clippy::decimal_bitwise_operands,
+    clippy::expect_used,
+    clippy::field_reassign_with_default,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
     use crate::map::TileCoord;

@@ -439,6 +439,7 @@ pub(crate) fn hydrate_state_from_pool(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::sav::SavOpaqueChunk;

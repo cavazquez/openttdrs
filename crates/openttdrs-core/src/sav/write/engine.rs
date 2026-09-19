@@ -184,6 +184,7 @@ pub(super) fn patch_engine_chunk(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::engine::ENGINE_TRAIN_KIRBY;

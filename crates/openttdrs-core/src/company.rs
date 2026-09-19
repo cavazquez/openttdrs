@@ -848,6 +848,7 @@ pub fn tile_owner_colour(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::useless_vec)]
 mod tests {
     use super::*;
     use crate::game_state::CompanyEconomy;

@@ -45,6 +45,7 @@ pub const VEHICLE_LENGTH: u8 = 8;
 pub const TILE_FRACTIONS: u16 = 256;
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::cargo::CargoType;

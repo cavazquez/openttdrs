@@ -831,7 +831,7 @@ fn trim_consist_to_length(state: &mut GameState, head_id: u32, max_length: u16) 
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::command::apply_command;

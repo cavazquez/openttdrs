@@ -1,8 +1,7 @@
 # Planificación y roadmaps
 
 El plan ejecutable es [Primera ruta jugable](parity/continuous-work-plan.md),
-actualizado el **2026-09-18**, con entregas #568–#575 y tareas pendientes
-#576–#577. La
+actualizado el **2026-09-18**, con entregas #568–#576 y tarea pendiente #577. La
 [auditoría de dirección](audits/2026-09-18-direction.md) explica la selección y
 el retiro de las épicas anteriores. Este documento conserva roadmaps,
 checklists y guías técnicas históricas; sus prioridades no activan trabajo.

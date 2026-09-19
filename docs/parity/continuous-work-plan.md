@@ -56,20 +56,28 @@ perfecta ni equivalencia universal de saves o generación.
   que la compañía activa haya cobrado; los tests recorren estado incompleto,
   entrega real, ausencia de ingreso/recepción y reconstrucción tras JSON. El
   binario real produjo capturas ES/EN a 1280×720 del panel cargado.
+- [#576](https://github.com/cavazquez/openttdrs/issues/576) — resultado visible
+  de F5/F9, cerrado con `77589c67`; guardar, cargar y sus errores generan un
+  aviso temporal ES/EN con el nombre de archivo y diagnóstico legible. El toast
+  no captura teclado, permanece visible con la simulación pausada aunque el HUD
+  técnico esté oculto, y la carga sólo sustituye la partida después de leerla
+  correctamente. Las regresiones ECS cubren F5/F9, Ctrl+S/Ctrl+L, ambos fallos,
+  preservación de estado/fuente, captura de la ventana de partidas y vencimiento
+  del aviso; pasaron formato, Clippy estricto, 1.618 tests de cliente (2
+  ignorados) y `sp1_playable_cycle` (2/2).
 
 ## Backlog ejecutable
 
 Cada fila es un resultado independiente. El issue contiene alcance, aceptación,
-dependencias y exclusiones; no se mantienen épicas abiertas como tareas.
-Las dos tareas pendientes están agrupadas en el hito existente
+dependencias y exclusiones; no se mantienen épicas abiertas como tareas. La
+tarea pendiente está agrupada en el hito existente
 [0.1 — vertical slice](https://github.com/cavazquez/openttdrs/milestone/1).
 
 | Orden | Issue | Entrega | Dependencia funcional |
 |---:|---|---|---|
-| 1 | [#576](https://github.com/cavazquez/openttdrs/issues/576) | Confirmación y errores visibles de F5/F9 | — |
-| 2 | [#577](https://github.com/cavazquez/openttdrs/issues/577) | Smoke gráfico del paquete Linux y sesión de aceptación | #572–#575 ✅, #576 |
+| 1 | [#577](https://github.com/cavazquez/openttdrs/issues/577) | Smoke gráfico del paquete Linux y sesión de aceptación | #572–#576 ✅ |
 
-**Próxima implementación: #576.** La reorganización de issues y documentación
+**Próxima implementación: #577.** La reorganización de issues y documentación
 no cuenta como implementación de las tareas pendientes.
 
 ## Cómo trabajar y cerrar

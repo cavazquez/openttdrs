@@ -30,9 +30,10 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 un servicio de camiones mina → central eléctrica, cobrar, guardar y reanudar.
 Temperate 64×64, OpenGFX, ES/EN y paquete Linux. La ruta por comandos #572 y
 su continuación JSON #573, junto con la entrada de menú #574, ya están
-entregadas; la guía y su avance reconstruible #575 también. El
-[plan ejecutable](docs/parity/continuous-work-plan.md) contiene dos tareas
-atómicas pendientes. La
+entregadas; la guía y su avance reconstruible #575 también, igual que el
+feedback visible de guardar/cargar #576. El
+[plan ejecutable](docs/parity/continuous-work-plan.md) contiene una tarea
+atómica pendiente. La
 [auditoría](docs/audits/2026-09-18-direction.md) explica el cambio.
 
 | Capa | Qué hay |
@@ -63,8 +64,8 @@ los sonidos y la música están versionados. `cargo run` selecciona el cliente y
 en el primer inicio, materializa localmente los PNG que necesita la UI desde el
 atlas incluido. No descarga assets ni requiere ejecutar scripts auxiliares.
 
-**Prioridad de implementación:** #576–#577
-(feedback y paquete). La paridad global
+**Prioridad de implementación:** #577
+(paquete). La paridad global
 de raster/SAV/NewGRF y la expansión multiclima quedan fuera de este corte.
 Sus límites técnicos siguen documentados. Editor #42 ✅ · GameScript-lite
 #43 ✅ · IA TransCargo ✅ (Squirrel OOS).
@@ -272,10 +273,10 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 | Multijugador (I8) | 🟡 | MVP lockstep + dedicated + host migration; desync/UI OOS |
 | IA rivales / GameScript / editor | 🟡 | TransCargo + editor #42 ✅; GS-lite #43 ✅; Squirrel OOS |
 
-Backlog vivo al 2026-09-18: dos [issues del repo](https://github.com/cavazquez/openttdrs/issues)
-(#576–#577), con orden y aceptación en el [plan vigente](docs/parity/continuous-work-plan.md).
+Backlog vivo al 2026-09-18: un [issue del repo](https://github.com/cavazquez/openttdrs/issues)
+(#577), con orden y aceptación en el [plan vigente](docs/parity/continuous-work-plan.md).
 Los ajustes P0 #568–#571, la ruta por comandos #572, su continuación JSON #573 y
-la entrada de menú #574 y su guía de avance #575
+la entrada de menú #574, su guía de avance #575 y el feedback de F5/F9 #576
 ya fueron entregados.
 Los quince anteriores se retiran como `not planned`, no como paridad lograda.
 [PARIDAD.md](docs/PARIDAD.md) conserva las capacidades y brechas técnicas.

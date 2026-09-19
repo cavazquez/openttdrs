@@ -138,9 +138,9 @@
       "inputs": [],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "f051ea89b180960dac4a99ff4a12675ce86503d8962e00a12e040e87b53b6389",
+      "output_sha256": "9231cb78d83d6e110b6d2d0770ad1c67a01fa4ff694e8118daaa0ef2910d7c37",
       "license": "layout derivado de PNG OpenGFX locales",
-      "note": "Regenerado y verificado 2026-09-02 con el atlas OpenGFX local; incluye las familias de estación monorail/maglev, los 74 StationGfx de aeropuerto, las 19 pendientes de agua para bordes Void, los 18 fallbacks Action5 de flechas one-way, los 64 slots de base Action5 0x17 de túnel y las variantes de pasos a nivel. CI valida hash del .rs. El --check local valida además las páginas PNG píxel a píxel."
+      "note": "Regenerado y verificado 2026-09-19 con el atlas OpenGFX local; incluye las familias de estación monorail/maglev, los 74 StationGfx de aeropuerto, las 19 pendientes de agua para bordes Void, los 18 fallbacks Action5 de flechas one-way, los 64 slots de base Action5 0x17 de túnel, las variantes de pasos a nivel y los layouts de árboles por clima. CI valida hash del .rs. El --check local valida además las páginas PNG píxel a píxel."
     },
     {
       "id": "airport_station_draw_data",

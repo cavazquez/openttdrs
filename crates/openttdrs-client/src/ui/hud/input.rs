@@ -5,6 +5,8 @@ use crate::render::RemapMapVisualsPending;
 use crate::settings::ClientPreferences;
 use crate::state::{SimRunState, sim_is_paused, toggle_sim_run_state};
 use crate::ui::hotkeys::{UiCommandId, UiHotkeys};
+use crate::ui::toolbar::build_input::cancel_placement;
+use crate::ui::toolbar::{DragBuildState, ToolbarState, toolbar_group_for_action};
 use crate::ui::{BuildMenuAction, UiToolState};
 
 /// **P** alterna pausa del tick de simulacion (`GameState::step`).
@@ -88,18 +90,36 @@ pub(crate) fn cycle_json_save_path_hotkey(
 }
 
 /// Hotkeys de herramienta: 1/2 carreteras, 3 estacion, C limpiar, Esc desactivar.
-pub(crate) fn handle_tool_hotkeys(hotkeys: Res<UiHotkeys>, mut tool_state: ResMut<UiToolState>) {
-    if hotkeys.fired(UiCommandId::RoadY) {
-        tool_state.active_tool = Some(BuildMenuAction::RoadY);
+///
+/// La herramienta sólo sigue activa si su grupo de toolbar también está abierto.
+/// Esto replica la selección mediante botón y evita que
+/// `hide_tool_when_panel_closed` la descarte en el frame siguiente.
+pub(crate) fn handle_tool_hotkeys(
+    hotkeys: Res<UiHotkeys>,
+    mut tool_state: ResMut<UiToolState>,
+    mut toolbar_state: ResMut<ToolbarState>,
+    mut drag_state: ResMut<DragBuildState>,
+) {
+    let action = if hotkeys.fired(UiCommandId::RoadY) {
+        Some(BuildMenuAction::RoadY)
     } else if hotkeys.fired(UiCommandId::RoadX) {
-        tool_state.active_tool = Some(BuildMenuAction::RoadX);
+        Some(BuildMenuAction::RoadX)
     } else if hotkeys.fired(UiCommandId::Station) {
-        tool_state.active_tool = Some(BuildMenuAction::Station);
+        Some(BuildMenuAction::Station)
     } else if hotkeys.fired(UiCommandId::BuildRail) {
-        tool_state.active_tool = Some(BuildMenuAction::Rail);
+        Some(BuildMenuAction::Rail)
     } else if hotkeys.fired(UiCommandId::Clear) {
-        tool_state.active_tool = Some(BuildMenuAction::Clear);
-    }
+        Some(BuildMenuAction::Clear)
+    } else {
+        None
+    };
+    let Some(action) = action else {
+        return;
+    };
+
+    toolbar_state.active_group = Some(toolbar_group_for_action(action));
+    tool_state.active_tool = Some(action);
+    cancel_placement(&mut drag_state);
 }
 
 #[cfg(test)]
@@ -126,6 +146,8 @@ mod tests {
         world.insert_resource(crate::settings::ClientPreferences::default());
         world.insert_resource(crate::render::RemapMapVisualsPending::default());
         world.insert_resource(UiToolState::default());
+        world.insert_resource(crate::ui::toolbar::ToolbarState::default());
+        world.insert_resource(crate::ui::toolbar::DragBuildState::default());
         world.insert_resource(UiHotkeys::default());
         let hud_text = world.spawn((TileInfoText, Visibility::Visible)).id();
 
@@ -163,5 +185,69 @@ mod tests {
             world.run_system_once(dispatch_ui_hotkeys).unwrap();
             world.run_system_once(handle_tool_hotkeys).unwrap();
         }
+    }
+
+    #[test]
+    fn tool_hotkeys_open_the_matching_panel_and_replace_an_active_drag() {
+        use crate::ui::toolbar::{
+            BuildMenuAction, DragBuildState, ToolbarGroup, ToolbarState,
+            hide_tool_when_panel_closed,
+        };
+
+        let mut world = World::new();
+        world.insert_resource(crate::settings::ClientPreferences::default());
+        world.insert_resource(UiHotkeys::default());
+        world.insert_resource(UiToolState::default());
+        world.insert_resource(ToolbarState::default());
+        world.insert_resource(DragBuildState::default());
+
+        for (key, expected_tool, expected_group) in [
+            (KeyCode::Digit1, BuildMenuAction::RoadY, ToolbarGroup::Road),
+            (KeyCode::Digit2, BuildMenuAction::RoadX, ToolbarGroup::Road),
+            (
+                KeyCode::Digit3,
+                BuildMenuAction::Station,
+                ToolbarGroup::Road,
+            ),
+            (KeyCode::KeyC, BuildMenuAction::Clear, ToolbarGroup::Road),
+        ] {
+            *world.resource_mut::<DragBuildState>() = DragBuildState {
+                armed: true,
+                start_tile: Some((4, 5)),
+                last_tile: Some((5, 5)),
+                last_action: Some(BuildMenuAction::RoadY),
+                pending_tiles: vec![(4, 5), (5, 5)],
+                ..default()
+            };
+            press_keys(&mut world, &[key]);
+            world.run_system_once(dispatch_ui_hotkeys).unwrap();
+            world.run_system_once(handle_tool_hotkeys).unwrap();
+            world.run_system_once(hide_tool_when_panel_closed).unwrap();
+
+            assert_eq!(
+                world.resource::<UiToolState>().active_tool,
+                Some(expected_tool)
+            );
+            assert_eq!(
+                world.resource::<ToolbarState>().active_group,
+                Some(expected_group)
+            );
+            let drag = world.resource::<DragBuildState>();
+            assert!(!drag.armed);
+            assert!(drag.pending_tiles.is_empty());
+        }
+
+        press_keys(&mut world, &[KeyCode::ShiftLeft, KeyCode::F1]);
+        world.run_system_once(dispatch_ui_hotkeys).unwrap();
+        world.run_system_once(handle_tool_hotkeys).unwrap();
+        world.run_system_once(hide_tool_when_panel_closed).unwrap();
+        assert_eq!(
+            world.resource::<UiToolState>().active_tool,
+            Some(BuildMenuAction::Rail)
+        );
+        assert_eq!(
+            world.resource::<ToolbarState>().active_group,
+            Some(ToolbarGroup::Rail)
+        );
     }
 }

@@ -170,9 +170,19 @@ def main(*, check: bool = False) -> int:
             crop = rgba.crop((x, y, x + width, y + height))
         crop.save(TILES / f"{name}.png")
         written += 1
-    OUT_RS.write_text(metadata, encoding="utf-8")
     print(f"  road waypoint vanilla: {written} sprites + metadata desde {nfo.relative_to(ROOT)}")
-    return 0 if written == 4 else 1
+    if written == 0:
+        # El checkout de referencia puede conservar sólo el NFO (suficiente
+        # para auditoría) y omitir la hoja PNG opcional. Es el mismo caso que
+        # no tener fuente local: no invalidar los assets ya empaquetados ni
+        # detener la generación completa por un bloque visual opcional.
+        return 2
+    if written != len(SPRITE_NAMES):
+        # Una extracción parcial sí sería inconsistente: no publicar metadata
+        # que apunta a sólo una parte de sus PNG.
+        return 1
+    OUT_RS.write_text(metadata, encoding="utf-8")
+    return 0
 
 
 if __name__ == "__main__":

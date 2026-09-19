@@ -111,6 +111,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # `.cargo/config.toml` selecciona mold para los tests completos de Rust.
+      # Este job también compila el runner de roundtrip, por eso necesita la
+      # misma fuente de dependencias Linux que el build del paquete.
+      - name: Dependencias Linux de la validación SAV
+        uses: ./.github/composite/linux-build-deps
+
       - name: Caché de compilación sccache
         uses: ./.github/composite/sccache
 

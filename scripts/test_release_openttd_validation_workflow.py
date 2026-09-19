@@ -33,6 +33,8 @@ def main() -> int:
 
     for needle in (
         "openttd-validation:",
+        "Dependencias Linux de la validación SAV",
+        "uses: ./.github/composite/linux-build-deps",
         'OPENTTD_VERSION: "15.3"',
         # The gate requires caching, not a stale action major after Dependabot.
         "uses: actions/cache@",

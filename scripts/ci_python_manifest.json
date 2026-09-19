@@ -48,6 +48,7 @@
     "scripts/extract_rail_tunnel_base_sprites.py",
     "scripts/gen_rail_signals_sav.py",
     "scripts/extract_roadveh_movement.py",
+    "scripts/test_extract_road_waypoint_sprites.py",
     "scripts/test_openttd_reference_manifest.py",
     "scripts/gen_water_lock_tiles.py",
     "scripts/compare_snapshots.py",
@@ -115,6 +116,7 @@
   ],
   "runs": [
     "scripts/test_openttd_reference_manifest.py",
+    "scripts/test_extract_road_waypoint_sprites.py",
     "scripts/test_compare_snapshots_mutation.py",
     "scripts/test_compare_world_raw_mutation.py",
     "scripts/test_random_map_parity.py",

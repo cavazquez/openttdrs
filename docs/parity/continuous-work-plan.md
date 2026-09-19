@@ -31,26 +31,29 @@ perfecta ni equivalencia universal de saves o generación.
 - [#570](https://github.com/cavazquez/openttdrs/issues/570) — Clippy estricto
   de los tests del cliente, cerrado con `6567b735`; también pasa el chequeo
   estricto de todos los targets del workspace.
+- [#571](https://github.com/cavazquez/openttdrs/issues/571) — lockfile y replay
+  de fuzz, cerrado con `5565e802`; el
+  [job remoto](https://github.com/cavazquez/openttdrs/actions/runs/35410088491)
+  pasó con nightly fijado, corpus, sanitizers y ancla SAV.
 
 ## Backlog ejecutable
 
 Cada fila es un resultado independiente. El issue contiene alcance, aceptación,
 dependencias y exclusiones; no se mantienen épicas abiertas como tareas.
-Las siete tareas pendientes están agrupadas en el hito existente
+Las seis tareas pendientes están agrupadas en el hito existente
 [0.1 — vertical slice](https://github.com/cavazquez/openttdrs/milestone/1).
 
 | Orden | Issue | Entrega | Dependencia funcional |
 |---:|---|---|---|
-| 1 | [#571](https://github.com/cavazquez/openttdrs/issues/571) | Lockfile de fuzz y replay reproducible | — |
-| 2 | [#572](https://github.com/cavazquez/openttdrs/issues/572) | Escenario compartido y ruta operada mediante comandos | — |
-| 3 | [#573](https://github.com/cavazquez/openttdrs/issues/573) | Continuación de la ruta después de guardar JSON | #572 |
-| 4 | [#574](https://github.com/cavazquez/openttdrs/issues/574) | Entrada «Primera ruta» en el menú | #572 |
-| 5 | [#575](https://github.com/cavazquez/openttdrs/issues/575) | Objetivo y avance visibles de esa ruta | #573, #574 |
-| 6 | [#576](https://github.com/cavazquez/openttdrs/issues/576) | Confirmación y errores visibles de F5/F9 | — |
-| 7 | [#577](https://github.com/cavazquez/openttdrs/issues/577) | Smoke gráfico del paquete Linux y sesión de aceptación | #571–#576 |
+| 1 | [#572](https://github.com/cavazquez/openttdrs/issues/572) | Escenario compartido y ruta operada mediante comandos | — |
+| 2 | [#573](https://github.com/cavazquez/openttdrs/issues/573) | Continuación de la ruta después de guardar JSON | #572 |
+| 3 | [#574](https://github.com/cavazquez/openttdrs/issues/574) | Entrada «Primera ruta» en el menú | #572 |
+| 4 | [#575](https://github.com/cavazquez/openttdrs/issues/575) | Objetivo y avance visibles de esa ruta | #573, #574 |
+| 5 | [#576](https://github.com/cavazquez/openttdrs/issues/576) | Confirmación y errores visibles de F5/F9 | — |
+| 6 | [#577](https://github.com/cavazquez/openttdrs/issues/577) | Smoke gráfico del paquete Linux y sesión de aceptación | #572–#576 |
 
-**Próxima implementación: #571.** La reorganización de issues y documentación
-no cuenta como implementación de las siete tareas pendientes.
+**Próxima implementación: #572.** La reorganización de issues y documentación
+no cuenta como implementación de las seis tareas pendientes.
 
 ## Cómo trabajar y cerrar
 

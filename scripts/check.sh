@@ -187,7 +187,7 @@ do_openttd_smoke() {
     # Gate real cuando hay binario (reference/ o $OPENTTD); SKIP limpio si no.
     ./scripts/validate_sav_openttd.sh \
         crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav
-    ./scripts/roundtrip_sav_openttd.sh \
+    OPENTTDRS_V1_SAV_ORDL=1 ./scripts/roundtrip_sav_openttd.sh \
         crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav
     info "openttd-smoke OK ✓"
 }

@@ -11,6 +11,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SAV="${1:-$ROOT/crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav}"
+SOURCE_SAV="$SAV"
 TMP="${TMPDIR:-/tmp}/openttdrs_roundtrip_$$"
 CFGDIR="$TMP/cfg"
 if [[ -n "${OPENTTDRS_OTTD_LOG_DIR:-}" ]]; then
@@ -49,6 +50,25 @@ if [[ ! -f "$SAV" ]]; then
   echo "FAIL: no existe $SAV" >&2
   echo "      Regenerá: OPENTTDRS_DUMP_MVP_RICH_SAV=... cargo test -p openttdrs-core --lib sav::write::tests::export_mvp_rich_emits_indy_road_vehs_and_stations -- --exact" >&2
   exit 1
+fi
+
+# V1-SAV/#588: editar una única orden Station del pool ORDL mediante la API
+# pública antes de que OpenTTD la re-guarde. El test prepara un manifiesto con
+# hashes, IDs y el estado esperado; su ausencia es un fallo, nunca un skip.
+if [[ "${OPENTTDRS_V1_SAV_ORDL:-0}" == "1" ]]; then
+  EDITED_SAV="$TMP/ordl-edited.sav"
+  ORDL_EVIDENCE="$TMP/ordl-evidence.json"
+  export OPENTTDRS_V1_SAV_ORDL=1
+  export OPENTTDRS_V1_SAV_ORDL_INPUT="$SOURCE_SAV"
+  export OPENTTDRS_V1_SAV_ORDL_EDITED="$EDITED_SAV"
+  export OPENTTDRS_V1_SAV_ORDL_EVIDENCE="$ORDL_EVIDENCE"
+  export OPENTTDRS_V1_CANDIDATE_SHA="$(git -C "$ROOT" rev-parse HEAD)"
+  cd "$ROOT"
+  cargo test -p openttdrs-core --test sav_v1_ordl_roundtrip \
+    prepares_v1_edited_station_order_for_native_resave -- --exact --nocapture
+  [[ -s "$EDITED_SAV" ]] || { echo "FAIL: falta SAV ORDL editado" >&2; exit 1; }
+  [[ -s "$ORDL_EVIDENCE" ]] || { echo "FAIL: falta evidencia ORDL" >&2; exit 1; }
+  SAV="$EDITED_SAV"
 fi
 
 # 1) Smoke load (mismo gate que CI).
@@ -95,17 +115,29 @@ echo "OK: OpenTTD re-guardó → $OUT_SAV ($(wc -c <"$OUT_SAV") bytes)"
 
 if [[ -n "${OPENTTDRS_OTTD_ARTIFACT_DIR:-}" ]]; then
   mkdir -p "$OPENTTDRS_OTTD_ARTIFACT_DIR"
-  cp "$OUT_SAV" "$OPENTTDRS_OTTD_ARTIFACT_DIR/$(basename "${SAV%.sav}").resaved.sav"
+  cp "$OUT_SAV" "$OPENTTDRS_OTTD_ARTIFACT_DIR/$(basename "${SOURCE_SAV%.sav}").resaved.sav"
+  if [[ "${OPENTTDRS_V1_SAV_ORDL:-0}" == "1" ]]; then
+    fixture_name="$(basename "${SOURCE_SAV%.sav}")"
+    cp "$SOURCE_SAV" "$OPENTTDRS_OTTD_ARTIFACT_DIR/${fixture_name}.ordl-input.sav"
+    cp "$SAV" "$OPENTTDRS_OTTD_ARTIFACT_DIR/${fixture_name}.ordl-edited.sav"
+    cp "$OUT_SAV" "$OPENTTDRS_OTTD_ARTIFACT_DIR/${fixture_name}.ordl-resaved.sav"
+    cp "$ORDL_EVIDENCE" "$OPENTTDRS_OTTD_ARTIFACT_DIR/${fixture_name}.ordl-evidence.json"
+  fi
 fi
 
 # 3) Import openttdrs + assert subconjunto (strict si el input es el fixture rico).
 export OPENTTDRS_ROUNDTRIP_SAV="$OUT_SAV"
-if [[ "$(basename "$SAV")" == "mvp_openttd_rich.sav" ]]; then
+if [[ "$(basename "$SOURCE_SAV")" == "mvp_openttd_rich.sav" ]]; then
   export OPENTTDRS_ROUNDTRIP_STRICT=1
 fi
 
 cd "$ROOT"
 cargo test -p openttdrs-core --test sav_openttd_roundtrip_subset \
   openttd_resaved_preserves_declared_subset -- --exact --nocapture
+
+if [[ "${OPENTTDRS_V1_SAV_ORDL:-0}" == "1" ]]; then
+  cargo test -p openttdrs-core --test sav_v1_ordl_roundtrip \
+    native_resave_preserves_v1_edited_station_order -- --exact --nocapture
+fi
 
 echo "OK: round-trip OpenTTD→openttdrs del subconjunto declarado"

@@ -121,7 +121,7 @@ pendientes. Las dependencias por ID V1 resuelven a los enlaces de esta lista.
 - **V1-NETG — [#585](https://github.com/cavazquez/openttdrs/issues/585):** red obligatoria: `PermissionDenied` falla con diagnóstico; inyección negativa y 22 recorridos loopback reales (23 pruebas, 0 ignoradas).
 - **V1-PAY — [#586](https://github.com/cavazquez/openttdrs/issues/586):** 11 cargos × 3 cantidades × 2 distancias × 3 edades = 198 pagos nativos exactos ([oráculo](temperate-payment-oracle.md) implementado; fixture/procedencia con hash).
 - **V1-PKT — [#587](https://github.com/cavazquez/openttdrs/issues/587):** una transferencia de carbón, dos tramos, conservación y feeder share ([contrato/oráculo](coal-transfer-v1.md) implementado; falta CI remota vigente antes del cierre).
-- **V1-SAV — [#588](https://github.com/cavazquez/openttdrs/issues/588):** una orden mutada preservada después del re-guardado nativo; mantener 6 cargas y el roundtrip obligatorio.
+- **V1-SAV — [#588](https://github.com/cavazquez/openttdrs/issues/588):** una orden `Station` mutada por `SetSharedOrderAt`, preservada después del re-guardado nativo; mantiene las 6 cargas, el roundtrip obligatorio y hashes/IDs/ORDL en [su evidencia](sav-ordl-v1.md). Implementado; espera CI remota vigente antes del cierre.
 - **V1-RAS — [#589](https://github.com/cavazquez/openttdrs/issues/589):** gate y evidencia de la escena Normal con el presupuesto anterior.
 - **V1-UI — [#590](https://github.com/cavazquez/openttdrs/issues/590):** edición de órdenes, 8 perfiles; depende de V1-VIS.
 - **V1-OWN — [#591](https://github.com/cavazquez/openttdrs/issues/591):** compra, start/stop, órdenes y demolición ajenas; 4 rechazos atómicos + 4 controles propios.

@@ -28,6 +28,13 @@ cambia la prioridad global, la fila resumida de `PARIDAD.md`.
 `✅` cubierto en el corte indicado; `🟡` best-effort o subconjunto; `❌` no se
 preserva. Importar un dato no implica que el exportador lo escriba.
 
+Actualización V1 #588 (2026-09-20): el gate obligatorio ejecuta una edición
+real de una orden `Station` enlazada a `ORDL`, la exporta, deja que OpenTTD
+15.3 la re-guarde y compara el manifiesto semántico completo. Conserva hashes,
+SHA candidato, IDs de vehículos/estaciones, destino, tipo, flags, orden
+relativo y membresía de la lista compartida; la reproducción y exclusiones
+están en [`sav-ordl-v1.md`](sav-ordl-v1.md).
+
 Actualización #371–#373 (2026-09-05): el merge de tablas importadas conserva
 columnas desconocidas al cambiar strings, listas escalares raíz o un
 struct-list raíz de otra longitud, siempre que su descriptor completo y las

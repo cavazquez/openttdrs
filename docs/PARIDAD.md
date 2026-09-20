@@ -2929,6 +2929,11 @@ En saves &lt; 214, OpenTTD mueve el RoadType desde bits 6–7 de `m7` a `m4` (ro
 ### Notas
 
 - Export MVP (#226/#267): `MAPS` `CH_TABLE` + `CITY` (≥1) + `STNN` moderno + `VEHS`/`ORDL` (tren + ROAD + **ship** + aeronaves de ala fija o helicópteros con sombra/rotor y campos FTA básicos) + `INDY` + `ECMY` + `CAPY` (incluye pagos activos de descargas graduales) + DATE/PLYR; planos RIFF. Cargamentos nuevos siguen goods×64 vacíos en STNN. Fixtures smoke `validate_sav_openttd.sh`: `mvp_openttd_load.sav`, `mvp_openttd_stations.sav`, `mvp_openttd_train.sav`, `mvp_openttd_rich.sav`, `mvp_openttd_ship.sav` (#267), `demo_openttd.sav`. Round-trip OpenTTD→openttdrs: `scripts/roundtrip_sav_openttd.sh`. Residual: tranvía, contadores/flags FTA avanzados, **GSET completo** y ejecución NewGRF completa; `PLYR` ya conserva dinero/préstamo/límite individual (incluido el centinela de límite global)/meses de bancarrota/color/nombre/presidente/`face`/`face_style`/indicador AI, `settings.*`, las 23 libreas y el historial trimestral (`cur_economy` + hasta 24 `old_economy`, incluso `delivered_cargo`) por todo el pool de compañías. Siguen pendientes flags completos y algunos consumidores de librea fuera del renderer de vehículos; el renderer de vehículos ya aplica la librea por tipo y ambos canales. `NGRF` se reconstruye desde la configuración activa (archivo, GRFID, versión y parámetros); `PATS`/`OPTS`, `ENGN` y `SRND` continúan como passthrough o subconjunto; `OBJS`/`OBID` ya usan la ruta semántica y de fusión descrita abajo.
+- V1-SAV [#588](https://github.com/cavazquez/openttdrs/issues/588) acota el
+  round-trip a una edición pública de `ORDL` y comprueba luego de OpenTTD 15.3
+  los IDs, enlace compartido, orden relativo, destino, tipo y flags; conserva
+  los SAV, hashes, SHA candidato y logs como artefactos. Ver
+  [`sav-ordl-v1.md`](parity/sav-ordl-v1.md).
 - El renderer aplica los canales primario y secundario de las 23 libreas por
   esquema y la herencia de librea explícita de grupos; también materializa
   2CC/crash y mapas Action5 en vehículos. La invalidación visual completa

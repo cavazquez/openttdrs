@@ -59,6 +59,7 @@ def main() -> int:
         "mvp_openttd_ship.sav",
         "demo_openttd.sav",
         "ROUNDTRIP_FIXTURES=(mvp_openttd_rich.sav)",
+        "OPENTTDRS_V1_SAV_ORDL=1",
         "summary.tsv",
         "openttd_version",
     ):
@@ -68,6 +69,14 @@ def main() -> int:
         text = load if script == LOAD else roundtrip
         expect(text, 'OPENTTDRS_REQUIRE_OPENTTD:-0', errors, script)
         expect(text, "OpenTTD requerido pero no encontrado", errors, script)
+
+    for needle in (
+        "sav_v1_ordl_roundtrip",
+        "OPENTTDRS_V1_CANDIDATE_SHA",
+        "ordl-evidence.json",
+        "native_resave_preserves_v1_edited_station_order",
+    ):
+        expect(roundtrip, needle, errors, ROUNDTRIP)
 
     if "continue-on-error" in workflow:
         errors.append(f"{WORKFLOW.relative_to(ROOT)}: el gate oficial no puede usar continue-on-error")

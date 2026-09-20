@@ -39,7 +39,8 @@ done
 
 for fixture in "${ROUNDTRIP_FIXTURES[@]}"; do
   sav="$ROOT/crates/openttdrs-core/tests/fixtures/$fixture"
-  OPENTTD_SMOKE_PORT=3990 bash "$ROOT/scripts/roundtrip_sav_openttd.sh" "$sav"
+  OPENTTD_SMOKE_PORT=3990 OPENTTDRS_V1_SAV_ORDL=1 \
+    bash "$ROOT/scripts/roundtrip_sav_openttd.sh" "$sav"
   printf '%s\troundtrip\t%s\tpass\tlogs/%s.roundtrip.log\n' \
     "$fixture" "$OPENTTD_VERSION" "${fixture%.sav}" >>"$SUMMARY"
 done

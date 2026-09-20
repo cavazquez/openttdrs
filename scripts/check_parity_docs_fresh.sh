@@ -81,6 +81,7 @@ require_pat '^\| \*\*RMAP-056\*\* \|.*\*\*Abierto' docs/parity/random-map-issues
 require_pat '^\| \*\*RMAP-082\*\* \|.*\*\*Abierto' docs/parity/random-map-issues.md
 python3 scripts/check_active_parity_backlog.py
 python3 scripts/check_raster_baseline.py
+python3 scripts/check_v1_raster_evidence.py
 python3 scripts/test_random_map_parity.py
 
 check_pat 'SIM_TICK_HZ = 5\.0'

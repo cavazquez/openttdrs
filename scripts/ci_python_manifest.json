@@ -114,6 +114,7 @@
     "scripts/test_compare_world_screenshots.py",
     "scripts/v1_raster_gate.py",
     "scripts/test_v1_raster_gate.py",
+    "scripts/check_v1_raster_evidence.py",
     "scripts/test_fuzz_regression_corpus.py",
     "scripts/test_fuzz_replay_workflow.py",
     "scripts/test_parity_docs_portability.py"
@@ -162,6 +163,7 @@
     "scripts/test_global_sprite_namespace.py",
     "scripts/test_compare_world_screenshots.py",
     "scripts/test_v1_raster_gate.py",
+    "scripts/check_v1_raster_evidence.py",
     "scripts/test_fuzz_regression_corpus.py",
     "scripts/test_fuzz_replay_workflow.py",
     "scripts/test_parity_docs_portability.py"

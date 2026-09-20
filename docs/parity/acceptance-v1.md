@@ -68,15 +68,20 @@ con `dx=dy=0`, sin máscaras, realineación ni recortes adaptativos:
 - Cobertura faltante: **0 píxeles**. Se deben cumplir los cuatro límites.
 
 La adenda del 18 de septiembre registró 45 diferencias en Normal; es evidencia
-histórica que hace razonable intentar este contrato, no una certificación del
-SHA actual. Out2x (4.427), Out4x (87.289) y Out8x (71.239) seguían divergentes
-en esa misma escena. Los otros cinco zooms se registran como diagnóstico,
-sin contarlos como verde raster. Si se cambia cámara/culling/overview, se
-ejecutan las seis escalas según `AGENTS.md` y se investigan las regresiones.
+histórica que hizo razonable intentar este contrato. Out2x (4.427), Out4x
+(87.289) y Out8x (71.239) seguían divergentes en esa misma escena. Los otros
+cinco zooms se registran como diagnóstico, sin contarlos como verde raster. Si
+se cambia cámara/culling/overview, se ejecutan las seis escalas según
+`AGENTS.md` y se investigan las regresiones.
 
-El comparador actual tiene un gate de **delta máximo por píxel**; no aplica por
-sí solo este presupuesto combinado de cantidad/media. [#589](https://github.com/cavazquez/openttdrs/issues/589)
-debe instrumentarlo con pruebas de borde y conservar las métricas exactas.
+[#589](https://github.com/cavazquez/openttdrs/issues/589) instrumenta
+`capture_v1_raster.sh` y `v1_raster_gate.py`: exige tres hashes iguales por
+motor, `dx=dy=0`, los cuatro límites combinados, assets/pins/logs y los cinco
+diagnósticos. Sus pruebas cubren cada frontera del presupuesto, evidencia
+faltante, geometría inválida y no determinismo. La corrida real de
+`1f170b076ce4f79c961082277cf5a35877e5d930` pasó con 437 píxeles, 5 >64,
+media 0,0210869792 y cobertura 0; ver [evidencia Kale V1](raster-v1-kale.md).
+El cierre de la issue aún exige CI remota verde del SHA vigente.
 
 ### UI propia
 

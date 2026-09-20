@@ -1,0 +1,558 @@
+V1-RAS diagnostic out2x: center=132,2 res=800x600 scale=2 settle=360f clean-static
+world-screenshot OpenTTD: bin=/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/reference/openttd-upstream/build/openttd sav=/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/save/Kale_TitleGame.sav out=/tmp/openttdrs-v1-raster-settled.idbuWp/diagnostics/out2x/reference.png center=132,2 res=800x600 scale=2 clean=1 sort=off gfx=opengfx blitter=8bpp-simple
+OK: referencia raster OpenTTD escrita en /tmp/openttdrs-v1-raster-settled.idbuWp/diagnostics/out2x/reference.png
+world-screenshot openttdrs: sav=/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/save/Kale_TitleGame.sav out=/tmp/openttdrs-v1-raster-settled.idbuWp/diagnostics/out2x/candidate.png center=132,2 res=800x600 scale=2 settle=360f clean=1 sort=off
+OK: candidata raster openttdrs escrita en /tmp/openttdrs-v1-raster-settled.idbuWp/diagnostics/out2x/candidate.png
+{
+  "acceptance": {
+    "changed_pixels": null,
+    "changed_ratio": null,
+    "enabled": false,
+    "meaning": "si est\u00e1 habilitado, exige que ning\u00fan p\u00edxel alineado supere el delta m\u00e1ximo indicado; no reemplaza la m\u00e9trica exacta",
+    "outside_candidate_pixels": null,
+    "passed": null,
+    "pixel_tolerance": null
+  },
+  "alignment": {
+    "candidate_translation": [
+      0,
+      0
+    ],
+    "meaning": "traslaci\u00f3n aplicada a la candidata: +x derecha, +y abajo",
+    "sample_stride_px": 1,
+    "search_radius_px": 0
+  },
+  "artifacts": {
+    "candidate": {
+      "path": "/tmp/openttdrs-v1-raster-settled.idbuWp/diagnostics/out2x/candidate.png",
+      "sha256": "37ff7e6bec62fee7a3d2bee56775e6d9c8539305e15ce01ad60772b06f9d5986"
+    },
+    "diff": {
+      "path": "/tmp/openttdrs-v1-raster-settled.idbuWp/diagnostics/out2x/diff.png",
+      "sha256": "48658f4d602b5b5cadf2320237bc7e9a313063db682ce055aed7c3e9362e5651"
+    },
+    "reference": {
+      "path": "/tmp/openttdrs-v1-raster-settled.idbuWp/diagnostics/out2x/reference.png",
+      "sha256": "35309213f2ea11c3be0ccb39ca4c0cff260428d342763ab401739fc6eb68b92b"
+    }
+  },
+  "capture": {
+    "candidate_graphics": "OpenGFX \u00b7 8bpp",
+    "center": [
+      132,
+      2
+    ],
+    "openttd_zoom": "Out2x",
+    "openttdrs_orthographic_scale": 2.0,
+    "pixel_tolerances": [
+      0,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "profile": "clean-static",
+    "reference_graphics": "OpenGFX 8.0 \u00b7 8bpp",
+    "requested_resolution": [
+      800,
+      600
+    ]
+  },
+  "hotspots": {
+    "cell_size_px": 64,
+    "cells_with_difference": 84,
+    "meaning": "regiones de pantalla ordenadas por p\u00edxeles distintos; no implican una tesela \u00fanica porque sprites altos pueden cubrir varias teselas",
+    "reported_cells": [
+      {
+        "bounds": [
+          512,
+          512,
+          576,
+          576
+        ],
+        "changed_pixels": 255,
+        "changed_ratio": 0.062255859375,
+        "max_channel_delta": 188,
+        "mean_channel_delta": 2.07183837890625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          704,
+          256,
+          768,
+          320
+        ],
+        "changed_pixels": 227,
+        "changed_ratio": 0.055419921875,
+        "max_channel_delta": 236,
+        "mean_channel_delta": 1.93414306640625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          448,
+          512,
+          512,
+          576
+        ],
+        "changed_pixels": 201,
+        "changed_ratio": 0.049072265625,
+        "max_channel_delta": 88,
+        "mean_channel_delta": 1.6497802734375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          640,
+          512,
+          704,
+          576
+        ],
+        "changed_pixels": 198,
+        "changed_ratio": 0.04833984375,
+        "max_channel_delta": 248,
+        "mean_channel_delta": 2.0196533203125,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          448,
+          576,
+          512,
+          600
+        ],
+        "changed_pixels": 183,
+        "changed_ratio": 0.119140625,
+        "max_channel_delta": 88,
+        "mean_channel_delta": 4.133463541666667,
+        "total_pixels": 1536
+      },
+      {
+        "bounds": [
+          640,
+          128,
+          704,
+          192
+        ],
+        "changed_pixels": 173,
+        "changed_ratio": 0.042236328125,
+        "max_channel_delta": 204,
+        "mean_channel_delta": 1.46063232421875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          704,
+          128,
+          768,
+          192
+        ],
+        "changed_pixels": 169,
+        "changed_ratio": 0.041259765625,
+        "max_channel_delta": 216,
+        "mean_channel_delta": 1.73895263671875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          512,
+          128,
+          576,
+          192
+        ],
+        "changed_pixels": 150,
+        "changed_ratio": 0.03662109375,
+        "max_channel_delta": 140,
+        "mean_channel_delta": 1.28631591796875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          576,
+          192,
+          640,
+          256
+        ],
+        "changed_pixels": 140,
+        "changed_ratio": 0.0341796875,
+        "max_channel_delta": 187,
+        "mean_channel_delta": 1.50262451171875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          576,
+          64,
+          640,
+          128
+        ],
+        "changed_pixels": 115,
+        "changed_ratio": 0.028076171875,
+        "max_channel_delta": 184,
+        "mean_channel_delta": 1.25103759765625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          512,
+          192,
+          576,
+          256
+        ],
+        "changed_pixels": 107,
+        "changed_ratio": 0.026123046875,
+        "max_channel_delta": 212,
+        "mean_channel_delta": 1.08935546875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          640,
+          192,
+          704,
+          256
+        ],
+        "changed_pixels": 105,
+        "changed_ratio": 0.025634765625,
+        "max_channel_delta": 152,
+        "mean_channel_delta": 1.17828369140625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          704,
+          192,
+          768,
+          256
+        ],
+        "changed_pixels": 104,
+        "changed_ratio": 0.025390625,
+        "max_channel_delta": 188,
+        "mean_channel_delta": 0.97747802734375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          128,
+          128,
+          192,
+          192
+        ],
+        "changed_pixels": 95,
+        "changed_ratio": 0.023193359375,
+        "max_channel_delta": 117,
+        "mean_channel_delta": 0.57403564453125,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          512,
+          64,
+          576,
+          128
+        ],
+        "changed_pixels": 91,
+        "changed_ratio": 0.022216796875,
+        "max_channel_delta": 192,
+        "mean_channel_delta": 0.75311279296875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          576,
+          128,
+          640,
+          192
+        ],
+        "changed_pixels": 79,
+        "changed_ratio": 0.019287109375,
+        "max_channel_delta": 147,
+        "mean_channel_delta": 0.77899169921875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          448,
+          192,
+          512,
+          256
+        ],
+        "changed_pixels": 78,
+        "changed_ratio": 0.01904296875,
+        "max_channel_delta": 168,
+        "mean_channel_delta": 0.797119140625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          384,
+          64,
+          448,
+          128
+        ],
+        "changed_pixels": 78,
+        "changed_ratio": 0.01904296875,
+        "max_channel_delta": 212,
+        "mean_channel_delta": 0.76019287109375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          256,
+          128,
+          320,
+          192
+        ],
+        "changed_pixels": 75,
+        "changed_ratio": 0.018310546875,
+        "max_channel_delta": 152,
+        "mean_channel_delta": 0.597900390625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          576,
+          512,
+          640,
+          576
+        ],
+        "changed_pixels": 71,
+        "changed_ratio": 0.017333984375,
+        "max_channel_delta": 192,
+        "mean_channel_delta": 0.71868896484375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          768,
+          256,
+          800,
+          320
+        ],
+        "changed_pixels": 68,
+        "changed_ratio": 0.033203125,
+        "max_channel_delta": 204,
+        "mean_channel_delta": 1.08203125,
+        "total_pixels": 2048
+      },
+      {
+        "bounds": [
+          448,
+          0,
+          512,
+          64
+        ],
+        "changed_pixels": 66,
+        "changed_ratio": 0.01611328125,
+        "max_channel_delta": 236,
+        "mean_channel_delta": 0.65069580078125,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          640,
+          64,
+          704,
+          128
+        ],
+        "changed_pixels": 58,
+        "changed_ratio": 0.01416015625,
+        "max_channel_delta": 216,
+        "mean_channel_delta": 0.54058837890625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          704,
+          64,
+          768,
+          128
+        ],
+        "changed_pixels": 57,
+        "changed_ratio": 0.013916015625,
+        "max_channel_delta": 216,
+        "mean_channel_delta": 0.7874755859375,
+        "total_pixels": 4096
+      }
+    ],
+    "truncated": true
+  },
+  "kind": "focused-world-screenshot",
+  "metrics": {
+    "aligned": {
+      "by_pixel_tolerance": {
+        "0": {
+          "changed_pixels": 4368,
+          "changed_ratio": 0.0091,
+          "changed_ratio_in_overlap": 0.0091,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 0, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 0
+        },
+        "16": {
+          "changed_pixels": 4288,
+          "changed_ratio": 0.008933333333333333,
+          "changed_ratio_in_overlap": 0.008933333333333333,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 16, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 16
+        },
+        "2": {
+          "changed_pixels": 4354,
+          "changed_ratio": 0.009070833333333334,
+          "changed_ratio_in_overlap": 0.009070833333333334,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 2, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 2
+        },
+        "32": {
+          "changed_pixels": 3725,
+          "changed_ratio": 0.007760416666666666,
+          "changed_ratio_in_overlap": 0.007760416666666666,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 32, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 32
+        },
+        "4": {
+          "changed_pixels": 4354,
+          "changed_ratio": 0.009070833333333334,
+          "changed_ratio_in_overlap": 0.009070833333333334,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 4, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 4
+        },
+        "64": {
+          "changed_pixels": 2131,
+          "changed_ratio": 0.004439583333333334,
+          "changed_ratio_in_overlap": 0.004439583333333334,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 64, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 64
+        },
+        "8": {
+          "changed_pixels": 4353,
+          "changed_ratio": 0.00906875,
+          "changed_ratio_in_overlap": 0.00906875,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 8, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 8
+        }
+      },
+      "candidate_size": [
+        800,
+        600
+      ],
+      "candidate_translation": [
+        0,
+        0
+      ],
+      "changed_pixels": 4368,
+      "changed_ratio": 0.0091,
+      "changed_ratio_in_overlap": 0.0091,
+      "max_channel_delta": 252,
+      "mean_channel_delta": 0.3568171875,
+      "outside_candidate_pixels": 0,
+      "overlap_pixels": 480000,
+      "reference_size": [
+        800,
+        600
+      ],
+      "total_pixels": 480000
+    },
+    "raw": {
+      "by_pixel_tolerance": {
+        "0": {
+          "changed_pixels": 4368,
+          "changed_ratio": 0.0091,
+          "changed_ratio_in_overlap": 0.0091,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 0, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 0
+        },
+        "16": {
+          "changed_pixels": 4288,
+          "changed_ratio": 0.008933333333333333,
+          "changed_ratio_in_overlap": 0.008933333333333333,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 16, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 16
+        },
+        "2": {
+          "changed_pixels": 4354,
+          "changed_ratio": 0.009070833333333334,
+          "changed_ratio_in_overlap": 0.009070833333333334,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 2, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 2
+        },
+        "32": {
+          "changed_pixels": 3725,
+          "changed_ratio": 0.007760416666666666,
+          "changed_ratio_in_overlap": 0.007760416666666666,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 32, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 32
+        },
+        "4": {
+          "changed_pixels": 4354,
+          "changed_ratio": 0.009070833333333334,
+          "changed_ratio_in_overlap": 0.009070833333333334,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 4, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 4
+        },
+        "64": {
+          "changed_pixels": 2131,
+          "changed_ratio": 0.004439583333333334,
+          "changed_ratio_in_overlap": 0.004439583333333334,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 64, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 64
+        },
+        "8": {
+          "changed_pixels": 4353,
+          "changed_ratio": 0.00906875,
+          "changed_ratio_in_overlap": 0.00906875,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 8, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 8
+        }
+      },
+      "candidate_size": [
+        800,
+        600
+      ],
+      "candidate_translation": [
+        0,
+        0
+      ],
+      "changed_pixels": 4368,
+      "changed_ratio": 0.0091,
+      "changed_ratio_in_overlap": 0.0091,
+      "max_channel_delta": 252,
+      "mean_channel_delta": 0.3568171875,
+      "outside_candidate_pixels": 0,
+      "overlap_pixels": 480000,
+      "reference_size": [
+        800,
+        600
+      ],
+      "total_pixels": 480000
+    }
+  },
+  "save": {
+    "path": "save/Kale_TitleGame.sav",
+    "sha256": "584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69"
+  },
+  "schema_version": 1,
+  "status": "different"
+}
+OK: comparación focalizada escrita en /tmp/openttdrs-v1-raster-settled.idbuWp/diagnostics/out2x
+  referencia: /tmp/openttdrs-v1-raster-settled.idbuWp/diagnostics/out2x/reference.png
+  candidata:  /tmp/openttdrs-v1-raster-settled.idbuWp/diagnostics/out2x/candidate.png
+  diff:       /tmp/openttdrs-v1-raster-settled.idbuWp/diagnostics/out2x/diff.png
+  reporte:    /tmp/openttdrs-v1-raster-settled.idbuWp/diagnostics/out2x/report.json
+  tolerancias: 0,2,4,8,16,32,64

@@ -1,0 +1,3 @@
+V1-RAS OpenTTD sample 1: center=132,2 res=800x600 scale=1 clean-static
+world-screenshot OpenTTD: bin=/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/reference/openttd-upstream/build/openttd sav=/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/save/Kale_TitleGame.sav out=/tmp/openttdrs-v1-raster-settled.idbuWp/normal/reference-1.png center=132,2 res=800x600 scale=1 clean=1 sort=off gfx=opengfx blitter=8bpp-simple
+OK: referencia raster OpenTTD escrita en /tmp/openttdrs-v1-raster-settled.idbuWp/normal/reference-1.png

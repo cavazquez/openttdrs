@@ -26,6 +26,7 @@ Orden sugerido al entrar:
 | Compatibilidad `.sav` import/export | [parity/sav-compatibility.md](parity/sav-compatibility.md) | [PLANIFICACION.md](PLANIFICACION.md#export-sav) explica el writer; [MAPA_Y_FERROCARRIL.md](MAPA_Y_FERROCARRIL.md) el formato/pipeline |
 | NewGRF Action0/3/5 | [parity/newgrf-action0-matrix.md](parity/newgrf-action0-matrix.md) | Propiedades de catálogos y render |
 | NewGRF callbacks | [parity/newgrf-callback-matrix.md](parity/newgrf-callback-matrix.md) | Call sites, storage y residual |
+| Raster V1 de Kale | [parity/raster-v1-kale.md](parity/raster-v1-kale.md) | Contrato focal, hashes, presupuesto y artefactos de #589 |
 
 Al cambiar una capacidad, editar su fuente canónica y el resumen de
 `PARIDAD.md` sólo si modifica la madurez global. Los roadmaps, README y guías
@@ -43,6 +44,7 @@ backlog.
 | [parity/sav-compatibility.md](parity/sav-compatibility.md) | Matriz única de importación/exportación `.sav` |
 | [parity/newgrf-action0-matrix.md](parity/newgrf-action0-matrix.md) | Propiedades y runtime Action0/3/5 |
 | [parity/newgrf-callback-matrix.md](parity/newgrf-callback-matrix.md) | Ejecución real de callbacks NewGRF |
+| [parity/raster-v1-kale.md](parity/raster-v1-kale.md) | Evidencia y reproducción del contrato raster focal V1 |
 | [MAPA_Y_FERROCARRIL.md](MAPA_Y_FERROCARRIL.md) | Flujo `.ottdmap`, MAPT/chunks, señales, autorail, waypoints |
 | [GRAFICOS.md](GRAFICOS.md) | Sprites OpenGFX + handoff terreno |
 | [RENDIMIENTO.md](RENDIMIENTO.md) | PERF mapas grandes + benchmarks |

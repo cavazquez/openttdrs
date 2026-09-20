@@ -1,0 +1,547 @@
+{
+  "acceptance": {
+    "changed_pixels": null,
+    "changed_ratio": null,
+    "enabled": false,
+    "meaning": "si est\u00e1 habilitado, exige que ning\u00fan p\u00edxel alineado supere el delta m\u00e1ximo indicado; no reemplaza la m\u00e9trica exacta",
+    "outside_candidate_pixels": null,
+    "passed": null,
+    "pixel_tolerance": null
+  },
+  "alignment": {
+    "candidate_translation": [
+      0,
+      0
+    ],
+    "meaning": "traslaci\u00f3n aplicada a la candidata: +x derecha, +y abajo",
+    "sample_stride_px": 1,
+    "search_radius_px": 0
+  },
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/evidence/kale-132-2/2026-09-20-1f170b07/diagnostics/out4x/candidate.png",
+      "sha256": "f510c5356b97046f6b0812bd5d3ad45cc7bd443fabc88ac785a372a1fb487fbd"
+    },
+    "diff": {
+      "path": "docs/parity/evidence/kale-132-2/2026-09-20-1f170b07/diagnostics/out4x/diff.png",
+      "sha256": "eb2e30726e3625315d17d51b93e73ea12e1860cfb588ddccc08cc2cbf0c90ab7"
+    },
+    "reference": {
+      "path": "docs/parity/evidence/kale-132-2/2026-09-20-1f170b07/diagnostics/out4x/reference.png",
+      "sha256": "7e3854e82d482286409dba3d8c32daac6090cf4ec0e038482e5df712ab98ac84"
+    }
+  },
+  "capture": {
+    "candidate_graphics": "OpenGFX \u00b7 8bpp",
+    "center": [
+      132,
+      2
+    ],
+    "openttd_zoom": "Out4x",
+    "openttdrs_orthographic_scale": 4.0,
+    "pixel_tolerances": [
+      0,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "profile": "clean-static",
+    "reference_graphics": "OpenGFX 8.0 \u00b7 8bpp",
+    "requested_resolution": [
+      800,
+      600
+    ]
+  },
+  "hotspots": {
+    "cell_size_px": 64,
+    "cells_with_difference": 126,
+    "meaning": "regiones de pantalla ordenadas por p\u00edxeles distintos; no implican una tesela \u00fanica porque sprites altos pueden cubrir varias teselas",
+    "reported_cells": [
+      {
+        "bounds": [
+          512,
+          448,
+          576,
+          512
+        ],
+        "changed_pixels": 1602,
+        "changed_ratio": 0.39111328125,
+        "max_channel_delta": 252,
+        "mean_channel_delta": 14.98199462890625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          192,
+          384,
+          256,
+          448
+        ],
+        "changed_pixels": 1496,
+        "changed_ratio": 0.365234375,
+        "max_channel_delta": 232,
+        "mean_channel_delta": 11.07220458984375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          128,
+          512,
+          192,
+          576
+        ],
+        "changed_pixels": 1449,
+        "changed_ratio": 0.353759765625,
+        "max_channel_delta": 216,
+        "mean_channel_delta": 9.57159423828125,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          704,
+          0,
+          768,
+          64
+        ],
+        "changed_pixels": 1398,
+        "changed_ratio": 0.34130859375,
+        "max_channel_delta": 216,
+        "mean_channel_delta": 9.56793212890625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          256,
+          0,
+          320,
+          64
+        ],
+        "changed_pixels": 1379,
+        "changed_ratio": 0.336669921875,
+        "max_channel_delta": 236,
+        "mean_channel_delta": 10.19378662109375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          64,
+          512,
+          128,
+          576
+        ],
+        "changed_pixels": 1351,
+        "changed_ratio": 0.329833984375,
+        "max_channel_delta": 200,
+        "mean_channel_delta": 9.01214599609375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          128,
+          448,
+          192,
+          512
+        ],
+        "changed_pixels": 1342,
+        "changed_ratio": 0.32763671875,
+        "max_channel_delta": 240,
+        "mean_channel_delta": 13.8843994140625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          320,
+          512,
+          384,
+          576
+        ],
+        "changed_pixels": 1300,
+        "changed_ratio": 0.3173828125,
+        "max_channel_delta": 232,
+        "mean_channel_delta": 11.5247802734375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          192,
+          448,
+          256,
+          512
+        ],
+        "changed_pixels": 1237,
+        "changed_ratio": 0.302001953125,
+        "max_channel_delta": 232,
+        "mean_channel_delta": 11.07586669921875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          384,
+          128,
+          448,
+          192
+        ],
+        "changed_pixels": 1236,
+        "changed_ratio": 0.3017578125,
+        "max_channel_delta": 216,
+        "mean_channel_delta": 11.367431640625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          256,
+          384,
+          320,
+          448
+        ],
+        "changed_pixels": 1236,
+        "changed_ratio": 0.3017578125,
+        "max_channel_delta": 216,
+        "mean_channel_delta": 8.8900146484375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          128,
+          384,
+          192,
+          448
+        ],
+        "changed_pixels": 1231,
+        "changed_ratio": 0.300537109375,
+        "max_channel_delta": 240,
+        "mean_channel_delta": 15.20489501953125,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          256,
+          320,
+          320,
+          384
+        ],
+        "changed_pixels": 1197,
+        "changed_ratio": 0.292236328125,
+        "max_channel_delta": 212,
+        "mean_channel_delta": 10.54095458984375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          640,
+          192,
+          704,
+          256
+        ],
+        "changed_pixels": 1184,
+        "changed_ratio": 0.2890625,
+        "max_channel_delta": 240,
+        "mean_channel_delta": 10.2640380859375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          512,
+          512,
+          576,
+          576
+        ],
+        "changed_pixels": 1149,
+        "changed_ratio": 0.280517578125,
+        "max_channel_delta": 236,
+        "mean_channel_delta": 9.9884033203125,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          320,
+          0,
+          384,
+          64
+        ],
+        "changed_pixels": 1136,
+        "changed_ratio": 0.27734375,
+        "max_channel_delta": 216,
+        "mean_channel_delta": 7.29461669921875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          0,
+          384,
+          64,
+          448
+        ],
+        "changed_pixels": 1130,
+        "changed_ratio": 0.27587890625,
+        "max_channel_delta": 216,
+        "mean_channel_delta": 10.9083251953125,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          0,
+          512,
+          64,
+          576
+        ],
+        "changed_pixels": 1118,
+        "changed_ratio": 0.27294921875,
+        "max_channel_delta": 252,
+        "mean_channel_delta": 8.49932861328125,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          64,
+          384,
+          128,
+          448
+        ],
+        "changed_pixels": 1103,
+        "changed_ratio": 0.269287109375,
+        "max_channel_delta": 232,
+        "mean_channel_delta": 9.63604736328125,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          128,
+          128,
+          192,
+          192
+        ],
+        "changed_pixels": 1078,
+        "changed_ratio": 0.26318359375,
+        "max_channel_delta": 200,
+        "mean_channel_delta": 6.87646484375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          448,
+          384,
+          512,
+          448
+        ],
+        "changed_pixels": 1059,
+        "changed_ratio": 0.258544921875,
+        "max_channel_delta": 232,
+        "mean_channel_delta": 9.806884765625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          256,
+          448,
+          320,
+          512
+        ],
+        "changed_pixels": 1036,
+        "changed_ratio": 0.2529296875,
+        "max_channel_delta": 232,
+        "mean_channel_delta": 8.19049072265625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          512,
+          384,
+          576,
+          448
+        ],
+        "changed_pixels": 1027,
+        "changed_ratio": 0.250732421875,
+        "max_channel_delta": 224,
+        "mean_channel_delta": 9.89886474609375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          256,
+          512,
+          320,
+          576
+        ],
+        "changed_pixels": 1017,
+        "changed_ratio": 0.248291015625,
+        "max_channel_delta": 232,
+        "mean_channel_delta": 9.36688232421875,
+        "total_pixels": 4096
+      }
+    ],
+    "truncated": true
+  },
+  "kind": "focused-world-screenshot",
+  "metrics": {
+    "aligned": {
+      "by_pixel_tolerance": {
+        "0": {
+          "changed_pixels": 87156,
+          "changed_ratio": 0.181575,
+          "changed_ratio_in_overlap": 0.181575,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 0, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 0
+        },
+        "16": {
+          "changed_pixels": 82995,
+          "changed_ratio": 0.17290625,
+          "changed_ratio_in_overlap": 0.17290625,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 16, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 16
+        },
+        "2": {
+          "changed_pixels": 87015,
+          "changed_ratio": 0.18128125,
+          "changed_ratio_in_overlap": 0.18128125,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 2, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 2
+        },
+        "32": {
+          "changed_pixels": 66075,
+          "changed_ratio": 0.13765625,
+          "changed_ratio_in_overlap": 0.13765625,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 32, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 32
+        },
+        "4": {
+          "changed_pixels": 87013,
+          "changed_ratio": 0.18127708333333334,
+          "changed_ratio_in_overlap": 0.18127708333333334,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 4, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 4
+        },
+        "64": {
+          "changed_pixels": 34854,
+          "changed_ratio": 0.0726125,
+          "changed_ratio_in_overlap": 0.0726125,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 64, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 64
+        },
+        "8": {
+          "changed_pixels": 86881,
+          "changed_ratio": 0.18100208333333334,
+          "changed_ratio_in_overlap": 0.18100208333333334,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 8, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 8
+        }
+      },
+      "candidate_size": [
+        800,
+        600
+      ],
+      "candidate_translation": [
+        0,
+        0
+      ],
+      "changed_pixels": 87156,
+      "changed_ratio": 0.181575,
+      "changed_ratio_in_overlap": 0.181575,
+      "max_channel_delta": 252,
+      "mean_channel_delta": 6.2437708333333335,
+      "outside_candidate_pixels": 0,
+      "overlap_pixels": 480000,
+      "reference_size": [
+        800,
+        600
+      ],
+      "total_pixels": 480000
+    },
+    "raw": {
+      "by_pixel_tolerance": {
+        "0": {
+          "changed_pixels": 87156,
+          "changed_ratio": 0.181575,
+          "changed_ratio_in_overlap": 0.181575,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 0, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 0
+        },
+        "16": {
+          "changed_pixels": 82995,
+          "changed_ratio": 0.17290625,
+          "changed_ratio_in_overlap": 0.17290625,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 16, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 16
+        },
+        "2": {
+          "changed_pixels": 87015,
+          "changed_ratio": 0.18128125,
+          "changed_ratio_in_overlap": 0.18128125,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 2, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 2
+        },
+        "32": {
+          "changed_pixels": 66075,
+          "changed_ratio": 0.13765625,
+          "changed_ratio_in_overlap": 0.13765625,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 32, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 32
+        },
+        "4": {
+          "changed_pixels": 87013,
+          "changed_ratio": 0.18127708333333334,
+          "changed_ratio_in_overlap": 0.18127708333333334,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 4, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 4
+        },
+        "64": {
+          "changed_pixels": 34854,
+          "changed_ratio": 0.0726125,
+          "changed_ratio_in_overlap": 0.0726125,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 64, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 64
+        },
+        "8": {
+          "changed_pixels": 86881,
+          "changed_ratio": 0.18100208333333334,
+          "changed_ratio_in_overlap": 0.18100208333333334,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 8, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 8
+        }
+      },
+      "candidate_size": [
+        800,
+        600
+      ],
+      "candidate_translation": [
+        0,
+        0
+      ],
+      "changed_pixels": 87156,
+      "changed_ratio": 0.181575,
+      "changed_ratio_in_overlap": 0.181575,
+      "max_channel_delta": 252,
+      "mean_channel_delta": 6.2437708333333335,
+      "outside_candidate_pixels": 0,
+      "overlap_pixels": 480000,
+      "reference_size": [
+        800,
+        600
+      ],
+      "total_pixels": 480000
+    }
+  },
+  "save": {
+    "path": "save/Kale_TitleGame.sav",
+    "sha256": "584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69"
+  },
+  "schema_version": 1,
+  "status": "different"
+}

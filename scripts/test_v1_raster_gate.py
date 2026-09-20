@@ -3,26 +3,27 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import io
 import json
-import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
-GATE = ROOT / "scripts" / "v1_raster_gate.py"
 CAPTURE = ROOT / "scripts" / "capture_v1_raster.sh"
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import v1_raster_gate
 from window_visual_regression import PngImage, write_png
 
 
 WIDTH = 800
 HEIGHT = 600
 PIXELS = WIDTH * HEIGHT
-FIXTURE = ROOT / "save" / "Kale_TitleGame.sav"
 SCALES = ((0.25, "In4x", "in4x"), (0.5, "In2x", "in2x"), (2.0, "Out2x", "out2x"), (4.0, "Out4x", "out4x"), (8.0, "Out8x", "out8x"))
 
 
@@ -32,6 +33,12 @@ def sha256(path: Path) -> str:
 
 def artifact(path: Path) -> dict[str, str]:
     return {"path": str(path.resolve()), "sha256": sha256(path)}
+
+
+def write_fixture(root: Path) -> Path:
+    fixture = root / "synthetic-kale-title-game.sav"
+    fixture.write_bytes(b"synthetic V1-RAS fixture for gate boundaries\n")
+    return fixture
 
 
 def base_image(width: int = WIDTH, height: int = HEIGHT) -> PngImage:
@@ -56,7 +63,12 @@ def changed_image(
     return PngImage(width, height, bytes(data))
 
 
-def write_diagnostics(root: Path, reference: PngImage, candidate: PngImage) -> list[Path]:
+def write_diagnostics(
+    root: Path,
+    fixture: Path,
+    reference: PngImage,
+    candidate: PngImage,
+) -> list[Path]:
     reports: list[Path] = []
     for scale, zoom, label in SCALES:
         directory = root / "diagnostics" / label
@@ -79,7 +91,7 @@ def write_diagnostics(root: Path, reference: PngImage, candidate: PngImage) -> l
                 "profile": "clean-static",
             },
             "alignment": {"search_radius_px": 0, "candidate_translation": [0, 0]},
-            "save": artifact(FIXTURE),
+            "save": artifact(fixture),
             "artifacts": {
                 "reference": artifact(reference_path),
                 "candidate": artifact(candidate_path),
@@ -95,6 +107,7 @@ def write_diagnostics(root: Path, reference: PngImage, candidate: PngImage) -> l
 
 def build_artifacts(
     root: Path,
+    fixture: Path,
     candidate: PngImage,
     *,
     unstable: bool = False,
@@ -108,10 +121,10 @@ def build_artifacts(
         if unstable and index == 2:
             image = changed_image(1, 1, width=candidate.width, height=candidate.height)
         write_png(normal / f"candidate-{index}.png", image)
-    return write_diagnostics(root, reference, candidate)
+    return write_diagnostics(root, fixture, reference, candidate)
 
 
-def run_gate(root: Path, reports: list[Path]) -> subprocess.CompletedProcess[str]:
+def run_gate(root: Path, fixture: Path, reports: list[Path]) -> SimpleNamespace:
     reference_asset = root / "reference.obg"
     candidate_asset = root / "candidate.grf"
     mode = root / ".graphics_mode"
@@ -119,12 +132,10 @@ def run_gate(root: Path, reports: list[Path]) -> subprocess.CompletedProcess[str
     candidate_asset.write_bytes(b"candidate asset")
     mode.write_text("8bpp\n", encoding="utf-8")
     args = [
-        sys.executable,
-        str(GATE),
         "--artifact-dir",
         str(root),
         "--save",
-        str(FIXTURE),
+        str(fixture),
         "--candidate-sha",
         "a" * 40,
         "--candidate-mode-file",
@@ -136,20 +147,33 @@ def run_gate(root: Path, reports: list[Path]) -> subprocess.CompletedProcess[str
     ]
     for report in reports:
         args.extend(("--diagnostic-report", str(report)))
-    return subprocess.run(args, cwd=ROOT, text=True, capture_output=True)
+    original_fixture_sha = v1_raster_gate.FIXTURE_SHA256
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    try:
+        # La constante de producción sigue fijando la fixture canónica. El test
+        # unitario usa una fixture mínima temporal para poder correr en CI limpio.
+        v1_raster_gate.FIXTURE_SHA256 = sha256(fixture)
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            return_code = v1_raster_gate.main(args)
+    finally:
+        v1_raster_gate.FIXTURE_SHA256 = original_fixture_sha
+    return SimpleNamespace(
+        returncode=return_code,
+        stdout=stdout.getvalue(),
+        stderr=stderr.getvalue(),
+    )
 
 
 class V1RasterGateTest(unittest.TestCase):
-    def setUp(self) -> None:
-        self.assertTrue(FIXTURE.is_file(), f"falta fixture V1: {FIXTURE}")
-
     def test_exact_budget_boundaries_pass(self) -> None:
         # 480 * 4 * 50 = 96_000; 96_000 / (800 * 600 * 4) == 0.05 exacto.
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
+            fixture = write_fixture(root)
             candidate = changed_image(480, 50)
-            reports = build_artifacts(root, candidate)
-            completed = run_gate(root, reports)
+            reports = build_artifacts(root, fixture, candidate)
+            completed = run_gate(root, fixture, reports)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             report = json.loads((root / "v1-raster-report.json").read_text(encoding="utf-8"))
             self.assertEqual(report["status"], "passed")
@@ -161,9 +185,10 @@ class V1RasterGateTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
+            fixture = write_fixture(root)
             candidate = changed_image(24, 65)
-            reports = build_artifacts(root, candidate)
-            completed = run_gate(root, reports)
+            reports = build_artifacts(root, fixture, candidate)
+            completed = run_gate(root, fixture, reports)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             report = json.loads((root / "v1-raster-report.json").read_text(encoding="utf-8"))
             self.assertEqual(report["normal"]["checks"]["pixels_over_channel_delta_64"]["actual"], 24)
@@ -177,8 +202,9 @@ class V1RasterGateTest(unittest.TestCase):
         for label, candidate in cases:
             with self.subTest(label=label), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
-                reports = build_artifacts(root, candidate)
-                completed = run_gate(root, reports)
+                fixture = write_fixture(root)
+                reports = build_artifacts(root, fixture, candidate)
+                completed = run_gate(root, fixture, reports)
                 self.assertEqual(completed.returncode, 1, f"{label}: {completed.stderr}")
                 report = json.loads((root / "v1-raster-report.json").read_text(encoding="utf-8"))
                 self.assertEqual(report["status"], "failed")
@@ -186,23 +212,26 @@ class V1RasterGateTest(unittest.TestCase):
     def test_missing_non_deterministic_or_wrong_geometry_never_passes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            reports = build_artifacts(root, base_image())
+            fixture = write_fixture(root)
+            reports = build_artifacts(root, fixture, base_image())
             (root / "normal" / "reference-3.png").unlink()
-            completed = run_gate(root, reports)
+            completed = run_gate(root, fixture, reports)
             self.assertEqual(completed.returncode, 2)
             self.assertIn("falta captura reference #3", completed.stderr)
 
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            reports = build_artifacts(root, base_image(), unstable=True)
-            completed = run_gate(root, reports)
+            fixture = write_fixture(root)
+            reports = build_artifacts(root, fixture, base_image(), unstable=True)
+            completed = run_gate(root, fixture, reports)
             self.assertEqual(completed.returncode, 2)
             self.assertIn("no son hash-idénticas", completed.stderr)
 
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            reports = build_artifacts(root, base_image(799, HEIGHT))
-            completed = run_gate(root, reports)
+            fixture = write_fixture(root)
+            reports = build_artifacts(root, fixture, base_image(799, HEIGHT))
+            completed = run_gate(root, fixture, reports)
             self.assertEqual(completed.returncode, 2)
             self.assertIn("geometría", completed.stderr)
 

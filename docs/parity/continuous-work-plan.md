@@ -107,8 +107,11 @@ corte. Orden para implementar una tarea a la vez:
    **#591** y filtro de cargo GS **#598** siguen el orden indicado.
 3. Recorridos: barco **#593**, avión **#594**, late join **#595** (después de
    #585), NewGRF/JSON **#592** y persistencia GS **#599** (después de #598).
-4. Presentación y herramientas: raster Normal **#589**, Órdenes **#590**
-   (después de #584), editor **#600**, TransCargo **#596** y RoadHaul **#597**.
+4. Presentación y herramientas: raster Normal **#589** está implementado y
+   certificado localmente en `1f170b07` (tres hashes por motor, presupuesto y
+   cinco diagnósticos en [la evidencia Kale](raster-v1-kale.md)); espera CI
+   remota vigente. Siguen Órdenes **#590** (después de #584), editor **#600**,
+   TransCargo **#596** y RoadHaul **#597**.
 5. Paquetes Windows **#601** y macOS **#602**. Emitir con **#603** el reporte
    completo del SHA candidato; ninguna ausencia cuenta como aprobación.
 

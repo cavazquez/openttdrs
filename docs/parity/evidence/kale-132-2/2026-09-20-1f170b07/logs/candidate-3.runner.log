@@ -1,0 +1,3 @@
+V1-RAS openttdrs sample 3: center=132,2 res=800x600 scale=1 settle=360f clean-static
+world-screenshot openttdrs: sav=/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/save/Kale_TitleGame.sav out=/tmp/openttdrs-v1-raster-settled.idbuWp/normal/candidate-3.png center=132,2 res=800x600 scale=1 settle=360f clean=1 sort=off
+OK: candidata raster openttdrs escrita en /tmp/openttdrs-v1-raster-settled.idbuWp/normal/candidate-3.png

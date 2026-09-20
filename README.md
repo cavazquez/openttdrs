@@ -345,7 +345,7 @@ siguen registrando las brechas generales aunque un caso V1 esté aprobado.
 | Ruta vial + persistencia JSON | Construcción por comandos, carga, pago, guardar y continuar | ✅ | 2 tests: entrega antes de 40.000 ticks y continuación exacta durante 2.000 ticks |
 | Economía Temperate + packets | 11 cargas, pagos, transfer/deliver, ratings y CargoDist | 🟡 | 198 pagos exactos [#586](https://github.com/cavazquez/openttdrs/issues/586) ✅ ([oráculo](docs/parity/temperate-payment-oracle.md) nativo) y transferencia de carbón en dos tramos [#587](https://github.com/cavazquez/openttdrs/issues/587) ✅ ([traza](docs/parity/coal-transfer-v1.md), conservación y feeder); ambos esperan CI remota vigente antes del cierre |
 | Import/export `.sav` | [Subconjunto interoperable](docs/parity/sav-compatibility.md); gate de 6 cargas y un roundtrip | 🟡 | [#588](https://github.com/cavazquez/openttdrs/issues/588) implementa una edición ORDL pública y exacta tras re-guardado nativo ([evidencia](docs/parity/sav-ordl-v1.md)); espera CI remota vigente, no SAV universal |
-| Render OpenGFX vanilla | Sprites y compositor amplios; framebuffer global todavía divergente | 🟡 | Una escena Kale `(132,2)`, 800×600, zoom Normal y presupuesto fijo [#589](https://github.com/cavazquez/openttdrs/issues/589); otros zooms quedan diagnósticos |
+| Render OpenGFX vanilla | Sprites y compositor amplios; framebuffer global todavía divergente | ✅ | [#589](https://github.com/cavazquez/openttdrs/issues/589) certifica Kale `(132,2)` Normal: 437/480 píxeles, 5/24 >64, media 0,02109/0,05 y cobertura 0 ([evidencia](docs/parity/raster-v1-kale.md)); los otros zooms siguen diagnósticos y el cierre espera CI remota vigente |
 | UI solitario | Menú ES/EN, ventanas y feedback F5/F9 | 🟡 | Gate de certificación separado y presupuesto fijo [#584](https://github.com/cavazquez/openttdrs/issues/584) ✅; faltan edición de Órdenes en 8 perfiles [#590](https://github.com/cavazquez/openttdrs/issues/590) y otras ventanas/opciones |
 | Multi-compañía | Ownership y asignación de compañía por cliente | 🟡 | 4 rechazos atómicos sobre bienes ajenos + 4 controles válidos [#591](https://github.com/cavazquez/openttdrs/issues/591) |
 | NewGRF | [Action0/3/5](docs/parity/newgrf-action0-matrix.md) y [callbacks runtime](docs/parity/newgrf-callback-matrix.md) parciales | 🟡 | Un GRF de camión con CB36, catálogo y continuación JSON de 2.000 ticks [#592](https://github.com/cavazquez/openttdrs/issues/592) |
@@ -358,7 +358,8 @@ siguen registrando las brechas generales aunque un caso V1 esté aprobado.
 | Distribución alpha | Prerelease multiplataforma publicada; fix y smoke Snap read-only locales | 🟡 | Instalar/validar Snap [#582](https://github.com/cavazquez/openttdrs/issues/582)/[#583](https://github.com/cavazquez/openttdrs/issues/583), menú gráfico [Windows #601](https://github.com/cavazquez/openttdrs/issues/601) y [macOS #602](https://github.com/cavazquez/openttdrs/issues/602) |
 | Certificación del corte | Tests y reportes parciales existentes | 🟡 | Un resultado por contrato y SHA, sin `skip` convertido en éxito [#603](https://github.com/cavazquez/openttdrs/issues/603) |
 
-Tolerancias V1, todavía pendientes de instrumentación donde lo indican los issues:
+Tolerancias V1 vinculantes; cada fila verde conserva su evidencia del mismo
+candidato y las demás siguen pendientes de instrumentación donde lo indican los issues:
 
 - **Estado, dinero, carga, órdenes, RNG y ownership:** cero diferencias en los
   casos declarados. Servicio pagado: hasta 40.000 ticks; continuación: 2.000.

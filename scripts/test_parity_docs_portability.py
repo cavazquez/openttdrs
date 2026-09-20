@@ -16,6 +16,33 @@ from check_raster_baseline import BASELINE
 ROOT = Path(__file__).resolve().parents[1]
 CHECKER = Path("scripts/check_parity_docs_fresh.sh")
 RASTER_BASELINE = BASELINE.relative_to(ROOT)
+V1_RASTER_REPORT = Path("docs/parity/evidence/kale-132-2/2026-09-20-1f170b07/v1-raster-report.json")
+V1_RASTER_EVIDENCE = V1_RASTER_REPORT.parent
+
+
+def v1_raster_artifact_paths(value):
+    if isinstance(value, dict):
+        path = value.get("path")
+        sha = value.get("sha256")
+        if isinstance(path, str) and isinstance(sha, str):
+            try:
+                (ROOT / path).resolve().relative_to((ROOT / V1_RASTER_EVIDENCE).resolve())
+            except ValueError:
+                pass
+            else:
+                yield path
+        for child in value.values():
+            yield from v1_raster_artifact_paths(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from v1_raster_artifact_paths(child)
+
+
+def link_or_copy(source, target):
+    try:
+        os.link(source, target)
+    except OSError:
+        shutil.copyfile(source, target)
 
 
 class ParityDocsPortabilityTest(unittest.TestCase):
@@ -44,16 +71,20 @@ class ParityDocsPortabilityTest(unittest.TestCase):
                 str(CHECKER),
                 "scripts/check_active_parity_backlog.py",
                 "scripts/check_raster_baseline.py",
+                "scripts/check_v1_raster_evidence.py",
                 "scripts/random_map_parity.py",
                 "scripts/test_random_map_parity.py",
                 "docs/parity/active-backlog.json",
                 str(RASTER_BASELINE),
+                str(V1_RASTER_REPORT),
                 "docs/parity/evidence/random-map-matrix/report.json",
             ]
+            v1_report = json.loads((ROOT / V1_RASTER_REPORT).read_text(encoding="utf-8"))
+            paths.extend(v1_raster_artifact_paths(v1_report))
             for relative in paths:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(ROOT / relative, target)
+                link_or_copy(ROOT / relative, target)
             if stale_path:
                 stale_text = stale_text or "SIM_TICK_HZ = 5.0"
                 with (root / stale_path).open("a") as stream:

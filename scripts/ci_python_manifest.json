@@ -50,6 +50,7 @@
     "scripts/extract_roadveh_movement.py",
     "scripts/test_extract_road_waypoint_sprites.py",
     "scripts/test_openttd_reference_manifest.py",
+    "scripts/temperate_payment_oracle.py",
     "scripts/gen_water_lock_tiles.py",
     "scripts/compare_snapshots.py",
     "scripts/test_compare_snapshots_mutation.py",

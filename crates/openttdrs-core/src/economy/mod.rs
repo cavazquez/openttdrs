@@ -53,7 +53,7 @@ pub use vehicle_costs::{
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::cargo::CargoType;
+    use crate::cargo::{CargoType, TEMPERATE_CARGO_TYPES};
     use crate::economy::global::{GlobalEconomy, INFLATION_FRAC_ONE};
     use crate::linkgraph_parity::Randomizer;
     use crate::map::TileCoord;
@@ -63,6 +63,75 @@ mod tests {
         let mut ge = GlobalEconomy::new();
         ge.startup(&mut Randomizer::new(42), CALENDAR_BASE_YEAR);
         ge.inflation_payment
+    }
+
+    #[test]
+    fn transported_goods_income_matches_openttd_15_3_temperate_oracle() {
+        const FIXTURE: &str =
+            include_str!("../../tests/fixtures/parity/temperate_payment_15_3.tsv");
+        let mut cases = 0;
+
+        for (line_number, line) in FIXTURE.lines().enumerate().skip(1) {
+            let fields: Vec<_> = line.split('\t').collect();
+            assert_eq!(
+                fields.len(),
+                5,
+                "V1-PAY línea {} debe tener cinco columnas: {line}",
+                line_number + 1
+            );
+            let cargo = CargoType::from_label(fields[0]).unwrap_or_else(|| {
+                panic!(
+                    "V1-PAY línea {} usa un cargo desconocido: {}",
+                    line_number + 1,
+                    fields[0]
+                )
+            });
+            assert_eq!(
+                cargo,
+                TEMPERATE_CARGO_TYPES[cases / (3 * 2 * 3)],
+                "V1-PAY línea {} no respeta el catálogo Temperate fijo",
+                line_number + 1
+            );
+            let count = fields[1].parse::<u32>().unwrap_or_else(|_| {
+                panic!(
+                    "V1-PAY línea {} tiene count inválido: {}",
+                    line_number + 1,
+                    fields[1]
+                )
+            });
+            let distance = fields[2].parse::<u32>().unwrap_or_else(|_| {
+                panic!(
+                    "V1-PAY línea {} tiene distance inválida: {}",
+                    line_number + 1,
+                    fields[2]
+                )
+            });
+            let transit_days = fields[3].parse::<u16>().unwrap_or_else(|_| {
+                panic!(
+                    "V1-PAY línea {} tiene transit_days inválido: {}",
+                    line_number + 1,
+                    fields[3]
+                )
+            });
+            let expected = fields[4].parse::<i64>().unwrap_or_else(|_| {
+                panic!(
+                    "V1-PAY línea {} tiene income inválido: {}",
+                    line_number + 1,
+                    fields[4]
+                )
+            });
+            let actual =
+                transported_goods_income(count, distance, transit_days, cargo, INFLATION_FRAC_ONE);
+
+            assert_eq!(
+                actual, expected,
+                "V1-PAY divergencia OpenTTD 15.3: cargo={} count={count} distance={distance} transit_days={transit_days}",
+                fields[0]
+            );
+            cases += 1;
+        }
+
+        assert_eq!(cases, 198, "V1-PAY debe ejecutar exactamente 198 casos");
     }
 
     #[test]

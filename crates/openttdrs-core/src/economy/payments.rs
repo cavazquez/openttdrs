@@ -284,7 +284,7 @@ pub fn transported_goods_income_with_spec(
         21
     };
     income >>= shift;
-    income.max(1)
+    income
 }
 
 /// Pago actual de una unidad de cargo tras aplicar la inflación 16.16.

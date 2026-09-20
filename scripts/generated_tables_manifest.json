@@ -18,6 +18,20 @@
       "note": "Regenerado 2026-07-25 desde el pin OpenTTD; rustfmt_skip mantiene estable el formato emitido."
     },
     {
+      "id": "temperate_payment_oracle",
+      "generator": "scripts/temperate_payment_oracle.py",
+      "output": "crates/openttdrs-core/tests/fixtures/parity/temperate_payment_15_3.tsv",
+      "inputs": [
+        "reference/openttd-upstream/src/economy.cpp",
+        "reference/openttd-upstream/src/table/cargo_const.h"
+      ],
+      "check": "regenerate_or_hash",
+      "requires_opengfx": false,
+      "output_sha256": "097953112a928e2a471939dd865fa6b7ae04c05c5099824b3ef34ec26cad35a6",
+      "license": "GPL-2.0-only (ejecución temporal de GetTransportedGoodsIncome de OpenTTD)",
+      "note": "V1-PAY: 198 ingresos Temperate generados por el cuerpo C++ literal del pin 15.3; --check valida además procedencia y hashes de fuente."
+    },
+    {
       "id": "house_draw_data",
       "generator": "scripts/gen_house_draw_data.py",
       "output": "crates/openttdrs-client/src/sprites/house_draw_data_generated.rs",
@@ -183,6 +197,11 @@
     }
   ],
   "inventory": [
+    {
+      "output": "crates/openttdrs-core/tests/fixtures/parity/temperate_payment_15_3.tsv",
+      "generator": "scripts/temperate_payment_oracle.py",
+      "pilot": true
+    },
     {
       "output": "crates/openttdrs-core/src/sav/house_population_generated.rs",
       "generator": "scripts/gen_house_population.py",

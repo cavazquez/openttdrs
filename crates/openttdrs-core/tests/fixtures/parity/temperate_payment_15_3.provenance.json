@@ -1,0 +1,52 @@
+{
+  "contract": "V1-PAY",
+  "fixture": {
+    "cases": 198,
+    "path": "crates/openttdrs-core/tests/fixtures/parity/temperate_payment_15_3.tsv",
+    "sha256": "097953112a928e2a471939dd865fa6b7ae04c05c5099824b3ef34ec26cad35a6"
+  },
+  "generator": "scripts/temperate_payment_oracle.py",
+  "oracle": {
+    "execution": "literal C++ body extracted and compiled with CargoSpec stubs",
+    "function": "GetTransportedGoodsIncome",
+    "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+    "openttd_tag": "15.3",
+    "source_sha256": {
+      "src/economy.cpp": "d8fcb150f911e1d26d7eca87f4fef2ccda1dcb4c53652ba4e3440213cd5a1374",
+      "src/table/cargo_const.h": "eac009bb66a180298414e2616fe2a3e793c0c5b42ec27c7318946afe41a4d706"
+    }
+  },
+  "parameters": {
+    "cargo_labels": [
+      "PASS",
+      "COAL",
+      "MAIL",
+      "OIL_",
+      "LVST",
+      "GOOD",
+      "GRAI",
+      "WOOD",
+      "IORE",
+      "STEL",
+      "VALU"
+    ],
+    "climate": "Temperate",
+    "counts": [
+      0,
+      1,
+      100
+    ],
+    "distances": [
+      1,
+      32
+    ],
+    "inflation_payment": 65536,
+    "newgrf": false,
+    "transit_days": [
+      0,
+      30,
+      100
+    ]
+  },
+  "schema_version": 1
+}

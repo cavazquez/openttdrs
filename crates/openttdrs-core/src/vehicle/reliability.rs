@@ -850,6 +850,16 @@ fn check_road_vehicle_needs_service(state: &mut crate::GameState, idx: usize) {
         cancel_pending_implicit_service_order(state, idx);
         return;
     };
+    // Mantener la orden temporal hasta que el vehículo llegue al depósito.
+    // La búsqueda se hace antes para poder retirarla si el depósito dejó de
+    // existir o no es alcanzable.
+    if state.vehicles[idx]
+        .orders
+        .iter()
+        .any(|order| matches!(order, VehicleOrder::Depot { stop: false, .. }))
+    {
+        return;
+    }
     let dist = crate::economy::manhattan_distance(pos, depot);
     if dist > ROAD_SERVICE_MAX_PENALTY {
         return;
@@ -1665,6 +1675,16 @@ mod tests {
             state.vehicles[0].current_order_ref(),
             Some(VehicleOrder::Depot { stop: false, .. })
         ));
+        check_road_vehicle_needs_service(&mut state, 0);
+        assert_eq!(
+            state.vehicles[0]
+                .orders
+                .iter()
+                .filter(|order| matches!(order, VehicleOrder::Depot { stop: false, .. }))
+                .count(),
+            1,
+            "una orden temporal de servicio pendiente no debe duplicarse"
+        );
 
         state.map.set_kind(depot, TileKind::Grass).unwrap();
         state.runtime.depot_spatial_index.invalidate();

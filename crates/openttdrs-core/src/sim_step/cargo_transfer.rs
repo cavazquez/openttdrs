@@ -1442,8 +1442,20 @@ pub(super) fn load_vehicles(
     // importante al importar un SAV que todavía no contiene `INDY`/stocks.
     // Un vehículo que ya estaba en carga debe seguir pasando por la lógica
     // normal para cerrar correctamente una orden `full_load` sin mercancía.
+    // La excepción es la primera visita física a una parada: el intento vacío
+    // registra `last_speed`, que habilita `selectgoods` para que la siguiente
+    // producción urbana pueda llevar pasajeros al andén.
     let has_loadable_supply = has_loadable_supply(state);
+    let has_pending_empty_station_attempt = state.vehicles.iter().any(|vehicle| {
+        vehicle.awaiting_load_window
+            && vehicle.cargo == 0
+            && vehicle
+                .current_order_ref()
+                .is_some_and(|order| order.is_station_like() && !order.no_load())
+            && station_index_at_vehicle(state, vehicle).is_some()
+    });
     if !has_loadable_supply
+        && !has_pending_empty_station_attempt
         && !state.vehicles.iter().any(|vehicle| vehicle.cargo_loading)
         && !state
             .vehicles
@@ -3302,6 +3314,34 @@ mod tests {
         station.cargo_stock.passengers = 1;
         state.stations.push(station);
         assert!(has_loadable_supply(&state));
+    }
+
+    #[test]
+    fn empty_station_arrival_records_load_attempt_before_town_supply_exists() {
+        use crate::{Command, VehicleOrder, apply_command};
+
+        let mut state = GameState::new(8, 8);
+        let stop = TileCoord::new(3, 3);
+        apply_command(&mut state, &Command::PlaceRoad(TileCoord::new(3, 2))).unwrap();
+        apply_command(&mut state, &Command::PlaceBusStop(stop, 3)).unwrap();
+        assert!(!has_loadable_supply(&state));
+
+        let mut bus = crate::Vehicle::new(1, VehicleKind::Bus, stop, stop);
+        bus.running = true;
+        bus.awaiting_load_window = true;
+        bus.orders = vec![VehicleOrder::station(stop)];
+        state.vehicles.push(bus);
+
+        state.step();
+
+        assert!(
+            state.stations[0]
+                .goods
+                .get(CargoType::Passengers)
+                .last_speed
+                > 0,
+            "la visita vacía debe habilitar MoveGoodsToStation con selectgoods"
+        );
     }
 
     #[test]

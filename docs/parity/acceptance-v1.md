@@ -135,7 +135,7 @@ pendientes. Las dependencias por ID V1 resuelven a los enlaces de esta lista.
 - **V1-AIR — [#594](https://github.com/cavazquez/openttdrs/issues/594):** un avión vanilla entre dos aeropuertos Country, primera entrega pagada.
 - **V1-NET — [#595](https://github.com/cavazquez/openttdrs/issues/595):** dedicated, dos clientes y late join, 2.000 ticks; depende de V1-NETG.
 - **V1-AIT — [#596](https://github.com/cavazquez/openttdrs/issues/596):** primera entrega ferroviaria pagada de TransCargo; [fixture determinista y aislamiento multicompañía](transcargo-v1.md) implementados, a la espera de CI remota vigente antes del cierre.
-- **V1-AIRH — [#597](https://github.com/cavazquez/openttdrs/issues/597):** primera entrega de pasajeros pagada de RoadHaul.
+- **V1-AIRH — [#597](https://github.com/cavazquez/openttdrs/issues/597):** primera entrega de pasajeros pagada de RoadHaul; [fixture determinista, log de eventos y aislamiento multicompañía](roadhaul-v1.md) implementados, a la espera de CI remota vigente antes del cierre.
 - **V1-GSCOUNT — [#598](https://github.com/cavazquez/openttdrs/issues/598):** `CargoDelivered` ya consulta el ledger persistente de unidades finales del tipo solicitado, sin inferir tipos del agregado legacy; [regresiones y migración](gs-cargo-filter-v1.md) implementadas, a la espera de CI remota vigente antes del cierre.
 - **V1-GS — [#599](https://github.com/cavazquez/openttdrs/issues/599):** progreso y noticia única después de JSON; depende de V1-GSCOUNT.
 - **V1-EDIT — [#600](https://github.com/cavazquez/openttdrs/issues/600):** persistir un escenario editado y abrirlo para jugar.

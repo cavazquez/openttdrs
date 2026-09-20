@@ -1,0 +1,42 @@
+{
+  "contract": "V1-COAL-TRANSFER",
+  "fixture": {
+    "cases": 2,
+    "path": "crates/openttdrs-core/tests/fixtures/parity/coal_transfer_15_3.tsv",
+    "sha256": "495318d32dc2480d41c546e43b611ed0806f07c8582e03701c3fadb2591d9132"
+  },
+  "generator": "scripts/temperate_payment_oracle.py",
+  "oracle": {
+    "execution": "literal C++ body extracted and compiled with CargoSpec stubs",
+    "function": "GetTransportedGoodsIncome",
+    "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+    "openttd_tag": "15.3",
+    "source_sha256": {
+      "src/economy.cpp": "d8fcb150f911e1d26d7eca87f4fef2ccda1dcb4c53652ba4e3440213cd5a1374",
+      "src/table/cargo_const.h": "eac009bb66a180298414e2616fe2a3e793c0c5b42ec27c7318946afe41a4d706"
+    }
+  },
+  "parameters": {
+    "cases": [
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 7
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 24
+      }
+    ],
+    "climate": "Temperate",
+    "feeder_payment_share_percent": 75,
+    "inflation_payment": 65536,
+    "newgrf": false
+  },
+  "schema_version": 1
+}

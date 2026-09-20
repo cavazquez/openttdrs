@@ -1,6 +1,6 @@
 # Contrato V1 — verde acotado por área
 
-Fecha local: **2026-09-19**. Base inspeccionada: `84144747`; `origin/main`
+Fecha local: **2026-09-20**. Base inspeccionada: `84144747`; `origin/main`
 observado al auditar: `340585dc147aab2fad64d3427fae5cfb785aa3c1`.
 Referencia técnica: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.
@@ -120,7 +120,7 @@ pendientes. Las dependencias por ID V1 resuelven a los enlaces de esta lista.
 - **V1-VIS — [#584](https://github.com/cavazquez/openttdrs/issues/584):** roles diagnóstico/certificación, presupuesto fijo y procedencia de captura (implementado; #590 aporta el caso Órdenes).
 - **V1-NETG — [#585](https://github.com/cavazquez/openttdrs/issues/585):** red obligatoria: `PermissionDenied` falla con diagnóstico; inyección negativa y 22 recorridos loopback reales (23 pruebas, 0 ignoradas).
 - **V1-PAY — [#586](https://github.com/cavazquez/openttdrs/issues/586):** 11 cargos × 3 cantidades × 2 distancias × 3 edades = 198 pagos nativos exactos ([oráculo](temperate-payment-oracle.md) implementado; fixture/procedencia con hash).
-- **V1-PKT — [#587](https://github.com/cavazquez/openttdrs/issues/587):** una transferencia de carbón, dos tramos, conservación y feeder share.
+- **V1-PKT — [#587](https://github.com/cavazquez/openttdrs/issues/587):** una transferencia de carbón, dos tramos, conservación y feeder share ([contrato/oráculo](coal-transfer-v1.md) implementado; falta CI remota vigente antes del cierre).
 - **V1-SAV — [#588](https://github.com/cavazquez/openttdrs/issues/588):** una orden mutada preservada después del re-guardado nativo; mantener 6 cargas y el roundtrip obligatorio.
 - **V1-RAS — [#589](https://github.com/cavazquez/openttdrs/issues/589):** gate y evidencia de la escena Normal con el presupuesto anterior.
 - **V1-UI — [#590](https://github.com/cavazquez/openttdrs/issues/590):** edición de órdenes, 8 perfiles; depende de V1-VIS.

@@ -62,8 +62,11 @@ pub struct SimStats {
     pub cargo_deliveries: u64,
     /// Unidades de cargo cargadas (suma de `load`).
     pub cargo_units_loaded: u64,
-    /// Unidades de cargo entregadas en estación.
+    /// Unidades descargadas en estación, incluidas las transferencias.
     pub cargo_units_delivered: u64,
+    /// Unidades entregadas de forma final; excluye las descargas de trasbordo.
+    #[serde(default)]
+    pub cargo_units_final_delivered: u64,
     /// Unidades añadidas al stock de industrias por `Industry::produce`.
     pub industry_cargo_units_produced: u64,
     /// Pasajeros generados en paradas bus por demanda urbana.

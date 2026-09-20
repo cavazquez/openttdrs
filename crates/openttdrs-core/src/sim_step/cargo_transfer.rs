@@ -922,6 +922,7 @@ fn try_unload_aircraft_mail_packets(
         }
     }
     state.stats.cargo_units_delivered += u64::from(unload_units);
+    state.stats.cargo_units_final_delivered += u64::from(delivered_units);
     state.vehicles[vehicle_idx].aircraft_mail_cargo = Some(
         u16::try_from(
             state.vehicles[vehicle_idx]
@@ -1099,8 +1100,10 @@ pub(super) fn unload_vehicles(
         let mut feeder_total = 0_i64;
         let mut feeder_income_by_owner: Vec<(crate::company::CompanyId, i64)> = Vec::new();
         let mut taken = taken;
-        let mut transfer_mask = Vec::with_capacity(taken.len());
+        let town_cargo = cargo_type.is_town_cargo();
+        let mut reinsert_mask = Vec::with_capacity(taken.len());
         let mut delivered_units = 0_u32;
+        let mut physically_delivered_units = 0_u32;
         for packet in &mut taken {
             // P3.16: pago por tramos recorridos (`GetDistance`), no Manhattan origen→destino.
             let distance = packet.get_distance(station_pos);
@@ -1151,7 +1154,7 @@ pub(super) fn unload_vehicles(
                 unload_type,
                 accepted,
             );
-            transfer_mask.push(action == crate::cargo_packet::CargoUnloadAction::Transfer);
+            let mut reinsert_packet = action == crate::cargo_packet::CargoUnloadAction::Transfer;
             match action {
                 crate::cargo_packet::CargoUnloadAction::Transfer => {
                     if !packet.feeder_paid
@@ -1191,6 +1194,20 @@ pub(super) fn unload_vehicles(
                     // la aceptación de la estación/pueblo y debe pasar por la
                     // segunda llamada nativa de `AddCargoDelivery`.
                     let accepted_industry = accepted_industry.min(u32::from(packet.count));
+                    // El ledger V1 sólo retira un packet entero cuando su
+                    // receptor aceptó todas sus unidades. Una aceptación
+                    // parcial conserva la semántica histórica de reencolar
+                    // el packet completo, antes que perder su remanente.
+                    let final_delivery = town_cargo || accepted_industry == u32::from(packet.count);
+                    if final_delivery {
+                        physically_delivered_units =
+                            physically_delivered_units.saturating_add(u32::from(packet.count));
+                    } else {
+                        // Una parada de freight sin receptor final conserva la
+                        // carga descargada. No debe desaparecer por confundir
+                        // un `Deliver` genérico con aceptación de industria.
+                        reinsert_packet = true;
+                    }
                     let station_town = town::nearest_town_index(&state.towns, station_pos)
                         .filter(|(_, distance)| *distance <= town::TOWN_AUTHORITY_RADIUS)
                         .and_then(|(index, _)| state.towns.get(index).map(|town| town.id));
@@ -1238,14 +1255,14 @@ pub(super) fn unload_vehicles(
                 crate::cargo_packet::CargoUnloadAction::Keep
                 | crate::cargo_packet::CargoUnloadAction::Load => {}
             }
+            reinsert_mask.push(reinsert_packet);
         }
 
-        let town_cargo = cargo_type.is_town_cargo();
         if delivered_units > 0 {
-            // `GoodsEntry::State` mirrors the upstream station flags used by
-            // NewGRF var 69. A final delivery (including direct delivery to
-            // an industry) marks cargo as ever/currently accepted; the
-            // bigtick flag is cleared by the next acceptance interval.
+            // `GoodsEntry::State` conserva el flag histórico de la acción
+            // `Deliver` para CB140/var69, incluso si freight se vuelve a
+            // encolar por no tener industria receptora. El ledger físico V1
+            // se contabiliza por separado en `physically_delivered_units`.
             state.stations[station_idx]
                 .goods
                 .get_mut(cargo_type)
@@ -1261,10 +1278,11 @@ pub(super) fn unload_vehicles(
         }
         let mut reinserted = Vec::new();
         let mut reinserted_cargos = Vec::new();
-        for (mut p, was_transfer) in taken.into_iter().zip(transfer_mask) {
-            // El modelo actual usa las estaciones como hub para todo freight;
-            // una transferencia forzada de pax/mail también debe quedar allí.
-            if !town_cargo || was_transfer {
+        for (mut p, reinsert_packet) in taken.into_iter().zip(reinsert_mask) {
+            // Un trasbordo, o un freight sin receptor final, conserva el
+            // packet en la cola. Una entrega realmente aceptada ya fue
+            // contabilizada arriba y reinsertarla duplicaría carga física.
+            if reinsert_packet {
                 p.update_unloading_tile(station_pos);
                 p.next_hop = None;
                 if !reinserted_cargos.contains(&p.cargo) {
@@ -1340,9 +1358,9 @@ pub(super) fn unload_vehicles(
         }
         let first_chunk = !state.vehicles[i].cargo_unloading;
         let first_delivery = state.stats.cargo_deliveries == 0 && first_chunk;
-        // Freight baja en una estación como trasbordo: no es una entrega final
-        // ni debe disparar una noticia. Transfer pax/mail tampoco entrega.
-        let final_delivery = town_cargo && delivered_units > 0;
+        // Sólo una aceptación física suma el ledger final; una descarga en
+        // una parada intermedia o sin receptor no dispara una noticia.
+        let final_delivery = physically_delivered_units > 0;
         if first_chunk && final_delivery {
             crate::news::push_cargo_delivery_news(
                 state,
@@ -1360,6 +1378,7 @@ pub(super) fn unload_vehicles(
             }
         }
         state.stats.cargo_units_delivered += u64::from(unload_units);
+        state.stats.cargo_units_final_delivered += u64::from(physically_delivered_units);
         state.vehicles[i].sync_cargo_from_packets();
         unloaded_this_tick[i] = true;
 
@@ -2314,6 +2333,30 @@ fn try_load_aircraft_mail_from_station_waiting_cargo(
     true
 }
 
+/// `StationCargoList::HasCargoFor` para carga primaria ya trasbordada.
+///
+/// La barrera de recogida primaria no debe convertir una parada intermedia en
+/// una segunda mina. Un packet que llegó desde otra estación, en cambio, ya
+/// recorrió un tramo y debe poder continuar hacia su siguiente orden. La
+/// identidad de esa situación es `first_station != estación actual`; los
+/// packets creados desde el stock propio de la parada conservan la estación
+/// actual como `first_station` y siguen sujetos a la barrera.
+fn station_has_transferred_freight_for_next_stations(
+    station: &crate::Station,
+    cargo: CargoType,
+    next_stations: &[TileCoord],
+) -> bool {
+    station.cargo_packets.packets().any(|packet| {
+        packet.cargo == cargo
+            && packet
+                .first_station
+                .is_some_and(|first| first != station.pos)
+            && packet
+                .next_hop
+                .is_none_or(|hop| next_stations.contains(&hop))
+    })
+}
+
 /// Reserva físicamente la capacidad libre de una unidad en una orden de carga
 /// completa. `OpenTTD` hace esta operación antes de `Load`, por lo que el stock
 /// que ya quedó asignado a otra unidad no vuelve a competir en la misma visita.
@@ -2369,6 +2412,11 @@ fn reserve_vehicle_cargo_at_station(
                     &state.industries,
                     station_pos,
                     cargo,
+                )
+                && !station_has_transferred_freight_for_next_stations(
+                    &state.stations[station_idx],
+                    cargo,
+                    &next_stations,
                 )
                 && !state.vehicles[vehicle_idx].orders.is_empty()
             {
@@ -2753,6 +2801,11 @@ fn try_load_from_station_waiting_cargo(
                     &state.industries,
                     station_pos,
                     cargo,
+                )
+                && !station_has_transferred_freight_for_next_stations(
+                    &state.stations[station_idx],
+                    cargo,
+                    &next_stations,
                 )
                 && !state.vehicles[order_vehicle_idx].orders.is_empty()
             {

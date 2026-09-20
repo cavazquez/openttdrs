@@ -29,7 +29,7 @@
       "requires_opengfx": false,
       "output_sha256": "097953112a928e2a471939dd865fa6b7ae04c05c5099824b3ef34ec26cad35a6",
       "license": "GPL-2.0-only (ejecución temporal de GetTransportedGoodsIncome de OpenTTD)",
-      "note": "V1-PAY: 198 ingresos Temperate generados por el cuerpo C++ literal del pin 15.3; --check valida además procedencia y hashes de fuente."
+      "note": "V1-PAY: 198 ingresos Temperate y la traza V1-COAL-TRANSFER de dos tramos, generados por el cuerpo C++ literal del pin 15.3; --check valida ambas fixtures, procedencia y hashes de fuente."
     },
     {
       "id": "house_draw_data",
@@ -199,6 +199,11 @@
   "inventory": [
     {
       "output": "crates/openttdrs-core/tests/fixtures/parity/temperate_payment_15_3.tsv",
+      "generator": "scripts/temperate_payment_oracle.py",
+      "pilot": true
+    },
+    {
+      "output": "crates/openttdrs-core/tests/fixtures/parity/coal_transfer_15_3.tsv",
       "generator": "scripts/temperate_payment_oracle.py",
       "pilot": true
     },

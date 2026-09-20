@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Genera o verifica el corpus V1-PAY con GetTransportedGoodsIncome nativo.
+"""Genera o verifica los corpus V1-PAY/V1-COAL-TRANSFER nativos.
 
 El harness extrae el cuerpo literal de ``GetTransportedGoodsIncome`` desde el
 checkout OpenTTD fijado, lo compila con stubs mínimos de ``CargoSpec`` y emite
-los 198 pagos Temperate del contrato. No calcula el lado de referencia con
-Rust ni reescribe la fórmula de OpenTTD en Python.
+los 198 pagos Temperate del contrato y la traza acotada de carbón con dos
+tramos. No calcula el lado de referencia con Rust ni reescribe la fórmula de
+OpenTTD en Python.
 
 Uso:
   python3 scripts/temperate_payment_oracle.py reference/openttd-upstream --check
@@ -26,6 +27,10 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "crates/openttdrs-core/tests/fixtures/parity/temperate_payment_15_3.tsv"
 PROVENANCE = ROOT / "crates/openttdrs-core/tests/fixtures/parity/temperate_payment_15_3.provenance.json"
+TRANSFER_FIXTURE = ROOT / "crates/openttdrs-core/tests/fixtures/parity/coal_transfer_15_3.tsv"
+TRANSFER_PROVENANCE = (
+    ROOT / "crates/openttdrs-core/tests/fixtures/parity/coal_transfer_15_3.provenance.json"
+)
 REFERENCE_MANIFEST = ROOT / "docs/parity/openttd-reference.json"
 ECONOMY_CPP = Path("src/economy.cpp")
 CARGO_CONST_H = Path("src/table/cargo_const.h")
@@ -33,6 +38,10 @@ INFLATION_PAYMENT = 1 << 16
 COUNTS = (0, 1, 100)
 DISTANCES = (1, 32)
 TRANSIT_DAYS = (0, 30, 100)
+TRANSFER_TRACE_CASES = (
+    ("transfer", "COAL", 4, 20, 7),
+    ("final", "COAL", 4, 40, 24),
+)
 
 # Orden y labels que usa el catálogo Temperate original; el índice es el
 # CargoType sintético del harness, no una tabla Rust.
@@ -226,20 +235,74 @@ int main()
 """
 
 
-def native_table(source: Path) -> str:
+def transfer_trace_harness_main(specs: list[tuple[str, int, int, int]]) -> str:
+    cargo_indices = {name: index for index, (name, _, _, _) in enumerate(specs)}
+    rows = ",\n        ".join(
+        "TraceCase{"
+        f'"{phase}", static_cast<CargoType>({cargo_indices[cargo]}), {count}, {distance}, {transit}'
+        "}"
+        for phase, cargo, count, distance, transit in TRANSFER_TRACE_CASES
+    )
+    cargo_specs = ",\n        ".join(
+        f"CargoSpec{{{payment}, {{{fast}, {slow}}}, CargoCallbackMasks{{}}}}"
+        for _, payment, fast, slow in specs
+    )
+    return f"""
+struct TraceCase {{
+    const char *phase;
+    CargoType cargo;
+    uint count;
+    uint distance;
+    uint16_t transit_days;
+}};
+
+int main()
+{{
+    g_cargo_specs = std::array<CargoSpec, 11>{{
+        {cargo_specs}
+    }};
+    const std::array<TraceCase, {len(TRANSFER_TRACE_CASES)}> cases{{{{
+        {rows}
+    }}}};
+
+    std::cout << "phase\\tcargo\\tcount\\tdistance\\ttransit_days\\tincome\\n";
+    for (const TraceCase &row : cases) {{
+        std::cout << row.phase << '\\t' << "COAL" << '\\t' << row.count << '\\t'
+                  << row.distance << '\\t' << row.transit_days << '\\t'
+                  << GetTransportedGoodsIncome(row.count, row.distance, row.transit_days, row.cargo)
+                  << '\\n';
+    }}
+}}
+"""
+
+
+def run_native_harness(literal_function: str, harness: str) -> str:
+    with tempfile.TemporaryDirectory(prefix="temperate-payment-oracle-") as directory:
+        temp = Path(directory)
+        source_file = temp / "oracle.cpp"
+        binary = temp / "oracle"
+        source_file.write_text(PREAMBLE + literal_function + harness, encoding="utf-8")
+        subprocess.run(["c++", "-std=c++20", str(source_file), "-o", str(binary)], check=True)
+        return subprocess.check_output([str(binary)], text=True)
+
+
+def native_harness_inputs(source: Path) -> tuple[str, list[tuple[str, int, int, int]]]:
     economy = (source / ECONOMY_CPP).read_text(encoding="utf-8")
     literal_function = extract_function(
         economy,
         "Money GetTransportedGoodsIncome(uint num_pieces, uint dist, uint16_t transit_periods, CargoType cargo_type)",
     )
-    specs = parse_temperate_specs(source / CARGO_CONST_H)
-    with tempfile.TemporaryDirectory(prefix="temperate-payment-oracle-") as directory:
-        temp = Path(directory)
-        source_file = temp / "oracle.cpp"
-        binary = temp / "oracle"
-        source_file.write_text(PREAMBLE + literal_function + harness_main(specs), encoding="utf-8")
-        subprocess.run(["c++", "-std=c++20", str(source_file), "-o", str(binary)], check=True)
-        return subprocess.check_output([str(binary)], text=True)
+    return literal_function, parse_temperate_specs(source / CARGO_CONST_H)
+
+
+def native_table(source: Path) -> str:
+    literal_function, specs = native_harness_inputs(source)
+    return run_native_harness(literal_function, harness_main(specs))
+
+
+def native_transfer_trace(source: Path) -> str:
+    literal_function, specs = native_harness_inputs(source)
+    return run_native_harness(literal_function, transfer_trace_harness_main(specs))
 
 
 def fixture_case_count(table: str) -> int:
@@ -252,21 +315,36 @@ def fixture_case_count(table: str) -> int:
     return expected
 
 
+def transfer_trace_case_count(trace: str) -> int:
+    lines = trace.splitlines()
+    if not lines or lines[0] != "phase\tcargo\tcount\tdistance\ttransit_days\tincome":
+        raise RuntimeError("la traza nativa no tiene el encabezado V1-COAL-TRANSFER")
+    if len(lines) - 1 != len(TRANSFER_TRACE_CASES):
+        raise RuntimeError(
+            f"la traza nativa tiene {len(lines) - 1} casos; se esperaban {len(TRANSFER_TRACE_CASES)}"
+        )
+    return len(TRANSFER_TRACE_CASES)
+
+
+def oracle_provenance(source: Path, manifest: dict[str, object]) -> dict[str, object]:
+    return {
+        "openttd_tag": manifest["tag"],
+        "openttd_commit": git_output(source, "rev-parse", "HEAD"),
+        "function": "GetTransportedGoodsIncome",
+        "execution": "literal C++ body extracted and compiled with CargoSpec stubs",
+        "source_sha256": {
+            str(ECONOMY_CPP): sha256_file(source / ECONOMY_CPP),
+            str(CARGO_CONST_H): sha256_file(source / CARGO_CONST_H),
+        },
+    }
+
+
 def expected_provenance(source: Path, manifest: dict[str, object], table: str) -> dict[str, object]:
     return {
         "schema_version": 1,
         "contract": "V1-PAY",
         "generator": "scripts/temperate_payment_oracle.py",
-        "oracle": {
-            "openttd_tag": manifest["tag"],
-            "openttd_commit": git_output(source, "rev-parse", "HEAD"),
-            "function": "GetTransportedGoodsIncome",
-            "execution": "literal C++ body extracted and compiled with CargoSpec stubs",
-            "source_sha256": {
-                str(ECONOMY_CPP): sha256_file(source / ECONOMY_CPP),
-                str(CARGO_CONST_H): sha256_file(source / CARGO_CONST_H),
-            },
-        },
+        "oracle": oracle_provenance(source, manifest),
         "parameters": {
             "inflation_payment": INFLATION_PAYMENT,
             "counts": list(COUNTS),
@@ -280,6 +358,38 @@ def expected_provenance(source: Path, manifest: dict[str, object], table: str) -
             "path": str(FIXTURE.relative_to(ROOT)),
             "sha256": sha256_bytes(table.encode("utf-8")),
             "cases": fixture_case_count(table),
+        },
+    }
+
+
+def expected_transfer_provenance(
+    source: Path, manifest: dict[str, object], trace: str
+) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "contract": "V1-COAL-TRANSFER",
+        "generator": "scripts/temperate_payment_oracle.py",
+        "oracle": oracle_provenance(source, manifest),
+        "parameters": {
+            "inflation_payment": INFLATION_PAYMENT,
+            "newgrf": False,
+            "climate": "Temperate",
+            "cases": [
+                {
+                    "phase": phase,
+                    "cargo": cargo,
+                    "count": count,
+                    "distance": distance,
+                    "transit_days": transit,
+                }
+                for phase, cargo, count, distance, transit in TRANSFER_TRACE_CASES
+            ],
+            "feeder_payment_share_percent": 75,
+        },
+        "fixture": {
+            "path": str(TRANSFER_FIXTURE.relative_to(ROOT)),
+            "sha256": sha256_bytes(trace.encode("utf-8")),
+            "cases": transfer_trace_case_count(trace),
         },
     }
 
@@ -306,6 +416,21 @@ def check_fixture(table: str, provenance: dict[str, object]) -> None:
         raise RuntimeError("DRIFT V1-PAY: la procedencia/hash no coincide con la tabla nativa")
 
 
+def check_transfer_trace(trace: str, provenance: dict[str, object]) -> None:
+    if not TRANSFER_FIXTURE.is_file():
+        raise RuntimeError(f"falta fixture versionada: {TRANSFER_FIXTURE}")
+    current = TRANSFER_FIXTURE.read_text(encoding="utf-8")
+    if current != trace:
+        raise RuntimeError(f"DRIFT V1-COAL-TRANSFER: {first_difference(trace, current)}")
+    if not TRANSFER_PROVENANCE.is_file():
+        raise RuntimeError(f"falta procedencia versionada: {TRANSFER_PROVENANCE}")
+    current_provenance = json.loads(TRANSFER_PROVENANCE.read_text(encoding="utf-8"))
+    if current_provenance != provenance:
+        raise RuntimeError(
+            "DRIFT V1-COAL-TRANSFER: la procedencia/hash no coincide con la traza nativa"
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -324,16 +449,33 @@ def main(argv: list[str] | None = None) -> int:
         manifest = reference_manifest()
         verify_source(args.source, manifest)
         table = native_table(args.source)
+        trace = native_transfer_trace(args.source)
         provenance = expected_provenance(args.source, manifest, table)
+        transfer_provenance = expected_transfer_provenance(args.source, manifest, trace)
         if args.check:
             check_fixture(table, provenance)
+            check_transfer_trace(trace, transfer_provenance)
             print(f"OK: V1-PAY {provenance['fixture']['cases']} casos nativos; hash {provenance['fixture']['sha256']}")
+            print(
+                "OK: V1-COAL-TRANSFER "
+                f"{transfer_provenance['fixture']['cases']} casos nativos; "
+                f"hash {transfer_provenance['fixture']['sha256']}"
+            )
         elif args.write:
             FIXTURE.write_text(table, encoding="utf-8")
             PROVENANCE.write_text(json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-            print(f"Escritos {FIXTURE.relative_to(ROOT)} y {PROVENANCE.relative_to(ROOT)}")
+            TRANSFER_FIXTURE.write_text(trace, encoding="utf-8")
+            TRANSFER_PROVENANCE.write_text(
+                json.dumps(transfer_provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            print(
+                "Escritos "
+                f"{FIXTURE.relative_to(ROOT)}, {PROVENANCE.relative_to(ROOT)}, "
+                f"{TRANSFER_FIXTURE.relative_to(ROOT)} y {TRANSFER_PROVENANCE.relative_to(ROOT)}"
+            )
         else:
             print(table, end="")
+            print(trace, end="")
     except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"FAIL V1-PAY: {exc}", file=sys.stderr)
         return 1

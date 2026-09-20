@@ -33,7 +33,10 @@ cargo test -p openttdrs-core transported_goods_income_matches_openttd_15_3_tempe
 La regresión Rust lee sólo la tabla externa, ejecuta el cálculo productivo y
 reporta el primer cargo, cantidad, distancia, edad, valor esperado y valor
 actual que diverjan. El chequeo de tablas generadas de CI vuelve a ejecutar el
-oráculo después de recuperar el pin OpenTTD.
+oráculo después de recuperar el pin OpenTTD. Ese mismo chequeo valida la
+[traza acotada de transferencia de carbón](coal-transfer-v1.md) V1-PKT:
+`coal_transfer_15_3.tsv` y su procedencia deben coincidir exactamente con las
+dos ejecuciones C++ nativas.
 
 ## Corrección acotada
 

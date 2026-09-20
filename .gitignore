@@ -53,6 +53,8 @@ target-agent
 !tests/fixtures/**/*.json
 # Manifiesto pin OpenTTD (#109)
 !docs/parity/openttd-reference.json
+# Manifiesto de contratos del agregado V1 (#603).
+!docs/parity/v1-contract-manifest.json
 # Manifiesto de artefactos visuales por familia (#297).
 !docs/parity/screenshots/window-regression.json
 !docs/parity/screenshots/window-regression/**/sidecar.json

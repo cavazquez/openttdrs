@@ -33,6 +33,7 @@ Orden sugerido al entrar:
 | GS JSON V1 | [parity/gs-json-v1.md](parity/gs-json-v1.md) | Meta Coal 5/10 → 10/10, dos compañías y noticia deduplicada |
 | Editor V1 | [parity/editor-v1.md](parity/editor-v1.md) | Escenario 64×64 editado, JSON aislado y reapertura por Escenarios |
 | Raster V1 de Kale | [parity/raster-v1-kale.md](parity/raster-v1-kale.md) | Contrato focal, hashes, presupuesto y artefactos de #589 |
+| Reporte V1 por contrato | [parity/v1-report.md](parity/v1-report.md) | Agregado fail-closed por SHA, umbral y artefactos de los contratos V1 |
 
 Al cambiar una capacidad, editar su fuente canónica y el resumen de
 `PARIDAD.md` sólo si modifica la madurez global. Los roadmaps, README y guías
@@ -57,6 +58,7 @@ backlog.
 | [parity/gs-json-v1.md](parity/gs-json-v1.md) | Contrato focal GS-lite de carga y recarga JSON |
 | [parity/editor-v1.md](parity/editor-v1.md) | Contrato focal del editor, guardado JSON y reapertura por menú |
 | [parity/raster-v1-kale.md](parity/raster-v1-kale.md) | Evidencia y reproducción del contrato raster focal V1 |
+| [parity/v1-report.md](parity/v1-report.md) | Formato y agregado verificable de los resultados V1 por contrato |
 | [MAPA_Y_FERROCARRIL.md](MAPA_Y_FERROCARRIL.md) | Flujo `.ottdmap`, MAPT/chunks, señales, autorail, waypoints |
 | [GRAFICOS.md](GRAFICOS.md) | Sprites OpenGFX + handoff terreno |
 | [RENDIMIENTO.md](RENDIMIENTO.md) | PERF mapas grandes + benchmarks |

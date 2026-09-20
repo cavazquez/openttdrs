@@ -143,7 +143,7 @@ pendientes. Las dependencias por ID V1 resuelven a los enlaces de esta lista.
 - **V1-EDIT — [#600](https://github.com/cavazquez/openttdrs/issues/600):** escenario Temperate 64×64 editado, JSON nativo y reapertura por Escenarios; conserva mapa, entidades, fecha/settings y tick, incluido el error de guardado que deja el documento abierto ([evidencia](editor-v1.md)). Implementado; espera CI remota vigente antes del cierre.
 - **V1-WIN — [#601](https://github.com/cavazquez/openttdrs/issues/601):** menú del ZIP Windows en entorno gráfico real.
 - **V1-MAC — [#602](https://github.com/cavazquez/openttdrs/issues/602):** menú del tar.gz macOS arm64 en entorno gráfico real.
-- **V1-REPORT — [#603](https://github.com/cavazquez/openttdrs/issues/603):** resultado por contrato/SHA; rechazar informes ausentes o mezclados. Su implementación puede comenzar con casos sintéticos; declarar todo verde depende de todos los contratos de la fila.
+- **V1-REPORT — [#603](https://github.com/cavazquez/openttdrs/issues/603):** [agregado fail-closed](v1-report.md) por contrato/SHA; rechaza informes ausentes, mezclados, omitidos o no aprobables. Declarar todo verde depende de los 20 resultados verificables del mismo candidato.
 
 Se conservan **[#582](https://github.com/cavazquez/openttdrs/issues/582)**
 y **[#583](https://github.com/cavazquez/openttdrs/issues/583)** para Snap:

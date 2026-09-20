@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "kind": "v1-contract-manifest",
+  "scope": "V1-2026-09-20",
+  "contracts": [
+    {"id": "V1-VIS", "issue": 584},
+    {"id": "V1-NETG", "issue": 585},
+    {"id": "V1-PAY", "issue": 586},
+    {"id": "V1-PKT", "issue": 587},
+    {"id": "V1-SAV", "issue": 588},
+    {"id": "V1-RAS", "issue": 589},
+    {"id": "V1-UI", "issue": 590},
+    {"id": "V1-OWN", "issue": 591},
+    {"id": "V1-GRF", "issue": 592},
+    {"id": "V1-SHIP", "issue": 593},
+    {"id": "V1-AIR", "issue": 594},
+    {"id": "V1-NET", "issue": 595},
+    {"id": "V1-AIT", "issue": 596},
+    {"id": "V1-AIRH", "issue": 597},
+    {"id": "V1-GSCOUNT", "issue": 598},
+    {"id": "V1-GS", "issue": 599},
+    {"id": "V1-EDIT", "issue": 600},
+    {"id": "V1-WIN", "issue": 601},
+    {"id": "V1-MAC", "issue": 602},
+    {"id": "V1-REPORT", "issue": 603}
+  ]
+}

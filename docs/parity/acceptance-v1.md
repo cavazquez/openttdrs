@@ -118,7 +118,7 @@ causa independiente requiere otra tarea; los criterios no satisfechos siguen
 pendientes. Las dependencias por ID V1 resuelven a los enlaces de esta lista.
 
 - **V1-VIS — [#584](https://github.com/cavazquez/openttdrs/issues/584):** roles diagnóstico/certificación, presupuesto fijo y procedencia de captura (implementado; #590 aporta el caso Órdenes).
-- **V1-NETG — [#585](https://github.com/cavazquez/openttdrs/issues/585):** red obligatoria sin éxito por `PermissionDenied`.
+- **V1-NETG — [#585](https://github.com/cavazquez/openttdrs/issues/585):** red obligatoria: `PermissionDenied` falla con diagnóstico; inyección negativa y 22 recorridos loopback reales (23 pruebas, 0 ignoradas).
 - **V1-PAY — [#586](https://github.com/cavazquez/openttdrs/issues/586):** 11 cargos × 3 cantidades × 2 distancias × 3 edades = 198 pagos nativos exactos.
 - **V1-PKT — [#587](https://github.com/cavazquez/openttdrs/issues/587):** una transferencia de carbón, dos tramos, conservación y feeder share.
 - **V1-SAV — [#588](https://github.com/cavazquez/openttdrs/issues/588):** una orden mutada preservada después del re-guardado nativo; mantener 6 cargas y el roundtrip obligatorio.

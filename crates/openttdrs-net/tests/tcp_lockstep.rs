@@ -18,6 +18,16 @@ use openttdrs_net::{
     SessionTimeouts, apply_session_event, read_message, write_message,
 };
 
+fn mandatory_network<T>(operation: &str, result: Result<T, NetError>) -> T {
+    match result {
+        Ok(value) => value,
+        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => {
+            panic!("red TCP obligatoria: {operation} recibió PermissionDenied ({error})")
+        }
+        Err(error) => panic!("red TCP obligatoria: {operation} falló ({error})"),
+    }
+}
+
 fn wait_event(client: &ClientSession, timeout: Duration) -> SessionEvent {
     let start = Instant::now();
     loop {
@@ -34,32 +44,23 @@ fn wait_event(client: &ClientSession, timeout: Duration) -> SessionEvent {
     }
 }
 
-fn maybe_start_server(bind: &str, snapshot: String) -> Option<ListenServer> {
-    match ListenServer::start(bind, snapshot) {
-        Ok(server) => Some(server),
-        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => None,
-        Err(error) => panic!("ListenServer::start falló: {error}"),
-    }
+fn start_server(bind: &str, snapshot: String) -> ListenServer {
+    mandatory_network("ListenServer::start", ListenServer::start(bind, snapshot))
 }
 
-fn maybe_start_server_with_timeouts(
+fn start_server_with_timeouts(
     bind: &str,
     snapshot: String,
     timeouts: SessionTimeouts,
-) -> Option<ListenServer> {
-    match ListenServer::start_with_timeouts(bind, snapshot, timeouts) {
-        Ok(server) => Some(server),
-        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => None,
-        Err(error) => panic!("ListenServer::start_with_timeouts falló: {error}"),
-    }
+) -> ListenServer {
+    mandatory_network(
+        "ListenServer::start_with_timeouts",
+        ListenServer::start_with_timeouts(bind, snapshot, timeouts),
+    )
 }
 
-fn maybe_connect_client(bind: &str) -> Option<ClientSession> {
-    match ClientSession::connect(bind) {
-        Ok(client) => Some(client),
-        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => None,
-        Err(error) => panic!("ClientSession::connect falló: {error}"),
-    }
+fn connect_client(bind: &str) -> ClientSession {
+    mandatory_network("ClientSession::connect", ClientSession::connect(bind))
 }
 
 fn framed_message(message: &NetMessage) -> Vec<u8> {
@@ -151,26 +152,50 @@ fn short_timeouts() -> SessionTimeouts {
 }
 
 #[test]
+fn permission_denied_is_a_network_failure_not_a_successful_skip() {
+    let injected = std::panic::catch_unwind(|| {
+        mandatory_network(
+            "PermissionDenied inyectado",
+            Err::<(), _>(NetError::Io(std::io::Error::from(
+                ErrorKind::PermissionDenied,
+            ))),
+        );
+    });
+    assert!(
+        injected.is_err(),
+        "PermissionDenied debe fallar la certificación de red"
+    );
+}
+
+#[test]
+fn mandatory_loopback_connection_establishes_a_real_session() {
+    let server = start_server("127.0.0.1:0", GameState::new(16, 16).save_json().unwrap());
+    let client = connect_client(&server.local_addr().to_string());
+    assert!(matches!(
+        wait_event(&client, Duration::from_secs(2)),
+        SessionEvent::Welcome { .. }
+    ));
+    wait_for_peer_count(&server, 1, Duration::from_secs(2));
+}
+
+#[test]
 fn silent_handshake_does_not_block_a_healthy_peer_or_shutdown() {
-    let server = match maybe_start_server_with_timeouts(
+    let server = start_server_with_timeouts(
         "127.0.0.1:0",
         GameState::new(16, 16).save_json().unwrap(),
         short_timeouts(),
-    ) {
-        Some(server) => server,
-        None => return,
-    };
+    );
     let bind = server.local_addr().to_string();
-    let healthy = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let healthy = connect_client(&bind);
     assert!(matches!(
         wait_event(&healthy, Duration::from_secs(2)),
         SessionEvent::Welcome { .. }
     ));
 
-    let _silent = TcpStream::connect(&bind).unwrap();
+    let _silent = mandatory_network(
+        "TcpStream::connect para peer silencioso",
+        TcpStream::connect(&bind).map_err(NetError::Io),
+    );
     // Dar una vuelta al accept para reproducir el punto donde la versión
     // previa se quedaba dentro del handshake bloqueante.
     thread::sleep(Duration::from_millis(20));
@@ -187,25 +212,22 @@ fn silent_handshake_does_not_block_a_healthy_peer_or_shutdown() {
 
 #[test]
 fn partial_peer_payload_expires_without_stalling_a_healthy_peer() {
-    let server = match maybe_start_server_with_timeouts(
+    let server = start_server_with_timeouts(
         "127.0.0.1:0",
         GameState::new(16, 16).save_json().unwrap(),
         short_timeouts(),
-    ) {
-        Some(server) => server,
-        None => return,
-    };
+    );
     let bind = server.local_addr().to_string();
-    let healthy = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let healthy = connect_client(&bind);
     assert!(matches!(
         wait_event(&healthy, Duration::from_secs(2)),
         SessionEvent::Welcome { .. }
     ));
 
-    let mut stalled = TcpStream::connect(&bind).unwrap();
+    let mut stalled = mandatory_network(
+        "TcpStream::connect para payload parcial",
+        TcpStream::connect(&bind).map_err(NetError::Io),
+    );
     write_message(
         &mut stalled,
         &NetMessage::Hello {
@@ -245,11 +267,10 @@ fn partial_peer_payload_expires_without_stalling_a_healthy_peer() {
 
 #[test]
 fn client_handshake_timeout_and_drop_are_bounded_against_a_silent_server() {
-    let listener = match TcpListener::bind("127.0.0.1:0") {
-        Ok(listener) => listener,
-        Err(error) if error.kind() == ErrorKind::PermissionDenied => return,
-        Err(error) => panic!("no se pudo crear listener de prueba: {error}"),
-    };
+    let listener = mandatory_network(
+        "TcpListener::bind para servidor silencioso",
+        TcpListener::bind("127.0.0.1:0").map_err(NetError::Io),
+    );
     let bind = listener.local_addr().unwrap().to_string();
     let (accepted_tx, accepted_rx) = mpsc::channel();
     let (stop_tx, stop_rx) = mpsc::channel();
@@ -259,11 +280,10 @@ fn client_handshake_timeout_and_drop_are_bounded_against_a_silent_server() {
         stop_rx.recv().expect("termina servidor silencioso");
     });
 
-    let client = match ClientSession::connect_with_timeouts(&bind, short_timeouts()) {
-        Ok(client) => client,
-        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => return,
-        Err(error) => panic!("ClientSession::connect_with_timeouts falló: {error}"),
-    };
+    let client = mandatory_network(
+        "ClientSession::connect_with_timeouts",
+        ClientSession::connect_with_timeouts(&bind, short_timeouts()),
+    );
     accepted_rx
         .recv_timeout(Duration::from_secs(2))
         .expect("servidor silencioso acepta el cliente");
@@ -285,12 +305,12 @@ fn client_handshake_timeout_and_drop_are_bounded_against_a_silent_server() {
 #[test]
 fn fragmented_propose_reaches_listen_server_with_its_original_sequence() {
     let snapshot = GameState::new(24, 24).save_json().unwrap();
-    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
-        Some(server) => server,
-        None => return,
-    };
+    let server = start_server("127.0.0.1:0", snapshot);
     let bind = server.local_addr().to_string();
-    let mut peer = TcpStream::connect(&bind).unwrap();
+    let mut peer = mandatory_network(
+        "TcpStream::connect para frame fragmentado",
+        TcpStream::connect(&bind).map_err(NetError::Io),
+    );
     write_message(
         &mut peer,
         &NetMessage::Hello {
@@ -365,11 +385,10 @@ fn fragmented_propose_reaches_listen_server_with_its_original_sequence() {
 
 #[test]
 fn client_session_receives_a_fragmented_server_commit() {
-    let listener = match TcpListener::bind("127.0.0.1:0") {
-        Ok(listener) => listener,
-        Err(error) if error.kind() == ErrorKind::PermissionDenied => return,
-        Err(error) => panic!("no se pudo crear listener de prueba: {error}"),
-    };
+    let listener = mandatory_network(
+        "TcpListener::bind para servidor de frames",
+        TcpListener::bind("127.0.0.1:0").map_err(NetError::Io),
+    );
     let bind = listener.local_addr().unwrap().to_string();
     let snapshot = GameState::new(16, 16).save_json().unwrap();
     let expected = NetMessage::Commit {
@@ -412,10 +431,7 @@ fn client_session_receives_a_fragmented_server_commit() {
         stream.flush().expect("flush frame completo");
     });
 
-    let client = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let client = connect_client(&bind);
     assert!(matches!(
         wait_event(&client, Duration::from_secs(2)),
         SessionEvent::Welcome { .. }
@@ -446,17 +462,11 @@ fn two_peers_same_log_same_hash_over_tcp() {
     let mut host = GameState::new(32, 32);
     let snapshot = host.save_json().unwrap();
 
-    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
-        Some(server) => server,
-        None => return,
-    };
+    let server = start_server("127.0.0.1:0", snapshot);
     let bind = server.local_addr().to_string();
     thread::sleep(Duration::from_millis(50));
 
-    let client = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let client = connect_client(&bind);
     let welcome = wait_event(&client, Duration::from_secs(2));
     let mut remote = GameState::new(1, 1);
     apply_session_event(&mut remote, &welcome).unwrap();
@@ -578,11 +588,11 @@ fn welcome_snapshot_preserves_active_house_lift_trajectory() {
 #[test]
 fn server_rejects_the_previous_authoritative_state_protocol_before_welcome() {
     let snapshot = GameState::new(8, 8).save_json().unwrap();
-    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
-        Some(server) => server,
-        None => return,
-    };
-    let mut peer = TcpStream::connect(server.local_addr()).unwrap();
+    let server = start_server("127.0.0.1:0", snapshot);
+    let mut peer = mandatory_network(
+        "TcpStream::connect para protocolo anterior",
+        TcpStream::connect(server.local_addr()).map_err(NetError::Io),
+    );
     peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
     write_message(
         &mut peer,
@@ -605,15 +615,9 @@ fn server_rejects_the_previous_authoritative_state_protocol_before_welcome() {
 #[test]
 fn client_reports_a_closed_server_once_then_the_drain_finishes() {
     let snapshot = GameState::new(16, 16).save_json().unwrap();
-    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
-        Some(server) => server,
-        None => return,
-    };
+    let server = start_server("127.0.0.1:0", snapshot);
     let bind = server.local_addr().to_string();
-    let client = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let client = connect_client(&bind);
     assert!(matches!(
         wait_event(&client, Duration::from_secs(2)),
         SessionEvent::Welcome { .. }
@@ -644,10 +648,7 @@ fn client_reports_a_closed_server_once_then_the_drain_finishes() {
 fn late_joiner_gets_live_snapshot_not_boot() {
     let mut host = GameState::new(32, 32);
     let boot = host.save_json().unwrap();
-    let server = match maybe_start_server("127.0.0.1:0", boot) {
-        Some(server) => server,
-        None => return,
-    };
+    let server = start_server("127.0.0.1:0", boot);
     let bind = server.local_addr().to_string();
 
     apply_command(&mut host, &Command::PlaceRail(TileCoord::new(5, 5))).unwrap();
@@ -659,10 +660,7 @@ fn late_joiner_gets_live_snapshot_not_boot() {
         .synchronize()
         .expect("snapshot live publicado antes del late join");
 
-    let client = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let client = connect_client(&bind);
     let welcome = wait_event(&client, Duration::from_secs(2));
     let mut remote = GameState::new(1, 1);
     apply_session_event(&mut remote, &welcome).unwrap();
@@ -677,18 +675,12 @@ fn late_joiner_gets_live_snapshot_not_boot() {
 #[test]
 fn snapshot_frontier_applies_commits_and_advances_exactly_once() {
     let mut host = GameState::new(16, 16);
-    let server = match maybe_start_server("127.0.0.1:0", host.save_json().unwrap()) {
-        Some(server) => server,
-        None => return,
-    };
+    let server = start_server("127.0.0.1:0", host.save_json().unwrap());
     let bind = server.local_addr().to_string();
 
     // Join antes del commit: debe recibir la operación por el log, no en el
     // snapshot con el que entró.
-    let early = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let early = connect_client(&bind);
     let early_welcome = wait_event(&early, Duration::from_secs(2));
     let mut early_state = GameState::new(1, 1);
     apply_session_event(&mut early_state, &early_welcome).unwrap();
@@ -720,10 +712,7 @@ fn snapshot_frontier_applies_commits_and_advances_exactly_once() {
 
     // Join después del commit: el Welcome ya lo contiene y su next_seq forma
     // parte de la misma frontera que el snapshot.
-    let after_commit = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let after_commit = connect_client(&bind);
     let after_commit_welcome = wait_event(&after_commit, Duration::from_secs(2));
     let SessionEvent::Welcome { next_seq, .. } = &after_commit_welcome else {
         panic!("se esperaba Welcome después del commit");
@@ -756,10 +745,7 @@ fn snapshot_frontier_applies_commits_and_advances_exactly_once() {
     assert_eq!(early_state.canonical_hash(), host.canonical_hash());
     assert_eq!(after_commit_state.canonical_hash(), host.canonical_hash());
 
-    let after_advance = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let after_advance = connect_client(&bind);
     let after_advance_welcome = wait_event(&after_advance, Duration::from_secs(2));
     let mut after_advance_state = GameState::new(1, 1);
     apply_session_event(&mut after_advance_state, &after_advance_welcome).unwrap();
@@ -803,16 +789,16 @@ fn snapshot_frontier_applies_commits_and_advances_exactly_once() {
 #[test]
 fn pending_handshake_crossing_advance_frontier_never_replays_it() {
     let mut host = GameState::new(8, 8);
-    let server = match maybe_start_server("127.0.0.1:0", host.save_json().unwrap()) {
-        Some(server) => server,
-        None => return,
-    };
+    let server = start_server("127.0.0.1:0", host.save_json().unwrap());
     let bind = server.local_addr().to_string();
 
     // Reproduce la carrera auditada: TCP ya aceptado, pero Hello todavía no
     // llegó. La barrera confirma que el hilo de listen vio esa conexión antes
     // de cruzar la frontera de simulación.
-    let mut pending = TcpStream::connect(&bind).expect("conecta socket pendiente");
+    let mut pending = mandatory_network(
+        "TcpStream::connect para handshake pendiente",
+        TcpStream::connect(&bind).map_err(NetError::Io),
+    );
     pending
         .set_read_timeout(Some(Duration::from_secs(2)))
         .expect("configura timeout socket pendiente");
@@ -872,17 +858,11 @@ fn pending_handshake_crossing_advance_frontier_never_replays_it() {
 fn client_propose_reaches_host() {
     let host_state = GameState::new(24, 24);
     let snapshot = host_state.save_json().unwrap();
-    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
-        Some(server) => server,
-        None => return,
-    };
+    let server = start_server("127.0.0.1:0", snapshot);
     let bind = server.local_addr().to_string();
     thread::sleep(Duration::from_millis(50));
 
-    let client = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let client = connect_client(&bind);
     let _welcome = wait_event(&client, Duration::from_secs(2));
 
     client
@@ -905,21 +885,12 @@ fn client_propose_reaches_host() {
 fn peers_receive_exclusive_company_identity_and_commit_issuer() {
     let host_state = GameState::new(24, 24);
     let snapshot = host_state.save_json().unwrap();
-    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
-        Some(server) => server,
-        None => return,
-    };
+    let server = start_server("127.0.0.1:0", snapshot);
     let bind = server.local_addr().to_string();
     thread::sleep(Duration::from_millis(50));
 
-    let first = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
-    let second = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let first = connect_client(&bind);
+    let second = connect_client(&bind);
     let _ = wait_event(&first, Duration::from_secs(2));
     let _ = wait_event(&second, Duration::from_secs(2));
     let first_company = first.handle().company_id();
@@ -943,19 +914,13 @@ fn peers_receive_exclusive_company_identity_and_commit_issuer() {
 
 #[test]
 fn company_pool_rejects_overflow_and_reuses_released_slot() {
-    let server =
-        match maybe_start_server("127.0.0.1:0", GameState::new(64, 64).save_json().unwrap()) {
-            Some(server) => server,
-            None => return,
-        };
+    let server = start_server("127.0.0.1:0", GameState::new(64, 64).save_json().unwrap());
     let bind = server.local_addr().to_string();
     let client_capacity = usize::from(MAX_COMPANIES) - 1;
     let mut clients = Vec::with_capacity(client_capacity);
 
     for _ in 0..client_capacity {
-        let Some(client) = maybe_connect_client(&bind) else {
-            return;
-        };
+        let client = connect_client(&bind);
         assert!(matches!(
             wait_event(&client, Duration::from_secs(2)),
             SessionEvent::Welcome { .. }
@@ -977,7 +942,10 @@ fn company_pool_rejects_overflow_and_reuses_released_slot() {
     );
 
     // El wire protocol debe rechazar el peer excedente antes de emitir Welcome.
-    let mut overflow_wire = TcpStream::connect(&bind).expect("conecta peer excedente");
+    let mut overflow_wire = mandatory_network(
+        "TcpStream::connect para peer excedente",
+        TcpStream::connect(&bind).map_err(NetError::Io),
+    );
     overflow_wire
         .set_read_timeout(Some(Duration::from_secs(2)))
         .expect("configura timeout del peer excedente");
@@ -996,10 +964,7 @@ fn company_pool_rejects_overflow_and_reuses_released_slot() {
 
     // El cliente de alto nivel transforma ese rechazo de handshake en una
     // desconexión explícita, en vez de dejarlo esperando un Welcome imposible.
-    let rejected = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let rejected = connect_client(&bind);
     assert!(matches!(
         wait_event(&rejected, Duration::from_secs(2)),
         SessionEvent::Disconnected { reason } if reason.contains("compañías exclusivas")
@@ -1041,10 +1006,7 @@ fn company_pool_rejects_overflow_and_reuses_released_slot() {
             .all(|client| client.handle().company_id() != released_company)
     );
 
-    let replacement = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let replacement = connect_client(&bind);
     assert!(matches!(
         wait_event(&replacement, Duration::from_secs(2)),
         SessionEvent::Welcome { .. }
@@ -1057,17 +1019,11 @@ fn company_pool_rejects_overflow_and_reuses_released_slot() {
 fn invalid_client_propose_is_rejected_before_commit() {
     let host_state = GameState::new(24, 24);
     let snapshot = host_state.save_json().unwrap();
-    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
-        Some(server) => server,
-        None => return,
-    };
+    let server = start_server("127.0.0.1:0", snapshot);
     let bind = server.local_addr().to_string();
     thread::sleep(Duration::from_millis(50));
 
-    let client = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let client = connect_client(&bind);
     let _welcome = wait_event(&client, Duration::from_secs(2));
 
     client
@@ -1095,17 +1051,17 @@ fn invalid_client_propose_is_rejected_before_commit() {
 fn server_rejects_a_spoofed_company_before_commit() {
     let host_state = GameState::new(24, 24);
     let snapshot = host_state.save_json().unwrap();
-    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
-        Some(server) => server,
-        None => return,
-    };
+    let server = start_server("127.0.0.1:0", snapshot);
     let bind = server.local_addr().to_string();
     thread::sleep(Duration::from_millis(50));
 
     // Un peer que saltee `ClientSessionHandle` no puede elegir el issuer del
     // commit: el servidor asigna la compañía durante el handshake y comprueba
     // el campo de `Propose` antes de reservar una secuencia.
-    let mut peer = TcpStream::connect(&bind).unwrap();
+    let mut peer = mandatory_network(
+        "TcpStream::connect para compañía falsificada",
+        TcpStream::connect(&bind).map_err(NetError::Io),
+    );
     write_message(
         &mut peer,
         &NetMessage::Hello {
@@ -1161,22 +1117,13 @@ fn server_rejects_a_spoofed_company_before_commit() {
 fn client_desync_report_reaches_host_and_peers() {
     let host_state = GameState::new(24, 24);
     let snapshot = host_state.save_json().unwrap();
-    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
-        Some(server) => server,
-        None => return,
-    };
+    let server = start_server("127.0.0.1:0", snapshot);
     let bind = server.local_addr().to_string();
     thread::sleep(Duration::from_millis(50));
 
-    let reporter = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let reporter = connect_client(&bind);
     let _welcome = wait_event(&reporter, Duration::from_secs(2));
-    let peer = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let peer = connect_client(&bind);
     let _welcome = wait_event(&peer, Duration::from_secs(2));
 
     reporter.report_desync(37, 0x10, 0x2a).unwrap();

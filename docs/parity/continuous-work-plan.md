@@ -96,7 +96,9 @@ V1 y sus dependencias están en [acceptance-v1.md](acceptance-v1.md#contratos-pe
 El [manifiesto](active-backlog.json) se contrastó con GitHub al preparar este
 corte. Orden para implementar una tarea a la vez:
 
-1. Gates que impiden falso verde: visual **#584**, sockets **#585**.
+1. Gates que impedían falso verde: visual **#584** y sockets **#585** están
+   implementados; cada commit conserva su evidencia local y debe obtener CI
+   remota verde antes del cierre.
    El agregador **#603** puede prepararse con reportes sintéticos; su aceptación
    global depende de los contratos reales. Finalizar **#582/#583** con la
    evidencia restante, sin duplicar el fix local.
@@ -118,8 +120,9 @@ certificar otro candidato. No se crean issues duplicados de esas pruebas.
 - Una tarea en implementación a la vez. Cerrar al satisfacer su aceptación
   original, con commit y evidencia; no ampliar su contrato después.
 - Los cuatro P0 de la alpha anterior se recuperaron; los gates V1 #584/#585
-  todavía están pendientes. No llamar «CI verde» a un chequeo de binario si
-  `--all-targets`, fuzz o el workflow siguen fallando o no se ejecutaron.
+  separan ahora el falso éxito local, pero no se cierran sin CI remota verde.
+  No llamar «CI verde» a un chequeo de binario si `--all-targets`, fuzz o el
+  workflow siguen fallando o no se ejecutaron.
 - Una tarea debe poder revisarse como un PR. Si aparecen dos causas
   independientes, dividir antes de continuar; el nuevo issue debe ser necesario
   para esta entrega, con reproducción y criterio de cierre propios.

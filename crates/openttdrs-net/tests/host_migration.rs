@@ -11,6 +11,16 @@ use openttdrs_net::{
     ClientSession, ListenServer, NetError, SessionEvent, apply_session_event, elect_new_host,
 };
 
+fn mandatory_network<T>(operation: &str, result: Result<T, NetError>) -> T {
+    match result {
+        Ok(value) => value,
+        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => {
+            panic!("red TCP obligatoria: {operation} recibió PermissionDenied ({error})")
+        }
+        Err(error) => panic!("red TCP obligatoria: {operation} falló ({error})"),
+    }
+}
+
 fn wait_event(client: &ClientSession, timeout: Duration) -> SessionEvent {
     let start = Instant::now();
     loop {
@@ -53,20 +63,12 @@ fn drain_until_disconnected(client: &ClientSession, timeout: Duration) {
     }
 }
 
-fn maybe_start_server(bind: &str, snapshot: String) -> Option<ListenServer> {
-    match ListenServer::start(bind, snapshot) {
-        Ok(server) => Some(server),
-        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => None,
-        Err(error) => panic!("ListenServer::start falló: {error}"),
-    }
+fn start_server(bind: &str, snapshot: String) -> ListenServer {
+    mandatory_network("ListenServer::start", ListenServer::start(bind, snapshot))
 }
 
-fn maybe_connect_client(bind: &str) -> Option<ClientSession> {
-    match ClientSession::connect(bind) {
-        Ok(client) => Some(client),
-        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => None,
-        Err(error) => panic!("ClientSession::connect falló: {error}"),
-    }
+fn connect_client(bind: &str) -> ClientSession {
+    mandatory_network("ClientSession::connect", ClientSession::connect(bind))
 }
 
 #[test]
@@ -74,22 +76,13 @@ fn listen_server_failover_promotes_min_peer_and_preserves_hash() {
     let mut host = GameState::new(32, 32);
     let snapshot = host.save_json().unwrap();
 
-    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
-        Some(server) => server,
-        None => return,
-    };
+    let server = start_server("127.0.0.1:0", snapshot);
     let bind_a = server.local_addr().to_string();
     thread::sleep(Duration::from_millis(40));
 
-    let client_lo = match maybe_connect_client(&bind_a) {
-        Some(client) => client,
-        None => return,
-    };
+    let client_lo = connect_client(&bind_a);
     let (mut state_lo, _, peer_lo) = wait_welcome(&client_lo, Duration::from_secs(2));
-    let client_hi = match maybe_connect_client(&bind_a) {
-        Some(client) => client,
-        None => return,
-    };
+    let client_hi = connect_client(&bind_a);
     let (mut state_hi, _, peer_hi) = wait_welcome(&client_hi, Duration::from_secs(2));
 
     assert_ne!(peer_lo, peer_hi);
@@ -126,20 +119,15 @@ fn listen_server_failover_promotes_min_peer_and_preserves_hash() {
     drop(client_hi);
 
     // Nuevo listen-server; el peer ganador actúa como host local (sin ClientSession).
-    let new_server = match ListenServer::start_with_seq("127.0.0.1:0", failover_snapshot, next_seq)
-    {
-        Ok(server) => server,
-        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => return,
-        Err(error) => panic!("ListenServer::start_with_seq falló: {error}"),
-    };
+    let new_server = mandatory_network(
+        "ListenServer::start_with_seq durante failover",
+        ListenServer::start_with_seq("127.0.0.1:0", failover_snapshot, next_seq),
+    );
     let bind_b = new_server.local_addr().to_string();
     thread::sleep(Duration::from_millis(40));
 
     let mut new_host_state = host;
-    let rejoiner = match maybe_connect_client(&bind_b) {
-        Some(client) => client,
-        None => return,
-    };
+    let rejoiner = connect_client(&bind_b);
     let (mut rejoiner_state, welcome_seq, _) = wait_welcome(&rejoiner, Duration::from_secs(2));
     assert_eq!(welcome_seq, next_seq);
     assert_eq!(
@@ -172,17 +160,11 @@ fn host_announce_reaches_connected_clients_without_manual_orchestration() {
     let host = GameState::new(16, 16);
     let snapshot = host.save_json().unwrap();
 
-    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
-        Some(server) => server,
-        None => return,
-    };
+    let server = start_server("127.0.0.1:0", snapshot);
     let bind = server.local_addr().to_string();
     thread::sleep(Duration::from_millis(40));
 
-    let client = match maybe_connect_client(&bind) {
-        Some(client) => client,
-        None => return,
-    };
+    let client = connect_client(&bind);
     let (_, next_seq, peer_id) = wait_welcome(&client, Duration::from_secs(2));
 
     let announce = format!("127.0.0.1:{}", server.local_addr().port().saturating_add(1));

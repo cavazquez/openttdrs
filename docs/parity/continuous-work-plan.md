@@ -114,7 +114,7 @@ corte. Orden para implementar una tarea a la vez:
    certificado localmente en `1f170b07` (tres hashes por motor, presupuesto y
    cinco diagnósticos en [la evidencia Kale](raster-v1-kale.md)); espera CI
    remota vigente. Órdenes **#590** quedó certificada localmente en
-   `72d906d8` ([ocho perfiles y presupuesto fijo](orders-v1.md)); sigue editor
+   `c4251e4c` ([ocho perfiles y presupuesto fijo](orders-v1.md)); sigue editor
    **#600**.
 5. Paquetes Windows **#601** y macOS **#602**. El [gate nativo ES/EN](package-native-graphical-v1.md)
    ya preserva paquete, SHA, logs y PNG desde cwd/perfil aislados; falta su

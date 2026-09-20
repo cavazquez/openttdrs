@@ -2,7 +2,7 @@
   "artifacts": {
     "candidate": {
       "path": "docs/parity/screenshots/orders-v1/OrdersEn/1280x720-1x/candidate.png",
-      "sha256": "a497e8cb6ca30bbc707bf1f55bcfeb5c5689f4aafcc7937fc67afb0717651f4c"
+      "sha256": "d5385857de08ec9e452a6eefd40db779549189f26abbdc0cc6d8e4f81aa590b6"
     },
     "diff": {
       "path": "docs/parity/screenshots/orders-v1/OrdersEn/1280x720-1x/diff.png",
@@ -10,7 +10,7 @@
     },
     "reference": {
       "path": "docs/parity/screenshots/orders-v1/OrdersEn/1280x720-1x/reference.png",
-      "sha256": "a497e8cb6ca30bbc707bf1f55bcfeb5c5689f4aafcc7937fc67afb0717651f4c"
+      "sha256": "d5385857de08ec9e452a6eefd40db779549189f26abbdc0cc6d8e4f81aa590b6"
     }
   },
   "assessment": {
@@ -18,17 +18,18 @@
     "within_tolerance": true
   },
   "baseline_provenance": {
-    "baseline_sha": "72d906d8ed53532ba33c7c6fbe4eaf39fbf946ae",
-    "capture_command": "bash scripts/capture_orders_v1_certification.sh baseline",
-    "captured_at": "2026-09-20T10:03:16Z",
+    "baseline_sha": "c4251e4c59b6a8bfad02cc8da248bb232871282a",
+    "capture_command": "OPENTTDRS_ORDERS_V1_ARTIFACT_ROOT=/tmp/openttdrs-orders-v1-c4251e4c bash scripts/capture_orders_v1_certification.sh baseline",
+    "captured_at": "2026-09-20T12:17:04Z",
     "source": "runtime"
   },
   "candidate_provenance": {
-    "candidate_png_sha256": "a497e8cb6ca30bbc707bf1f55bcfeb5c5689f4aafcc7937fc67afb0717651f4c",
-    "candidate_sha": "72d906d8ed53532ba33c7c6fbe4eaf39fbf946ae",
-    "capture_command": "bash scripts/capture_orders_v1_certification.sh candidate",
-    "capture_id": "438de9e528d253483bdb116b887b1af266b76cd7baa4bdc63d9adf434a2ca63b",
-    "captured_at": "2026-09-20T10:03:54Z",
+    "candidate_png_sha256": "d5385857de08ec9e452a6eefd40db779549189f26abbdc0cc6d8e4f81aa590b6",
+    "candidate_sha": "c4251e4c59b6a8bfad02cc8da248bb232871282a",
+    "capture_command": "OPENTTDRS_ORDERS_V1_ARTIFACT_ROOT=/tmp/openttdrs-orders-v1-c4251e4c bash scripts/capture_orders_v1_certification.sh candidate",
+    "capture_id": "5408ab25e017e47563c1c1bcd7627117a4f2b3df71f71392c8717f5b6918cfd6",
+    "captured_at": "2026-09-20T12:17:44Z",
+    "control_assertion_command": "cargo test --locked --offline -p openttdrs-client v1_orders_panel_exposes_every_certified_control_as_visible_button -- --nocapture",
     "control_assertions": {
       "add-conditional-above": {
         "actionable": true,

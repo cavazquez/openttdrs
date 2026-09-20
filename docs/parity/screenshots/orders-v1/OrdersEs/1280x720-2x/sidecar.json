@@ -18,17 +18,18 @@
     "within_tolerance": true
   },
   "baseline_provenance": {
-    "baseline_sha": "72d906d8ed53532ba33c7c6fbe4eaf39fbf946ae",
-    "capture_command": "bash scripts/capture_orders_v1_certification.sh baseline",
-    "captured_at": "2026-09-20T10:03:16Z",
+    "baseline_sha": "c4251e4c59b6a8bfad02cc8da248bb232871282a",
+    "capture_command": "OPENTTDRS_ORDERS_V1_ARTIFACT_ROOT=/tmp/openttdrs-orders-v1-c4251e4c bash scripts/capture_orders_v1_certification.sh baseline",
+    "captured_at": "2026-09-20T12:17:04Z",
     "source": "runtime"
   },
   "candidate_provenance": {
     "candidate_png_sha256": "454e4c94dbf371e1842cff48b5f2d4364acfdda55af1d036b933359049ccd83c",
-    "candidate_sha": "72d906d8ed53532ba33c7c6fbe4eaf39fbf946ae",
-    "capture_command": "bash scripts/capture_orders_v1_certification.sh candidate",
-    "capture_id": "aea51acecf133a9a2d426aadcee1b5fdde03bb7c00598b53aaf07ca92eaf3353",
-    "captured_at": "2026-09-20T10:03:54Z",
+    "candidate_sha": "c4251e4c59b6a8bfad02cc8da248bb232871282a",
+    "capture_command": "OPENTTDRS_ORDERS_V1_ARTIFACT_ROOT=/tmp/openttdrs-orders-v1-c4251e4c bash scripts/capture_orders_v1_certification.sh candidate",
+    "capture_id": "e095ae6f94d74b99348a69f704d13d9a73975a7d2a103645cdce736376ccedd8",
+    "captured_at": "2026-09-20T12:17:44Z",
+    "control_assertion_command": "cargo test --locked --offline -p openttdrs-client v1_orders_panel_exposes_every_certified_control_as_visible_button -- --nocapture",
     "control_assertions": {
       "add-conditional-above": {
         "actionable": true,

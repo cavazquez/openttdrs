@@ -105,7 +105,7 @@ ya separa roles, exige SHA/procedencia fresca y aplica el presupuesto fijo a
 manifiestos `client_regression`; [#590](https://github.com/cavazquez/openttdrs/issues/590)
 aporta las ocho capturas runtime de Órdenes en
 [`orders-v1-regression.json`](screenshots/orders-v1-regression.json), ligadas
-al SHA `72d906d8ed53532ba33c7c6fbe4eaf39fbf946ae`. La categoría
+al SHA `c4251e4c59b6a8bfad02cc8da248bb232871282a`. La categoría
 `client_regression` pasa con sus sidecars y presupuesto fijo; no se exige
 clonar la apariencia de OpenTTD.
 

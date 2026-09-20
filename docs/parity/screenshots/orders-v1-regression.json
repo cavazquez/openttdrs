@@ -2,7 +2,7 @@
   "schema_version": 2,
   "comparison_role": "client_regression",
   "description": "Certificación V1 propia de la ventana Órdenes (#590). Compara dos ejecuciones runtime de la demo vial integrada; no afirma similitud visual con OpenTTD.",
-  "certified_candidate_sha": "72d906d8ed53532ba33c7c6fbe4eaf39fbf946ae",
+  "certified_candidate_sha": "c4251e4c59b6a8bfad02cc8da248bb232871282a",
   "windows": [
     {
       "id": "OrdersEs",
@@ -44,9 +44,9 @@
         "cycle-conditional"
       ],
       "baseline_provenance": {
-        "baseline_sha": "72d906d8ed53532ba33c7c6fbe4eaf39fbf946ae",
-        "captured_at": "2026-09-20T10:03:16Z",
-        "capture_command": "bash scripts/capture_orders_v1_certification.sh baseline",
+        "baseline_sha": "c4251e4c59b6a8bfad02cc8da248bb232871282a",
+        "captured_at": "2026-09-20T12:17:04Z",
+        "capture_command": "OPENTTDRS_ORDERS_V1_ARTIFACT_ROOT=/tmp/openttdrs-orders-v1-c4251e4c bash scripts/capture_orders_v1_certification.sh baseline",
         "source": "runtime"
       }
     },
@@ -90,9 +90,9 @@
         "cycle-conditional"
       ],
       "baseline_provenance": {
-        "baseline_sha": "72d906d8ed53532ba33c7c6fbe4eaf39fbf946ae",
-        "captured_at": "2026-09-20T10:03:16Z",
-        "capture_command": "bash scripts/capture_orders_v1_certification.sh baseline",
+        "baseline_sha": "c4251e4c59b6a8bfad02cc8da248bb232871282a",
+        "captured_at": "2026-09-20T12:17:04Z",
+        "capture_command": "OPENTTDRS_ORDERS_V1_ARTIFACT_ROOT=/tmp/openttdrs-orders-v1-c4251e4c bash scripts/capture_orders_v1_certification.sh baseline",
         "source": "runtime"
       }
     }

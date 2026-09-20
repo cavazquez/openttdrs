@@ -43,12 +43,14 @@ ventanas en el juego no cambia. El presupuesto V1 es exactamente:
 - píxeles sobre ese delta: hasta `0,5 %` dentro de cada ROI;
 - media absoluta normalizada por canal: hasta `1/255`.
 
-En el SHA `72d906d8ed53532ba33c7c6fbe4eaf39fbf946ae`, las ocho comparaciones
+En el SHA `c4251e4c59b6a8bfad02cc8da248bb232871282a`, las ocho comparaciones
 dan `0` píxeles sobre el umbral y media `0`. Los sidecars enlazan cada PNG a
 ese SHA, a su comando de captura y a las 19 aserciones `present` +
 `actionable`: lista, horario, carga/descarga, non-stop, andén, depósito,
 refit, reordenamiento, salto, borrado, destino, órdenes compartidas y las tres
-acciones condicionales.
+acciones condicionales. La aserción de inventario se ejecuta con
+`v1_orders_panel_exposes_every_certified_control_as_visible_button`, que exige
+que cada una exista como `Button` visible en el árbol ECS.
 
 Para regenerar y validar la evidencia localmente:
 

@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::cargo::CargoType;
+use crate::company::CargoDeliveryLedger;
 use crate::game_state::{GameState, company_net_value};
 use crate::news::{
     NewsDisplayMode, NewsItem, NewsReference, NewsType, add_news_item, calendar_day_index,
@@ -25,7 +26,7 @@ pub enum GsGoalKind {
     CompanyValue {
         min: i64,
     },
-    /// Progreso = entregas totales de la compañía activa (el cargo es etiquetado).
+    /// Progreso = unidades finales del cargo indicado de la compañía activa.
     CargoDelivered {
         cargo: CargoType,
         min: u64,
@@ -82,7 +83,7 @@ pub fn seed_gs_demo(state: &mut GameState) {
             },
             GsGoal {
                 id: 2,
-                title: "Entregá 5 cargas (cualquier tipo)".into(),
+                title: "Entregá 5 unidades de carbón".into(),
                 progress_num: 0,
                 progress_den: 5,
                 completed: false,
@@ -141,7 +142,7 @@ pub fn tick_gs(state: &mut GameState) {
 
 fn goal_progress_for_company(
     net: i64,
-    deliveries: u64,
+    deliveries: &CargoDeliveryLedger,
     kind: GsGoalKind,
     calendar_year: u32,
 ) -> (u64, u64, bool) {
@@ -151,9 +152,10 @@ fn goal_progress_for_company(
             let num = u64::try_from(net.max(0)).unwrap_or(0).min(den);
             (num, den, net >= min)
         }
-        GsGoalKind::CargoDelivered { min, .. } => {
+        GsGoalKind::CargoDelivered { cargo, min } => {
+            let delivered = deliveries.units_for(cargo);
             let den = min.max(1);
-            (deliveries.min(den), den, deliveries >= min)
+            (delivered.min(den), den, delivered >= min)
         }
         GsGoalKind::ReachYear { year: target } => {
             let den = u64::from(target.max(1));
@@ -170,10 +172,12 @@ fn refresh_gs_progress(state: &mut GameState) {
         .get(state.active_company.index())
         .or_else(|| state.companies.first());
     let net = company.map_or(0, |c| company_net_value(c.economy.money, c.economy.loan));
-    let deliveries = company.map_or(0, |c| c.cargo_deliveries);
+    let deliveries = company.map_or_else(CargoDeliveryLedger::default, |c| {
+        c.cargo_units_delivered_by_type.clone()
+    });
 
     for goal in &mut state.gs.goals {
-        let (num, den, done) = goal_progress_for_company(net, deliveries, goal.kind, year);
+        let (num, den, done) = goal_progress_for_company(net, &deliveries, goal.kind, year);
         goal.progress_num = num;
         goal.progress_den = den;
         if done {
@@ -188,7 +192,7 @@ fn refresh_gs_progress(state: &mut GameState) {
 fn emit_rival_goal_news(state: &mut GameState) {
     let active = state.active_company.0;
     let (year, _) = calendar_year_day(calendar_day_index(state.tick));
-    let snapshots: Vec<(u8, String, i64, u64)> = state
+    let snapshots: Vec<(u8, String, i64, CargoDeliveryLedger)> = state
         .companies
         .iter()
         .filter(|c| c.id.0 != active)
@@ -197,7 +201,7 @@ fn emit_rival_goal_news(state: &mut GameState) {
                 c.id.0,
                 c.name.clone(),
                 company_net_value(c.economy.money, c.economy.loan),
-                c.cargo_deliveries,
+                c.cargo_units_delivered_by_type.clone(),
             )
         })
         .collect();
@@ -214,7 +218,7 @@ fn emit_rival_goal_news(state: &mut GameState) {
             if matches!(kind, GsGoalKind::ReachYear { .. }) {
                 continue;
             }
-            let (_, _, done) = goal_progress_for_company(*net, *deliveries, *kind, year);
+            let (_, _, done) = goal_progress_for_company(*net, deliveries, *kind, year);
             if !done {
                 continue;
             }
@@ -296,7 +300,8 @@ mod tests {
         if let Some(c) = state.companies.first_mut() {
             c.economy.money = 200_000;
             c.economy.loan = 0;
-            c.cargo_deliveries = 10;
+            c.cargo_units_delivered_by_type
+                .record_final_delivery(CargoType::Coal, 10);
         }
         tick_gs(&mut state);
         assert!(state.gs.goals.iter().all(|g| g.completed));
@@ -411,5 +416,80 @@ mod tests {
             "el progreso del jugador activo no usa copy de rival"
         );
         assert!(state.gs.goals.iter().any(|g| g.id == 1 && g.completed));
+    }
+
+    #[test]
+    fn cargo_goal_counts_only_the_requested_cargo_of_the_active_company() {
+        let mut state = GameState::new(16, 16);
+        state.ensure_rival_transcargo();
+        state.gs = GsState {
+            enabled: true,
+            goals: vec![GsGoal {
+                id: 8,
+                title: "Entregá 10 unidades de carbón".into(),
+                progress_num: 0,
+                progress_den: 10,
+                completed: false,
+                kind: GsGoalKind::CargoDelivered {
+                    cargo: CargoType::Coal,
+                    min: 10,
+                },
+            }],
+            story_pages: Vec::new(),
+            story_index: 0,
+            all_complete: false,
+            victory_news_sent: false,
+            rival_goal_news_sent: Vec::new(),
+        };
+
+        let active = state.active_company.index();
+        let rival = state
+            .companies
+            .iter()
+            .position(|company| company.id != state.active_company)
+            .expect("rival");
+        // El agregado legacy sigue siendo 10, pero no identifica el cargo.
+        // Diez pasajeros y diez toneladas de carbón de otra compañía no
+        // pueden avanzar el objetivo Coal del jugador.
+        state.companies[active].cargo_deliveries = 10;
+        state.companies[active]
+            .cargo_units_delivered_by_type
+            .record_final_delivery(CargoType::Passengers, 10);
+        state.companies[rival]
+            .cargo_units_delivered_by_type
+            .record_final_delivery(CargoType::Coal, 10);
+        tick_gs(&mut state);
+        let goal = &state.gs.goals[0];
+        assert_eq!(goal.progress_num, 0);
+        assert!(!goal.completed);
+
+        state.companies[active]
+            .cargo_units_delivered_by_type
+            .record_final_delivery(CargoType::Coal, 5);
+        tick_gs(&mut state);
+        assert_eq!(state.gs.goals[0].progress_num, 5);
+        assert!(!state.gs.goals[0].completed);
+
+        let mut five_more_coal = state.clone();
+        five_more_coal.companies[active]
+            .cargo_units_delivered_by_type
+            .record_final_delivery(CargoType::Coal, 5);
+        tick_gs(&mut five_more_coal);
+        assert_eq!(five_more_coal.gs.goals[0].progress_num, 10);
+        assert!(five_more_coal.gs.goals[0].completed);
+
+        state.companies[active]
+            .cargo_units_delivered_by_type
+            .record_final_delivery(CargoType::Coal, 4);
+        tick_gs(&mut state);
+        assert_eq!(state.gs.goals[0].progress_num, 9);
+        assert!(!state.gs.goals[0].completed);
+
+        state.companies[active]
+            .cargo_units_delivered_by_type
+            .record_final_delivery(CargoType::Coal, 1);
+        tick_gs(&mut state);
+        assert_eq!(state.gs.goals[0].progress_num, 10);
+        assert!(state.gs.goals[0].completed);
     }
 }

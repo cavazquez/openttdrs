@@ -102,9 +102,9 @@ corte. Orden para implementar una tarea a la vez:
    El agregador **#603** puede prepararse con reportes sintéticos; su aceptación
    global depende de los contratos reales. Finalizar **#582/#583** con la
    evidencia restante, sin duplicar el fix local.
-2. Contratos de datos: pagos **#586**, transferencia **#587** y ORDL **#588**
-   están implementados y esperan CI remota vigente antes del cierre; ownership
-   **#591** y filtro de cargo GS **#598** siguen el orden indicado.
+2. Contratos de datos: pagos **#586**, transferencia **#587**, ORDL **#588** y
+   filtro de cargo GS **#598** están implementados y esperan CI remota vigente
+   antes del cierre; ownership **#591** sigue el orden indicado.
 3. Recorridos: barco **#593**, avión **#594**, late join **#595** (después de
    #585), NewGRF/JSON **#592** y persistencia GS **#599** (después de #598).
 4. Presentación y herramientas: raster Normal **#589** está implementado y

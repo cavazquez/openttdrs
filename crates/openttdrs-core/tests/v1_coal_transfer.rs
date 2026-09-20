@@ -421,6 +421,13 @@ fn play_transfer_route() -> CoalTransferReport {
         waiting.saturating_add(onboard).saturating_add(delivered),
         "balance V1 de carbón: producido + stock inicial = esperando + a bordo + entrega final"
     );
+    assert_eq!(
+        state.companies[state.active_company.index()]
+            .cargo_units_delivered_by_type
+            .units_for(CargoType::Coal),
+        delivered,
+        "la entrega física final debe acreditar carbón, no un agregado sin tipo"
+    );
 
     CoalTransferReport {
         ticks_to_final_delivery: final_tick,

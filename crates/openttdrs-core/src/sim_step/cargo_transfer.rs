@@ -775,6 +775,11 @@ fn try_unload_aircraft_mail_packets(
                     None,
                 );
                 delivered_units = delivered_units.saturating_add(u32::from(packet.count));
+                if let Some(company) = state.companies.get_mut(vehicle_owner.index()) {
+                    company
+                        .cargo_units_delivered_by_type
+                        .record_final_delivery(packet.cargo, u32::from(packet.count));
+                }
                 let gross_part = part;
                 let mut deliverer_part = part;
                 if !packet.feeder_paid
@@ -1202,6 +1207,11 @@ pub(super) fn unload_vehicles(
                     if final_delivery {
                         physically_delivered_units =
                             physically_delivered_units.saturating_add(u32::from(packet.count));
+                        if let Some(company) = state.companies.get_mut(vehicle_owner.index()) {
+                            company
+                                .cargo_units_delivered_by_type
+                                .record_final_delivery(packet.cargo, u32::from(packet.count));
+                        }
                     } else {
                         // Una parada de freight sin receptor final conserva la
                         // carga descargada. No debe desaparecer por confundir
@@ -3356,6 +3366,12 @@ mod tests {
         assert!(state.vehicles[0].aircraft_mail_packets.is_empty());
         assert_eq!(state.vehicles[0].aircraft_mail_cargo, Some(0));
         assert_eq!(state.stats.cargo_units_delivered, 2);
+        assert_eq!(
+            state.companies[0]
+                .cargo_units_delivered_by_type
+                .units_for(CargoType::Mail),
+            2
+        );
     }
 
     #[test]

@@ -1590,6 +1590,9 @@ impl GameState {
             if c.cargo_deliveries == 0 {
                 c.cargo_deliveries = self.stats.cargo_deliveries;
             }
+            // `stats.cargo_deliveries` sólo cuenta eventos legacy. No contiene
+            // el tipo ni las unidades entregadas, así que no puede migrarse al
+            // ledger GS-lite por cargo sin inventar datos (V1-GSCOUNT).
         }
     }
 

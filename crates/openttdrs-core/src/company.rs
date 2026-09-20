@@ -5,7 +5,9 @@
 //! de verdad multi-compañía; `sync_company_mirrors` mantiene ambos alineados.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
+use crate::cargo::CargoType;
 use crate::game_state::CompanyEconomy;
 use crate::map::TileCoord;
 use crate::map::TileKind;
@@ -103,6 +105,39 @@ pub const DEFAULT_COMPANY_LANDSCAPING_LIMIT: u32 = 4096 << 16;
 
 /// Entradas de `PLYR.yearly_expenses`: tres años por trece clases de gasto.
 pub const COMPANY_YEARLY_EXPENSES_COUNT: usize = 3 * 13;
+
+/// Unidades de carga entregadas finalmente por una compañía, separadas por
+/// `CargoType`.
+///
+/// El agregado histórico `Company::cargo_deliveries` cuenta eventos y no
+/// identifica el cargo. Por eso el ledger inicia vacío al leer JSON anterior a
+/// V1-GSCOUNT: no es seguro atribuir ese total heredado a carbón ni a ningún
+/// otro tipo.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct CargoDeliveryLedger {
+    #[serde(default)]
+    units_by_cargo_id: BTreeMap<u8, u64>,
+}
+
+impl CargoDeliveryLedger {
+    /// Registra unidades que una compañía entregó a un receptor final.
+    pub fn record_final_delivery(&mut self, cargo: CargoType, units: u32) {
+        if units == 0 {
+            return;
+        }
+        let total = self.units_by_cargo_id.entry(cargo.cargo_id()).or_default();
+        *total = total.saturating_add(u64::from(units));
+    }
+
+    /// Unidades finales acreditadas para el tipo de carga indicado.
+    #[must_use]
+    pub fn units_for(&self, cargo: CargoType) -> u64 {
+        self.units_by_cargo_id
+            .get(&cargo.cargo_id())
+            .copied()
+            .unwrap_or(0)
+    }
+}
 
 /// Escribe el owner de infraestructura en los cinco bits bajos de `m1`.
 ///
@@ -280,6 +315,12 @@ pub struct Company {
     /// Entregas de carga acumuladas.
     #[serde(default)]
     pub cargo_deliveries: u64,
+    /// Ledger persistente de unidades finales por tipo para objetivos GS-lite.
+    ///
+    /// La ausencia del campo en JSON heredado migra explícitamente a vacío;
+    /// `cargo_deliveries` no puede reconstruir su distribución por tipo.
+    #[serde(default)]
+    pub cargo_units_delivered_by_type: CargoDeliveryLedger,
     /// Series mensuales para gráficos (Income / Operating Profit / Value).
     #[serde(default)]
     pub economy_history: crate::game_state::EconomyHistory,
@@ -439,6 +480,7 @@ impl Company {
             cargo_income_earned: 0,
             vehicle_running_costs: 0,
             cargo_deliveries: 0,
+            cargo_units_delivered_by_type: CargoDeliveryLedger::default(),
             economy_history: crate::game_state::EconomyHistory::default(),
             quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory::default(),
             bankruptcy_months: 0,
@@ -485,6 +527,7 @@ impl Company {
             cargo_income_earned: 0,
             vehicle_running_costs: 0,
             cargo_deliveries: 0,
+            cargo_units_delivered_by_type: CargoDeliveryLedger::default(),
             economy_history: crate::game_state::EconomyHistory::default(),
             quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory::default(),
             bankruptcy_months: 0,
@@ -531,6 +574,7 @@ impl Company {
             cargo_income_earned: 0,
             vehicle_running_costs: 0,
             cargo_deliveries: 0,
+            cargo_units_delivered_by_type: CargoDeliveryLedger::default(),
             economy_history: crate::game_state::EconomyHistory::default(),
             quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory::default(),
             bankruptcy_months: 0,
@@ -907,6 +951,32 @@ mod tests {
         let restored_disabled: Company =
             serde_json::from_value(serde_json::to_value(disabled).unwrap()).unwrap();
         assert_eq!(restored_disabled.servint_ships, 0);
+    }
+
+    #[test]
+    fn legacy_delivery_total_does_not_seed_the_cargo_ledger() {
+        let company = Company::player(CompanyEconomy::default(), 0);
+        let mut encoded = serde_json::to_value(&company).unwrap();
+        let object = encoded.as_object_mut().unwrap();
+        object.remove("cargo_units_delivered_by_type");
+        object.insert("cargo_deliveries".into(), serde_json::Value::from(10_u64));
+
+        let restored: Company = serde_json::from_value(encoded).unwrap();
+        assert_eq!(restored.cargo_deliveries, 10);
+        assert_eq!(
+            restored
+                .cargo_units_delivered_by_type
+                .units_for(CargoType::Coal),
+            0,
+            "el agregado legacy no revela cuántas unidades eran carbón"
+        );
+        assert_eq!(
+            restored
+                .cargo_units_delivered_by_type
+                .units_for(CargoType::Passengers),
+            0,
+            "el agregado legacy tampoco puede atribuirse a pasajeros"
+        );
     }
 
     #[test]

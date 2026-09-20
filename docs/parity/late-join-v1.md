@@ -43,8 +43,11 @@ dos issuers, compañías exclusivas y slots materializados en los tres estados.
 El transporte no se simula: `PermissionDenied` al crear listener o conectar
 cliente produce `panic`. El plazo global de la certificación es 120 s; los
 sondeos loopback usan 1 ms sólo para acelerar la entrega local, sin ampliar
-ese límite. Al final se envía un `HashCheck` real del protocolo además de las
-comparaciones por tick.
+ese límite. En la ejecución `default` de nextest que consume CI, el contrato
+reserva todos los slots: así la cobertura no lo hace competir con otras
+simulaciones y el presupuesto mide la sesión TCP, no la contención ajena. Al
+final se envía un `HashCheck` real del protocolo además de las comparaciones
+por tick.
 
 La salida emite un JSON `V1-NET late join report` con `source_sha`, ticks
 solicitados/observados, clientes, tick del join, log de comandos, primer

@@ -2,6 +2,15 @@
 retries = 0
 test-threads = "num-cpus"
 
+# V1-NET ejecuta tres simulaciones completas sobre sockets TCP reales. Reservar
+# todos los slots evita que la instrumentación de cobertura lo haga competir
+# con benchmarks/simulaciones ajenas: conserva sus 2.000 AdvanceTicks(1) y el
+# plazo global estricto de 120 s del contrato. GitHub invoca el perfil
+# `default` de nextest aunque compile con el perfil Cargo `ci`.
+[[profile.default.overrides]]
+filter = 'binary_id(openttdrs-net::v1_late_join) and test(/^v1_late_join_two_clients_stay_lockstep_for_2000_ticks$/)'
+threads-required = "num-test-threads"
+
 # Paridad con CI (.github/workflows/ci.yml, scripts/check.sh ci).
 [profile.ci]
 retries = 0

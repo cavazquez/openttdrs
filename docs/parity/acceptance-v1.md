@@ -133,7 +133,7 @@ pendientes. Las dependencias por ID V1 resuelven a los enlaces de esta lista.
 - **V1-UI — [#590](https://github.com/cavazquez/openttdrs/issues/590):** edición de órdenes, 8 perfiles; depende de V1-VIS.
 - **V1-OWN — [#591](https://github.com/cavazquez/openttdrs/issues/591):** compra, start/stop, órdenes y demolición ajenas: [4 rechazos atómicos, 4 controles propios e issuer inválido](ownership-v1.md) con el API productivo de red; implementado, a la espera de CI remota vigente antes del cierre.
 - **V1-GRF — [#592](https://github.com/cavazquez/openttdrs/issues/592):** un camión CB36 reatachado al catálogo tras JSON, 2.000 ticks, con bytes GRF V2 propios, GRFID/versión/parámetros/SHA y `7C` documentados en [su evidencia](newgrf-cb36-v1.md).
-- **V1-SHIP — [#593](https://github.com/cavazquez/openttdrs/issues/593):** primera entrega marítima con boya, sin locks/canales.
+- **V1-SHIP — [#593](https://github.com/cavazquez/openttdrs/issues/593):** primera entrega marítima de carbón con boya, dos corridas con el mismo hash y conservación de carga ([evidencia](ship-delivery-v1.md)); sin locks/canales y a la espera de CI remota vigente antes del cierre.
 - **V1-AIR — [#594](https://github.com/cavazquez/openttdrs/issues/594):** un avión vanilla entre dos aeropuertos Country, primera entrega pagada.
 - **V1-NET — [#595](https://github.com/cavazquez/openttdrs/issues/595):** dedicated, dos clientes y late join, 2.000 ticks; depende de V1-NETG.
 - **V1-AIT — [#596](https://github.com/cavazquez/openttdrs/issues/596):** primera entrega ferroviaria pagada de TransCargo; [fixture determinista y aislamiento multicompañía](transcargo-v1.md) implementados, a la espera de CI remota vigente antes del cierre.

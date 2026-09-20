@@ -329,7 +329,7 @@ Para el paquete Snap y su publicación, usar la receta documentada en
 
 ## Qué está hecho / qué falta (resumen)
 
-> Corte V1: 2026-09-20, base inspeccionada `72d906d8`. ✅ significa que pasa
+> Corte V1: 2026-09-20, candidata actual de `main`. ✅ significa que pasa
 > **el contrato acotado de esta fila**, no paridad completa con OpenTTD.
 > 🟡 significa que falta implementación o evidencia de aceptación.
 
@@ -349,7 +349,7 @@ siguen registrando las brechas generales aunque un caso V1 esté aprobado.
 | UI solitario | Menú ES/EN, ventanas y feedback F5/F9 | ✅ | Gate de certificación separado y presupuesto fijo [#584](https://github.com/cavazquez/openttdrs/issues/584) ✅; [#590](https://github.com/cavazquez/openttdrs/issues/590) certifica edición de Órdenes en 8 perfiles con 0 píxeles fuera de presupuesto ([evidencia](docs/parity/orders-v1.md)). Quedan otras ventanas/opciones fuera de este corte |
 | Multi-compañía | Ownership y asignación de compañía por cliente | 🟡 | [#591](https://github.com/cavazquez/openttdrs/issues/591) implementado: 4 rechazos atómicos sobre bienes ajenos, 4 controles válidos de A y issuer inválido ([evidencia](docs/parity/ownership-v1.md)); falta CI remota vigente |
 | NewGRF | [Action0/3/5](docs/parity/newgrf-action0-matrix.md) y [callbacks runtime](docs/parity/newgrf-callback-matrix.md) parciales | ✅ | [#592](https://github.com/cavazquez/openttdrs/issues/592) certifica un GRF V2 mínimo de camión con CB36 `37` frente a Action0 `91`, `7C[3]`, catálogo productivo y continuación JSON exacta de 2.000 ticks ([evidencia](docs/parity/newgrf-cb36-v1.md)); otros GRFs/CBIDs siguen fuera del corte |
-| Barcos | Depósitos, docks, boyas, esclusas y controlador naval | 🟡 | Compra → boya → entrega pagada en una ruta marítima [#593](https://github.com/cavazquez/openttdrs/issues/593); quedan fuera canales/locks/YAPF global |
+| Barcos | Depósitos, docks, boyas, esclusas y controlador naval | ✅ | [#593](https://github.com/cavazquez/openttdrs/issues/593) certifica depósito → muelle de carga → boya → entrega pagada de carbón, con conservación, dos corridas idénticas y hash canónico ([evidencia](docs/parity/ship-delivery-v1.md)); quedan fuera canales/locks/YAPF global y espera CI remota vigente antes del cierre |
 | Aviones | FTA, compra/vuelo y oracle Helidepot (4 tests verificados) | 🟡 | Servicio pagado de un avión entre dos aeropuertos Country [#594](https://github.com/cavazquez/openttdrs/issues/594); no todos los layouts |
 | Multijugador propio | TCP lockstep, dedicated, late join, resync y host migration | 🟡 | Gate TCP obligatorio [#585](https://github.com/cavazquez/openttdrs/issues/585) ✅ (`PermissionDenied` falla; inyección negativa + 22 recorridos loopback, 0 omitidas); faltan 2 clientes durante 2.000 ticks [#595](https://github.com/cavazquez/openttdrs/issues/595); sin protocolo OpenTTD |
 | IA rivales propias | TransCargo y RoadHaul construyen rutas | 🟡 | [TransCargo #596](https://github.com/cavazquez/openttdrs/issues/596) y [RoadHaul #597](https://github.com/cavazquez/openttdrs/issues/597) implementados: entregas físicas, compra/órdenes y saldo humano aislado ([evidencia ferroviaria](docs/parity/transcargo-v1.md), [evidencia de pasajeros](docs/parity/roadhaul-v1.md)); falta CI remota vigente. No NoAI/Squirrel |

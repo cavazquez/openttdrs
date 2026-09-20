@@ -1,25 +1,26 @@
-# Corte cerrado — validación jugable de la alpha
+# Corte V1 — aceptación acotada por área
 
-Actualizado: **2026-09-19**. Base auditada: `ca698e50`.
+Actualizado: **2026-09-19**. Base inspeccionada: `84144747`.
 
-La instrucción del usuario del 2026-09-18 reemplaza el orden anterior de
-perseguir paridad por subsistemas. El objetivo inmediato es entregar una
-experiencia acotada que pueda jugarse y verificarse de principio a fin.
-La paridad con OpenTTD sigue siendo una referencia técnica de largo plazo.
-El escenario guiado usado para esa validación fue retirado después del cierre:
-los fixtures de carretera continúan como evidencia interna, pero no son un modo
-del cliente.
+La nueva solicitud del usuario abre un corte finito para el resumen del README:
+actualizar qué está hecho, fijar qué significa verde y crear tareas atómicas.
+El [contrato V1](acceptance-v1.md) define escenarios, tolerancias y exclusiones.
+Se crean #584–#603 y se conservan #582/#583; no se reabren épicas históricas.
+La entrega documental prepara el trabajo posterior, no autoriza a afirmar que
+todos los contratos ya pasan. La paridad global continúa como referencia
+técnica separada. El escenario guiado anterior permanece retirado; sus fixtures
+siguen siendo evidencia interna.
 
 La entrega está publicada como
 [prerelease `v0.1.0-alpha.1`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
 y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) (revisión 1,
 Linux amd64). La revisión 1 tiene un defecto posterior de empaquetado: intenta
 materializar tiles OpenGFX dentro del mount `$SNAP` de sólo lectura. [#582](https://github.com/cavazquez/openttdrs/issues/582)
-y [#583](https://github.com/cavazquez/openttdrs/issues/583) corrigen y prueban
-la próxima `0.1.0-alpha.2`; no convierte las brechas históricas de paridad en
-tareas activas.
+y [#583](https://github.com/cavazquez/openttdrs/issues/583) conservan ese alcance.
+`84144747` ya aporta build y smoke read-only locales de `0.1.0-alpha.2`;
+el cierre exige la evidencia restante del paquete instalado/distribuido.
 
-## Entrega comprometida (cumplida)
+## Entrega alpha anterior (cumplida)
 
 La validación construyó un servicio de camiones entre una mina de carbón y una
 central eléctrica, recibió el primer pago, guardó JSON, cargó y completó otra
@@ -90,17 +91,35 @@ o generación.
 
 ## Backlog ejecutable
 
-El corte no tiene tareas ejecutables abiertas. Cada trabajo futuro debe volver a
-pasar por una auditoría de dirección y abrir un issue independiente, con
-alcance, aceptación, dependencias y exclusiones propios; no se reactivan épicas
-históricas como tareas por defecto.
+**22 issues abiertos: 20 nuevos y los 2 de Snap.** El índice completo, los IDs
+V1 y sus dependencias están en [acceptance-v1.md](acceptance-v1.md#contratos-pendientes-e-issues).
+El [manifiesto](active-backlog.json) se contrastó con GitHub al preparar este
+corte. Orden para implementar una tarea a la vez:
+
+1. Gates que impiden falso verde: visual **#584**, sockets **#585**.
+   El agregador **#603** puede prepararse con reportes sintéticos; su aceptación
+   global depende de los contratos reales. Finalizar **#582/#583** con la
+   evidencia restante, sin duplicar el fix local.
+2. Contratos de datos: pagos **#586**, transferencia **#587**, ORDL **#588**,
+   ownership **#591** y filtro de cargo GS **#598**.
+3. Recorridos: barco **#593**, avión **#594**, late join **#595** (después de
+   #585), NewGRF/JSON **#592** y persistencia GS **#599** (después de #598).
+4. Presentación y herramientas: raster Normal **#589**, Órdenes **#590**
+   (después de #584), editor **#600**, TransCargo **#596** y RoadHaul **#597**.
+5. Paquetes Windows **#601** y macOS **#602**. Emitir con **#603** el reporte
+   completo del SHA candidato; ninguna ausencia cuenta como aprobación.
+
+Construcción básica, fixtures PBS y ruta vial/JSON ya tienen evidencia acotada
+(95 tests seleccionados incluyendo FTA); se reutiliza y se reejecuta al
+certificar otro candidato. No se crean issues duplicados de esas pruebas.
 
 ## Cómo trabajar y cerrar
 
 - Una tarea en implementación a la vez. Cerrar al satisfacer su aceptación
   original, con commit y evidencia; no ampliar su contrato después.
-- Los cuatro gates P0 ya están recuperados. No llamar «CI verde» a un chequeo
-  de binario si `--all-targets`, fuzz o el workflow siguen fallando.
+- Los cuatro P0 de la alpha anterior se recuperaron; los gates V1 #584/#585
+  todavía están pendientes. No llamar «CI verde» a un chequeo de binario si
+  `--all-targets`, fuzz o el workflow siguen fallando o no se ejecutaron.
 - Una tarea debe poder revisarse como un PR. Si aparecen dos causas
   independientes, dividir antes de continuar; el nuevo issue debe ser necesario
   para esta entrega, con reproducción y criterio de cierre propios.
@@ -116,7 +135,14 @@ históricas como tareas por defecto.
   de implementación. Para reactivarlos hace falta un nuevo corte y una tarea
   concreta; un gap histórico no inicia automáticamente otro ciclo.
 
-## Aceptación del corte
+## Aceptación V1
+
+Todos los contratos de cada fila del README ejecutados para el mismo SHA, con
+los presupuestos de [acceptance-v1.md](acceptance-v1.md). Cero skips encubiertos,
+umbrales ampliados o cierres `not planned` contados como cumplimiento. La
+aceptación se publica por área; completar V1 no cierra paridad universal.
+
+## Aceptación del corte alpha anterior
 
 1. CI, plataformas, documentación y replay de fuzz verdes para el commit
    candidato, sin omitir pasos. Si aparece otro fallo, aislarlo antes de
@@ -147,15 +173,17 @@ commits, páginas de documentación o reducción de píxeles en una sola captura
 
 ## Fuera de este corte
 
-Paridad global Out4x/Out8x, compositor universal, NewGRF completo, SAV universal,
-matriz multiclima ilimitada, RNG runtime general, Oil Rig, oráculos amplios
-road/rail, nuevos idiomas y expansión de multiplayer. Las brechas y pruebas
-existentes se conservan en las matrices; no se presentan como resueltas.
+Paridad global Out2x/Out4x/Out8x, compositor universal, NewGRF completo, SAV
+universal, matriz multiclima ilimitada, RNG runtime general, Oil Rig, oráculos
+amplios road/rail, nuevos idiomas, Squirrel y red fuera de los dos clientes del
+contrato V1. Las brechas y pruebas existentes se conservan en las matrices;
+no se presentan como resueltas.
 
 ## Evidencia y antecedentes
 
 - [Auditoría y disposición de los 15 issues anteriores](../audits/2026-09-18-direction.md).
 - [Madurez y contratos técnicos](../PARIDAD.md).
+- [Contratos, tolerancias y evidencia del corte V1](acceptance-v1.md).
 - [Manifiesto del backlog](active-backlog.json), contrastado con GitHub al
   publicar este corte; el checker local valida consistencia documental, no
   consulta GitHub por sí mismo.

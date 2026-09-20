@@ -325,35 +325,50 @@ Para el paquete Snap y su publicación, usar la receta documentada en
 
 ## Qué está hecho / qué falta (resumen)
 
-> Actualizado: 2026-09-19. Las matrices canónicas enlazadas abajo tienen
-> prioridad sobre cualquier resumen de esta tabla.
+> Corte V1: 2026-09-19, base inspeccionada `84144747`. ✅ significa que pasa
+> **el contrato acotado de esta fila**, no paridad completa con OpenTTD.
+> 🟡 significa que falta implementación o evidencia de aceptación.
 
-Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
+El [contrato V1](docs/parity/acceptance-v1.md) fija fixtures, tolerancias y
+exclusiones antes de implementar. El objetivo es llevar todas estas filas a
+verde con pruebas reproducibles. Las [matrices canónicas](docs/PARIDAD.md)
+siguen registrando las brechas generales aunque un caso V1 esté aprobado.
 
-| Área | Estado | Notas |
-|------|--------|-------|
-| Construcción road + rail + terraform | ✅ | Waypoints, señales, `RailConvert` (tipo seleccionado) |
-| PBS / path signals | 🟡 | Implementado para escenarios acotados; fidelidad global en [PARIDAD.md](docs/PARIDAD.md#estado-canónico-actual) |
-| Economía + 11 cargas temperate + packets | 🟡 | CargoDist MCF, transfer/deliver y ratings; climas/NewGRF incompletos |
-| Import/export `.sav` | 🟡 | Subconjunto interoperable; matriz única de import vs export en [sav-compatibility.md](docs/parity/sav-compatibility.md) |
-| Render OpenGFX vanilla | 🟠 | Cobertura amplia, pero la composición raster global no tiene paridad demostrada; baseline y límites en [PARIDAD.md](docs/PARIDAD.md#evidencia-visual-raster-vigente) |
-| UI solitario (menús, listas, noticias) | 🟡 | Jugable; varias opciones del core todavía no están expuestas |
-| Multi-compañía | 🟡 | Mínima + ownership; segunda humana OOS |
-| NewGRF | 🟡 | Estado por propiedad en la [matriz Action0/3/5](docs/parity/newgrf-action0-matrix.md) y ejecución real en la [matriz de callbacks](docs/parity/newgrf-callback-matrix.md) |
-| Barcos | 🟡 | Depósitos, docks, boyas, locks y A*; movimiento/órdenes simplificados |
-| Aviones | 🟡 | Airport FTA, compra/vuelo/ruido/crash; render y casos límite incompletos |
-| Multijugador (I8) | 🟡 | MVP lockstep + dedicated + host migration; desync/UI OOS |
-| IA rivales / GameScript / editor | 🟡 | TransCargo + editor #42 ✅; GS-lite #43 ✅; Squirrel OOS |
-| Distribución alpha | 🟡 | [GitHub prerelease](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1) disponible; Snap `latest/edge` en corrección de arranque mediante [#582](https://github.com/cavazquez/openttdrs/issues/582) y [#583](https://github.com/cavazquez/openttdrs/issues/583) |
+| Área | Hecho hoy | V1 | Contrato de cierre / pendiente atómico |
+|------|-----------|----|---------------------------------------|
+| Construcción road + rail + terraform básicos | Comandos, conexiones, depósitos y cambios de terreno | ✅ | 75 regresiones de construcción verificadas; no certifica todas las geometrías |
+| PBS / path signals | Reservas y movimiento con oracle externo | ✅ | Fixtures simple, dual-curva y consist de 3 unidades: 14 tests; ventanas de 40/400/500 ticks y caso rico de 2.000 ticks |
+| Ruta vial + persistencia JSON | Construcción por comandos, carga, pago, guardar y continuar | ✅ | 2 tests: entrega antes de 40.000 ticks y continuación exacta durante 2.000 ticks |
+| Economía Temperate + packets | 11 cargas, pagos, transfer/deliver, ratings y CargoDist | 🟡 | 198 pagos exactos [#586](https://github.com/cavazquez/openttdrs/issues/586) y una transferencia de dos tramos [#587](https://github.com/cavazquez/openttdrs/issues/587) |
+| Import/export `.sav` | [Subconjunto interoperable](docs/parity/sav-compatibility.md); gate de 6 cargas y un roundtrip | 🟡 | Preservar una orden modificada tras re-guardado nativo [#588](https://github.com/cavazquez/openttdrs/issues/588); no SAV universal |
+| Render OpenGFX vanilla | Sprites y compositor amplios; framebuffer global todavía divergente | 🟡 | Una escena Kale `(132,2)`, 800×600, zoom Normal y presupuesto fijo [#589](https://github.com/cavazquez/openttdrs/issues/589); otros zooms quedan diagnósticos |
+| UI solitario | Menú ES/EN, ventanas y feedback F5/F9 | 🟡 | Gate visual efectivo [#584](https://github.com/cavazquez/openttdrs/issues/584) y edición de órdenes en 8 perfiles [#590](https://github.com/cavazquez/openttdrs/issues/590); no todas las ventanas/opciones |
+| Multi-compañía | Ownership y asignación de compañía por cliente | 🟡 | 4 rechazos atómicos sobre bienes ajenos + 4 controles válidos [#591](https://github.com/cavazquez/openttdrs/issues/591) |
+| NewGRF | [Action0/3/5](docs/parity/newgrf-action0-matrix.md) y [callbacks runtime](docs/parity/newgrf-callback-matrix.md) parciales | 🟡 | Un GRF de camión con CB36, catálogo y continuación JSON de 2.000 ticks [#592](https://github.com/cavazquez/openttdrs/issues/592) |
+| Barcos | Depósitos, docks, boyas, esclusas y controlador naval | 🟡 | Compra → boya → entrega pagada en una ruta marítima [#593](https://github.com/cavazquez/openttdrs/issues/593); quedan fuera canales/locks/YAPF global |
+| Aviones | FTA, compra/vuelo y oracle Helidepot (4 tests verificados) | 🟡 | Servicio pagado de un avión entre dos aeropuertos Country [#594](https://github.com/cavazquez/openttdrs/issues/594); no todos los layouts |
+| Multijugador propio | TCP lockstep, dedicated, late join, resync y host migration | 🟡 | Impedir pruebas omitidas [#585](https://github.com/cavazquez/openttdrs/issues/585) y 2 clientes durante 2.000 ticks [#595](https://github.com/cavazquez/openttdrs/issues/595); sin protocolo OpenTTD |
+| IA rivales propias | TransCargo y RoadHaul construyen rutas | 🟡 | Primera entrega pagada de [TransCargo #596](https://github.com/cavazquez/openttdrs/issues/596) y [RoadHaul #597](https://github.com/cavazquez/openttdrs/issues/597); no NoAI/Squirrel |
+| GS-lite propio | Goals, story y league; el objetivo de carga aún ignora el tipo | 🟡 | Filtrar cargo [#598](https://github.com/cavazquez/openttdrs/issues/598) y conservar progreso/noticia tras JSON [#599](https://github.com/cavazquez/openttdrs/issues/599); no GameScript/Squirrel |
+| Editor de escenarios | Herramientas, guardado y apertura propios | 🟡 | Editar → guardar → abrir para jugar un escenario 64×64 [#600](https://github.com/cavazquez/openttdrs/issues/600); no `.scn` universal |
+| Distribución alpha | Prerelease multiplataforma publicada; fix y smoke Snap read-only locales | 🟡 | Instalar/validar Snap [#582](https://github.com/cavazquez/openttdrs/issues/582)/[#583](https://github.com/cavazquez/openttdrs/issues/583), menú gráfico [Windows #601](https://github.com/cavazquez/openttdrs/issues/601) y [macOS #602](https://github.com/cavazquez/openttdrs/issues/602) |
+| Certificación del corte | Tests y reportes parciales existentes | 🟡 | Un resultado por contrato y SHA, sin `skip` convertido en éxito [#603](https://github.com/cavazquez/openttdrs/issues/603) |
 
-Los únicos [issues activos](https://github.com/cavazquez/openttdrs/issues) de
-este corte son [#582](https://github.com/cavazquez/openttdrs/issues/582) y
-[#583](https://github.com/cavazquez/openttdrs/issues/583): corrigen y prueban
-el arranque del Snap read-only. Los ajustes P0 #568–#571, la ruta por comandos #572, su
-continuación JSON #573, la entrada de menú #574, la guía #575, el feedback de
-F5/F9 #576 y el smoke/aceptación de paquete #577 ya fueron entregados.
-Los quince anteriores se retiran como `not planned`, no como paridad lograda.
-[PARIDAD.md](docs/PARIDAD.md) conserva las capacidades y brechas técnicas.
+Tolerancias V1, todavía pendientes de instrumentación donde lo indican los issues:
+
+- **Estado, dinero, carga, órdenes, RNG y ownership:** cero diferencias en los
+  casos declarados. Servicio pagado: hasta 40.000 ticks; continuación: 2.000.
+- **Raster de la escena fijada:** ≤0,1 % de píxeles distintos, ≤0,005 % con
+  delta de canal >64, media por canal ≤0,05/255 y cero cobertura faltante.
+  Sin desplazar ni recortar la comparación para aprobar.
+- **Regresión de UI propia:** por región fija, ≤0,5 % de píxeles con delta
+  >8/255 y media ≤1/255; cero controles/textos requeridos ausentes. Esto no
+  certifica semejanza con la UI de OpenTTD.
+
+Los 20 issues nuevos **#584–#603** y los dos existentes **#582/#583** forman
+el [backlog ejecutable](docs/parity/continuous-work-plan.md). Los quince padres
+históricos siguen retirados como `not planned`, nunca como paridad lograda.
+No se declara CI completa verde ni se cambian goldens para aprobar este resumen.
 
 ---
 

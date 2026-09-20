@@ -6,26 +6,25 @@ compatibilidad `.sav` está en
 [`parity/sav-compatibility.md`](parity/sav-compatibility.md); pin JSON y
 capturas siguen en `docs/parity/`.
 
-**Dirección vigente (2026-09-19):** el corte de validación de la alpha está
-completado. #568–#576 entregaron ajustes P0, una ruta de carbón por comandos,
-su continuación JSON y feedback visible de F5/F9; [#577](https://github.com/cavazquez/openttdrs/issues/577)
-certificó el paquete Linux extraído y su sesión de aceptación. El acceso guiado
-y su panel fueron retirados del cliente; la evidencia de carretera queda como
-fixture interno. La revisión Snap 1 no cubrió su mount de assets read-only y
-tiene un bloqueo de arranque; [#582](https://github.com/cavazquez/openttdrs/issues/582)
-y [#583](https://github.com/cavazquez/openttdrs/issues/583) son el único corte
-activo para corregirlo y validarlo. Los
-quince issues anteriores se retiran como `not planned`; sus brechas técnicas
-siguen existiendo. Las menciones posteriores a padres «abiertos» son registros
-del corte de evidencia de cada sección, no instrucciones para reactivarlos. Ver
-la [auditoría y disposición completa](audits/2026-09-18-direction.md).
+**Dirección vigente (2026-09-19):** se abre el
+[corte V1 de aceptación acotada](parity/acceptance-v1.md) solicitado para el
+resumen del README. Fija fixtures, tolerancias, exclusiones y veinte tareas
+atómicas nuevas, además de #582/#583 de Snap. El corte alpha anterior
+#568–#577 conserva su evidencia; el acceso guiado retirado no vuelve al cliente.
+El verde V1 sólo acredita su contrato, no paridad general. Los quince padres
+históricos siguen retirados como `not planned`; sus brechas técnicas permanecen.
+Las menciones posteriores a padres «abiertos» son registros del corte de
+evidencia de cada sección, no instrucciones para reactivarlos. Ver la
+[auditoría anterior](audits/2026-09-18-direction.md) y el
+[plan vigente](parity/continuous-work-plan.md).
 
 **Distribución alpha (2026-09-19):** el corte se publicó como
 [prerelease `v0.1.0-alpha.1`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
 y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) para Linux amd64
-(revisión 1). Esa revisión Snap tiene un bloqueo de arranque conocido; la
-próxima `0.1.0-alpha.2` se validará con raíz `$SNAP` de sólo lectura antes de
-publicarse. Distribuir el cliente no certifica paridad global, compatibilidad
+(revisión 1). Esa revisión Snap tiene un bloqueo de arranque conocido. El fix
+y smoke local de `0.1.0-alpha.2` están en `84144747`, con assets empaquetados y
+raíz read-only; falta acreditar la revisión instalada/distribuida para cerrar
+#582/#583. Distribuir el cliente no certifica paridad global, compatibilidad
 universal de saves, NewGRF ni multijugador.
 
 Para investigar una discrepancia de render de una partida `.sav`, seguir la
@@ -62,6 +61,14 @@ se cuenta como evidencia.
 
 ## Estado canónico actual
 
+**Corte V1 vigente: 2026-09-19 · base inspeccionada `84144747`.** La revisión
+de código, fixtures y GitHub encontró tolerancias visuales universales en las
+57 ventanas, pruebas TCP que pueden retornar sin conexiones y objetivos GS
+que no filtran por cargo. Los criterios y límites se fijan en
+[acceptance-v1.md](parity/acceptance-v1.md). Pasaron 95 tests seleccionados de
+construcción, PBS, FTA y ruta vial/JSON; eso no equivale a CI completa, una
+matriz raster nueva ni todos los contratos V1 aprobados.
+
 **Corte de auditoría histórico: 2026-09-18 · `main` publicado `ca698e50`.**
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`. En esa base, CI fallaba en formato
@@ -72,10 +79,11 @@ en #568–#571; el corte de producto posterior se confirmó con la
 [CI verde de `aa8fe3d9`](https://github.com/cavazquez/openttdrs/actions/runs/35433985317).
 [Evidencia y alcance de revisión](audits/2026-09-18-direction.md).
 
-El manifiesto [`active-backlog.json`](parity/active-backlog.json) fija esta fecha,
-base auditada, referencia y lista de tareas. Su checker comprueba consistencia
-local; el estado remoto se contrastó al reorganizar los issues. La base es un
-commit anterior al cambio documental para evitar autorreferencia.
+El manifiesto [`active-backlog.json`](parity/active-backlog.json) fija la fecha,
+base y lista de tareas **del corte V1**. Su checker comprueba consistencia
+local; el estado remoto se contrastó al crear los issues. La base inspeccionada
+es anterior al cambio documental para evitar autorreferencia; no representa
+una certificación completa de ese commit.
 
 ### Evidencia técnica acumulada
 
@@ -1544,7 +1552,19 @@ incluidos offsets relativos.
 
 <!-- active-parity-backlog:start -->
 
-- No hay issues activos en este corte.
+- Snap: [#582](https://github.com/cavazquez/openttdrs/issues/582), [#583](https://github.com/cavazquez/openttdrs/issues/583).
+- Gates visual/red: [#584](https://github.com/cavazquez/openttdrs/issues/584), [#585](https://github.com/cavazquez/openttdrs/issues/585).
+- Economía/packets: [#586](https://github.com/cavazquez/openttdrs/issues/586), [#587](https://github.com/cavazquez/openttdrs/issues/587).
+- SAV: [#588](https://github.com/cavazquez/openttdrs/issues/588).
+- Raster/UI: [#589](https://github.com/cavazquez/openttdrs/issues/589), [#590](https://github.com/cavazquez/openttdrs/issues/590).
+- Compañías/NewGRF: [#591](https://github.com/cavazquez/openttdrs/issues/591), [#592](https://github.com/cavazquez/openttdrs/issues/592).
+- Barcos/aviones: [#593](https://github.com/cavazquez/openttdrs/issues/593), [#594](https://github.com/cavazquez/openttdrs/issues/594).
+- Multijugador: [#595](https://github.com/cavazquez/openttdrs/issues/595).
+- IA: [#596](https://github.com/cavazquez/openttdrs/issues/596), [#597](https://github.com/cavazquez/openttdrs/issues/597).
+- GS-lite: [#598](https://github.com/cavazquez/openttdrs/issues/598), [#599](https://github.com/cavazquez/openttdrs/issues/599).
+- Editor: [#600](https://github.com/cavazquez/openttdrs/issues/600).
+- Windows/macOS: [#601](https://github.com/cavazquez/openttdrs/issues/601), [#602](https://github.com/cavazquez/openttdrs/issues/602).
+- Reporte por contrato/SHA: [#603](https://github.com/cavazquez/openttdrs/issues/603).
 
 <!-- active-parity-backlog:end -->
 

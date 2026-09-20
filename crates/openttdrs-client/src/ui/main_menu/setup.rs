@@ -20,17 +20,18 @@ use super::{
     MainMenuDensityTarget, MainMenuEditorButton, MainMenuHeightmapSlot, MainMenuHighscoresButton,
     MainMenuHighscoresText, MainMenuHintsText, MainMenuLanguageButton, MainMenuLanguageLabel,
     MainMenuLoadButton, MainMenuLocalizedText, MainMenuMapSizeButton, MainMenuNewGameButton,
-    MainMenuOpenHeightmapsDirButton, MainMenuOpenScenariosDirButton, MainMenuPanel,
-    MainMenuPreferencesButton, MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes,
-    MainMenuResolutionButton, MainMenuScenariosButton, MainMenuSeedDecButton,
-    MainMenuSeedIncButton, MainMenuSeedInput, MainMenuSeedInputState, MainMenuSeedRandomButton,
-    MainMenuSoundButton, MainMenuStartButton, MainMenuSubPanel, MainMenuSummaryText,
-    MainMenuTitleText, MainMenuToggle, MainMenuUi,
+    MainMenuNewGameOptionsColumn, MainMenuOpenHeightmapsDirButton, MainMenuOpenScenariosDirButton,
+    MainMenuPanel, MainMenuPreferencesButton, MainMenuQuitButton, MainMenuQuitConfirmNo,
+    MainMenuQuitConfirmYes, MainMenuResolutionButton, MainMenuScenariosButton,
+    MainMenuSeedDecButton, MainMenuSeedIncButton, MainMenuSeedInput, MainMenuSeedInputState,
+    MainMenuSeedRandomButton, MainMenuSoundButton, MainMenuStartButton, MainMenuSubPanel,
+    MainMenuSummaryText, MainMenuTitleText, MainMenuToggle, MainMenuUi,
 };
 
 const MAIN_MENU_BACKDROP_ALPHA: f32 = 0.28;
 const MAIN_MENU_PANEL_ALPHA: f32 = 0.86;
-const MAIN_MENU_PANEL_WIDTH: f32 = 440.0;
+const MAIN_MENU_PANEL_MAX_WIDTH: f32 = 900.0;
+const NEW_GAME_OPTIONS_COLUMN_WIDTH: f32 = 420.0;
 
 pub(crate) fn setup_main_menu(
     mut commands: Commands,
@@ -59,7 +60,8 @@ pub(crate) fn setup_main_menu(
         .with_children(|p| {
             p.spawn((
                 Node {
-                    width: Val::Px(MAIN_MENU_PANEL_WIDTH),
+                    width: Val::Percent(90.0),
+                    max_width: Val::Px(MAIN_MENU_PANEL_MAX_WIDTH),
                     height: Val::Percent(90.0),
                     max_height: Val::Percent(90.0),
                     flex_direction: FlexDirection::Column,
@@ -330,13 +332,43 @@ fn spawn_new_game_panel(parent: &mut ChildSpawnerCommands) {
 }
 
 fn spawn_new_game_options(panel: &mut ChildSpawnerCommands) {
-    panel.spawn(option_section_label("Clima"));
     panel
         .spawn((Node {
+            width: Val::Percent(100.0),
             flex_direction: FlexDirection::Row,
-            column_gap: Val::Px(6.0),
+            flex_wrap: FlexWrap::Wrap,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::FlexStart,
+            column_gap: Val::Px(16.0),
+            row_gap: Val::Px(12.0),
             ..default()
         },))
+        .with_children(|columns| {
+            columns
+                .spawn((MainMenuNewGameOptionsColumn, new_game_options_column()))
+                .with_children(spawn_new_game_map_options);
+            columns
+                .spawn((MainMenuNewGameOptionsColumn, new_game_options_column()))
+                .with_children(spawn_new_game_world_options);
+        });
+}
+
+fn new_game_options_column() -> Node {
+    Node {
+        width: Val::Px(NEW_GAME_OPTIONS_COLUMN_WIDTH),
+        flex_grow: 1.0,
+        flex_shrink: 1.0,
+        flex_direction: FlexDirection::Column,
+        align_items: AlignItems::Center,
+        row_gap: Val::Px(6.0),
+        ..default()
+    }
+}
+
+fn spawn_new_game_map_options(panel: &mut ChildSpawnerCommands) {
+    panel.spawn(option_section_label("Clima"));
+    panel
+        .spawn((wide_option_row(Val::Px(6.0)),))
         .with_children(|row| {
             for climate in [
                 Climate::Temperate,
@@ -350,26 +382,14 @@ fn spawn_new_game_options(panel: &mut ChildSpawnerCommands) {
 
     panel.spawn(option_section_label("Tamano del mapa (demo)"));
     panel
-        .spawn((Node {
-            flex_direction: FlexDirection::Row,
-            column_gap: Val::Px(4.0),
-            ..default()
-        },))
+        .spawn((wide_option_row(Val::Px(4.0)),))
         .with_children(|row| {
             row.spawn(map_size_button(MainMenuMapSizeButton::Compact));
         });
 
     panel.spawn(option_section_label("Ancho (teselas)"));
     panel
-        .spawn((Node {
-            flex_direction: FlexDirection::Row,
-            flex_wrap: FlexWrap::Wrap,
-            width: Val::Px(420.0),
-            column_gap: Val::Px(4.0),
-            row_gap: Val::Px(4.0),
-            justify_content: JustifyContent::Center,
-            ..default()
-        },))
+        .spawn((wide_option_row(Val::Px(4.0)),))
         .with_children(|row| {
             for axis in MapAxisSize::all() {
                 row.spawn(map_size_button(MainMenuMapSizeButton::Width(axis)));
@@ -378,15 +398,7 @@ fn spawn_new_game_options(panel: &mut ChildSpawnerCommands) {
 
     panel.spawn(option_section_label("Alto (teselas)"));
     panel
-        .spawn((Node {
-            flex_direction: FlexDirection::Row,
-            flex_wrap: FlexWrap::Wrap,
-            width: Val::Px(420.0),
-            column_gap: Val::Px(4.0),
-            row_gap: Val::Px(4.0),
-            justify_content: JustifyContent::Center,
-            ..default()
-        },))
+        .spawn((wide_option_row(Val::Px(4.0)),))
         .with_children(|row| {
             for axis in MapAxisSize::all() {
                 row.spawn(map_size_button(MainMenuMapSizeButton::Height(axis)));
@@ -395,28 +407,29 @@ fn spawn_new_game_options(panel: &mut ChildSpawnerCommands) {
 
     panel.spawn(option_section_label("Ano de inicio"));
     panel
-        .spawn((Node {
-            flex_direction: FlexDirection::Row,
-            flex_wrap: FlexWrap::Wrap,
-            width: Val::Px(400.0),
-            column_gap: Val::Px(4.0),
-            row_gap: Val::Px(4.0),
-            justify_content: JustifyContent::Center,
-            ..default()
-        },))
+        .spawn((wide_option_row(Val::Px(4.0)),))
         .with_children(|row| {
             for year in START_YEARS {
                 row.spawn(start_year_button(year));
             }
         });
 
+    panel.spawn(option_section_label("Dinero inicial"));
+    panel
+        .spawn((wide_option_row(Val::Px(4.0)),))
+        .with_children(|row| {
+            for amount in STARTING_MONEY_OPTIONS {
+                row.spawn(starting_money_button(amount));
+            }
+        });
+}
+
+fn spawn_new_game_world_options(panel: &mut ChildSpawnerCommands) {
+    spawn_seed_options(panel);
+
     panel.spawn(option_section_label("Densidad de pueblos"));
     panel
-        .spawn((Node {
-            flex_direction: FlexDirection::Row,
-            column_gap: Val::Px(6.0),
-            ..default()
-        },))
+        .spawn((wide_option_row(Val::Px(6.0)),))
         .with_children(|row| {
             for density in PopulationDensity::all() {
                 row.spawn(density_button(density, MainMenuDensityTarget::Town));
@@ -425,41 +438,16 @@ fn spawn_new_game_options(panel: &mut ChildSpawnerCommands) {
 
     panel.spawn(option_section_label("Densidad de industrias"));
     panel
-        .spawn((Node {
-            flex_direction: FlexDirection::Row,
-            column_gap: Val::Px(6.0),
-            ..default()
-        },))
+        .spawn((wide_option_row(Val::Px(6.0)),))
         .with_children(|row| {
             for density in PopulationDensity::all() {
                 row.spawn(density_button(density, MainMenuDensityTarget::Industry));
             }
         });
 
-    panel.spawn(option_section_label("Dinero inicial"));
-    panel
-        .spawn((Node {
-            flex_direction: FlexDirection::Row,
-            flex_wrap: FlexWrap::Wrap,
-            width: Val::Px(400.0),
-            column_gap: Val::Px(4.0),
-            row_gap: Val::Px(4.0),
-            justify_content: JustifyContent::Center,
-            ..default()
-        },))
-        .with_children(|row| {
-            for amount in STARTING_MONEY_OPTIONS {
-                row.spawn(starting_money_button(amount));
-            }
-        });
-
     panel.spawn(option_section_label("Relieve"));
     panel
-        .spawn((Node {
-            flex_direction: FlexDirection::Row,
-            column_gap: Val::Px(6.0),
-            ..default()
-        },))
+        .spawn((wide_option_row(Val::Px(6.0)),))
         .with_children(|row| {
             for roughness in TerrainRoughness::all() {
                 row.spawn(roughness_button(roughness));
@@ -468,33 +456,51 @@ fn spawn_new_game_options(panel: &mut ChildSpawnerCommands) {
 
     panel.spawn(option_section_label("Terreno"));
     panel
-        .spawn((Node {
-            flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(4.0),
-            ..default()
-        },))
+        .spawn((wide_option_row(Val::Px(6.0)),))
         .with_children(|toggles| {
             toggles.spawn(toggle_button(
                 MainMenuToggle::WorldGen,
                 "Terreno procedural",
+                206.0,
             ));
-            toggles.spawn(toggle_button(MainMenuToggle::Island, "Modo isla (costas)"));
+            toggles.spawn(toggle_button(
+                MainMenuToggle::Island,
+                "Modo isla (costas)",
+                206.0,
+            ));
             toggles.spawn(toggle_button(
                 MainMenuToggle::RivalAi,
                 "Rival IA (TransCargo)",
+                206.0,
             ));
             toggles.spawn(toggle_button(
                 MainMenuToggle::Disasters,
                 "Desastres ambientales",
+                206.0,
             ));
             if dev_mode() {
                 toggles.spawn(toggle_button(
                     MainMenuToggle::PreserveDemo,
                     "Incluir showcase completo (64×64)",
+                    206.0,
                 ));
             }
         });
+}
 
+fn wide_option_row(gap: Val) -> Node {
+    Node {
+        width: Val::Percent(100.0),
+        flex_direction: FlexDirection::Row,
+        flex_wrap: FlexWrap::Wrap,
+        justify_content: JustifyContent::Center,
+        column_gap: gap,
+        row_gap: gap,
+        ..default()
+    }
+}
+
+fn spawn_seed_options(panel: &mut ChildSpawnerCommands) {
     panel
         .spawn((Node {
             flex_direction: FlexDirection::Row,

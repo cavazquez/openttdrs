@@ -106,10 +106,10 @@ pub(super) fn roughness_button(roughness: TerrainRoughness) -> impl Bundle {
 }
 
 pub(super) fn map_size_button(btn: MainMenuMapSizeButton) -> impl Bundle {
-    let label = match btn {
-        MainMenuMapSizeButton::Compact => "Demo 64×64".to_string(),
+    let (label, width) = match btn {
+        MainMenuMapSizeButton::Compact => ("Demo 64×64".to_string(), 116.0),
         MainMenuMapSizeButton::Width(axis) | MainMenuMapSizeButton::Height(axis) => {
-            axis.menu_label().to_string()
+            (axis.menu_label().to_string(), 56.0)
         }
     };
     (
@@ -117,7 +117,7 @@ pub(super) fn map_size_button(btn: MainMenuMapSizeButton) -> impl Bundle {
         UiClickBeep,
         btn,
         Node {
-            width: Val::Px(56.0),
+            width: Val::Px(width),
             height: Val::Px(30.0),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
@@ -220,13 +220,17 @@ pub(super) fn climate_button(climate: Climate) -> impl Bundle {
     )
 }
 
-pub(super) fn toggle_button(toggle: MainMenuToggle, label: &'static str) -> impl Bundle {
+pub(super) fn toggle_button(
+    toggle: MainMenuToggle,
+    label: &'static str,
+    width: f32,
+) -> impl Bundle {
     (
         Button,
         UiClickBeep,
         toggle,
         Node {
-            width: Val::Px(360.0),
+            width: Val::Px(width),
             height: Val::Px(30.0),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,

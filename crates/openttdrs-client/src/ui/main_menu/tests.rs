@@ -3,8 +3,8 @@
 use super::labels::{adjust_seed, cycle_density, summary_text, summary_text_for};
 use super::{
     MainMenuDemoButton, MainMenuDynamicText, MainMenuLanguageButton, MainMenuLocalizedText,
-    MainMenuNewGameButton, MainMenuPanel, MainMenuPreferencesButton, MainMenuResolutionButton,
-    MainMenuSeedInput, MainMenuSeedInputState, setup_main_menu,
+    MainMenuNewGameButton, MainMenuNewGameOptionsColumn, MainMenuPanel, MainMenuPreferencesButton,
+    MainMenuResolutionButton, MainMenuSeedInput, MainMenuSeedInputState, setup_main_menu,
 };
 use crate::network::{NetCli, NetworkStatus};
 use crate::state::bootstrap::{
@@ -33,6 +33,13 @@ fn setup_main_menu_and_camera_run() {
     );
     assert_eq!(world.query::<&MainMenuDemoButton>().iter(&world).count(), 1);
     assert_eq!(world.query::<&MainMenuSeedInput>().iter(&world).count(), 1);
+    assert_eq!(
+        world
+            .query::<&MainMenuNewGameOptionsColumn>()
+            .iter(&world)
+            .count(),
+        2
+    );
 }
 
 #[test]

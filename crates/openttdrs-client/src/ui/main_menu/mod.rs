@@ -136,6 +136,13 @@ pub(crate) struct MainMenuSeedInputState {
 #[derive(Component)]
 pub(crate) struct MainMenuSeedRandomButton;
 
+/// Columna semántica del formulario de creación de partida.
+///
+/// El formulario usa dos columnas en pantallas amplias y se pliega a una sola
+/// columna cuando el espacio no alcanza.
+#[derive(Component)]
+pub(crate) struct MainMenuNewGameOptionsColumn;
+
 #[derive(Component, Clone, Copy)]
 pub(crate) enum MainMenuToggle {
     WorldGen,

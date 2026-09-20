@@ -3,7 +3,8 @@ use bevy::prelude::*;
 use crate::render::{MapVisualLayer, ShoreTile, WaterTile};
 use crate::state::bootstrap::{MapSizePreset, NewGameSettings};
 use crate::state::{
-    ClientScreen, SimWorld, SuspendedGameSession, new_game::NewGameSettingsResource,
+    ClientScreen, ScenarioDirectory, SimWorld, SuspendedGameSession,
+    new_game::NewGameSettingsResource,
 };
 use crate::ui::save_window::{SaveWindowMode, SaveWindowState, save_dir_from};
 
@@ -14,8 +15,10 @@ use super::super::{
 };
 use super::session::enter_new_game;
 
-fn scenarios_dir() -> std::path::PathBuf {
-    std::path::PathBuf::from("save/scenarios")
+fn scenarios_dir(directory: Option<&ScenarioDirectory>) -> std::path::PathBuf {
+    directory.map_or_else(crate::state::scenarios_save_dir, |directory| {
+        directory.path().to_path_buf()
+    })
 }
 
 fn heightmaps_dir() -> std::path::PathBuf {
@@ -44,6 +47,7 @@ fn list_heightmap_files() -> Vec<std::path::PathBuf> {
 pub(crate) fn main_menu_scenarios_interaction(
     mut panel: ResMut<MainMenuPanel>,
     mut save_window: ResMut<SaveWindowState>,
+    scenario_directory: Option<Res<ScenarioDirectory>>,
     mut settings: ResMut<NewGameSettingsResource>,
     mut next_screen: ResMut<NextState<ClientScreen>>,
     mut suspended: ResMut<SuspendedGameSession>,
@@ -90,10 +94,11 @@ pub(crate) fn main_menu_scenarios_interaction(
     >,
     mut commands: Commands,
 ) {
+    let scenario_directory = scenario_directory.as_deref();
     if *panel == MainMenuPanel::Root {
         for (interaction, mut bg) in &mut root_btn {
             if *interaction == Interaction::Pressed {
-                let _ = std::fs::create_dir_all(scenarios_dir());
+                let _ = std::fs::create_dir_all(scenarios_dir(scenario_directory));
                 let _ = std::fs::create_dir_all(heightmaps_dir());
                 *panel = MainMenuPanel::Scenarios;
                 return;
@@ -107,7 +112,7 @@ pub(crate) fn main_menu_scenarios_interaction(
     }
     for (interaction, mut bg) in &mut open_scn {
         if *interaction == Interaction::Pressed {
-            let dir = scenarios_dir();
+            let dir = scenarios_dir(scenario_directory);
             let _ = std::fs::create_dir_all(&dir);
             let path = dir.join("_menu.json");
             save_window.open_in_mode(

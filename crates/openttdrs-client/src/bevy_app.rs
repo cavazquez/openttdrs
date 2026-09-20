@@ -43,7 +43,8 @@ use crate::render_trace::RenderTracePlugin;
 use crate::settings::{ClientSettingsPlugin, patch_window_plugin_for_settings};
 use crate::simulation::{SimulationPlugin, VisualCaptureFreeze};
 use crate::state::{
-    BootstrapLoadError, ClientScreen, EditorSession, SimWorld, SuspendedGameSession,
+    BootstrapLoadError, ClientScreen, EditorSession, ScenarioDirectory, SimWorld,
+    SuspendedGameSession,
 };
 #[cfg(target_os = "linux")]
 use crate::tray::TrayIconPlugin;
@@ -235,6 +236,7 @@ pub(crate) fn build_client_app(
     app.insert_resource(VisualCaptureFreeze(visual_capture));
     app.init_resource::<SuspendedGameSession>();
     app.init_resource::<EditorSession>();
+    app.init_resource::<ScenarioDirectory>();
     app.insert_resource(ClientAudioEnabled(!audio_disabled));
     crate::audio::insert_asset_root(&mut app, asset_root);
     // La UI de sonido consulta este estado incluso durante una captura

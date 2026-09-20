@@ -27,6 +27,26 @@ impl EditorSession {
     }
 }
 
+/// Carpeta en la que el editor y el menú intercambian escenarios.
+///
+/// El recurso permite que los recorridos de UI usen una carpeta temporal en
+/// pruebas, sin cambiar la ubicación normal que ve el jugador.
+#[derive(Resource, Debug, Clone)]
+pub(crate) struct ScenarioDirectory(pub std::path::PathBuf);
+
+impl ScenarioDirectory {
+    #[must_use]
+    pub(crate) fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+impl Default for ScenarioDirectory {
+    fn default() -> Self {
+        Self(scenarios_save_dir())
+    }
+}
+
 /// Ajustes por defecto al entrar al editor desde el menú.
 #[must_use]
 pub fn editor_new_game_settings() -> NewGameSettings {

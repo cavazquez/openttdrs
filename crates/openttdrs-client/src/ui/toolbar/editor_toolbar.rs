@@ -15,7 +15,9 @@ use crate::i18n::localized_calendar_date;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending};
 use crate::settings::ClientPreferences;
 use crate::state::ingame_lifecycle::InGameUi;
-use crate::state::{EditorSession, SimRunState, SimWorld, sim_is_paused, toggle_sim_run_state};
+use crate::state::{
+    EditorSession, ScenarioDirectory, SimRunState, SimWorld, sim_is_paused, toggle_sim_run_state,
+};
 use crate::ui::audio_settings_window::SoundMusicWindowState;
 use crate::ui::command_error_text::command_error_message;
 use crate::ui::extra_viewport_window::ExtraViewportWindowState;
@@ -213,6 +215,7 @@ fn latest_heightmap_path(dir: &std::path::Path) -> Option<std::path::PathBuf> {
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_editor_file_routes(
     editor: Res<EditorSession>,
+    scenario_directory: Option<Res<ScenarioDirectory>>,
     mut routes: MessageReader<OpenUiRoute>,
     mut save_window: ResMut<SaveWindowState>,
     mut sim: ResMut<SimWorld>,
@@ -229,12 +232,20 @@ pub(crate) fn handle_editor_file_routes(
     for OpenUiRoute(route) in routes.read() {
         match route {
             UiRoute::EditorSaveScenario => {
-                let dir = crate::state::scenarios_save_dir();
+                let dir = scenario_directory
+                    .as_deref()
+                    .map_or_else(crate::state::scenarios_save_dir, |directory| {
+                        directory.path().to_path_buf()
+                    });
                 let _ = std::fs::create_dir_all(&dir);
                 save_window.open_in_mode(SaveWindowMode::Save, &dir);
             }
             UiRoute::EditorLoadScenario => {
-                let dir = crate::state::scenarios_save_dir();
+                let dir = scenario_directory
+                    .as_deref()
+                    .map_or_else(crate::state::scenarios_save_dir, |directory| {
+                        directory.path().to_path_buf()
+                    });
                 save_window.open_in_mode(SaveWindowMode::Load, &dir);
             }
             UiRoute::EditorSaveHeightmap => {
@@ -1050,6 +1061,7 @@ pub(crate) fn sync_editor_toolbar_button_visuals(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_editor_toolbar_control_buttons(
     editor: Res<EditorSession>,
+    scenario_directory: Option<Res<ScenarioDirectory>>,
     buttons: Query<
         (&Interaction, &EditorToolbarAction),
         (
@@ -1097,7 +1109,11 @@ pub(crate) fn handle_editor_toolbar_control_buttons(
                 };
             }
             EditorToolbarAction::Save => {
-                let dir = crate::state::scenarios_save_dir();
+                let dir = scenario_directory
+                    .as_deref()
+                    .map_or_else(crate::state::scenarios_save_dir, |directory| {
+                        directory.path().to_path_buf()
+                    });
                 let _ = std::fs::create_dir_all(&dir);
                 save_window.open_in_mode(SaveWindowMode::Save, &dir);
             }
@@ -1362,8 +1378,85 @@ fn open_group(toolbar: &mut ToolbarState, tool: &mut UiToolState, group: Toolbar
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    use bevy::app::AppExit;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::text::EditableText;
+    use openttdrs_core::map::TileCoord;
+    use openttdrs_core::{Command, IndustrySpec};
+
+    use crate::render::{RemapMapVisualsPending, VehicleIndex};
+    use crate::state::new_game::NewGameSettingsResource;
+    use crate::state::{
+        ClientScreen, ScenarioDirectory, SuspendedGameSession, apply_editor_sandbox,
+        editor_new_game_settings,
+    };
+    use crate::ui::main_menu::{
+        MainMenuOpenScenariosDirButton, MainMenuPanel, MainMenuScenariosButton,
+        main_menu_scenarios_interaction,
+    };
+    use crate::ui::save_window::{
+        SaveWindowButton, SaveWindowNameText, SaveWindowRow, handle_save_window_buttons,
+    };
+
+    fn first_successful_editor_command(
+        state: &mut openttdrs_core::GameState,
+        command: impl Fn(TileCoord) -> Command,
+    ) -> TileCoord {
+        let (width, height) = state.map.dimensions();
+        for y in 8..(height as i32 - 8) {
+            for x in 8..(width as i32 - 8) {
+                let pos = TileCoord::new(x, y);
+                if crate::network::apply_player_command(state, &command(pos)).is_ok() {
+                    return pos;
+                }
+            }
+        }
+        panic!("el mapa del editor debe admitir el comando solicitado");
+    }
+
+    fn editor_scenario_world(scenario_dir: &std::path::Path) -> World {
+        let mut sim = SimWorld::from_new_game(&editor_new_game_settings());
+        apply_editor_sandbox(&mut sim);
+
+        let mut world = World::new();
+        world.insert_resource(sim);
+        world.insert_resource(EditorSession::active());
+        world.insert_resource(ScenarioDirectory(scenario_dir.to_path_buf()));
+        world.insert_resource(SaveWindowState::default());
+        world.insert_resource(VehicleIndex::default());
+        world.insert_resource(RemapMapVisualsPending::default());
+        world.insert_resource(SimHudControls {
+            json_save_path: scenario_dir
+                .join("active.json")
+                .to_string_lossy()
+                .into_owned(),
+            ..Default::default()
+        });
+        world.insert_resource(EditorDocumentState::default());
+        world.insert_resource(State::new(ClientScreen::InGame));
+        world.insert_resource(NextState::<ClientScreen>::default());
+        world.insert_resource(SuspendedGameSession::default());
+        world.insert_resource(MainMenuPanel::Root);
+        world.insert_resource(NewGameSettingsResource::default());
+        world.init_resource::<Messages<OpenUiRoute>>();
+        world.init_resource::<Messages<AppExit>>();
+        world.spawn((SaveWindowNameText, EditableText::new("editor-v1.json")));
+        world
+    }
+
+    fn route_editor_file_action(world: &mut World, route: UiRoute) {
+        world.write_message(OpenUiRoute(route));
+        world.run_system_once(handle_editor_file_routes).unwrap();
+        world.resource_mut::<Messages<OpenUiRoute>>().clear();
+    }
+
+    fn press_save_window_button(world: &mut World, button: SaveWindowButton) -> Entity {
+        world.spawn((Button, button, Interaction::Pressed)).id()
+    }
 
     #[test]
     fn editor_toolbar_has_nineteen_actions() {
@@ -1438,5 +1531,252 @@ mod tests {
         assert!(!document.is_dirty());
         document.mark_dirty();
         assert!(document.is_dirty());
+    }
+
+    #[test]
+    fn editor_v1_roundtrip_via_menu_preserves_edited_scenario() {
+        let temp = tempfile::tempdir().expect("directorio temporal de escenarios");
+        let blocked_directory = temp.path().join("not-a-directory");
+        std::fs::write(&blocked_directory, "archivo que bloquea el directorio")
+            .expect("preparar fallo de guardado");
+        let mut world = editor_scenario_world(temp.path());
+
+        world.resource_mut::<EditorDocumentState>().mark_saved();
+        let (
+            raised_tile,
+            town_tile,
+            coal_mine_tile,
+            power_station_tile,
+            towns_before,
+            industries_before,
+            editor_tick,
+        ) = {
+            let mut sim = world.resource_mut::<SimWorld>();
+            assert_eq!(sim.state.map.dimensions(), (64, 64));
+            assert_eq!(sim.state.climate, openttdrs_core::Climate::Temperate);
+            assert!(sim.state.cheats.infinite_money_active());
+            crate::network::apply_player_command(&mut sim.state, &Command::CheatSetYear(1975))
+                .expect("el sandbox del editor permite cambiar la fecha");
+
+            let towns_before = sim.state.towns.len();
+            let industries_before = sim.state.industries.len();
+            let raised_tile = first_successful_editor_command(&mut sim.state, Command::RaiseLand);
+            let town_click = first_successful_editor_command(&mut sim.state, Command::FoundTown);
+            let town_tile = sim
+                .state
+                .towns
+                .last()
+                .expect("pueblo creado por el comando")
+                .pos;
+            assert_eq!(
+                town_tile,
+                TileCoord::new(town_click.x, town_click.y.saturating_sub(1))
+            );
+            let coal_mine_tile = first_successful_editor_command(&mut sim.state, |pos| {
+                Command::PlaceIndustrySpec(pos, IndustrySpec::CoalMine)
+            });
+            let power_station_tile = first_successful_editor_command(&mut sim.state, |pos| {
+                Command::PlaceIndustrySpec(pos, IndustrySpec::PowerStation)
+            });
+
+            assert_eq!(sim.state.towns.len(), towns_before + 1);
+            assert_eq!(sim.state.industries.len(), industries_before + 2);
+            assert!(sim.state.towns.iter().any(|town| town.pos == town_tile));
+            assert!(sim.state.industries.iter().any(|industry| {
+                industry.pos == coal_mine_tile && industry.spec == Some(IndustrySpec::CoalMine)
+            }));
+            assert!(sim.state.industries.iter().any(|industry| {
+                industry.pos == power_station_tile
+                    && industry.spec == Some(IndustrySpec::PowerStation)
+            }));
+            (
+                raised_tile,
+                town_tile,
+                coal_mine_tile,
+                power_station_tile,
+                towns_before,
+                industries_before,
+                sim.state.tick,
+            )
+        };
+        assert!(world.resource::<EditorDocumentState>().is_dirty());
+
+        world.insert_resource(ScenarioDirectory(blocked_directory.clone()));
+        world.resource_mut::<SimHudControls>().json_save_path = blocked_directory
+            .join("editor-v1.json")
+            .to_string_lossy()
+            .into_owned();
+        route_editor_file_action(&mut world, UiRoute::EditorSaveScenario);
+        let failed_save = press_save_window_button(&mut world, SaveWindowButton::Confirm);
+        world.run_system_once(handle_save_window_buttons).unwrap();
+        world.despawn(failed_save);
+        assert!(world.resource::<SaveWindowState>().open);
+        assert!(!world.resource::<SaveWindowState>().status.is_empty());
+        assert!(world.resource::<EditorDocumentState>().is_dirty());
+        assert!(world.resource::<EditorSession>().active);
+
+        world.insert_resource(ScenarioDirectory(temp.path().to_path_buf()));
+        world.resource_mut::<SimHudControls>().json_save_path = temp
+            .path()
+            .join("active.json")
+            .to_string_lossy()
+            .into_owned();
+        route_editor_file_action(&mut world, UiRoute::EditorSaveScenario);
+        let save = press_save_window_button(&mut world, SaveWindowButton::Confirm);
+        world.run_system_once(handle_save_window_buttons).unwrap();
+        world.despawn(save);
+        let scenario_path = temp.path().join("editor-v1.json");
+        assert!(scenario_path.exists());
+        assert!(
+            std::fs::read_to_string(&scenario_path)
+                .expect("escenario JSON nativo")
+                .starts_with('{')
+        );
+        assert!(!world.resource::<SaveWindowState>().open);
+        assert!(!world.resource::<EditorDocumentState>().is_dirty());
+
+        let (
+            expected_dimensions,
+            expected_climate,
+            expected_seed,
+            expected_disasters,
+            expected_raised_map_tile,
+            expected_towns,
+            expected_industries,
+            expected_hash,
+        ) = {
+            let state = &world.resource::<SimWorld>().state;
+            (
+                state.map.dimensions(),
+                state.climate,
+                state.world_seed,
+                state.disasters_enabled,
+                state.map.get(raised_tile).expect("tesela elevada"),
+                state
+                    .towns
+                    .iter()
+                    .map(|town| (town.id, town.pos, town.name.clone(), town.population))
+                    .collect::<Vec<_>>(),
+                state
+                    .industries
+                    .iter()
+                    .map(|industry| {
+                        (
+                            industry.pos,
+                            industry.spec,
+                            industry.kind,
+                            industry.tiles.clone(),
+                            industry.selected_layout,
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+                state.canonical_hash(),
+            )
+        };
+
+        route_editor_file_action(&mut world, UiRoute::EditorExit);
+        assert!(matches!(
+            world.resource::<NextState<ClientScreen>>(),
+            NextState::Pending(ClientScreen::MainMenu)
+                | NextState::PendingIfNeq(ClientScreen::MainMenu)
+        ));
+        assert!(world.resource::<SuspendedGameSession>().active);
+
+        // Equivale a aplicar la transición que pidió el manejador anterior;
+        // el mundo cargado sólo se reemplaza después desde el manejador real
+        // de la ventana de escenarios.
+        world.insert_resource(State::new(ClientScreen::MainMenu));
+        world.insert_resource(NextState::<ClientScreen>::default());
+        world.spawn((
+            Button,
+            MainMenuScenariosButton,
+            Interaction::Pressed,
+            BackgroundColor(Color::BLACK),
+        ));
+        world
+            .run_system_once(main_menu_scenarios_interaction)
+            .unwrap();
+        assert_eq!(*world.resource::<MainMenuPanel>(), MainMenuPanel::Scenarios);
+        world.spawn((
+            Button,
+            MainMenuOpenScenariosDirButton,
+            Interaction::Pressed,
+            BackgroundColor(Color::BLACK),
+        ));
+        world
+            .run_system_once(main_menu_scenarios_interaction)
+            .unwrap();
+        {
+            let save_window = world.resource::<SaveWindowState>();
+            assert!(save_window.open);
+            assert_eq!(save_window.mode, SaveWindowMode::Load);
+            assert_eq!(save_window.entries.len(), 1);
+            assert_eq!(save_window.entries[0].name, "editor-v1.json");
+        }
+
+        world.spawn((Button, SaveWindowRow { slot: 0 }, Interaction::Pressed));
+        let load = press_save_window_button(&mut world, SaveWindowButton::Confirm);
+        world.run_system_once(handle_save_window_buttons).unwrap();
+        world.despawn(load);
+        assert!(!world.resource::<SaveWindowState>().open);
+        assert!(world.resource::<RemapMapVisualsPending>().is_pending());
+        assert!(!world.resource::<SuspendedGameSession>().active);
+        assert!(matches!(
+            world.resource::<NextState<ClientScreen>>(),
+            NextState::Pending(ClientScreen::InGame)
+                | NextState::PendingIfNeq(ClientScreen::InGame)
+        ));
+        world.insert_resource(State::new(ClientScreen::InGame));
+
+        let loaded = &world.resource::<SimWorld>().state;
+        assert_eq!(loaded.map.dimensions(), expected_dimensions);
+        assert_eq!(loaded.climate, expected_climate);
+        assert_eq!(loaded.world_seed, expected_seed);
+        assert_eq!(loaded.disasters_enabled, expected_disasters);
+        assert_eq!(
+            loaded.tick, editor_tick,
+            "el editor no avanzó la simulación"
+        );
+        assert_eq!(loaded.map.get(raised_tile), Some(expected_raised_map_tile));
+        assert_eq!(
+            loaded
+                .towns
+                .iter()
+                .map(|town| (town.id, town.pos, town.name.clone(), town.population))
+                .collect::<Vec<_>>(),
+            expected_towns,
+        );
+        assert_eq!(
+            loaded
+                .industries
+                .iter()
+                .map(|industry| {
+                    (
+                        industry.pos,
+                        industry.spec,
+                        industry.kind,
+                        industry.tiles.clone(),
+                        industry.selected_layout,
+                    )
+                })
+                .collect::<Vec<_>>(),
+            expected_industries,
+        );
+        assert_eq!(loaded.canonical_hash(), expected_hash);
+        assert_eq!(loaded.towns.len(), towns_before + 1);
+        assert_eq!(loaded.industries.len(), industries_before + 2);
+        assert!(loaded.towns.iter().any(|town| town.pos == town_tile));
+        assert!(
+            loaded
+                .industries
+                .iter()
+                .any(|industry| industry.pos == coal_mine_tile)
+        );
+        assert!(
+            loaded
+                .industries
+                .iter()
+                .any(|industry| industry.pos == power_station_tile)
+        );
     }
 }

@@ -51,15 +51,19 @@ class ParityDocsPortabilityTest(unittest.TestCase):
         "docs/parity/random-map-matrix.md",
     )
 
-    def test_v1_raster_report_is_versioned(self):
-        """The portable fixture cannot reveal an ignored source report."""
+    def test_v1_raster_artifacts_are_versioned(self):
+        """The portable fixture cannot reveal ignored source artifacts."""
+        report = json.loads((ROOT / V1_RASTER_REPORT).read_text(encoding="utf-8"))
+        paths = [str(V1_RASTER_REPORT), *v1_raster_artifact_paths(report)]
         result = subprocess.run(
-            ["git", "ls-files", "--error-unmatch", "--", str(V1_RASTER_REPORT)],
+            ["git", "ls-files", "--", *paths],
             cwd=ROOT,
             capture_output=True,
             text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
+        missing = sorted(set(paths) - set(result.stdout.splitlines()))
+        self.assertFalse(missing, f"artefactos V1-RAS no versionados: {missing}")
 
     def run_gate(
         self,

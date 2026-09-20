@@ -1,0 +1,547 @@
+{
+  "acceptance": {
+    "changed_pixels": null,
+    "changed_ratio": null,
+    "enabled": false,
+    "meaning": "si est\u00e1 habilitado, exige que ning\u00fan p\u00edxel alineado supere el delta m\u00e1ximo indicado; no reemplaza la m\u00e9trica exacta",
+    "outside_candidate_pixels": null,
+    "passed": null,
+    "pixel_tolerance": null
+  },
+  "alignment": {
+    "candidate_translation": [
+      0,
+      0
+    ],
+    "meaning": "traslaci\u00f3n aplicada a la candidata: +x derecha, +y abajo",
+    "sample_stride_px": 1,
+    "search_radius_px": 0
+  },
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/out8x/candidate.png",
+      "sha256": "13fb7d2a52cc1937ace81966b88865d6f22a45370305175062f45cec6ebd773c"
+    },
+    "diff": {
+      "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/out8x/diff.png",
+      "sha256": "44f173fc2989c873962f8dc789ed4fe7c411380de9ec5c542d5a99c21fe262a4"
+    },
+    "reference": {
+      "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/out8x/reference.png",
+      "sha256": "5112108334311ec6accae507f9b564c89f10d50112663fa47b0322ccdd438ac5"
+    }
+  },
+  "capture": {
+    "candidate_graphics": "OpenGFX \u00b7 8bpp",
+    "center": [
+      132,
+      2
+    ],
+    "openttd_zoom": "Out8x",
+    "openttdrs_orthographic_scale": 8.0,
+    "pixel_tolerances": [
+      0,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "profile": "clean-static",
+    "reference_graphics": "OpenGFX 8.0 \u00b7 8bpp",
+    "requested_resolution": [
+      800,
+      600
+    ]
+  },
+  "hotspots": {
+    "cell_size_px": 64,
+    "cells_with_difference": 130,
+    "meaning": "regiones de pantalla ordenadas por p\u00edxeles distintos; no implican una tesela \u00fanica porque sprites altos pueden cubrir varias teselas",
+    "reported_cells": [
+      {
+        "bounds": [
+          576,
+          128,
+          640,
+          192
+        ],
+        "changed_pixels": 961,
+        "changed_ratio": 0.234619140625,
+        "max_channel_delta": 180,
+        "mean_channel_delta": 6.4666748046875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          0,
+          192,
+          64,
+          256
+        ],
+        "changed_pixels": 936,
+        "changed_ratio": 0.228515625,
+        "max_channel_delta": 240,
+        "mean_channel_delta": 8.4364013671875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          320,
+          384,
+          384,
+          448
+        ],
+        "changed_pixels": 932,
+        "changed_ratio": 0.2275390625,
+        "max_channel_delta": 224,
+        "mean_channel_delta": 9.5423583984375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          640,
+          384,
+          704,
+          448
+        ],
+        "changed_pixels": 931,
+        "changed_ratio": 0.227294921875,
+        "max_channel_delta": 184,
+        "mean_channel_delta": 6.61712646484375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          320,
+          256,
+          384,
+          320
+        ],
+        "changed_pixels": 918,
+        "changed_ratio": 0.22412109375,
+        "max_channel_delta": 240,
+        "mean_channel_delta": 7.7813720703125,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          640,
+          192,
+          704,
+          256
+        ],
+        "changed_pixels": 908,
+        "changed_ratio": 0.2216796875,
+        "max_channel_delta": 204,
+        "mean_channel_delta": 5.945556640625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          0,
+          256,
+          64,
+          320
+        ],
+        "changed_pixels": 906,
+        "changed_ratio": 0.22119140625,
+        "max_channel_delta": 240,
+        "mean_channel_delta": 7.388671875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          640,
+          128,
+          704,
+          192
+        ],
+        "changed_pixels": 904,
+        "changed_ratio": 0.220703125,
+        "max_channel_delta": 196,
+        "mean_channel_delta": 6.117431640625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          448,
+          128,
+          512,
+          192
+        ],
+        "changed_pixels": 903,
+        "changed_ratio": 0.220458984375,
+        "max_channel_delta": 168,
+        "mean_channel_delta": 6.17034912109375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          640,
+          448,
+          704,
+          512
+        ],
+        "changed_pixels": 900,
+        "changed_ratio": 0.2197265625,
+        "max_channel_delta": 196,
+        "mean_channel_delta": 5.84405517578125,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          704,
+          448,
+          768,
+          512
+        ],
+        "changed_pixels": 897,
+        "changed_ratio": 0.218994140625,
+        "max_channel_delta": 180,
+        "mean_channel_delta": 6.07696533203125,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          384,
+          256,
+          448,
+          320
+        ],
+        "changed_pixels": 893,
+        "changed_ratio": 0.218017578125,
+        "max_channel_delta": 240,
+        "mean_channel_delta": 8.07171630859375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          704,
+          192,
+          768,
+          256
+        ],
+        "changed_pixels": 867,
+        "changed_ratio": 0.211669921875,
+        "max_channel_delta": 240,
+        "mean_channel_delta": 5.9228515625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          640,
+          64,
+          704,
+          128
+        ],
+        "changed_pixels": 862,
+        "changed_ratio": 0.21044921875,
+        "max_channel_delta": 196,
+        "mean_channel_delta": 6.6239013671875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          192,
+          256,
+          256,
+          320
+        ],
+        "changed_pixels": 861,
+        "changed_ratio": 0.210205078125,
+        "max_channel_delta": 240,
+        "mean_channel_delta": 8.54949951171875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          640,
+          512,
+          704,
+          576
+        ],
+        "changed_pixels": 857,
+        "changed_ratio": 0.209228515625,
+        "max_channel_delta": 212,
+        "mean_channel_delta": 7.1943359375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          576,
+          192,
+          640,
+          256
+        ],
+        "changed_pixels": 855,
+        "changed_ratio": 0.208740234375,
+        "max_channel_delta": 196,
+        "mean_channel_delta": 5.712890625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          128,
+          320,
+          192,
+          384
+        ],
+        "changed_pixels": 816,
+        "changed_ratio": 0.19921875,
+        "max_channel_delta": 240,
+        "mean_channel_delta": 7.16632080078125,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          64,
+          384,
+          128,
+          448
+        ],
+        "changed_pixels": 808,
+        "changed_ratio": 0.197265625,
+        "max_channel_delta": 240,
+        "mean_channel_delta": 7.8021240234375,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          256,
+          320,
+          320,
+          384
+        ],
+        "changed_pixels": 808,
+        "changed_ratio": 0.197265625,
+        "max_channel_delta": 184,
+        "mean_channel_delta": 7.1588134765625,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          512,
+          256,
+          576,
+          320
+        ],
+        "changed_pixels": 779,
+        "changed_ratio": 0.190185546875,
+        "max_channel_delta": 196,
+        "mean_channel_delta": 5.21160888671875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          320,
+          64,
+          384,
+          128
+        ],
+        "changed_pixels": 774,
+        "changed_ratio": 0.18896484375,
+        "max_channel_delta": 232,
+        "mean_channel_delta": 7.1827392578125,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          192,
+          320,
+          256,
+          384
+        ],
+        "changed_pixels": 770,
+        "changed_ratio": 0.18798828125,
+        "max_channel_delta": 240,
+        "mean_channel_delta": 7.5867919921875,
+        "total_pixels": 4096
+      },
+      {
+        "bounds": [
+          576,
+          256,
+          640,
+          320
+        ],
+        "changed_pixels": 770,
+        "changed_ratio": 0.18798828125,
+        "max_channel_delta": 184,
+        "mean_channel_delta": 5.1884765625,
+        "total_pixels": 4096
+      }
+    ],
+    "truncated": true
+  },
+  "kind": "focused-world-screenshot",
+  "metrics": {
+    "aligned": {
+      "by_pixel_tolerance": {
+        "0": {
+          "changed_pixels": 71175,
+          "changed_ratio": 0.14828125,
+          "changed_ratio_in_overlap": 0.14828125,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 0, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 0
+        },
+        "16": {
+          "changed_pixels": 68462,
+          "changed_ratio": 0.14262916666666667,
+          "changed_ratio_in_overlap": 0.14262916666666667,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 16, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 16
+        },
+        "2": {
+          "changed_pixels": 70866,
+          "changed_ratio": 0.1476375,
+          "changed_ratio_in_overlap": 0.1476375,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 2, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 2
+        },
+        "32": {
+          "changed_pixels": 58442,
+          "changed_ratio": 0.12175416666666666,
+          "changed_ratio_in_overlap": 0.12175416666666666,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 32, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 32
+        },
+        "4": {
+          "changed_pixels": 70866,
+          "changed_ratio": 0.1476375,
+          "changed_ratio_in_overlap": 0.1476375,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 4, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 4
+        },
+        "64": {
+          "changed_pixels": 32980,
+          "changed_ratio": 0.06870833333333333,
+          "changed_ratio_in_overlap": 0.06870833333333333,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 64, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 64
+        },
+        "8": {
+          "changed_pixels": 70805,
+          "changed_ratio": 0.14751041666666667,
+          "changed_ratio_in_overlap": 0.14751041666666667,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 8, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 8
+        }
+      },
+      "candidate_size": [
+        800,
+        600
+      ],
+      "candidate_translation": [
+        0,
+        0
+      ],
+      "changed_pixels": 71175,
+      "changed_ratio": 0.14828125,
+      "changed_ratio_in_overlap": 0.14828125,
+      "max_channel_delta": 248,
+      "mean_channel_delta": 5.169166145833334,
+      "outside_candidate_pixels": 0,
+      "overlap_pixels": 480000,
+      "reference_size": [
+        800,
+        600
+      ],
+      "total_pixels": 480000
+    },
+    "raw": {
+      "by_pixel_tolerance": {
+        "0": {
+          "changed_pixels": 71175,
+          "changed_ratio": 0.14828125,
+          "changed_ratio_in_overlap": 0.14828125,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 0, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 0
+        },
+        "16": {
+          "changed_pixels": 68462,
+          "changed_ratio": 0.14262916666666667,
+          "changed_ratio_in_overlap": 0.14262916666666667,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 16, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 16
+        },
+        "2": {
+          "changed_pixels": 70866,
+          "changed_ratio": 0.1476375,
+          "changed_ratio_in_overlap": 0.1476375,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 2, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 2
+        },
+        "32": {
+          "changed_pixels": 58442,
+          "changed_ratio": 0.12175416666666666,
+          "changed_ratio_in_overlap": 0.12175416666666666,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 32, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 32
+        },
+        "4": {
+          "changed_pixels": 70866,
+          "changed_ratio": 0.1476375,
+          "changed_ratio_in_overlap": 0.1476375,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 4, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 4
+        },
+        "64": {
+          "changed_pixels": 32980,
+          "changed_ratio": 0.06870833333333333,
+          "changed_ratio_in_overlap": 0.06870833333333333,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 64, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 64
+        },
+        "8": {
+          "changed_pixels": 70805,
+          "changed_ratio": 0.14751041666666667,
+          "changed_ratio_in_overlap": 0.14751041666666667,
+          "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 8, incluyendo cobertura ausente",
+          "outside_candidate_pixels": 0,
+          "tolerance": 8
+        }
+      },
+      "candidate_size": [
+        800,
+        600
+      ],
+      "candidate_translation": [
+        0,
+        0
+      ],
+      "changed_pixels": 71175,
+      "changed_ratio": 0.14828125,
+      "changed_ratio_in_overlap": 0.14828125,
+      "max_channel_delta": 248,
+      "mean_channel_delta": 5.169166145833334,
+      "outside_candidate_pixels": 0,
+      "overlap_pixels": 480000,
+      "reference_size": [
+        800,
+        600
+      ],
+      "total_pixels": 480000
+    }
+  },
+  "save": {
+    "path": "save/Kale_TitleGame.sav",
+    "sha256": "584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69"
+  },
+  "schema_version": 1,
+  "status": "different"
+}

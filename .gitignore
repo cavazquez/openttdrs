@@ -62,6 +62,7 @@ target-agent
 !docs/parity/screenshots/orders-v1/**/sidecar.json
 # Evidencia canónica del gate raster V1 (#589); CI la lee desde un checkout limpio.
 !docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/v1-raster-report.json
+!docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/*/report.json
 !scripts/ci_python_manifest.json
 !scripts/generated_tables_manifest.json
 # Inventario verificable del corpus de regresión de fuzz.

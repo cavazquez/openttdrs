@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -42,6 +43,15 @@ TRANSFER_TRACE_CASES = (
     ("transfer", "COAL", 4, 20, 7),
     ("final", "COAL", 4, 40, 24),
 )
+
+
+def default_source() -> Path:
+    """Return the pinned checkout, optionally selected for a local isolated run."""
+    configured = os.environ.get("OPENTTDRS_PAYMENT_ORACLE_SOURCE")
+    if not configured:
+        return ROOT / "reference/openttd-upstream"
+    source = Path(configured)
+    return source if source.is_absolute() else ROOT / source
 
 # Orden y labels que usa el catálogo Temperate original; el índice es el
 # CargoType sintético del harness, no una tabla Rust.
@@ -437,8 +447,11 @@ def main(argv: list[str] | None = None) -> int:
         "source",
         nargs="?",
         type=Path,
-        default=ROOT / "reference/openttd-upstream",
-        help="checkout OpenTTD fijado (default: reference/openttd-upstream)",
+        default=default_source(),
+        help=(
+            "checkout OpenTTD fijado (default: reference/openttd-upstream; "
+            "override local: OPENTTDRS_PAYMENT_ORACLE_SOURCE)"
+        ),
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="comparar contra fixture/procedencia versionadas")

@@ -32,6 +32,18 @@ cargo test --locked --offline -p openttdrs-core --lib \
   -- --exact --nocapture
 ```
 
+Por defecto el generador usa `reference/openttd-upstream`, como CI. Si esa
+copia se está usando para un oracle instrumentado, se puede preservar y elegir
+otra copia limpia del mismo pin sólo para esta comprobación:
+
+```bash
+OPENTTDRS_PAYMENT_ORACLE_SOURCE=reference/openttd-15.3-oracle \
+  python3 scripts/temperate_payment_oracle.py --check
+```
+
+El override no relaja el pin, los hashes ni la limpieza de
+`src/economy.cpp`/`src/table/cargo_const.h`; una copia distinta sigue fallando.
+
 La regresión Rust lee sólo la tabla externa, ejecuta el cálculo productivo y
 reporta el primer cargo, cantidad, distancia, edad, valor esperado y valor
 actual que diverjan. El chequeo de tablas generadas de CI vuelve a ejecutar el

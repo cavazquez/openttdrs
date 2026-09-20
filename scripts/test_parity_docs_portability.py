@@ -38,11 +38,9 @@ def v1_raster_artifact_paths(value):
             yield from v1_raster_artifact_paths(child)
 
 
-def link_or_copy(source, target):
-    try:
-        os.link(source, target)
-    except OSError:
-        shutil.copyfile(source, target)
+def copy_fixture_file(source, target):
+    """Copy, never hard-link, because negative cases deliberately mutate it."""
+    shutil.copyfile(source, target)
 
 
 class ParityDocsPortabilityTest(unittest.TestCase):
@@ -84,7 +82,7 @@ class ParityDocsPortabilityTest(unittest.TestCase):
             for relative in paths:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
-                link_or_copy(ROOT / relative, target)
+                copy_fixture_file(ROOT / relative, target)
             if stale_path:
                 stale_text = stale_text or "SIM_TICK_HZ = 5.0"
                 with (root / stale_path).open("a") as stream:

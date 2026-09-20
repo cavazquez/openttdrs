@@ -7,7 +7,10 @@ use crate::state::bootstrap::{
     MapSizePreset, NewGameSettings, PopulationDensity, START_YEARS, STARTING_MONEY_OPTIONS,
     TerrainRoughness,
 };
-use crate::state::{ClientScreen, SuspendedGameSession, new_game::NewGameSettingsResource};
+use crate::state::{
+    ClientScreen, SimWorld, SuspendedGameSession,
+    new_game::{NewGameSeedSequence, NewGameSettingsResource},
+};
 use crate::ui::SimHudControls;
 use crate::ui::save_window::{SaveWindowMode, SaveWindowState, save_dir_from};
 
@@ -198,8 +201,10 @@ pub(crate) fn main_menu_interaction(
     mut panel: ResMut<MainMenuPanel>,
     mut next_screen: ResMut<NextState<ClientScreen>>,
     mut settings: ResMut<NewGameSettingsResource>,
+    mut auto_seeds: ResMut<NewGameSeedSequence>,
     mut save_window: ResMut<SaveWindowState>,
     mut suspended: ResMut<SuspendedGameSession>,
+    sim: Option<Res<SimWorld>>,
     hud: Res<SimHudControls>,
     q_menu: Query<Entity, With<MainMenuUi>>,
     q_menu_cam: Query<Entity, With<MainMenuCamera>>,
@@ -279,6 +284,7 @@ pub(crate) fn main_menu_interaction(
         MainMenuPanel::Root => {
             for (interaction, mut bg) in &mut button_sets.p0() {
                 if *interaction == Interaction::Pressed {
+                    settings.0.seed = auto_seeds.next_seed();
                     *panel = MainMenuPanel::NewGame;
                     return;
                 }
@@ -316,6 +322,8 @@ pub(crate) fn main_menu_interaction(
                         &q_menu_cam,
                         &intro_layers,
                         settings.settings(),
+                        sim.as_deref().map(|sim| sim.state.tick),
+                        &mut auto_seeds,
                         &mut next_screen,
                         &mut suspended,
                     );
@@ -348,6 +356,8 @@ pub(crate) fn main_menu_interaction(
                     &q_menu_cam,
                     &intro_layers,
                     settings.settings(),
+                    sim.as_deref().map(|sim| sim.state.tick),
+                    &mut auto_seeds,
                     &mut next_screen,
                     &mut suspended,
                 );

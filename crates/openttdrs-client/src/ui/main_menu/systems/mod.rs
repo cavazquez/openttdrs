@@ -10,7 +10,8 @@ pub(crate) use navigation::{
     sync_main_menu_panel_visibility,
 };
 pub(crate) use new_game_options::{
-    main_menu_options_interaction, main_menu_roughness_interaction, sync_main_menu_summary,
+    main_menu_options_interaction, main_menu_roughness_interaction,
+    main_menu_seed_input_interaction, sync_main_menu_seed_input, sync_main_menu_summary,
 };
 pub(crate) use preferences::{
     main_menu_highscores_interaction, main_menu_preferences_interaction,

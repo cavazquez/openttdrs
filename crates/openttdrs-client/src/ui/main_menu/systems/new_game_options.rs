@@ -1,16 +1,23 @@
+use bevy::input::ButtonState;
+use bevy::input::keyboard::{Key, KeyboardInput};
+use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
+use bevy::text::EditableText;
 use openttdrs_core::Climate;
 
 use crate::state::bootstrap::MapSizePreset;
-use crate::state::new_game::NewGameSettingsResource;
+use crate::state::new_game::{NewGameSeedSequence, NewGameSettingsResource};
 
 use super::super::labels::{adjust_seed, cycle_density, summary_text_for};
 use super::super::widgets::{option_button_bg, seed_button_bg, toggle_button_bg};
 use super::super::{
     MainMenuClimateButton, MainMenuDensityButton, MainMenuDensityTarget, MainMenuMapSizeButton,
     MainMenuPanel, MainMenuRoughnessButton, MainMenuSeedDecButton, MainMenuSeedIncButton,
-    MainMenuStartYearButton, MainMenuStartingMoneyButton, MainMenuSummaryText, MainMenuToggle,
+    MainMenuSeedInput, MainMenuSeedInputState, MainMenuSeedRandomButton, MainMenuStartYearButton,
+    MainMenuStartingMoneyButton, MainMenuSummaryText, MainMenuToggle,
 };
+
+const MAX_SEED_DIGITS: usize = 20;
 
 pub(crate) fn sync_main_menu_summary(
     settings: Res<NewGameSettingsResource>,
@@ -29,10 +36,134 @@ pub(crate) fn sync_main_menu_summary(
     }
 }
 
+/// Refleja el valor materializado de la semilla en el campo editable.
+pub(crate) fn sync_main_menu_seed_input(
+    panel: Res<MainMenuPanel>,
+    settings: Res<NewGameSettingsResource>,
+    mut inputs: Query<(&mut EditableText, &mut MainMenuSeedInputState), With<MainMenuSeedInput>>,
+) {
+    if *panel != MainMenuPanel::NewGame || (!panel.is_changed() && !settings.is_changed()) {
+        return;
+    }
+    let seed = settings.0.seed.to_string();
+    for (mut editable, mut edit_state) in &mut inputs {
+        if edit_state.draft == seed {
+            continue;
+        }
+        edit_state.draft.clone_from(&seed);
+        edit_state.replace_on_next_edit = false;
+        editable.editor_mut().set_text(&seed);
+    }
+}
+
+/// Campo numérico y botón de aleatorización de la semilla de nueva partida.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn main_menu_seed_input_interaction(
+    panel: Res<MainMenuPanel>,
+    mut settings: ResMut<NewGameSettingsResource>,
+    mut auto_seeds: ResMut<NewGameSeedSequence>,
+    mut input_focus: ResMut<InputFocus>,
+    mut key_events: MessageReader<KeyboardInput>,
+    mut input_q: Query<
+        (
+            Entity,
+            Ref<Interaction>,
+            &mut EditableText,
+            &mut MainMenuSeedInputState,
+        ),
+        With<MainMenuSeedInput>,
+    >,
+    mut randomize_q: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<MainMenuSeedRandomButton>),
+    >,
+) {
+    if *panel != MainMenuPanel::NewGame {
+        key_events.clear();
+        return;
+    }
+    let Ok((entity, interaction, mut editable, mut edit_state)) = input_q.single_mut() else {
+        key_events.clear();
+        return;
+    };
+
+    if interaction.is_changed() && *interaction == Interaction::Pressed {
+        edit_state.draft = settings.0.seed.to_string();
+        edit_state.replace_on_next_edit = true;
+        editable.editor_mut().set_text(&edit_state.draft);
+        input_focus.set(entity, FocusCause::Pressed);
+    }
+
+    for (interaction, mut background) in &mut randomize_q {
+        if *interaction == Interaction::Pressed {
+            settings.0.seed = auto_seeds.next_seed();
+            edit_state.draft = settings.0.seed.to_string();
+            edit_state.replace_on_next_edit = false;
+            editable.editor_mut().set_text(&edit_state.draft);
+        }
+        *background = seed_button_bg(*interaction);
+    }
+
+    if input_focus.get() != Some(entity) {
+        key_events.clear();
+        return;
+    }
+
+    let mut changed = false;
+    for event in key_events.read() {
+        if event.state != ButtonState::Pressed {
+            continue;
+        }
+        if matches!(event.logical_key, Key::Backspace) {
+            if edit_state.replace_on_next_edit {
+                edit_state.replace_on_next_edit = false;
+                changed |= !edit_state.draft.is_empty();
+                edit_state.draft.clear();
+            } else {
+                changed |= edit_state.draft.pop().is_some();
+            }
+            continue;
+        }
+        if matches!(event.logical_key, Key::Delete) {
+            edit_state.replace_on_next_edit = false;
+            changed |= !edit_state.draft.is_empty();
+            edit_state.draft.clear();
+            continue;
+        }
+        let Some(text) = &event.text else {
+            continue;
+        };
+        for character in text.chars().filter(char::is_ascii_digit) {
+            if edit_state.replace_on_next_edit {
+                edit_state.draft.clear();
+                edit_state.replace_on_next_edit = false;
+            }
+            if edit_state.draft.len() >= MAX_SEED_DIGITS {
+                continue;
+            }
+            let mut candidate = edit_state.draft.clone();
+            candidate.push(character);
+            if candidate.parse::<u64>().is_ok() {
+                edit_state.draft = candidate;
+                changed = true;
+            }
+        }
+    }
+    if !changed {
+        return;
+    }
+    editable.editor_mut().set_text(&edit_state.draft);
+    if let Ok(seed) = edit_state.draft.parse::<u64>() {
+        settings.0.seed = seed;
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn main_menu_options_interaction(
     panel: Res<MainMenuPanel>,
     mut settings: ResMut<NewGameSettingsResource>,
+    input_focus: Option<Res<InputFocus>>,
+    seed_inputs: Query<(), With<MainMenuSeedInput>>,
     mut button_sets: ParamSet<(
         Query<(&Interaction, &MainMenuClimateButton, &mut BackgroundColor)>,
         Query<(&Interaction, &MainMenuMapSizeButton, &mut BackgroundColor)>,
@@ -53,29 +184,35 @@ pub(crate) fn main_menu_options_interaction(
         return;
     }
 
-    if keys.just_pressed(KeyCode::Digit1) {
-        settings.0.climate = Climate::Temperate;
-    }
-    if keys.just_pressed(KeyCode::Digit2) {
-        settings.0.climate = Climate::SubArctic;
-    }
-    if keys.just_pressed(KeyCode::Digit3) {
-        settings.0.climate = Climate::SubTropical;
-    }
-    if keys.just_pressed(KeyCode::Digit4) {
-        settings.0.climate = Climate::Toyland;
-    }
-    if keys.just_pressed(KeyCode::BracketLeft) {
-        adjust_seed(&mut settings.0.seed, -1);
-    }
-    if keys.just_pressed(KeyCode::BracketRight) {
-        adjust_seed(&mut settings.0.seed, 1);
-    }
-    if keys.just_pressed(KeyCode::KeyZ) {
-        cycle_density(&mut settings.0.town_density);
-    }
-    if keys.just_pressed(KeyCode::KeyX) {
-        cycle_density(&mut settings.0.industry_density);
+    let seed_input_focused = input_focus
+        .as_deref()
+        .and_then(InputFocus::get)
+        .is_some_and(|entity| seed_inputs.get(entity).is_ok());
+    if !seed_input_focused {
+        if keys.just_pressed(KeyCode::Digit1) {
+            settings.0.climate = Climate::Temperate;
+        }
+        if keys.just_pressed(KeyCode::Digit2) {
+            settings.0.climate = Climate::SubArctic;
+        }
+        if keys.just_pressed(KeyCode::Digit3) {
+            settings.0.climate = Climate::SubTropical;
+        }
+        if keys.just_pressed(KeyCode::Digit4) {
+            settings.0.climate = Climate::Toyland;
+        }
+        if keys.just_pressed(KeyCode::BracketLeft) {
+            adjust_seed(&mut settings.0.seed, -1);
+        }
+        if keys.just_pressed(KeyCode::BracketRight) {
+            adjust_seed(&mut settings.0.seed, 1);
+        }
+        if keys.just_pressed(KeyCode::KeyZ) {
+            cycle_density(&mut settings.0.town_density);
+        }
+        if keys.just_pressed(KeyCode::KeyX) {
+            cycle_density(&mut settings.0.industry_density);
+        }
     }
 
     for (interaction, btn, mut bg) in &mut button_sets.p0() {

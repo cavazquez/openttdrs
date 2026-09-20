@@ -1389,7 +1389,7 @@ mod tests {
     use openttdrs_core::{Command, IndustrySpec};
 
     use crate::render::{RemapMapVisualsPending, VehicleIndex};
-    use crate::state::new_game::NewGameSettingsResource;
+    use crate::state::new_game::{NewGameSeedSequence, NewGameSettingsResource};
     use crate::state::{
         ClientScreen, ScenarioDirectory, SuspendedGameSession, apply_editor_sandbox,
         editor_new_game_settings,
@@ -1442,6 +1442,7 @@ mod tests {
         world.insert_resource(SuspendedGameSession::default());
         world.insert_resource(MainMenuPanel::Root);
         world.insert_resource(NewGameSettingsResource::default());
+        world.init_resource::<NewGameSeedSequence>();
         world.init_resource::<Messages<OpenUiRoute>>();
         world.init_resource::<Messages<AppExit>>();
         world.spawn((SaveWindowNameText, EditableText::new("editor-v1.json")));

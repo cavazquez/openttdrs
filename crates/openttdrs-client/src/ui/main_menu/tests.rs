@@ -4,15 +4,19 @@ use super::labels::{adjust_seed, cycle_density, summary_text, summary_text_for};
 use super::{
     MainMenuDemoButton, MainMenuDynamicText, MainMenuLanguageButton, MainMenuLocalizedText,
     MainMenuNewGameButton, MainMenuPanel, MainMenuPreferencesButton, MainMenuResolutionButton,
-    setup_main_menu,
+    MainMenuSeedInput, MainMenuSeedInputState, setup_main_menu,
 };
 use crate::network::{NetCli, NetworkStatus};
 use crate::state::bootstrap::{
     MapSizePreset, NewGameSettings, PopulationDensity, STARTING_MONEY_OPTIONS,
 };
-use crate::state::new_game::NewGameSettingsResource;
+use crate::state::new_game::{NewGameSeedSequence, NewGameSettingsResource};
 use bevy::ecs::system::RunSystemOnce;
-use bevy::prelude::{Text, World};
+use bevy::input::ButtonState;
+use bevy::input::keyboard::{Key, KeyboardInput};
+use bevy::input_focus::InputFocus;
+use bevy::prelude::{Entity, KeyCode, Messages, Text, World};
+use bevy::text::EditableText;
 use openttdrs_core::Climate;
 
 #[test]
@@ -28,6 +32,41 @@ fn setup_main_menu_and_camera_run() {
         1
     );
     assert_eq!(world.query::<&MainMenuDemoButton>().iter(&world).count(), 1);
+    assert_eq!(world.query::<&MainMenuSeedInput>().iter(&world).count(), 1);
+}
+
+#[test]
+fn seed_input_accepts_a_player_supplied_number() {
+    let mut world = World::new();
+    world.insert_resource(MainMenuPanel::NewGame);
+    world.insert_resource(NewGameSettingsResource::default());
+    world.init_resource::<NewGameSeedSequence>();
+    world.init_resource::<Messages<KeyboardInput>>();
+    let input = world
+        .spawn((
+            MainMenuSeedInput,
+            MainMenuSeedInputState::default(),
+            bevy::prelude::Interaction::default(),
+            EditableText::new(""),
+        ))
+        .id();
+    world.insert_resource(InputFocus::from_entity(input));
+    world.write_message(KeyboardInput {
+        key_code: KeyCode::Digit7,
+        logical_key: Key::Character("7".into()),
+        state: ButtonState::Pressed,
+        text: Some("7".into()),
+        repeat: false,
+        window: Entity::PLACEHOLDER,
+    });
+
+    world
+        .run_system_once(super::main_menu_seed_input_interaction)
+        .unwrap();
+
+    assert_eq!(world.resource::<NewGameSettingsResource>().0.seed, 7);
+    let mut editable = world.query::<&EditableText>();
+    assert_eq!(editable.single(&world).unwrap().value(), "7");
 }
 
 #[test]

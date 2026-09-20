@@ -4,7 +4,7 @@ use crate::render::{MapVisualLayer, ShoreTile, WaterTile};
 use crate::state::bootstrap::{MapSizePreset, NewGameSettings};
 use crate::state::{
     ClientScreen, ScenarioDirectory, SimWorld, SuspendedGameSession,
-    new_game::NewGameSettingsResource,
+    new_game::{NewGameSeedSequence, NewGameSettingsResource},
 };
 use crate::ui::save_window::{SaveWindowMode, SaveWindowState, save_dir_from};
 
@@ -49,8 +49,10 @@ pub(crate) fn main_menu_scenarios_interaction(
     mut save_window: ResMut<SaveWindowState>,
     scenario_directory: Option<Res<ScenarioDirectory>>,
     mut settings: ResMut<NewGameSettingsResource>,
+    mut auto_seeds: ResMut<NewGameSeedSequence>,
     mut next_screen: ResMut<NextState<ClientScreen>>,
     mut suspended: ResMut<SuspendedGameSession>,
+    sim: Option<Res<SimWorld>>,
     q_menu: Query<Entity, With<MainMenuUi>>,
     q_menu_cam: Query<Entity, With<MainMenuCamera>>,
     intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
@@ -165,6 +167,8 @@ pub(crate) fn main_menu_scenarios_interaction(
             &q_menu_cam,
             &intro_layers,
             settings.settings(),
+            sim.as_deref().map(|sim| sim.state.tick),
+            &mut auto_seeds,
             &mut next_screen,
             &mut suspended,
         );

@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use bevy::text::{EditableText, TextCursorStyle};
+use bevy::ui::FocusPolicy;
 use openttdrs_core::Climate;
 
 use crate::network::{NetCli, NetworkStatus};
@@ -21,8 +23,9 @@ use super::{
     MainMenuOpenHeightmapsDirButton, MainMenuOpenScenariosDirButton, MainMenuPanel,
     MainMenuPreferencesButton, MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes,
     MainMenuResolutionButton, MainMenuScenariosButton, MainMenuSeedDecButton,
-    MainMenuSeedIncButton, MainMenuSoundButton, MainMenuStartButton, MainMenuSubPanel,
-    MainMenuSummaryText, MainMenuTitleText, MainMenuToggle, MainMenuUi,
+    MainMenuSeedIncButton, MainMenuSeedInput, MainMenuSeedInputState, MainMenuSeedRandomButton,
+    MainMenuSoundButton, MainMenuStartButton, MainMenuSubPanel, MainMenuSummaryText,
+    MainMenuTitleText, MainMenuToggle, MainMenuUi,
 };
 
 const MAIN_MENU_BACKDROP_ALPHA: f32 = 0.28;
@@ -501,8 +504,32 @@ fn spawn_new_game_options(panel: &mut ChildSpawnerCommands) {
         },))
         .with_children(|row| {
             row.spawn(option_section_label("Semilla"));
+            row.spawn((
+                MainMenuSeedInput,
+                MainMenuSeedInputState::default(),
+                EditableText::new("0"),
+                Node {
+                    width: Val::Px(142.0),
+                    height: Val::Px(28.0),
+                    padding: UiRect::horizontal(Val::Px(6.0)),
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.1, 0.08, 0.06)),
+                BorderColor::all(Color::srgb(0.6, 0.53, 0.36)),
+                Interaction::default(),
+                FocusPolicy::Block,
+                TextCursorStyle::default(),
+                TextFont {
+                    font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),
+                    ..default()
+                },
+                TextColor(Color::srgb(0.95, 0.93, 0.8)),
+            ));
             row.spawn(seed_adjust_button(MainMenuSeedDecButton, "−"));
             row.spawn(seed_adjust_button(MainMenuSeedIncButton, "+"));
+            row.spawn(seed_adjust_button(MainMenuSeedRandomButton, "↻"));
         });
 }
 

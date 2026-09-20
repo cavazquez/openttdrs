@@ -13,10 +13,11 @@ pub(crate) use systems::{
     apply_pending_heightmap_on_enter, auto_start_preloaded_json, leave_main_menu,
     main_menu_continue_interaction, main_menu_editor_interaction, main_menu_highscores_interaction,
     main_menu_interaction, main_menu_options_interaction, main_menu_preferences_interaction,
-    main_menu_roughness_interaction, main_menu_scenarios_interaction, main_menu_sound_interaction,
-    return_to_main_menu, sync_main_menu_continue_button, sync_main_menu_heightmap_slots,
-    sync_main_menu_highscores, sync_main_menu_localized_labels, sync_main_menu_panel_visibility,
-    sync_main_menu_preferences, sync_main_menu_summary,
+    main_menu_roughness_interaction, main_menu_scenarios_interaction,
+    main_menu_seed_input_interaction, main_menu_sound_interaction, return_to_main_menu,
+    sync_main_menu_continue_button, sync_main_menu_heightmap_slots, sync_main_menu_highscores,
+    sync_main_menu_localized_labels, sync_main_menu_panel_visibility, sync_main_menu_preferences,
+    sync_main_menu_seed_input, sync_main_menu_summary,
 };
 
 use bevy::prelude::*;
@@ -119,6 +120,21 @@ pub(crate) struct MainMenuSeedDecButton;
 
 #[derive(Component)]
 pub(crate) struct MainMenuSeedIncButton;
+
+/// Campo editable de la semilla de la próxima partida.
+#[derive(Component)]
+pub(crate) struct MainMenuSeedInput;
+
+/// Estado de edición separado de la semilla materializada en las opciones.
+#[derive(Component, Default)]
+pub(crate) struct MainMenuSeedInputState {
+    draft: String,
+    replace_on_next_edit: bool,
+}
+
+/// Solicita otra semilla automática sin abandonar el panel de nueva partida.
+#[derive(Component)]
+pub(crate) struct MainMenuSeedRandomButton;
 
 #[derive(Component, Clone, Copy)]
 pub(crate) enum MainMenuToggle {

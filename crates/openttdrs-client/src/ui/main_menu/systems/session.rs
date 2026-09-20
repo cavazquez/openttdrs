@@ -6,6 +6,9 @@ use crate::state::{
 };
 use crate::ui::main_menu_intro::despawn_main_menu_intro_layers;
 use bevy::prelude::*;
+use openttdrs_core::GameTick;
+
+use crate::state::new_game::NewGameSeedSequence;
 
 use super::super::{MainMenuCamera, MainMenuUi};
 
@@ -81,19 +84,42 @@ pub(crate) fn auto_start_preloaded_json(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(in crate::ui::main_menu) fn enter_new_game(
     commands: &mut Commands,
     q_menu: &Query<Entity, With<MainMenuUi>>,
     q_menu_cam: &Query<Entity, With<MainMenuCamera>>,
     intro_layers: &Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
     settings: NewGameSettings,
+    previous_tick: Option<GameTick>,
+    auto_seeds: &mut NewGameSeedSequence,
     next_screen: &mut NextState<ClientScreen>,
     suspended: &mut SuspendedGameSession,
 ) {
     suspended.active = false;
     commands.insert_resource(EditorSession::inactive());
-    commands.insert_resource(SimWorld::from_new_game(&settings.sanitized()));
+    commands.insert_resource(build_new_game_session(settings, previous_tick, auto_seeds));
     leave_main_menu(commands, q_menu, q_menu_cam, intro_layers, next_screen);
+}
+
+fn build_new_game_session(
+    settings: NewGameSettings,
+    previous_tick: Option<GameTick>,
+    auto_seeds: &mut NewGameSeedSequence,
+) -> SimWorld {
+    let mut settings = settings.sanitized();
+    if settings.world_gen && settings.seed == 0 {
+        settings.seed = auto_seeds.next_seed();
+    }
+
+    let mut sim = SimWorld::from_new_game(&settings);
+    if let Some(previous_tick) = previous_tick
+        && previous_tick > sim.state.tick
+    {
+        sim.state.tick = previous_tick;
+        sim.state.sync_timers_from_tick();
+    }
+    sim
 }
 
 pub(in crate::ui::main_menu) fn enter_editor(
@@ -111,4 +137,62 @@ pub(in crate::ui::main_menu) fn enter_editor(
     commands.insert_resource(EditorSession::active());
     info!("Editor de escenarios: sandbox ON (dinero ∞, bulldozer, sin IA rival)");
     leave_main_menu(commands, q_menu, q_menu_cam, intro_layers, next_screen);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{NewGameSeedSequence, build_new_game_session};
+    use crate::state::bootstrap::NewGameSettings;
+    use openttdrs_core::GameTick;
+
+    #[test]
+    fn automatic_new_games_materialize_distinct_world_seeds() {
+        let settings = NewGameSettings {
+            world_gen: true,
+            island: true,
+            preserve_demo: false,
+            ..NewGameSettings::default()
+        };
+        let mut auto_seeds = NewGameSeedSequence::default();
+
+        let first = build_new_game_session(settings, None, &mut auto_seeds);
+        let second = build_new_game_session(settings, None, &mut auto_seeds);
+
+        assert_ne!(first.state.world_seed, 0);
+        assert_ne!(second.state.world_seed, 0);
+        assert_ne!(first.state.world_seed, second.state.world_seed);
+    }
+
+    #[test]
+    fn explicit_new_game_seed_stays_reproducible() {
+        let settings = NewGameSettings {
+            world_gen: true,
+            island: true,
+            preserve_demo: false,
+            seed: 73,
+            ..NewGameSettings::default()
+        };
+        let mut auto_seeds = NewGameSeedSequence::default();
+
+        let sim = build_new_game_session(settings, None, &mut auto_seeds);
+
+        assert_eq!(sim.state.world_seed, 73);
+    }
+
+    #[test]
+    fn replacing_a_session_keeps_the_later_tick() {
+        let mut auto_seeds = NewGameSeedSequence::default();
+        let previous_tick = GameTick::new(123_456);
+
+        let sim = build_new_game_session(
+            NewGameSettings {
+                preserve_demo: false,
+                ..NewGameSettings::default()
+            },
+            Some(previous_tick),
+            &mut auto_seeds,
+        );
+
+        assert_eq!(sim.state.tick, previous_tick);
+    }
 }

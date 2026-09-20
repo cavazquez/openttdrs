@@ -141,8 +141,8 @@ pendientes. Las dependencias por ID V1 resuelven a los enlaces de esta lista.
 - **V1-GSCOUNT — [#598](https://github.com/cavazquez/openttdrs/issues/598):** `CargoDelivered` ya consulta el ledger persistente de unidades finales del tipo solicitado, sin inferir tipos del agregado legacy; [regresiones y migración](gs-cargo-filter-v1.md) implementadas, a la espera de CI remota vigente antes del cierre.
 - **V1-GS — [#599](https://github.com/cavazquez/openttdrs/issues/599):** una meta `Coal=10` de TransCargo guarda en 5/10, continúa 2.000 ticks contra la rama JSON y conserva hash/noticia única ([evidencia](gs-json-v1.md)). Implementado; espera CI remota vigente antes del cierre. Depende de V1-GSCOUNT.
 - **V1-EDIT — [#600](https://github.com/cavazquez/openttdrs/issues/600):** escenario Temperate 64×64 editado, JSON nativo y reapertura por Escenarios; conserva mapa, entidades, fecha/settings y tick, incluido el error de guardado que deja el documento abierto ([evidencia](editor-v1.md)). Implementado; espera CI remota vigente antes del cierre.
-- **V1-WIN — [#601](https://github.com/cavazquez/openttdrs/issues/601):** menú del ZIP Windows en entorno gráfico real.
-- **V1-MAC — [#602](https://github.com/cavazquez/openttdrs/issues/602):** menú del tar.gz macOS arm64 en entorno gráfico real.
+- **V1-WIN — [#601](https://github.com/cavazquez/openttdrs/issues/601):** [gate nativo](package-native-graphical-v1.md) del ZIP Windows, ES/EN, cwd/perfil aislados y evidencia por SHA; espera dry-run en sesión gráfica real.
+- **V1-MAC — [#602](https://github.com/cavazquez/openttdrs/issues/602):** [gate nativo](package-native-graphical-v1.md) del tar.gz macOS arm64, ES/EN, cwd/perfil aislados y evidencia por SHA; espera dry-run en sesión gráfica real.
 - **V1-REPORT — [#603](https://github.com/cavazquez/openttdrs/issues/603):** [agregado fail-closed](v1-report.md) por contrato/SHA; rechaza informes ausentes, mezclados, omitidos o no aprobables. Declarar todo verde depende de los 20 resultados verificables del mismo candidato.
 
 Se conservan **[#582](https://github.com/cavazquez/openttdrs/issues/582)**

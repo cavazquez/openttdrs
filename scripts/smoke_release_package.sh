@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GRAPHICAL_CHECKER="${ROOT}/scripts/check_release_graphical_smoke.py"
+NATIVE_GRAPHICAL_SMOKE="${ROOT}/scripts/smoke_release_graphical.py"
 SHOT_WIDTH=1280
 SHOT_HEIGHT=720
 SHOT_RESOLUTION="${SHOT_WIDTH}x${SHOT_HEIGHT}"
@@ -31,7 +32,7 @@ case "$graphical_smoke" in
     exit 2
     ;;
 esac
-graphical_timeout="${OPENTTDRS_RELEASE_GRAPHICAL_TIMEOUT_SECONDS:-45}"
+graphical_timeout="${OPENTTDRS_RELEASE_GRAPHICAL_TIMEOUT_SECONDS:-60}"
 if ! [[ "$graphical_timeout" =~ ^[1-9][0-9]*$ ]]; then
   echo "OPENTTDRS_RELEASE_GRAPHICAL_TIMEOUT_SECONDS debe ser un entero positivo." >&2
   exit 2
@@ -45,11 +46,38 @@ asset_log="${workdir}/check-assets.log"
 network_log="${workdir}/network.log"
 menu_log="${workdir}/menu.log"
 menu_shot="${workdir}/menu.png"
+native_graphical_dir="${workdir}/native-graphical"
+asset_cwd="${workdir}/outside-checkout"
+asset_profile="${workdir}/isolated-profile"
+
+python_command() {
+  if command -v python3 >/dev/null 2>&1; then
+    command -v python3
+  elif command -v python >/dev/null 2>&1; then
+    command -v python
+  else
+    echo "Hace falta Python para el smoke de paquete." >&2
+    return 1
+  fi
+}
+
+write_package_sha() {
+  local output="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$archive" >"$output"
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$archive" >"$output"
+  else
+    local python_cmd
+    python_cmd="$(python_command)" || return 1
+    "$python_cmd" -c 'import hashlib, pathlib, sys; path = pathlib.Path(sys.argv[1]); print(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path}")' "$archive" >"$output"
+  fi
+}
 
 collect_artifacts() {
   [[ -n "$artifact_dir" ]] || return 0
   mkdir -p "$artifact_dir"
-  sha256sum "$archive" >"${artifact_dir}/package.sha256"
+  write_package_sha "${artifact_dir}/package.sha256" || true
   for source in \
     "$asset_log" \
     "$network_log" \
@@ -59,6 +87,9 @@ collect_artifacts() {
     [[ -f "$source" ]] || continue
     cp "$source" "${artifact_dir}/$(basename "$source")"
   done
+  if [[ -d "$native_graphical_dir" ]]; then
+    cp -a "$native_graphical_dir" "${artifact_dir}/graphical"
+  fi
 }
 
 cleanup() {
@@ -115,7 +146,31 @@ if (( ${#music[@]} == 0 || ${#sounds[@]} == 0 )); then
   exit 1
 fi
 
-if ! "$client" --check-assets >"$asset_log" 2>&1; then
+mkdir -p \
+  "$asset_cwd" \
+  "${asset_profile}/home" \
+  "${asset_profile}/config" \
+  "${asset_profile}/data" \
+  "${asset_profile}/state" \
+  "${asset_profile}/cache" \
+  "${asset_profile}/runtime"
+chmod 700 "${asset_profile}/runtime"
+if [[ -e "$asset_cwd/assets" || -e "$asset_cwd/reference" ]]; then
+  echo "El cwd del smoke no quedó aislado del checkout." >&2
+  exit 1
+fi
+if ! (
+  cd "$asset_cwd"
+  env \
+    HOME="${asset_profile}/home" \
+    XDG_CONFIG_HOME="${asset_profile}/config" \
+    XDG_DATA_HOME="${asset_profile}/data" \
+    XDG_STATE_HOME="${asset_profile}/state" \
+    XDG_CACHE_HOME="${asset_profile}/cache" \
+    XDG_RUNTIME_DIR="${asset_profile}/runtime" \
+    OPENTTDRS_ASSET_ROOT="$package_dir" \
+    "$client" --check-assets
+) >"$asset_log" 2>&1; then
   echo "El cliente empaquetado no validó sus assets:" >&2
   cat "$asset_log" >&2
   exit 1
@@ -127,8 +182,8 @@ capture_graphical_frame() {
   local output="$2"
   local log="$3"
   local lavapipe_icd="$4"
-  local run_cwd="$workdir/outside-checkout"
-  local profile="$workdir/isolated-profile"
+  local run_cwd="$asset_cwd"
+  local profile="$asset_profile"
 
   (
     cd "$run_cwd"
@@ -156,12 +211,39 @@ capture_graphical_frame() {
   ) >"$log" 2>&1
 }
 
-run_graphical_smoke() {
-  [[ "$graphical_smoke" == "1" ]] || return 0
-  if [[ "$suffix" == ".exe" ]]; then
-    echo "El smoke gráfico sólo admite un paquete Linux extraído." >&2
+run_native_graphical_smoke() {
+  local python_cmd
+  python_cmd="$(python_command)" || return 1
+  if [[ ! -f "$NATIVE_GRAPHICAL_SMOKE" ]]; then
+    echo "No existe el smoke gráfico nativo: $NATIVE_GRAPHICAL_SMOKE" >&2
     return 1
   fi
+  local candidate_sha="${OPENTTDRS_RELEASE_CANDIDATE_SHA:-}"
+  if ! [[ "$candidate_sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+    echo "El smoke gráfico nativo requiere OPENTTDRS_RELEASE_CANDIDATE_SHA de 40 hexadecimales." >&2
+    return 1
+  fi
+  mkdir -p "$native_graphical_dir"
+  "$python_cmd" "$NATIVE_GRAPHICAL_SMOKE" \
+    --client "$client" \
+    --package-root "$package_dir" \
+    --archive "$archive" \
+    --candidate-sha "$candidate_sha" \
+    --artifact-dir "$native_graphical_dir" \
+    --timeout-seconds "$graphical_timeout"
+  echo "Smoke gráfico nativo OK: menú ES/EN desde el paquete y sesión del runner."
+}
+
+run_graphical_smoke() {
+  [[ "$graphical_smoke" == "1" ]] || return 0
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*|Darwin*) run_native_graphical_smoke; return $? ;;
+    Linux*) ;;
+    *)
+      echo "No hay driver gráfico nativo declarado para $(uname -s)." >&2
+      return 1
+      ;;
+  esac
   for command in xvfb-run xauth timeout python3; do
     if ! command -v "$command" >/dev/null 2>&1; then
       echo "Falta $command para el smoke gráfico Linux." >&2
@@ -176,21 +258,6 @@ run_graphical_smoke() {
   lavapipe_icd="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -name 'lvp_icd*.json' -print -quit)"
   if [[ -z "$lavapipe_icd" ]]; then
     echo "No se encontró el ICD Lavapipe para el renderer de software." >&2
-    return 1
-  fi
-
-  local profile="$workdir/isolated-profile"
-  mkdir -p \
-    "$workdir/outside-checkout" \
-    "${profile}/home" \
-    "${profile}/config" \
-    "${profile}/data" \
-    "${profile}/state" \
-    "${profile}/cache" \
-    "${profile}/runtime"
-  chmod 700 "${profile}/runtime"
-  if [[ -e "$workdir/outside-checkout/assets" || -e "$workdir/outside-checkout/reference" ]]; then
-    echo "El cwd gráfico no quedó aislado del checkout." >&2
     return 1
   fi
 
@@ -230,7 +297,10 @@ address="127.0.0.1:${port}"
 "$dedicated" --bind "$address" >"$server_log" 2>&1 &
 server_pid=$!
 
-if ! "$client" --network-smoke "$address" >"$network_log" 2>&1; then
+if ! (
+  cd "$asset_cwd"
+  env OPENTTDRS_ASSET_ROOT="$package_dir" "$client" --network-smoke "$address"
+) >"$network_log" 2>&1; then
   echo "Log del dedicated empaquetado:" >&2
   cat "$server_log" >&2
   echo "Log del cliente empaquetado:" >&2

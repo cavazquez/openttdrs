@@ -34,6 +34,7 @@ Orden sugerido al entrar:
 | Editor V1 | [parity/editor-v1.md](parity/editor-v1.md) | Escenario 64×64 editado, JSON aislado y reapertura por Escenarios |
 | Raster V1 de Kale | [parity/raster-v1-kale.md](parity/raster-v1-kale.md) | Contrato focal, hashes, presupuesto y artefactos de #589 |
 | Reporte V1 por contrato | [parity/v1-report.md](parity/v1-report.md) | Agregado fail-closed por SHA, umbral y artefactos de los contratos V1 |
+| Paquetes gráficos V1 | [parity/package-native-graphical-v1.md](parity/package-native-graphical-v1.md) | Smoke nativo ES/EN de los paquetes Windows y macOS, con evidencia por SHA |
 
 Al cambiar una capacidad, editar su fuente canónica y el resumen de
 `PARIDAD.md` sólo si modifica la madurez global. Los roadmaps, README y guías
@@ -59,6 +60,7 @@ backlog.
 | [parity/editor-v1.md](parity/editor-v1.md) | Contrato focal del editor, guardado JSON y reapertura por menú |
 | [parity/raster-v1-kale.md](parity/raster-v1-kale.md) | Evidencia y reproducción del contrato raster focal V1 |
 | [parity/v1-report.md](parity/v1-report.md) | Formato y agregado verificable de los resultados V1 por contrato |
+| [parity/package-native-graphical-v1.md](parity/package-native-graphical-v1.md) | Smoke nativo verificable de paquetes Windows y macOS |
 | [MAPA_Y_FERROCARRIL.md](MAPA_Y_FERROCARRIL.md) | Flujo `.ottdmap`, MAPT/chunks, señales, autorail, waypoints |
 | [GRAFICOS.md](GRAFICOS.md) | Sprites OpenGFX + handoff terreno |
 | [RENDIMIENTO.md](RENDIMIENTO.md) | PERF mapas grandes + benchmarks |

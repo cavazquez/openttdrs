@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Contrato y smoke aislado del dry-run multiplataforma de release (#296, #577).
+"""Contrato y smoke aislado del dry-run multiplataforma de release (#296, #577, #601, #602).
 
 El workflow debe construir artefactos de los tres sistemas, probar el paquete
 ya extraído y impedir una publicación por tag sin los gates previos. Además de
@@ -68,11 +68,12 @@ class ReleaseDryRunWorkflowTest(unittest.TestCase):
             "./scripts/package_release.sh",
             "./scripts/check_linux_glibc_floor.sh",
             "./scripts/smoke_release_package.sh",
-            "Smoke gráfico del paquete Linux extraído",
+            "Smoke gráfico nativo del paquete extraído",
             'OPENTTDRS_RELEASE_GRAPHICAL_SMOKE: "1"',
+            'OPENTTDRS_RELEASE_GRAPHICAL_TIMEOUT_SECONDS: "60"',
+            "OPENTTDRS_RELEASE_CANDIDATE_SHA: ${{ github.sha }}",
             "OPENTTDRS_RELEASE_SMOKE_ARTIFACT_DIR",
-            "release-linux-graphics-smoke-",
-            "if: runner.os != 'Linux'",
+            "release-${{ matrix.platform }}-graphics-smoke-",
             "scripts/write_release_report.py",
             "release-report-${{ needs.validate.outputs.version }}-${{ matrix.platform }}.json",
             "if: github.ref_type == 'tag'",
@@ -93,6 +94,7 @@ class ReleaseDryRunWorkflowTest(unittest.TestCase):
             "VK_ICD_FILENAMES",
             "lvp_icd*.json",
             "check_release_graphical_smoke.py",
+            "smoke_release_graphical.py",
             "package.sha256",
         ):
             self.assertIn(marker, smoke)

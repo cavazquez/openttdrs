@@ -116,8 +116,10 @@ corte. Orden para implementar una tarea a la vez:
    remota vigente. Órdenes **#590** quedó certificada localmente en
    `72d906d8` ([ocho perfiles y presupuesto fijo](orders-v1.md)); sigue editor
    **#600**.
-5. Paquetes Windows **#601** y macOS **#602**. Emitir con **#603** el reporte
-   completo del SHA candidato; ninguna ausencia cuenta como aprobación.
+5. Paquetes Windows **#601** y macOS **#602**. El [gate nativo ES/EN](package-native-graphical-v1.md)
+   ya preserva paquete, SHA, logs y PNG desde cwd/perfil aislados; falta su
+   dry-run en sesiones gráficas reales. Emitir con **#603** el reporte completo
+   del SHA candidato; ninguna ausencia cuenta como aprobación.
 
 Construcción básica, fixtures PBS y ruta vial/JSON ya tienen evidencia acotada
 (95 tests seleccionados incluyendo FTA); se reutiliza y se reejecuta al

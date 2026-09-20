@@ -96,8 +96,11 @@ de `screenshots/window-regression.json` permiten actualmente ratio **1** y
 deltas **255**. Orders/1280x720-1x registra **921.572/921.600** píxeles
 distintos. Verificar sus hashes/sidecars prueba integridad del archivo, no
 similitud ni ausencia de regresiones en el ejecutable actual. [#584](https://github.com/cavazquez/openttdrs/issues/584)
-separa esas categorías y [#590](https://github.com/cavazquez/openttdrs/issues/590)
-certifica el flujo de Órdenes. No se exige clonar la apariencia de OpenTTD.
+ya separa roles, exige SHA/procedencia fresca y aplica el presupuesto fijo a
+manifiestos `client_regression`; [#590](https://github.com/cavazquez/openttdrs/issues/590)
+debe aportar las ocho capturas reales de Órdenes. Hasta entonces, la categoría
+`client_regression` no es aplicable, nunca verde por el archivo histórico. No
+se exige clonar la apariencia de OpenTTD.
 
 ### Paquetes
 
@@ -114,7 +117,7 @@ y exclusiones. Su aceptación no crece después de la primera mejora. Una
 causa independiente requiere otra tarea; los criterios no satisfechos siguen
 pendientes. Las dependencias por ID V1 resuelven a los enlaces de esta lista.
 
-- **V1-VIS — [#584](https://github.com/cavazquez/openttdrs/issues/584):** separar evidencia visual diagnóstica de gates efectivos.
+- **V1-VIS — [#584](https://github.com/cavazquez/openttdrs/issues/584):** roles diagnóstico/certificación, presupuesto fijo y procedencia de captura (implementado; #590 aporta el caso Órdenes).
 - **V1-NETG — [#585](https://github.com/cavazquez/openttdrs/issues/585):** red obligatoria sin éxito por `PermissionDenied`.
 - **V1-PAY — [#586](https://github.com/cavazquez/openttdrs/issues/586):** 11 cargos × 3 cantidades × 2 distancias × 3 edades = 198 pagos nativos exactos.
 - **V1-PKT — [#587](https://github.com/cavazquez/openttdrs/issues/587):** una transferencia de carbón, dos tramos, conservación y feeder share.

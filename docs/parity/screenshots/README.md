@@ -208,6 +208,53 @@ tolerancia declarada:
 python3 scripts/window_visual_regression.py
 ```
 
+### Roles y certificación V1 (#584)
+
+`window-regression.json` es ahora un manifiesto **diagnóstico** explícito
+(`schema_version: 2`,
+`comparison_role: openttd_similarity_diagnostic`). Sus 57 capturas conservan
+la comparación histórica contra OpenTTD y sus tolerancias amplias; un resultado
+`status: diagnostic` sólo afirma integridad de esos artefactos, nunca semejanza
+actual ni ausencia de regresiones del cliente.
+
+El mismo gate admite un manifiesto independiente con
+`comparison_role: client_regression`, siempre invocado de forma explícita:
+
+```bash
+python3 scripts/window_visual_regression.py \
+  --manifest /ruta/al/client-regression.json \
+  --mode certification \
+  --candidate-sha "$GITHUB_SHA"
+```
+
+Ese rol rechaza tolerancias universales, `accepted_differences` y perfiles sin
+ROI fijo. El presupuesto V1 no es configurable: en cada ROI, como máximo el
+0,5 % de píxeles puede tener delta RGBA máximo mayor que 8, y la media absoluta
+por canal normalizada debe ser menor o igual a `1/255` (equivale a 1 en la
+escala 0–255). `required_controls` exige una aserción separada
+`present: true` y `actionable: true` por texto/control; no se promedian
+regiones para ocultar un botón roto.
+
+Cada sidecar de certificación lleva un `baseline_provenance` y una
+`candidate_provenance` ligados al PNG: SHA candidata completo, fecha RFC3339,
+comando de captura, origen `runtime`, perfil, hash del PNG y un `capture_id`
+derivado. Para generar esos sidecars hace falta una declaración fresca de la
+captura:
+
+```bash
+python3 scripts/window_visual_regression.py \
+  --manifest /ruta/al/client-regression.json \
+  --mode certification \
+  --candidate-sha "$GITHUB_SHA" \
+  --candidate-provenance /ruta/a/candidate-provenance.json \
+  --write-sidecars
+```
+
+El reporte JSON separa `artifact_integrity`, `client_regression` y
+`openttd_similarity`; una categoría no implica las otras. La certificación de
+Órdenes con sus ocho perfiles se incorpora en [#590](https://github.com/cavazquez/openttdrs/issues/590), que debe aportar el manifiesto y las capturas
+reales del runtime.
+
 Durante la regeneración local puede limitarse a una ventana sin que las otras
 ausencias oculten el resultado:
 
@@ -219,11 +266,13 @@ python3 scripts/window_visual_regression.py --window Vehicle
 ```
 
 El reporte JSON etiqueta separadamente `absence`, `geometry`, `iconographic`
-y `chromatic`. Las diferencias aceptadas sólo pueden declararse con su categoría
-y un issue abierto; no hay tolerancias implícitas. La prueba de mutación y el
-gate del manifiesto canónico forman parte de los checks Python compartidos de
-CI: una captura ausente, una dimensión distinta, un hash/sidecar obsoleto o
-una diferencia fuera de tolerancia no pueden pasar silenciosamente.
+y `chromatic` para el archivo diagnóstico, y errores de integridad,
+procedencia, controles o presupuesto para certificación. Las diferencias
+aceptadas sólo pertenecen al archivo diagnóstico y deben citar su categoría y
+un issue abierto. La prueba de mutación y el gate del manifiesto canónico forman
+parte de los checks Python compartidos de CI: una captura ausente, una dimensión
+distinta, un hash/sidecar obsoleto o una diferencia fuera de presupuesto no
+pueden pasar silenciosamente.
 
 Las demás ventanas todavía son el inventario de #240. Las seis de la fase 1
 citan #297, los 14 pickers construction de la fase 2 citan #299, las diez

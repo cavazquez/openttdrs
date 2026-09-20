@@ -1,6 +1,7 @@
 {
-  "schema_version": 1,
-  "description": "Fases 1 (#297), 2 (#299), 3 (#300), 4 (#301) y 5 (#302): cada perfil conserva referencia OpenTTD, candidato, diff y sidecar.",
+  "schema_version": 2,
+  "comparison_role": "openttd_similarity_diagnostic",
+  "description": "Archivo diagnóstico de fases 1 (#297), 2 (#299), 3 (#300), 4 (#301) y 5 (#302): cada perfil conserva referencia OpenTTD, candidato, diff y sidecar. No certifica regresión del cliente.",
   "windows": [
     {
       "id": "Vehicle",

@@ -2,6 +2,10 @@
 
 <p align="center">
   <img src="static/app/openttdrs-icon.png" alt="openttdrs" width="220">
+  <br>
+  <a href="https://snapcraft.io/openttdrs">
+    <img src="https://snapcraft.io/static/images/badges/en/snap-store-black.svg" alt="Get it from the Snap Store" width="180">
+  </a>
 </p>
 
 [![CI](https://github.com/cavazquez/openttdrs/actions/workflows/ci.yml/badge.svg)](https://github.com/cavazquez/openttdrs/actions/workflows/ci.yml)
@@ -20,13 +24,13 @@ La alpha pública de escritorio actual es [`0.1.0-alpha.1`](https://github.com/c
 
 **Gobierno:** [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [ADRs](docs/adr/)
 
-**Última actualización:** 2026-09-19
+**Última actualización:** 2026-09-20
 
 ---
 
 ## Estado del proyecto
 
-> Dirección actualizada: 2026-09-19. Las capacidades técnicas conservan sus
+> Dirección actualizada: 2026-09-20. Las capacidades técnicas conservan sus
 > matrices de evidencia; completar este corte no certifica paridad global.
 
 **Estado jugable actual.** El menú ofrece nueva partida, carga, escenarios o
@@ -325,7 +329,7 @@ Para el paquete Snap y su publicación, usar la receta documentada en
 
 ## Qué está hecho / qué falta (resumen)
 
-> Corte V1: 2026-09-19, base inspeccionada `84144747`. ✅ significa que pasa
+> Corte V1: 2026-09-20, base inspeccionada `84144747`. ✅ significa que pasa
 > **el contrato acotado de esta fila**, no paridad completa con OpenTTD.
 > 🟡 significa que falta implementación o evidencia de aceptación.
 
@@ -342,7 +346,7 @@ siguen registrando las brechas generales aunque un caso V1 esté aprobado.
 | Economía Temperate + packets | 11 cargas, pagos, transfer/deliver, ratings y CargoDist | 🟡 | 198 pagos exactos [#586](https://github.com/cavazquez/openttdrs/issues/586) y una transferencia de dos tramos [#587](https://github.com/cavazquez/openttdrs/issues/587) |
 | Import/export `.sav` | [Subconjunto interoperable](docs/parity/sav-compatibility.md); gate de 6 cargas y un roundtrip | 🟡 | Preservar una orden modificada tras re-guardado nativo [#588](https://github.com/cavazquez/openttdrs/issues/588); no SAV universal |
 | Render OpenGFX vanilla | Sprites y compositor amplios; framebuffer global todavía divergente | 🟡 | Una escena Kale `(132,2)`, 800×600, zoom Normal y presupuesto fijo [#589](https://github.com/cavazquez/openttdrs/issues/589); otros zooms quedan diagnósticos |
-| UI solitario | Menú ES/EN, ventanas y feedback F5/F9 | 🟡 | Gate visual efectivo [#584](https://github.com/cavazquez/openttdrs/issues/584) y edición de órdenes en 8 perfiles [#590](https://github.com/cavazquez/openttdrs/issues/590); no todas las ventanas/opciones |
+| UI solitario | Menú ES/EN, ventanas y feedback F5/F9 | 🟡 | Gate de certificación separado y presupuesto fijo [#584](https://github.com/cavazquez/openttdrs/issues/584) ✅; faltan edición de Órdenes en 8 perfiles [#590](https://github.com/cavazquez/openttdrs/issues/590) y otras ventanas/opciones |
 | Multi-compañía | Ownership y asignación de compañía por cliente | 🟡 | 4 rechazos atómicos sobre bienes ajenos + 4 controles válidos [#591](https://github.com/cavazquez/openttdrs/issues/591) |
 | NewGRF | [Action0/3/5](docs/parity/newgrf-action0-matrix.md) y [callbacks runtime](docs/parity/newgrf-callback-matrix.md) parciales | 🟡 | Un GRF de camión con CB36, catálogo y continuación JSON de 2.000 ticks [#592](https://github.com/cavazquez/openttdrs/issues/592) |
 | Barcos | Depósitos, docks, boyas, esclusas y controlador naval | 🟡 | Compra → boya → entrega pagada en una ruta marítima [#593](https://github.com/cavazquez/openttdrs/issues/593); quedan fuera canales/locks/YAPF global |

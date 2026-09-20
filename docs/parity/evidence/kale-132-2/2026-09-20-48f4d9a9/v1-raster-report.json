@@ -1,0 +1,707 @@
+{
+  "assets": {
+    "candidate": [
+      {
+        "path": "assets/opengfx/opengfx-8.0/ogfx1_base.grf",
+        "sha256": "f8201e87c7210493aaf525993013dc94dd4b7a801c4bb27df47544786bf8eaa9",
+        "size_bytes": 2693610
+      },
+      {
+        "path": "assets/opengfx/atlas/tiles_atlas_0.png",
+        "sha256": "cbb898a033c2dc95920c1ee10a3e1152bc95019f7abf2afd25aca9fc5dc8ce41",
+        "size_bytes": 4268633
+      }
+    ],
+    "candidate_graphics_mode": {
+      "path": "assets/opengfx/.graphics_mode",
+      "sha256": "b61e2c5b6fb62eb30de3d28f99c38e8b9ab73ff32a264366103a46fd24d719d3",
+      "size_bytes": 5
+    },
+    "reference": [
+      {
+        "path": "assets/opengfx/.signal-src-8bpp/extract/opengfx-8.0/opengfx.obg",
+        "sha256": "e3ce8169ea9cf0fab624ad8b9b940684f3dfdf189f88bc79bbe62064fd3496d0",
+        "size_bytes": 10737
+      }
+    ]
+  },
+  "contract": {
+    "alignment": {
+      "adaptive_crop": false,
+      "candidate_translation": [
+        0,
+        0
+      ],
+      "masks": false,
+      "search_radius_px": 0
+    },
+    "budget": {
+      "max_changed_pixels": 480,
+      "max_mean_absolute_rgba_channel_delta": 0.05,
+      "max_outside_candidate_pixels": 0,
+      "max_pixels_over_channel_delta_64": 24
+    },
+    "candidate_settle_frames": 360,
+    "center": [
+      132,
+      2
+    ],
+    "fixture": {
+      "path": "save/Kale_TitleGame.sav",
+      "sha256": "584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69",
+      "size_bytes": 1085424
+    },
+    "fixture_expected_sha256": "584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69",
+    "issue": 589,
+    "openttd_zoom": "Normal",
+    "openttdrs_orthographic_scale": 1.0,
+    "profile": "clean-static",
+    "resolution": [
+      800,
+      600
+    ],
+    "sample_count_per_engine": 3
+  },
+  "diagnostics": [
+    {
+      "artifacts": {
+        "candidate": {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/in4x/candidate.png",
+          "sha256": "46bea89e4102d9a9cc9cc9f0261e896873425e7a804ff6c7417db2a2844089b5",
+          "size_bytes": 117606
+        },
+        "diff": {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/in4x/diff.png",
+          "sha256": "059423634ed3547a040ae38d9aa05a58a356072da77cd01bbee84c65fe9b5b99",
+          "size_bytes": 3790
+        },
+        "reference": {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/in4x/reference.png",
+          "sha256": "9529d553e3aa6bb7f402e11f18d6f7243b2942fbc16159f15d91ec536944cd7b",
+          "size_bytes": 24567
+        }
+      },
+      "metrics_raw": {
+        "by_pixel_tolerance": {
+          "0": {
+            "changed_pixels": 3456,
+            "changed_ratio": 0.0072,
+            "changed_ratio_in_overlap": 0.0072,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 0, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 0
+          },
+          "16": {
+            "changed_pixels": 3456,
+            "changed_ratio": 0.0072,
+            "changed_ratio_in_overlap": 0.0072,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 16, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 16
+          },
+          "2": {
+            "changed_pixels": 3456,
+            "changed_ratio": 0.0072,
+            "changed_ratio_in_overlap": 0.0072,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 2, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 2
+          },
+          "32": {
+            "changed_pixels": 3024,
+            "changed_ratio": 0.0063,
+            "changed_ratio_in_overlap": 0.0063,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 32, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 32
+          },
+          "4": {
+            "changed_pixels": 3456,
+            "changed_ratio": 0.0072,
+            "changed_ratio_in_overlap": 0.0072,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 4, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 4
+          },
+          "64": {
+            "changed_pixels": 32,
+            "changed_ratio": 6.666666666666667e-05,
+            "changed_ratio_in_overlap": 6.666666666666667e-05,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 64, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 64
+          },
+          "8": {
+            "changed_pixels": 3456,
+            "changed_ratio": 0.0072,
+            "changed_ratio_in_overlap": 0.0072,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 8, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 8
+          }
+        },
+        "candidate_size": [
+          800,
+          600
+        ],
+        "candidate_translation": [
+          0,
+          0
+        ],
+        "changed_pixels": 3456,
+        "changed_ratio": 0.0072,
+        "changed_ratio_in_overlap": 0.0072,
+        "max_channel_delta": 101,
+        "mean_channel_delta": 0.22131666666666666,
+        "outside_candidate_pixels": 0,
+        "overlap_pixels": 480000,
+        "reference_size": [
+          800,
+          600
+        ],
+        "total_pixels": 480000
+      },
+      "openttd_zoom": "In4x",
+      "report": {
+        "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/in4x/report.json",
+        "sha256": "e9433466b707a5b9b7191b0c6511cd3586bf70f169cda9bda2ba33a2e6751c51",
+        "size_bytes": 14266
+      },
+      "scale": 0.25,
+      "status": "different"
+    },
+    {
+      "artifacts": {
+        "candidate": {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/in2x/candidate.png",
+          "sha256": "e5cdec9a99d36bc970f124eebfb1a60744beb5d67b04c6da5671de2067ac53d3",
+          "size_bytes": 301953
+        },
+        "diff": {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/in2x/diff.png",
+          "sha256": "d236e989c28c867d525821d86aefd0b282932185fb13fe74218c0b312f8338b0",
+          "size_bytes": 3480
+        },
+        "reference": {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/in2x/reference.png",
+          "sha256": "d025ab6d5c142207b33554378b4f298eb8fadba118cc5fc5b6af84693d99f7e6",
+          "size_bytes": 46938
+        }
+      },
+      "metrics_raw": {
+        "by_pixel_tolerance": {
+          "0": {
+            "changed_pixels": 892,
+            "changed_ratio": 0.0018583333333333334,
+            "changed_ratio_in_overlap": 0.0018583333333333334,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 0, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 0
+          },
+          "16": {
+            "changed_pixels": 884,
+            "changed_ratio": 0.0018416666666666666,
+            "changed_ratio_in_overlap": 0.0018416666666666666,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 16, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 16
+          },
+          "2": {
+            "changed_pixels": 892,
+            "changed_ratio": 0.0018583333333333334,
+            "changed_ratio_in_overlap": 0.0018583333333333334,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 2, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 2
+          },
+          "32": {
+            "changed_pixels": 776,
+            "changed_ratio": 0.0016166666666666666,
+            "changed_ratio_in_overlap": 0.0016166666666666666,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 32, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 32
+          },
+          "4": {
+            "changed_pixels": 892,
+            "changed_ratio": 0.0018583333333333334,
+            "changed_ratio_in_overlap": 0.0018583333333333334,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 4, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 4
+          },
+          "64": {
+            "changed_pixels": 12,
+            "changed_ratio": 2.5e-05,
+            "changed_ratio_in_overlap": 2.5e-05,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 64, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 64
+          },
+          "8": {
+            "changed_pixels": 892,
+            "changed_ratio": 0.0018583333333333334,
+            "changed_ratio_in_overlap": 0.0018583333333333334,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 8, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 8
+          }
+        },
+        "candidate_size": [
+          800,
+          600
+        ],
+        "candidate_translation": [
+          0,
+          0
+        ],
+        "changed_pixels": 892,
+        "changed_ratio": 0.0018583333333333334,
+        "changed_ratio_in_overlap": 0.0018583333333333334,
+        "max_channel_delta": 101,
+        "mean_channel_delta": 0.05727708333333333,
+        "outside_candidate_pixels": 0,
+        "overlap_pixels": 480000,
+        "reference_size": [
+          800,
+          600
+        ],
+        "total_pixels": 480000
+      },
+      "openttd_zoom": "In2x",
+      "report": {
+        "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/in2x/report.json",
+        "sha256": "e6d3006b6e1e686b625fdcac928f3289590c56f0843594f537e736726041313d",
+        "size_bytes": 11892
+      },
+      "scale": 0.5,
+      "status": "different"
+    },
+    {
+      "artifacts": {
+        "candidate": {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/out2x/candidate.png",
+          "sha256": "2290e235ca0b8c582d9e1dfff983384fa6c8eb8c2d47dcbe54b4d61c8cdce47c",
+          "size_bytes": 1163775
+        },
+        "diff": {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/out2x/diff.png",
+          "sha256": "b92f2474f48801b29cc5d0f0fce2e8fcd461436479c7667759081cce3979065a",
+          "size_bytes": 14190
+        },
+        "reference": {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/out2x/reference.png",
+          "sha256": "35309213f2ea11c3be0ccb39ca4c0cff260428d342763ab401739fc6eb68b92b",
+          "size_bytes": 108800
+        }
+      },
+      "metrics_raw": {
+        "by_pixel_tolerance": {
+          "0": {
+            "changed_pixels": 4084,
+            "changed_ratio": 0.008508333333333333,
+            "changed_ratio_in_overlap": 0.008508333333333333,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 0, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 0
+          },
+          "16": {
+            "changed_pixels": 4002,
+            "changed_ratio": 0.0083375,
+            "changed_ratio_in_overlap": 0.0083375,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 16, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 16
+          },
+          "2": {
+            "changed_pixels": 4070,
+            "changed_ratio": 0.008479166666666666,
+            "changed_ratio_in_overlap": 0.008479166666666666,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 2, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 2
+          },
+          "32": {
+            "changed_pixels": 3281,
+            "changed_ratio": 0.006835416666666667,
+            "changed_ratio_in_overlap": 0.006835416666666667,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 32, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 32
+          },
+          "4": {
+            "changed_pixels": 4070,
+            "changed_ratio": 0.008479166666666666,
+            "changed_ratio_in_overlap": 0.008479166666666666,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 4, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 4
+          },
+          "64": {
+            "changed_pixels": 2051,
+            "changed_ratio": 0.004272916666666667,
+            "changed_ratio_in_overlap": 0.004272916666666667,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 64, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 64
+          },
+          "8": {
+            "changed_pixels": 4069,
+            "changed_ratio": 0.008477083333333333,
+            "changed_ratio_in_overlap": 0.008477083333333333,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 8, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 8
+          }
+        },
+        "candidate_size": [
+          800,
+          600
+        ],
+        "candidate_translation": [
+          0,
+          0
+        ],
+        "changed_pixels": 4084,
+        "changed_ratio": 0.008508333333333333,
+        "changed_ratio_in_overlap": 0.008508333333333333,
+        "max_channel_delta": 252,
+        "mean_channel_delta": 0.32941770833333334,
+        "outside_candidate_pixels": 0,
+        "overlap_pixels": 480000,
+        "reference_size": [
+          800,
+          600
+        ],
+        "total_pixels": 480000
+      },
+      "openttd_zoom": "Out2x",
+      "report": {
+        "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/out2x/report.json",
+        "sha256": "5d21d85962e96619a949d74730aca7004532991cbcf4888e0bde47538353dd79",
+        "size_bytes": 14832
+      },
+      "scale": 2.0,
+      "status": "different"
+    },
+    {
+      "artifacts": {
+        "candidate": {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/out4x/candidate.png",
+          "sha256": "d13a48bddc9b76d0ad479a16cc5610b51e59d455ae7fa6caa2042559041d6142",
+          "size_bytes": 1440773
+        },
+        "diff": {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/out4x/diff.png",
+          "sha256": "b5daea7b3fc6d548589d81cb250eaf44eba0c0ca143d67499a607e7acd3dfed9",
+          "size_bytes": 155897
+        },
+        "reference": {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/out4x/reference.png",
+          "sha256": "7e3854e82d482286409dba3d8c32daac6090cf4ec0e038482e5df712ab98ac84",
+          "size_bytes": 159631
+        }
+      },
+      "metrics_raw": {
+        "by_pixel_tolerance": {
+          "0": {
+            "changed_pixels": 87106,
+            "changed_ratio": 0.18147083333333333,
+            "changed_ratio_in_overlap": 0.18147083333333333,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 0, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 0
+          },
+          "16": {
+            "changed_pixels": 82948,
+            "changed_ratio": 0.17280833333333334,
+            "changed_ratio_in_overlap": 0.17280833333333334,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 16, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 16
+          },
+          "2": {
+            "changed_pixels": 86965,
+            "changed_ratio": 0.18117708333333332,
+            "changed_ratio_in_overlap": 0.18117708333333332,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 2, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 2
+          },
+          "32": {
+            "changed_pixels": 66077,
+            "changed_ratio": 0.13766041666666667,
+            "changed_ratio_in_overlap": 0.13766041666666667,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 32, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 32
+          },
+          "4": {
+            "changed_pixels": 86963,
+            "changed_ratio": 0.18117291666666666,
+            "changed_ratio_in_overlap": 0.18117291666666666,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 4, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 4
+          },
+          "64": {
+            "changed_pixels": 34979,
+            "changed_ratio": 0.07287291666666666,
+            "changed_ratio_in_overlap": 0.07287291666666666,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 64, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 64
+          },
+          "8": {
+            "changed_pixels": 86831,
+            "changed_ratio": 0.18089791666666666,
+            "changed_ratio_in_overlap": 0.18089791666666666,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 8, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 8
+          }
+        },
+        "candidate_size": [
+          800,
+          600
+        ],
+        "candidate_translation": [
+          0,
+          0
+        ],
+        "changed_pixels": 87106,
+        "changed_ratio": 0.18147083333333333,
+        "changed_ratio_in_overlap": 0.18147083333333333,
+        "max_channel_delta": 252,
+        "mean_channel_delta": 6.2491953125,
+        "outside_candidate_pixels": 0,
+        "overlap_pixels": 480000,
+        "reference_size": [
+          800,
+          600
+        ],
+        "total_pixels": 480000
+      },
+      "openttd_zoom": "Out4x",
+      "report": {
+        "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/out4x/report.json",
+        "sha256": "717bc25f7ce383cc4e3d33f0941ad1457fa452ee56e9e09dba7406067042d64f",
+        "size_bytes": 14899
+      },
+      "scale": 4.0,
+      "status": "different"
+    },
+    {
+      "artifacts": {
+        "candidate": {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/out8x/candidate.png",
+          "sha256": "13fb7d2a52cc1937ace81966b88865d6f22a45370305175062f45cec6ebd773c",
+          "size_bytes": 1440773
+        },
+        "diff": {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/out8x/diff.png",
+          "sha256": "44f173fc2989c873962f8dc789ed4fe7c411380de9ec5c542d5a99c21fe262a4",
+          "size_bytes": 158593
+        },
+        "reference": {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/out8x/reference.png",
+          "sha256": "5112108334311ec6accae507f9b564c89f10d50112663fa47b0322ccdd438ac5",
+          "size_bytes": 216550
+        }
+      },
+      "metrics_raw": {
+        "by_pixel_tolerance": {
+          "0": {
+            "changed_pixels": 71175,
+            "changed_ratio": 0.14828125,
+            "changed_ratio_in_overlap": 0.14828125,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 0, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 0
+          },
+          "16": {
+            "changed_pixels": 68462,
+            "changed_ratio": 0.14262916666666667,
+            "changed_ratio_in_overlap": 0.14262916666666667,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 16, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 16
+          },
+          "2": {
+            "changed_pixels": 70866,
+            "changed_ratio": 0.1476375,
+            "changed_ratio_in_overlap": 0.1476375,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 2, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 2
+          },
+          "32": {
+            "changed_pixels": 58442,
+            "changed_ratio": 0.12175416666666666,
+            "changed_ratio_in_overlap": 0.12175416666666666,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 32, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 32
+          },
+          "4": {
+            "changed_pixels": 70866,
+            "changed_ratio": 0.1476375,
+            "changed_ratio_in_overlap": 0.1476375,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 4, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 4
+          },
+          "64": {
+            "changed_pixels": 32980,
+            "changed_ratio": 0.06870833333333333,
+            "changed_ratio_in_overlap": 0.06870833333333333,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 64, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 64
+          },
+          "8": {
+            "changed_pixels": 70805,
+            "changed_ratio": 0.14751041666666667,
+            "changed_ratio_in_overlap": 0.14751041666666667,
+            "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 8, incluyendo cobertura ausente",
+            "outside_candidate_pixels": 0,
+            "tolerance": 8
+          }
+        },
+        "candidate_size": [
+          800,
+          600
+        ],
+        "candidate_translation": [
+          0,
+          0
+        ],
+        "changed_pixels": 71175,
+        "changed_ratio": 0.14828125,
+        "changed_ratio_in_overlap": 0.14828125,
+        "max_channel_delta": 248,
+        "mean_channel_delta": 5.169166145833334,
+        "outside_candidate_pixels": 0,
+        "overlap_pixels": 480000,
+        "reference_size": [
+          800,
+          600
+        ],
+        "total_pixels": 480000
+      },
+      "openttd_zoom": "Out8x",
+      "report": {
+        "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/diagnostics/out8x/report.json",
+        "sha256": "9793faf202d652456e62fd27f4cf81dc2d71dc04ac89ae7f4976379afc40966c",
+        "size_bytes": 14711
+      },
+      "scale": 8.0,
+      "status": "different"
+    }
+  ],
+  "kind": "v1-raster-gate",
+  "normal": {
+    "artifacts": {
+      "diff": {
+        "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/normal/diff.png",
+        "sha256": "5ddda3afb5a314df04f525a7050429bad7af9ff9059c78757ffaea3cc69a2117",
+        "size_bytes": 2944
+      }
+    },
+    "checks": {
+      "changed_pixels": {
+        "actual": 45,
+        "maximum": 480,
+        "passed": true
+      },
+      "mean_absolute_rgba_channel_delta": {
+        "actual": 0.0024390625,
+        "maximum": 0.05,
+        "passed": true
+      },
+      "outside_candidate_pixels": {
+        "actual": 0,
+        "maximum": 0,
+        "passed": true
+      },
+      "pixels_over_channel_delta_64": {
+        "actual": 5,
+        "maximum": 24,
+        "passed": true
+      }
+    },
+    "metrics": {
+      "candidate_size": [
+        800,
+        600
+      ],
+      "candidate_translation": [
+        0,
+        0
+      ],
+      "changed_pixels": 45,
+      "changed_ratio": 9.375e-05,
+      "changed_ratio_in_overlap": 9.375e-05,
+      "max_channel_delta": 137,
+      "mean_channel_delta": 0.0024390625,
+      "outside_candidate_pixels": 0,
+      "overlap_pixels": 480000,
+      "reference_size": [
+        800,
+        600
+      ],
+      "total_pixels": 480000
+    },
+    "pixel_tolerance_64": {
+      "changed_pixels": 5,
+      "changed_ratio": 1.0416666666666666e-05,
+      "changed_ratio_in_overlap": 1.0416666666666666e-05,
+      "meaning": "p\u00edxeles con delta m\u00e1ximo de canal > 64, incluyendo cobertura ausente",
+      "outside_candidate_pixels": 0,
+      "tolerance": 64
+    },
+    "samples": {
+      "candidate": [
+        {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/normal/candidate-1.png",
+          "sha256": "6eb808c54266c118374ab882692604af801fd6b1df9380c63acd3f8f88c70eb5",
+          "size_bytes": 818327
+        },
+        {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/normal/candidate-2.png",
+          "sha256": "6eb808c54266c118374ab882692604af801fd6b1df9380c63acd3f8f88c70eb5",
+          "size_bytes": 818327
+        },
+        {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/normal/candidate-3.png",
+          "sha256": "6eb808c54266c118374ab882692604af801fd6b1df9380c63acd3f8f88c70eb5",
+          "size_bytes": 818327
+        }
+      ],
+      "reference": [
+        {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/normal/reference-1.png",
+          "sha256": "81f49dd2e245475d6dec35b1ab4d857a49014ddb7526e40d0363b029ce3d4155",
+          "size_bytes": 86728
+        },
+        {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/normal/reference-2.png",
+          "sha256": "81f49dd2e245475d6dec35b1ab4d857a49014ddb7526e40d0363b029ce3d4155",
+          "size_bytes": 86728
+        },
+        {
+          "path": "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/normal/reference-3.png",
+          "sha256": "81f49dd2e245475d6dec35b1ab4d857a49014ddb7526e40d0363b029ce3d4155",
+          "size_bytes": 86728
+        }
+      ]
+    }
+  },
+  "pins": {
+    "candidate_commit": "48f4d9a9830dfc088961577969082b25b5b02aa9",
+    "openttd_official_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+    "openttd_oracle_commit": "c2661164bcb6cbf5ab97b56ccbee7506a3b26833"
+  },
+  "schema_version": 1,
+  "status": "passed"
+}

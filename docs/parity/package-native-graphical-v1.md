@@ -15,6 +15,11 @@ menú localizado, un PNG no vacío de **1280×720** y salida dentro de **60 s po
 idioma**. Una sesión gráfica ausente, un panic, timeout, asset faltante o
 captura plana produce `failed`, nunca `skip`.
 
+En macOS el driver solicita sólo para esa captura una ventana nativa sin
+bordes a pantalla completa. Así el framebuffer conserva 1280×720 incluso si
+el menú y el dock reducen el área útil de una ventana decorada a 1280×653; no
+recorta la imagen, no usa un display virtual y no altera el límite de 60 s.
+
 ## Evidencia
 
 El directorio de artefactos contiene:

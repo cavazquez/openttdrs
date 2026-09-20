@@ -22,7 +22,7 @@ use bevy::image::ImageSamplerDescriptor;
 use bevy::input_focus::tab_navigation::TabNavigationPlugin;
 use bevy::prelude::*;
 use bevy::text::RemSize;
-use bevy::window::ExitCondition;
+use bevy::window::{ExitCondition, MonitorSelection, WindowMode};
 use bevy::winit::WinitPlugin;
 
 use crate::app_icon::AppIconPlugin;
@@ -104,6 +104,32 @@ pub(crate) fn visual_capture_requested() -> bool {
         || std::env::var_os("OPENTTDRS_MAIN_MENU_SHOT").is_some()
 }
 
+/// Una captura de paquete puede pedir explícitamente el framebuffer completo
+/// del monitor. El smoke macOS lo usa para que un escritorio 1280x720 no
+/// convierta una ventana decorada en un frame útil de 1280x653. Sigue siendo
+/// una ventana nativa y sólo se activa junto a una captura visual.
+fn capture_borderless_fullscreen_requested() -> bool {
+    capture_borderless_fullscreen_requested_from(
+        visual_capture_requested(),
+        std::env::var("OPENTTDRS_CAPTURE_BORDERLESS_FULLSCREEN")
+            .ok()
+            .as_deref(),
+    )
+}
+
+fn capture_borderless_fullscreen_requested_from(
+    visual_capture: bool,
+    requested: Option<&str>,
+) -> bool {
+    visual_capture
+        && requested.is_some_and(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+}
+
 /// Indica si la captura de mapa debe excluir todo overlay que no pertenezca al
 /// raster estático de OpenTTD.
 ///
@@ -166,6 +192,11 @@ pub(crate) fn build_client_app(
                 title: "openttdrs".into(),
                 name: Some("openttdrs".into()),
                 resolution: (width, height).into(),
+                mode: if capture_borderless_fullscreen_requested() {
+                    WindowMode::BorderlessFullscreen(MonitorSelection::Primary)
+                } else {
+                    WindowMode::Windowed
+                },
                 ..default()
             }),
             ..default()
@@ -333,6 +364,29 @@ mod tests {
         assert!(super::audio_disabled_for_run(false, true, false));
         assert!(super::audio_disabled_for_run(false, false, true));
         assert!(!super::audio_disabled_for_run(false, false, false));
+    }
+
+    #[test]
+    fn borderless_fullscreen_requires_visual_capture_and_an_explicit_opt_in() {
+        assert!(super::capture_borderless_fullscreen_requested_from(
+            true,
+            Some(" yes ")
+        ));
+        assert!(super::capture_borderless_fullscreen_requested_from(
+            true,
+            Some("ON")
+        ));
+        assert!(!super::capture_borderless_fullscreen_requested_from(
+            false,
+            Some("1")
+        ));
+        assert!(!super::capture_borderless_fullscreen_requested_from(
+            true,
+            Some("0")
+        ));
+        assert!(!super::capture_borderless_fullscreen_requested_from(
+            true, None
+        ));
     }
 
     #[test]

@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +20,7 @@ SMOKE = ROOT / "scripts" / "smoke_release_graphical.py"
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from window_visual_regression import PngImage, write_png
+import smoke_release_graphical as native_graphical_smoke
 
 
 def write_file(path: Path, content: str, *, executable: bool = False) -> None:
@@ -64,6 +66,27 @@ def invoke(root: Path, client: Path, package: Path, archive: Path, artifacts: Pa
 
 
 class NativeGraphicalSmokeTest(unittest.TestCase):
+    def test_macos_requests_native_borderless_fullscreen_only_for_its_capture(self) -> None:
+        package = Path("/package")
+        profile = Path("/profile")
+        screenshot = Path("/shot.png")
+        with mock.patch.dict(
+            os.environ,
+            {native_graphical_smoke.MACOS_FULLSCREEN_CAPTURE: "inherited"},
+            clear=False,
+        ):
+            with mock.patch.object(native_graphical_smoke.platform, "system", return_value="Darwin"):
+                macos = native_graphical_smoke.launch_environment(
+                    package, profile, "es", screenshot
+                )
+            with mock.patch.object(native_graphical_smoke.platform, "system", return_value="Windows"):
+                windows = native_graphical_smoke.launch_environment(
+                    package, profile, "es", screenshot
+                )
+
+        self.assertEqual(macos[native_graphical_smoke.MACOS_FULLSCREEN_CAPTURE], "1")
+        self.assertNotIn(native_graphical_smoke.MACOS_FULLSCREEN_CAPTURE, windows)
+
     def test_two_locales_use_only_packaged_assets_and_write_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -106,6 +129,40 @@ class NativeGraphicalSmokeTest(unittest.TestCase):
             )
             for name in ("menu-es.log", "menu-en.log", "menu-es.png", "menu-en.png"):
                 self.assertTrue((artifacts / name).is_file(), name)
+
+    def test_utf8_menu_marker_does_not_depend_on_runner_locale(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            package = root / "openttdrs-package"
+            (package / "assets").mkdir(parents=True)
+            archive = root / "openttdrs-package.zip"
+            archive.write_bytes(b"package fixture")
+            frame = root / "menu.png"
+            write_menu(frame, 2)
+            client = package / "openttdrs-client"
+            write_file(
+                client,
+                "#!/usr/bin/env bash\n"
+                "set -eu\n"
+                "cp \"$FAKE_MENU\" \"$OPENTTDRS_MAIN_MENU_SHOT\"\n"
+                "printf '%s\\n' 'main_menu_shot: menú localizado sin escenario guiado listo'\n",
+                executable=True,
+            )
+            artifacts = root / "evidence"
+            env = os.environ | {
+                "FAKE_MENU": str(frame),
+                "LC_ALL": "C",
+                "LANG": "C",
+                "PYTHONUTF8": "0",
+                "PYTHONCOERCECLOCALE": "0",
+                "PYTHONIOENCODING": "utf-8",
+            }
+            result = invoke(root, client, package, archive, artifacts, env=env)
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads((artifacts / "graphical-smoke.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["status"], "passed")
+            self.assertTrue(all(entry["status"] == "passed" for entry in report["languages"]))
 
     def test_missing_capture_is_a_failure_not_a_skip(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

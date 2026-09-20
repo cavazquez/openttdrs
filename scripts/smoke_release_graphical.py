@@ -33,6 +33,7 @@ from window_visual_regression import GateError
 SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
 MENU_MARKER = "main_menu_shot: menú localizado sin escenario guiado listo"
 DEFAULT_LANGUAGES = ("es", "en")
+MACOS_FULLSCREEN_CAPTURE = "OPENTTDRS_CAPTURE_BORDERLESS_FULLSCREEN"
 
 
 class GraphicalSmokeError(RuntimeError):
@@ -99,6 +100,7 @@ def launch_environment(package_root: Path, profile: Path, language: str, screens
         "OPENTTDRS_LANGUAGE",
         "OPENTTDRS_MAIN_MENU_SHOT",
         "OPENTTDRS_SHOT_RES",
+        MACOS_FULLSCREEN_CAPTURE,
         "HOME",
         "USERPROFILE",
         "APPDATA",
@@ -130,6 +132,11 @@ def launch_environment(package_root: Path, profile: Path, language: str, screens
             "XDG_RUNTIME_DIR": str(profile / "runtime"),
         }
     )
+    # El escritorio hosted de macOS deja un área útil de 1280x653 cuando se
+    # solicita una ventana decorada de 1280x720. La captura debe usar la
+    # sesión nativa completa, no recortar ni relajar el contrato del PNG.
+    if platform.system() == "Darwin":
+        environment[MACOS_FULLSCREEN_CAPTURE] = "1"
     return environment
 
 
@@ -197,6 +204,8 @@ def capture_language(
             cwd=cwd,
             env=launch_environment(package_root, profile, language, screenshot),
             text=True,
+            encoding="utf-8",
+            errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             timeout=timeout_seconds,

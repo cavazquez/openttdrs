@@ -29,6 +29,7 @@ Orden sugerido al entrar:
 | NewGRF V1 CB36 | [parity/newgrf-cb36-v1.md](parity/newgrf-cb36-v1.md) | Fixture GRF V2, hash y recarga JSON certificada |
 | Barco V1 | [parity/ship-delivery-v1.md](parity/ship-delivery-v1.md) | Entrega de carbón vía boya, conservación y hash determinista |
 | Avión V1 | [parity/air-delivery-v1.md](parity/air-delivery-v1.md) | Servicio Country, bloques FTA y entrega de pasajeros |
+| Late join TCP V1 | [parity/late-join-v1.md](parity/late-join-v1.md) | Dedicated, dos clientes, 2.000 ticks y hash/log por tick |
 | Raster V1 de Kale | [parity/raster-v1-kale.md](parity/raster-v1-kale.md) | Contrato focal, hashes, presupuesto y artefactos de #589 |
 
 Al cambiar una capacidad, editar su fuente canónica y el resumen de
@@ -50,6 +51,7 @@ backlog.
 | [parity/newgrf-cb36-v1.md](parity/newgrf-cb36-v1.md) | Contrato focal CB36 de camión tras JSON |
 | [parity/ship-delivery-v1.md](parity/ship-delivery-v1.md) | Contrato focal de entrega naval con boya |
 | [parity/air-delivery-v1.md](parity/air-delivery-v1.md) | Contrato focal de servicio aéreo Country |
+| [parity/late-join-v1.md](parity/late-join-v1.md) | Contrato focal TCP de late join con dos clientes |
 | [parity/raster-v1-kale.md](parity/raster-v1-kale.md) | Evidencia y reproducción del contrato raster focal V1 |
 | [MAPA_Y_FERROCARRIL.md](MAPA_Y_FERROCARRIL.md) | Flujo `.ottdmap`, MAPT/chunks, señales, autorail, waypoints |
 | [GRAFICOS.md](GRAFICOS.md) | Sprites OpenGFX + handoff terreno |

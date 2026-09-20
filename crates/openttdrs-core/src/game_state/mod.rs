@@ -292,6 +292,29 @@ mod economy_history_tests {
     }
 }
 
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod runtime_hydration_tests {
+    use crate::{GameState, GameTick, TileCoord, Vehicle, VehicleKind};
+
+    #[test]
+    fn json_hydration_restores_vehicle_sim_tick_to_snapshot_tick() {
+        let mut state = GameState::new(16, 16);
+        state.tick = GameTick::new(500);
+        state.sync_timers_from_tick();
+        state.vehicles.push(Vehicle::new(
+            1,
+            VehicleKind::Truck,
+            TileCoord::new(2, 2),
+            TileCoord::new(3, 2),
+        ));
+
+        let restored = GameState::load_json(&state.save_json().expect("serializa fixture"))
+            .expect("hidrata fixture");
+        assert_eq!(restored.vehicles[0].sim_tick, restored.tick.get());
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CompanyEconomy {
     pub money: i64,
@@ -1219,6 +1242,14 @@ impl GameState {
             self.cur_tileloop_tile = crate::map::tile_loop::default_cur_tileloop_tile();
         }
         self.runtime = SimulationRuntime::new();
+        // `sim_tick` no se persiste, pero las fases de carga/órdenes del
+        // próximo tick pueden usarlo antes de que la fase de movimiento lo
+        // vuelva a actualizar. Restaurarlo al tick del snapshot mantiene la
+        // salida de una orden (y su horario) idéntica tras save/late join.
+        let snapshot_tick = self.tick.get();
+        for vehicle in &mut self.vehicles {
+            vehicle.sim_tick = snapshot_tick;
+        }
         self.rebuild_station_flows();
         self.sanitize_all_vehicle_orders();
         self.sync_scaled_max_loan();

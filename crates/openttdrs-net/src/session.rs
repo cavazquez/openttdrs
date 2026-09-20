@@ -1506,6 +1506,7 @@ fn ensure_company_slot(state: &mut GameState, company_id: CompanyId) -> Result<(
         return Err(format!("compañía fuera de rango: {}", company_id.0));
     }
     state.ensure_companies();
+    let effective_max_loan = state.global_economy.scaled_max_loan();
     while state.companies.len() <= index {
         let id =
             CompanyId(u8::try_from(state.companies.len()).map_err(|_| "pool de compañías lleno")?);
@@ -1514,6 +1515,11 @@ fn ensure_company_slot(state: &mut GameState, company_id: CompanyId) -> Result<(
             openttdrs_core::Company::player(openttdrs_core::CompanyEconomy::default(), colour);
         company.id = id;
         company.name = format!("Compañía {}", u16::from(id.0) + 1);
+        // Una compañía creada después de `finish_new_game_startup` debe nacer
+        // con el límite efectivo actual, igual que un estado restaurado por
+        // `hydrate_runtime`. Dejar el default pre-inflación haría que el host
+        // y un late join discrepasen sólo por serializar el snapshot.
+        company.economy.max_loan = effective_max_loan;
         state.companies.push(company);
     }
     Ok(())

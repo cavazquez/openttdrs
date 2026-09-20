@@ -51,6 +51,15 @@ pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {
         .filter_map(|v| v.pending_depot_order_refit.map(|cargo| (v.id, cargo)))
         .collect();
     for (head_id, cargo) in pending {
+        let Some(owner) = state
+            .runtime
+            .fleet_index
+            .slot(head_id)
+            .and_then(|slot| state.vehicles.get(slot))
+            .map(|vehicle| vehicle.owner)
+        else {
+            continue;
+        };
         if let Some(slot) = state.runtime.fleet_index.slot(head_id)
             && let Some(v) = state.vehicles.get_mut(slot)
         {
@@ -117,7 +126,7 @@ pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {
             total_cost = total_cost.saturating_add(cost);
             refits.push((idx, cost));
         }
-        if total_cost > state.economy.money {
+        if total_cost > state.company_economy(owner).money {
             continue;
         }
         for (idx, _cost) in refits {
@@ -149,12 +158,66 @@ pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {
             state.vehicles[idx].refit_capacity =
                 u16::try_from(state.vehicles[idx].capacity).unwrap_or(u16::MAX);
         }
-        state.economy.money -= total_cost;
+        state.debit_company(owner, total_cost);
     }
 }
 
 pub(super) fn sync_vehicle_order_destinations(state: &mut GameState) {
     for vehicle in &mut state.vehicles {
         vehicle.sync_order_destination_with_stations(&state.map, &state.stations);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::command::{Command, apply_command};
+    use crate::{CargoType, CompanyId, TileCoord, Vehicle, VehicleKind};
+
+    #[test]
+    fn depot_order_refit_charges_vehicle_owner_not_active_company() {
+        let mut state = GameState::new(8, 8);
+        state.ensure_rival_transcargo();
+        let rival = state
+            .companies
+            .iter()
+            .find(|company| company.is_ai)
+            .expect("rival TransCargo")
+            .id;
+        assert!(state.set_active_company(rival));
+
+        let depot = TileCoord::new(2, 2);
+        apply_command(&mut state, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+        apply_command(&mut state, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+        state
+            .engine_catalog
+            .iter_mut()
+            .find(|engine| engine.id == crate::engine::ENGINE_TRUCK_MPS)
+            .expect("MPS truck engine")
+            .refit_cost = 64;
+
+        let mut truck = Vehicle::new(91, VehicleKind::Truck, depot, depot);
+        truck.owner = rival;
+        truck.engine_id = Some(crate::engine::ENGINE_TRUCK_MPS);
+        truck.cargo_type = Some(CargoType::Mail);
+        truck.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
+        truck.pending_depot_order_refit = Some(CargoType::Coal);
+        state.vehicles.push(truck);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+        assert!(state.set_active_company(CompanyId::PLAYER));
+
+        let player_before = state.companies[CompanyId::PLAYER.index()].economy.money;
+        let rival_before = state.companies[rival.index()].economy.money;
+
+        apply_pending_depot_order_refits(&mut state);
+
+        assert_eq!(state.vehicles[0].cargo_type, Some(CargoType::Coal));
+        assert!(state.vehicles[0].pending_depot_order_refit.is_none());
+        assert_eq!(
+            state.companies[CompanyId::PLAYER.index()].economy.money,
+            player_before
+        );
+        assert!(state.companies[rival.index()].economy.money < rival_before);
     }
 }

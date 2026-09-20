@@ -105,13 +105,15 @@ corte. Orden para implementar una tarea a la vez:
 2. Contratos de datos: pagos **#586**, transferencia **#587**, ORDL **#588**,
    filtro de cargo GS **#598** y ownership **#591** están implementados y
    esperan CI remota vigente antes del cierre.
-3. Recorridos: barco **#593**, avión **#594**, late join **#595** (después de
-   #585), NewGRF/JSON **#592** y persistencia GS **#599** (después de #598).
+3. Recorridos: TransCargo **#596** está certificado localmente con su
+   [fixture determinista](transcargo-v1.md) y espera CI remota vigente. Siguen
+   barco **#593**, avión **#594**, late join **#595** (después de #585),
+   NewGRF/JSON **#592** y persistencia GS **#599** (después de #598).
 4. Presentación y herramientas: raster Normal **#589** está implementado y
    certificado localmente en `1f170b07` (tres hashes por motor, presupuesto y
    cinco diagnósticos en [la evidencia Kale](raster-v1-kale.md)); espera CI
-   remota vigente. Siguen Órdenes **#590** (después de #584), editor **#600**,
-   TransCargo **#596** y RoadHaul **#597**.
+   remota vigente. Siguen Órdenes **#590** (después de #584), editor **#600**
+   y RoadHaul **#597**.
 5. Paquetes Windows **#601** y macOS **#602**. Emitir con **#603** el reporte
    completo del SHA candidato; ninguna ausencia cuenta como aprobación.
 

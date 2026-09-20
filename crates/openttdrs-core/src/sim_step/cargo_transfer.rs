@@ -1814,6 +1814,7 @@ fn finish_consist_unloading(state: &mut GameState, unloaded_this_tick: &[bool]) 
 /// cambia, antes de mutar ninguna de ellas.
 #[allow(clippy::too_many_lines)]
 fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx: usize) -> bool {
+    let vehicle_owner = state.vehicles[vehicle_idx].owner;
     let Some(order) = state.vehicles[vehicle_idx].current_order_ref().copied() else {
         return false;
     };
@@ -1939,7 +1940,7 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
         total_cost = total_cost.saturating_add(cost);
         refits.push((idx, target, cost));
     }
-    if refits.is_empty() || total_cost > state.economy.money {
+    if refits.is_empty() || total_cost > state.company_economy(vehicle_owner).money {
         return false;
     }
 
@@ -2016,7 +2017,7 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
             state.construction.wagon_speed_limits,
         );
     }
-    state.economy.money -= total_cost;
+    state.debit_company(vehicle_owner, total_cost);
     true
 }
 
@@ -3562,6 +3563,68 @@ mod tests {
         assert_eq!(state.vehicles[0].cargo_type, Some(CargoType::Coal));
         assert_eq!(state.vehicles[0].cargo, 0);
         assert_eq!(state.economy.money, money_before);
+    }
+
+    #[test]
+    fn station_refit_charges_the_vehicle_owner_not_the_active_company() {
+        let pos = TileCoord::new(1, 1);
+        let mut state = GameState::new(4, 4);
+        state.ensure_rival_transcargo();
+        let rival = state
+            .companies
+            .iter()
+            .find(|company| company.is_ai)
+            .expect("rival TransCargo")
+            .id;
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 2 << 3;
+        tile.m3 = 1;
+        state.map.set_tile(pos, tile).unwrap();
+        let mut station = crate::Station::new_with_kind(pos, crate::StopKind::TruckStop);
+        station.owner = rival;
+        state.stations.push(station);
+
+        let engine = state
+            .engine_catalog
+            .iter_mut()
+            .find(|engine| engine.id == crate::engine::ENGINE_TRUCK_MPS)
+            .expect("MPS truck engine");
+        engine.newgrf_grfid = 0x5245_4649;
+        engine.newgrf_runtime = Some(Box::new(cb36_literal_runtime(0x4000 | 6)));
+
+        let mut truck = crate::Vehicle::new(36, VehicleKind::Truck, pos, pos);
+        truck.owner = rival;
+        truck.engine_id = Some(crate::engine::ENGINE_TRUCK_MPS);
+        truck.cargo_type = Some(CargoType::Mail);
+        truck.orders = vec![crate::VehicleOrder::station_with_refit(
+            pos,
+            crate::OrderLoadType::LoadIfPossible,
+            crate::OrderUnloadType::UnloadIfPossible,
+            crate::OrderNonStop::NonStopDestination,
+            Some(CargoType::Coal),
+            false,
+        )];
+        state.vehicles.push(truck);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+
+        let player_before = state.companies[crate::CompanyId::PLAYER.index()]
+            .economy
+            .money;
+        let rival_before = state.companies[rival.index()].economy.money;
+
+        assert!(maybe_refit_at_station(&mut state, 0, 0));
+
+        assert_eq!(state.vehicles[0].cargo_type, Some(CargoType::Coal));
+        assert_eq!(
+            state.companies[crate::CompanyId::PLAYER.index()]
+                .economy
+                .money,
+            player_before
+        );
+        assert!(state.companies[rival.index()].economy.money < rival_before);
     }
 
     #[test]

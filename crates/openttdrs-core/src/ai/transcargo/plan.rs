@@ -37,7 +37,7 @@ pub(super) fn industry_served_by_ai(
 }
 
 pub(crate) fn next_unserved_plan(state: &GameState, ai_id: CompanyId) -> Option<RoutePlan> {
-    let factory = state
+    let fallback_dest = state
         .industries
         .iter()
         .find(|i| i.kind == IndustryKind::Factory)
@@ -61,9 +61,17 @@ pub(crate) fn next_unserved_plan(state: &GameState, ai_id: CompanyId) -> Option<
         if industry_served_by_ai(state, ai_id, source) {
             continue;
         }
+        // En un mundo con `IndustrySpec`, preferir un receptor que acepte el
+        // cargo realmente. El fixture histórico sin spec conserva Factory como
+        // fallback para no alterar sus rutas legacy.
+        let dest = state
+            .industries
+            .iter()
+            .find(|industry| industry.accepts_cargo(cargo))
+            .map_or(fallback_dest, |industry| industry.pos);
         return Some(RoutePlan {
             source,
-            dest: factory,
+            dest,
             cargo,
         });
     }

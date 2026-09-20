@@ -1562,19 +1562,9 @@ incluidos offsets relativos.
 
 <!-- active-parity-backlog:start -->
 
-- Snap: [#582](https://github.com/cavazquez/openttdrs/issues/582), [#583](https://github.com/cavazquez/openttdrs/issues/583).
-- Gates visual/red: [#584](https://github.com/cavazquez/openttdrs/issues/584), [#585](https://github.com/cavazquez/openttdrs/issues/585).
-- Economía/packets: [#586](https://github.com/cavazquez/openttdrs/issues/586), [#587](https://github.com/cavazquez/openttdrs/issues/587).
-- SAV: [#588](https://github.com/cavazquez/openttdrs/issues/588).
-- Raster/UI: [#589](https://github.com/cavazquez/openttdrs/issues/589), [#590](https://github.com/cavazquez/openttdrs/issues/590).
-- Compañías/NewGRF: [#591](https://github.com/cavazquez/openttdrs/issues/591), [#592](https://github.com/cavazquez/openttdrs/issues/592).
-- Barcos/aviones: [#593](https://github.com/cavazquez/openttdrs/issues/593), [#594](https://github.com/cavazquez/openttdrs/issues/594).
-- Multijugador: [#595](https://github.com/cavazquez/openttdrs/issues/595).
-- IA: [#596](https://github.com/cavazquez/openttdrs/issues/596), [#597](https://github.com/cavazquez/openttdrs/issues/597).
-- GS-lite: [#598](https://github.com/cavazquez/openttdrs/issues/598), [#599](https://github.com/cavazquez/openttdrs/issues/599).
-- Editor: [#600](https://github.com/cavazquez/openttdrs/issues/600).
-- Windows/macOS: [#601](https://github.com/cavazquez/openttdrs/issues/601), [#602](https://github.com/cavazquez/openttdrs/issues/602).
-- Reporte por contrato/SHA: [#603](https://github.com/cavazquez/openttdrs/issues/603).
+No hay backlog activo. El corte V1 2026-09-20 cerró los contratos 582–604;
+un nuevo alcance requiere auditoría y un issue atómico antes de volver a
+considerarse trabajo de paridad activo.
 
 <!-- active-parity-backlog:end -->
 

@@ -117,12 +117,15 @@ paquete; frame no vacío **1280×720**. Para Windows/macOS, ES/EN y timeout de
 Conservar SHA del paquete, SHA fuente, logs y captura del entorno real.
 Falta de sesión gráfica es un bloqueo visible, nunca un smoke aprobado.
 
-## Contratos pendientes e issues
+## Contratos V1 e issues cerrados
 
 Cada issue tiene evidencia, un entregable revisable, criterios, dependencias
-y exclusiones. Su aceptación no crece después de la primera mejora. Una
-causa independiente requiere otra tarea; los criterios no satisfechos siguen
-pendientes. Las dependencias por ID V1 resuelven a los enlaces de esta lista.
+y exclusiones. Su aceptación no crece después de la primera mejora. El
+2026-09-20 se cerraron los contratos #582–#604 tras la evidencia de CI,
+paquetes y regresiones correspondiente. Las notas de «espera CI» que aparecen
+en el inventario siguiente conservan el estado histórico de la definición del
+corte; no son trabajo activo. Las dependencias por ID V1 resuelven a los
+enlaces de esta lista.
 
 - **V1-VIS — [#584](https://github.com/cavazquez/openttdrs/issues/584):** roles diagnóstico/certificación, presupuesto fijo y procedencia de captura (implementado; #590 aporta el caso Órdenes).
 - **V1-NETG — [#585](https://github.com/cavazquez/openttdrs/issues/585):** red obligatoria: `PermissionDenied` falla con diagnóstico; inyección negativa y 22 recorridos loopback reales (23 pruebas, 0 ignoradas).
@@ -143,16 +146,16 @@ pendientes. Las dependencias por ID V1 resuelven a los enlaces de esta lista.
 - **V1-EDIT — [#600](https://github.com/cavazquez/openttdrs/issues/600):** escenario Temperate 64×64 editado, JSON nativo y reapertura por Escenarios; conserva mapa, entidades, fecha/settings y tick, incluido el error de guardado que deja el documento abierto ([evidencia](editor-v1.md)). Implementado; espera CI remota vigente antes del cierre.
 - **V1-WIN — [#601](https://github.com/cavazquez/openttdrs/issues/601):** [gate nativo](package-native-graphical-v1.md) del ZIP Windows, ES/EN, cwd/perfil aislados y evidencia por SHA; espera dry-run en sesión gráfica real.
 - **V1-MAC — [#602](https://github.com/cavazquez/openttdrs/issues/602):** [gate nativo](package-native-graphical-v1.md) del tar.gz macOS arm64, ES/EN, cwd/perfil aislados y evidencia por SHA; espera dry-run en sesión gráfica real.
-- **V1-REPORT — [#603](https://github.com/cavazquez/openttdrs/issues/603):** [agregado fail-closed](v1-report.md) por contrato/SHA; rechaza informes ausentes, mezclados, omitidos o no aprobables. Declarar todo verde depende de los 20 resultados verificables del mismo candidato.
+- **V1-REPORT — [#603](https://github.com/cavazquez/openttdrs/issues/603):** [agregado fail-closed](v1-report.md) por contrato/SHA; rechaza informes ausentes, mezclados, omitidos o no aprobables. El mecanismo está cerrado; una certificación concreta continúa requiriendo 20 resultados verificables del mismo candidato.
 
-Se conservan **[#582](https://github.com/cavazquez/openttdrs/issues/582)**
-y **[#583](https://github.com/cavazquez/openttdrs/issues/583)** para Snap:
-el commit `84144747` incluye el fix y el [smoke read-only](snap-v1.md) conserva
-SHA, logs y captura incluso al fallar, pero eso no acredita una nueva revisión
-instalada desde la tienda. No se duplican esos issues ni se cierran como parte
-de este trabajo documental.
+Los contratos de Snap [#582](https://github.com/cavazquez/openttdrs/issues/582)
+y [#583](https://github.com/cavazquez/openttdrs/issues/583) cerraron con el
+Snap `0.1.0-alpha.2` revisión 2 publicado e instalado fresco: assets
+materializados en build, raíz SquashFS de sólo lectura y menú gráfico ES/EN
+verificados. El [smoke read-only](snap-v1.md) conserva además el contrato
+reproducible sin tocar el perfil de usuario.
 
-## Evidencia comprobada al preparar el corte
+## Evidencia histórica al preparar el corte
 
 Sobre `84144747`, sin cambios de runtime en esta entrega:
 
@@ -168,11 +171,13 @@ cargo test --locked --offline -p openttdrs-core \
 Resultado: **21 + 54 + 5 + 3 + 6 + 2 + 4 = 95 tests**, cero fallos y cero
 ignorados en esta selección. PBS conserva comparaciones exactas de las
 fixtures; los 4 tests de Helidepot no certifican la ruta de ala fija V1-AIR.
-La construcción, las fixtures PBS y la ruta vial/JSON tienen verde acotado;
-los demás contratos siguen pendientes.
+En la fotografía inicial, construcción, fixtures PBS y ruta vial/JSON tenían
+verde acotado y los demás contratos aún estaban en ejecución. Los cierres
+posteriores del 2026-09-20 no alteran esta evidencia histórica.
 
-No se ejecutó una CI completa para esta actualización ni se regeneró la
-matriz raster: el verde remoto debe comprobarse en el SHA que se certifique.
+Esta selección inicial no ejecutó CI completa ni regeneró la matriz raster; los
+cierres posteriores comprobaron la CI remota en la SHA correspondiente. Toda
+certificación futura debe volver a comprobar el SHA que pretenda certificar.
 Los reportes de 2026-09-07/18 siguen identificados como evidencia histórica.
 
 ## Orden y cierre

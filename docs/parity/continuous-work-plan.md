@@ -1,24 +1,20 @@
 # Corte V1 — aceptación acotada por área
 
-Actualizado: **2026-09-20**. Base inspeccionada: `84144747`.
+Actualizado: **2026-09-20**. Base histórica inspeccionada: `84144747`.
 
-La nueva solicitud del usuario abre un corte finito para el resumen del README:
-actualizar qué está hecho, fijar qué significa verde y crear tareas atómicas.
-El [contrato V1](acceptance-v1.md) define escenarios, tolerancias y exclusiones.
-Se crean #584–#603 y se conservan #582/#583; no se reabren épicas históricas.
-La entrega documental prepara el trabajo posterior, no autoriza a afirmar que
-todos los contratos ya pasan. La paridad global continúa como referencia
-técnica separada. El escenario guiado anterior permanece retirado; sus fixtures
-siguen siendo evidencia interna.
+El corte V1 que actualizó el resumen del README, fijó tolerancias y creó tareas
+atómicas ya concluyó: los contratos #582–#604 están cerrados. El
+[contrato V1](acceptance-v1.md) conserva fixtures, tolerancias, exclusiones y
+evidencia; no convierte esos cierres en una certificación de paridad global.
+El escenario guiado anterior permanece retirado y sus fixtures siguen siendo
+evidencia interna. No hay tarea activa hasta una nueva auditoría.
 
-La entrega está publicada como
+La entrega de escritorio está publicada como
 [prerelease `v0.1.0-alpha.1`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
-y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) (revisión 1,
-Linux amd64). La revisión 1 tiene un defecto posterior de empaquetado: intenta
-materializar tiles OpenGFX dentro del mount `$SNAP` de sólo lectura. [#582](https://github.com/cavazquez/openttdrs/issues/582)
-y [#583](https://github.com/cavazquez/openttdrs/issues/583) conservan ese alcance.
-`84144747` ya aporta build y smoke read-only locales de `0.1.0-alpha.2`;
-el cierre exige la evidencia restante del paquete instalado/distribuido.
+y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) para Linux amd64.
+El Snap `0.1.0-alpha.2` revisión 2 materializa los tiles en build y fue
+validado recién instalado, con assets desde el mount SquashFS de sólo lectura y
+menú gráfico ES/EN.
 
 ## Entrega alpha anterior (cumplida)
 
@@ -91,37 +87,16 @@ o generación.
 
 ## Backlog ejecutable
 
-**22 issues abiertos: 20 nuevos y los 2 de Snap.** El índice completo, los IDs
-V1 y sus dependencias están en [acceptance-v1.md](acceptance-v1.md#contratos-pendientes-e-issues).
-El [manifiesto](active-backlog.json) se contrastó con GitHub al preparar este
-corte. Orden para implementar una tarea a la vez:
+No hay issues activos. Los contratos #582–#604 cerraron con CI, dry-runs de
+paquetes y evidencia de aceptación según corresponda. El [manifiesto]
+(active-backlog.json) y el bloque activo de `PARIDAD.md` están vacíos.
 
-1. Gates que impedían falso verde: visual **#584** y sockets **#585** están
-   implementados; cada commit conserva su evidencia local y debe obtener CI
-   remota verde antes del cierre.
-   El agregador **#603** puede prepararse con reportes sintéticos; su aceptación
-   global depende de los contratos reales. Finalizar **#582/#583** con la
-   evidencia restante, sin duplicar el fix local.
-2. Contratos de datos: pagos **#586**, transferencia **#587**, ORDL **#588**,
-   filtro de cargo GS **#598** y ownership **#591** están implementados y
-   esperan CI remota vigente antes del cierre.
-3. Recorridos: TransCargo **#596**, RoadHaul **#597**, barco **#593** y avión
-   **#594** están certificados localmente con sus [fixtures
-   deterministas](transcargo-v1.md), [evidencia de pasajeros](roadhaul-v1.md),
-   [viaje marítimo](ship-delivery-v1.md) y [servicio Country](air-delivery-v1.md).
-   Late join **#595** (después de #585), NewGRF/JSON **#592** y persistencia
-   GS **#599** (después de #598) también pasan sus contratos locales. Todos
-   esperan CI remota vigente antes del cierre.
-4. Presentación y herramientas: raster Normal **#589** está implementado y
-   certificado localmente en `48f4d9a9` (tres hashes por motor, presupuesto y
-   cinco diagnósticos en [la evidencia Kale](raster-v1-kale.md)); espera CI
-   remota vigente. Órdenes **#590** quedó certificada localmente en
-   `c4251e4c` ([ocho perfiles y presupuesto fijo](orders-v1.md)); sigue editor
-   **#600**.
-5. Paquetes Windows **#601** y macOS **#602**. El [gate nativo ES/EN](package-native-graphical-v1.md)
-   ya preserva paquete, SHA, logs y PNG desde cwd/perfil aislados; falta su
-   dry-run en sesiones gráficas reales. Emitir con **#603** el reporte completo
-   del SHA candidato; ninguna ausencia cuenta como aprobación.
+El agregador #603 sigue siendo fail-closed: sin 20 resultados explícitos para
+la misma SHA, su salida es `not-run`, no verde. Eso impide inferir una
+certificación V1 o paridad global a partir de los cierres.
+
+El próximo corte debe comenzar con una auditoría nueva y un issue atómico con
+reproducción, métrica, tolerancia y criterio de cierre propios.
 
 Construcción básica, fixtures PBS y ruta vial/JSON ya tienen evidencia acotada
 (95 tests seleccionados incluyendo FTA); se reutiliza y se reejecuta al
@@ -131,9 +106,8 @@ certificar otro candidato. No se crean issues duplicados de esas pruebas.
 
 - Una tarea en implementación a la vez. Cerrar al satisfacer su aceptación
   original, con commit y evidencia; no ampliar su contrato después.
-- Los cuatro P0 de la alpha anterior se recuperaron; los gates V1 #584/#585
-  separan ahora el falso éxito local, pero no se cierran sin CI remota verde.
-  No llamar «CI verde» a un chequeo de binario si `--all-targets`, fuzz o el
+- Los gates V1 cerrados separan el falso éxito local. Para un corte nuevo, no
+  llamar «CI verde» a un chequeo de binario si `--all-targets`, fuzz o el
   workflow siguen fallando o no se ejecutaron.
 - Una tarea debe poder revisarse como un PR. Si aparecen dos causas
   independientes, dividir antes de continuar; el nuevo issue debe ser necesario

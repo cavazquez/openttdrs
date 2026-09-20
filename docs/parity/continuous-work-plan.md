@@ -105,11 +105,13 @@ corte. Orden para implementar una tarea a la vez:
 2. Contratos de datos: pagos **#586**, transferencia **#587**, ORDL **#588**,
    filtro de cargo GS **#598** y ownership **#591** están implementados y
    esperan CI remota vigente antes del cierre.
-3. Recorridos: TransCargo **#596** y RoadHaul **#597** están certificados
-   localmente con sus [fixtures deterministas](transcargo-v1.md) y
-   [evidencia de pasajeros](roadhaul-v1.md), y esperan CI remota vigente.
-   Siguen barco **#593**, avión **#594**, late join **#595** (después de
-   #585), NewGRF/JSON **#592** y persistencia GS **#599** (después de #598).
+3. Recorridos: TransCargo **#596**, RoadHaul **#597**, barco **#593** y avión
+   **#594** están certificados localmente con sus [fixtures
+   deterministas](transcargo-v1.md), [evidencia de pasajeros](roadhaul-v1.md),
+   [viaje marítimo](ship-delivery-v1.md) y [servicio Country](air-delivery-v1.md).
+   Late join **#595** (después de #585), NewGRF/JSON **#592** y persistencia
+   GS **#599** (después de #598) también pasan sus contratos locales. Todos
+   esperan CI remota vigente antes del cierre.
 4. Presentación y herramientas: raster Normal **#589** está implementado y
    certificado localmente en `48f4d9a9` (tres hashes por motor, presupuesto y
    cinco diagnósticos en [la evidencia Kale](raster-v1-kale.md)); espera CI

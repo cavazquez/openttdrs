@@ -22,7 +22,7 @@ use bevy::image::ImageSamplerDescriptor;
 use bevy::input_focus::tab_navigation::TabNavigationPlugin;
 use bevy::prelude::*;
 use bevy::text::RemSize;
-use bevy::window::{ExitCondition, MonitorSelection, WindowMode};
+use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 
 use crate::app_icon::AppIconPlugin;
@@ -104,23 +104,20 @@ pub(crate) fn visual_capture_requested() -> bool {
         || std::env::var_os("OPENTTDRS_MAIN_MENU_SHOT").is_some()
 }
 
-/// Una captura de paquete puede pedir explícitamente el framebuffer completo
-/// del monitor. El smoke macOS lo usa para que un escritorio 1280x720 no
-/// convierta una ventana decorada en un frame útil de 1280x653. Sigue siendo
-/// una ventana nativa y sólo se activa junto a una captura visual.
-fn capture_borderless_fullscreen_requested() -> bool {
-    capture_borderless_fullscreen_requested_from(
+/// Una captura de paquete puede pedir explícitamente una ventana sin bordes.
+/// El smoke macOS lo usa para que una solicitud 1280x720 no pierda 67 px en
+/// la decoración. Sigue siendo una ventana nativa, no cambia de monitor y
+/// sólo se activa junto a una captura visual.
+fn capture_borderless_window_requested() -> bool {
+    capture_borderless_window_requested_from(
         visual_capture_requested(),
-        std::env::var("OPENTTDRS_CAPTURE_BORDERLESS_FULLSCREEN")
+        std::env::var("OPENTTDRS_CAPTURE_BORDERLESS_WINDOW")
             .ok()
             .as_deref(),
     )
 }
 
-fn capture_borderless_fullscreen_requested_from(
-    visual_capture: bool,
-    requested: Option<&str>,
-) -> bool {
+fn capture_borderless_window_requested_from(visual_capture: bool, requested: Option<&str>) -> bool {
     visual_capture
         && requested.is_some_and(|value| {
             matches!(
@@ -187,16 +184,13 @@ pub(crate) fn build_client_app(
         }
     } else {
         let (width, height) = capture_window_resolution().unwrap_or((1280, 720));
+        let borderless_capture = capture_borderless_window_requested();
         patch_window_plugin_for_settings(WindowPlugin {
             primary_window: Some(Window {
                 title: "openttdrs".into(),
                 name: Some("openttdrs".into()),
                 resolution: (width, height).into(),
-                mode: if capture_borderless_fullscreen_requested() {
-                    WindowMode::BorderlessFullscreen(MonitorSelection::Primary)
-                } else {
-                    WindowMode::Windowed
-                },
+                decorations: !borderless_capture,
                 ..default()
             }),
             ..default()
@@ -367,26 +361,24 @@ mod tests {
     }
 
     #[test]
-    fn borderless_fullscreen_requires_visual_capture_and_an_explicit_opt_in() {
-        assert!(super::capture_borderless_fullscreen_requested_from(
+    fn borderless_window_requires_visual_capture_and_an_explicit_opt_in() {
+        assert!(super::capture_borderless_window_requested_from(
             true,
             Some(" yes ")
         ));
-        assert!(super::capture_borderless_fullscreen_requested_from(
+        assert!(super::capture_borderless_window_requested_from(
             true,
             Some("ON")
         ));
-        assert!(!super::capture_borderless_fullscreen_requested_from(
+        assert!(!super::capture_borderless_window_requested_from(
             false,
             Some("1")
         ));
-        assert!(!super::capture_borderless_fullscreen_requested_from(
+        assert!(!super::capture_borderless_window_requested_from(
             true,
             Some("0")
         ));
-        assert!(!super::capture_borderless_fullscreen_requested_from(
-            true, None
-        ));
+        assert!(!super::capture_borderless_window_requested_from(true, None));
     }
 
     #[test]

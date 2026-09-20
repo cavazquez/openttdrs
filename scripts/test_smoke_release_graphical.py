@@ -66,13 +66,13 @@ def invoke(root: Path, client: Path, package: Path, archive: Path, artifacts: Pa
 
 
 class NativeGraphicalSmokeTest(unittest.TestCase):
-    def test_macos_requests_native_borderless_fullscreen_only_for_its_capture(self) -> None:
+    def test_macos_requests_native_borderless_window_only_for_its_capture(self) -> None:
         package = Path("/package")
         profile = Path("/profile")
         screenshot = Path("/shot.png")
         with mock.patch.dict(
             os.environ,
-            {native_graphical_smoke.MACOS_FULLSCREEN_CAPTURE: "inherited"},
+            {native_graphical_smoke.MACOS_BORDERLESS_CAPTURE: "inherited"},
             clear=False,
         ):
             with mock.patch.object(native_graphical_smoke.platform, "system", return_value="Darwin"):
@@ -84,8 +84,8 @@ class NativeGraphicalSmokeTest(unittest.TestCase):
                     package, profile, "es", screenshot
                 )
 
-        self.assertEqual(macos[native_graphical_smoke.MACOS_FULLSCREEN_CAPTURE], "1")
-        self.assertNotIn(native_graphical_smoke.MACOS_FULLSCREEN_CAPTURE, windows)
+        self.assertEqual(macos[native_graphical_smoke.MACOS_BORDERLESS_CAPTURE], "1")
+        self.assertNotIn(native_graphical_smoke.MACOS_BORDERLESS_CAPTURE, windows)
 
     def test_two_locales_use_only_packaged_assets_and_write_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

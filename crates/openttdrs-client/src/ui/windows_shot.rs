@@ -97,6 +97,15 @@ const OPEN_FRAME: u32 = 30;
 const MAP_SHOT_CAMERA_FRAME: u32 = 1;
 const SHOT_FRAME: u32 = 60;
 const EXIT_FRAME: u32 = 120;
+/// Geometría lógica certificada para la evidencia visual V1 de Órdenes (#590).
+///
+/// Es deliberadamente independiente de la cascada de autoposicionamiento:
+/// esta última depende del orden en que Bevy materializa ventanas ocultas y
+/// haría que dos ejecuciones idénticas no fueran comparables píxel a píxel.
+const ORDERS_V1_SHOT_SIZE: Vec2 = Vec2::new(384.0, 310.0);
+const ORDERS_V1_SHOT_MARGIN: f32 = 8.0;
+const ORDERS_V1_SHOT_TOP: f32 = 80.0;
+const ORDERS_V1_SHOT_STATUSBAR_AVOID: f32 = 28.0;
 /// Un `.sav` grande puede necesitar varios frames para materializar todos los
 /// chunks visibles tras mover la cámara. La captura de mapa espera más que la
 /// de ventanas y se puede extender sin recompilar.
@@ -1876,6 +1885,49 @@ fn orders_shot_instance_visible(
             .is_some_and(Option::is_some)
 }
 
+/// Devuelve la posición lógica estable de Órdenes para una captura V1.
+///
+/// Se deja una guarda de ocho unidades a la derecha y se conserva la barra de
+/// estado. En un viewport bajo (1280×720 a escala 2), el panel baja sólo lo
+/// necesario para seguir íntegramente visible y accionable.
+#[must_use]
+fn orders_v1_shot_position(viewport: Vec2) -> Vec2 {
+    let max_x = (viewport.x - ORDERS_V1_SHOT_SIZE.x - ORDERS_V1_SHOT_MARGIN).max(0.0);
+    let max_y = (viewport.y - ORDERS_V1_SHOT_STATUSBAR_AVOID - ORDERS_V1_SHOT_SIZE.y).max(0.0);
+    Vec2::new(max_x, ORDERS_V1_SHOT_TOP.min(max_y))
+}
+
+/// Fija solamente la evidencia de Órdenes cuando se solicitó su captura
+/// individual. No altera la posición ni el comportamiento de la UI normal.
+fn stabilize_orders_v1_window_shot(world: &mut World) {
+    if requested_window_shot_id() != Ok(Some(FloatingWindowId::Orders)) {
+        return;
+    }
+
+    let ui_scale = world
+        .get_resource::<UiScale>()
+        .map_or(1.0, |scale| scale.0.max(0.5));
+    let viewport = world
+        .query_filtered::<&Window, With<PrimaryWindow>>()
+        .iter(world)
+        .next()
+        .map_or(Vec2::new(1280.0, 720.0), |window| {
+            Vec2::new(window.width(), window.height()) / ui_scale
+        });
+    let position = orders_v1_shot_position(viewport);
+
+    let mut windows = world.query::<(&FloatingWindow, &Visibility, &mut Node)>();
+    for (window, visibility, mut node) in windows.iter_mut(world) {
+        if window.id != FloatingWindowId::Orders || *visibility == Visibility::Hidden {
+            continue;
+        }
+        node.left = Val::Px(position.x);
+        node.top = Val::Px(position.y);
+        node.width = Val::Px(ORDERS_V1_SHOT_SIZE.x);
+        node.height = Val::Px(ORDERS_V1_SHOT_SIZE.y);
+    }
+}
+
 /// Ajuste explícito de QA: `None` conserva cámara y peticiones de remap.
 fn apply_window_shot_scale(world: &mut World, requested: Option<f32>) -> Option<f32> {
     let requested = requested?;
@@ -1956,6 +2008,7 @@ fn windows_shot_driver(world: &mut World, mut frame: Local<u32>) {
                 Visibility::Hidden
             };
         }
+        stabilize_orders_v1_window_shot(world);
     }
 
     if *frame == SHOT_FRAME {
@@ -2456,6 +2509,26 @@ mod tests {
             None,
             &[None, None]
         ));
+    }
+
+    #[test]
+    fn orders_v1_shot_position_keeps_the_panel_inside_all_certified_viewports() {
+        assert_eq!(
+            orders_v1_shot_position(Vec2::new(1280.0, 720.0)),
+            Vec2::new(888.0, 80.0)
+        );
+        assert_eq!(
+            orders_v1_shot_position(Vec2::new(640.0, 360.0)),
+            Vec2::new(248.0, 22.0)
+        );
+        assert_eq!(
+            orders_v1_shot_position(Vec2::new(1920.0, 1080.0)),
+            Vec2::new(1528.0, 80.0)
+        );
+        assert_eq!(
+            orders_v1_shot_position(Vec2::new(960.0, 540.0)),
+            Vec2::new(568.0, 80.0)
+        );
     }
 
     #[test]

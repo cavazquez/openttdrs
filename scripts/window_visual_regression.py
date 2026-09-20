@@ -462,10 +462,13 @@ def build_sidecar(
 
 def validate_artifacts(sidecar: dict[str, Any], paths: dict[str, Path]) -> list[str]:
     errors: list[str] = []
-    artifacts = sidecar.get("artifacts", {})
+    artifacts = sidecar.get("artifacts")
+    if not isinstance(artifacts, dict):
+        return ["sidecar.artifacts no coincide con archivos"]
+    expected_artifacts = artifact_metadata(paths)
     for name in ("reference", "candidate", "diff"):
         artifact = artifacts.get(name)
-        if not isinstance(artifact, dict) or artifact.get("sha256") != sha256(paths[name]):
+        if artifact != expected_artifacts[name]:
             errors.append(f"sidecar.artifacts.{name} no coincide con archivo")
     return errors
 

@@ -260,6 +260,27 @@ def main() -> int:
 
         sidecar_path = root / "artifacts" / "1280x720-1x" / "sidecar.json"
         sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+        sidecar["artifacts"]["candidate"]["path"] = "/tmp/external-candidate.png"
+        sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
+        external_path = run(certification, "--mode", "certification", "--candidate-sha", sha)
+        require(
+            external_path,
+            external_path.returncode == 1 and "sidecar.artifacts.candidate" in external_path.stdout,
+            "un sidecar no puede apuntar fuera del artefacto versionado",
+        )
+
+        cert_write = run(
+            certification,
+            "--mode",
+            "certification",
+            "--candidate-sha",
+            sha,
+            "--candidate-provenance",
+            str(provenance),
+            "--write-sidecars",
+        )
+        require(cert_write, cert_write.returncode == 0, "no se pudo restaurar la ruta de artefacto")
+        sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
         del sidecar["candidate_provenance"]
         sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
         missing_fresh = run(certification, "--mode", "certification", "--candidate-sha", sha)

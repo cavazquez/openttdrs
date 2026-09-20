@@ -74,6 +74,8 @@ def main() -> int:
         "sav_v1_ordl_roundtrip",
         "OPENTTDRS_V1_CANDIDATE_SHA",
         "ordl-evidence.json",
+        'if [[ "$SAV" != /* ]]; then',
+        'SAV="$(cd "$(dirname "$SAV")" && pwd)/$(basename "$SAV")"',
         "native_resave_preserves_v1_edited_station_order",
     ):
         expect(roundtrip, needle, errors, ROUNDTRIP)

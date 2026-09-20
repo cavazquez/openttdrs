@@ -11,6 +11,12 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SAV="${1:-$ROOT/crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav}"
+# Los binarios de integración de Cargo arrancan desde el directorio del crate,
+# no desde la raíz del workspace. Resolver el input antes de exportarlo evita
+# que V1-SAV pierda una fixture recibida como ruta relativa.
+if [[ "$SAV" != /* ]]; then
+  SAV="$(cd "$(dirname "$SAV")" && pwd)/$(basename "$SAV")"
+fi
 SOURCE_SAV="$SAV"
 TMP="${TMPDIR:-/tmp}/openttdrs_roundtrip_$$"
 CFGDIR="$TMP/cfg"

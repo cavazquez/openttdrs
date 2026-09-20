@@ -32,6 +32,7 @@ RESOLUTION = [800, 600]
 NORMAL_SCALE = 1.0
 NORMAL_ZOOM = "Normal"
 PROFILE = "clean-static"
+SETTLE_FRAMES = 360
 SAMPLE_COUNT = 3
 DIAGNOSTIC_SCALES = {
     0.25: "In4x",
@@ -281,6 +282,7 @@ def main(argv: list[str]) -> int:
                 "openttdrs_orthographic_scale": NORMAL_SCALE,
                 "openttd_zoom": NORMAL_ZOOM,
                 "profile": PROFILE,
+                "candidate_settle_frames": SETTLE_FRAMES,
                 "sample_count_per_engine": SAMPLE_COUNT,
                 "alignment": {
                     "candidate_translation": [0, 0],

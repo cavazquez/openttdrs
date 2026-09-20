@@ -214,6 +214,8 @@ class V1RasterGateTest(unittest.TestCase):
             self.assertIn(f"capture_diagnostic {scale:g} {label}", source)
         self.assertIn('OPENTTDRS_WORLD_SCREENSHOT_ALIGNMENT_RADIUS=0', source)
         self.assertIn('OPENTTDRS_WORLD_SCREENSHOT_ALIGNMENT_STRIDE=1', source)
+        self.assertIn('SETTLE_FRAMES="360"', source)
+        self.assertIn('OPENTTDRS_WORLD_SCREENSHOT_SETTLE_FRAMES="$SETTLE_FRAMES"', source)
         self.assertIn('git -C "$ROOT" diff --quiet', source)
         self.assertIn('--diagnostic-report "$OUT_DIR/diagnostics/out8x/report.json"', source)
         self.assertNotIn("SKIP", source)

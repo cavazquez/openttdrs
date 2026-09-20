@@ -19,6 +19,7 @@ OPENTTD_BIN="${2:-${OPENTTD_BIN:-${ROOT}/reference/openttd-upstream/build/opentt
 SAV="${ROOT}/save/Kale_TitleGame.sav"
 CENTER="132,2"
 RESOLUTION="800x600"
+SETTLE_FRAMES="360"
 FIXTURE_SHA="584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69"
 ORACLE_COMMIT="c2661164bcb6cbf5ab97b56ccbee7506a3b26833"
 ORACLE_WORKTREE="${OPENTTDRS_V1_RASTER_ORACLE_WORKTREE:-${ROOT}/reference/openttd-upstream}"
@@ -81,8 +82,9 @@ capture_normal() {
   } >"$OUT_DIR/logs/reference-$index.runner.log" 2>&1
 
   {
-    printf 'V1-RAS openttdrs sample %s: center=%s res=%s scale=1 clean-static\n' "$index" "$CENTER" "$RESOLUTION"
+    printf 'V1-RAS openttdrs sample %s: center=%s res=%s scale=1 settle=%sf clean-static\n' "$index" "$CENTER" "$RESOLUTION" "$SETTLE_FRAMES"
     OPENTTDRS_WORLD_SCREENSHOT_CLEAN=1 \
+      OPENTTDRS_WORLD_SCREENSHOT_SETTLE_FRAMES="$SETTLE_FRAMES" \
       OPENTTDRS_WORLD_SCREENSHOT_CANDIDATE_LOG="$OUT_DIR/logs/candidate-$index.engine.log" \
       "$ROOT/scripts/export_openttdrs_world_screenshot.sh" \
       "$SAV" "$candidate" "$CENTER" "$RESOLUTION" 1
@@ -96,8 +98,9 @@ capture_diagnostic() {
 
   mkdir -p "$diagnostic_dir"
   {
-    printf 'V1-RAS diagnostic %s: center=%s res=%s scale=%s clean-static\n' "$label" "$CENTER" "$RESOLUTION" "$scale"
+    printf 'V1-RAS diagnostic %s: center=%s res=%s scale=%s settle=%sf clean-static\n' "$label" "$CENTER" "$RESOLUTION" "$scale" "$SETTLE_FRAMES"
     OPENTTDRS_WORLD_SCREENSHOT_CLEAN=1 \
+      OPENTTDRS_WORLD_SCREENSHOT_SETTLE_FRAMES="$SETTLE_FRAMES" \
       OPENTTDRS_WORLD_SCREENSHOT_ALIGNMENT_RADIUS=0 \
       OPENTTDRS_WORLD_SCREENSHOT_ALIGNMENT_STRIDE=1 \
       OPENTTDRS_WORLD_SCREENSHOT_REFERENCE_LOG="$OUT_DIR/logs/$label.reference.engine.log" \

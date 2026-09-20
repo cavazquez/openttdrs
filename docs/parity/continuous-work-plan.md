@@ -13,7 +13,11 @@ del cliente.
 La entrega está publicada como
 [prerelease `v0.1.0-alpha.1`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
 y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) (revisión 1,
-Linux amd64). No convierte las brechas históricas de paridad en tareas activas.
+Linux amd64). La revisión 1 tiene un defecto posterior de empaquetado: intenta
+materializar tiles OpenGFX dentro del mount `$SNAP` de sólo lectura. [#582](https://github.com/cavazquez/openttdrs/issues/582)
+y [#583](https://github.com/cavazquez/openttdrs/issues/583) corrigen y prueban
+la próxima `0.1.0-alpha.2`; no convierte las brechas históricas de paridad en
+tareas activas.
 
 ## Entrega comprometida (cumplida)
 
@@ -37,7 +41,9 @@ o generación.
   arm64. El Snap estricto `core24` se compiló con la misma versión, pasó los
   linters de Snapcraft con sólo avisos de bibliotecas X11 preventivas y se
   publicó como revisión 1 de `latest/edge`. El launcher y los assets incluidos
-  pasaron `--check-assets` desde el árbol empaquetado.
+  pasaron `--check-assets` desde un árbol empaquetado escribible, pero no desde
+  el mount Snap real. La corrección posterior #582/#583 cubre esa diferencia
+  con materialización en build y un smoke read-only.
 - [#568](https://github.com/cavazquez/openttdrs/issues/568) — `rustfmt` de
   `station_tile_anim.rs`, cerrado con el commit `87114d5a` tras `cargo fmt
   --all -- --check` y revisión del diff.
@@ -132,7 +138,9 @@ del paquete quedan enlazados en #577. Después se creó el tag
 [`v0.1.0-alpha.1`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1),
 el [workflow de release](https://github.com/cavazquez/openttdrs/actions/runs/35453383079)
 publicó la prerelease y el Snap Store recibió la revisión 1 en
-[`latest/edge`](https://snapcraft.io/openttdrs).
+[`latest/edge`](https://snapcraft.io/openttdrs). La revisión se detectó después
+como no arrancable bajo el mount read-only; la corrección queda acotada a
+#582/#583 antes de publicar `0.1.0-alpha.2`.
 
 El avance se mide por estos resultados y tareas aceptadas, no por cantidad de
 commits, páginas de documentación o reducción de píxeles en una sola captura.

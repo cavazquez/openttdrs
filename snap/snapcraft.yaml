@@ -1,6 +1,6 @@
 name: openttdrs
 title: openttdrs
-version: "0.1.0-alpha.1"
+version: "0.1.0-alpha.2"
 summary: Isometric transport simulation inspired by OpenTTD
 description: |
   openttdrs is an isometric transport simulation written in Rust and built with
@@ -91,11 +91,21 @@ parts:
         -p openttdrs-client --bin openttdrs-client \
         -p openttdrs-net --bin openttdrs-dedicated
 
+      # `tiles/` es un derivado local del atlas versionado. En un checkout el
+      # cliente puede materializarlo al primer arranque, pero el mount `$SNAP`
+      # es deliberadamente de sólo lectura. Generarlo aquí garantiza que el
+      # artefacto final ya contiene todos los PNG requeridos.
+      OPENTTDRS_ASSET_ROOT="$CRAFT_PART_SRC" \
+        target/release/openttdrs-client --check-assets
+
       install -Dm755 target/release/openttdrs-client \
         "$CRAFT_PART_INSTALL/bin/openttdrs-client"
       install -Dm755 target/release/openttdrs-dedicated \
         "$CRAFT_PART_INSTALL/bin/openttdrs-dedicated"
       install -Dm755 "$CRAFT_PROJECT_DIR/snap/local/openttdrs-launch" \
         "$CRAFT_PART_INSTALL/bin/openttdrs-launch"
-      cp -a assets "$CRAFT_PART_INSTALL/assets"
-      cp -a static "$CRAFT_PART_INSTALL/static"
+      # `override-build` se ejecuta desde el directorio de build, mientras que
+      # la materialización anterior escribió en CRAFT_PART_SRC. Copiar desde
+      # allí incluye también los PNG derivados no versionados.
+      cp -a "$CRAFT_PART_SRC/assets" "$CRAFT_PART_INSTALL/assets"
+      cp -a "$CRAFT_PART_SRC/static" "$CRAFT_PART_INSTALL/static"

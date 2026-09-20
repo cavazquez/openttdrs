@@ -6,6 +6,13 @@ Los cambios relevantes de cada release se documentan aquí. El formato sigue
 
 ## [Unreleased]
 
+### Corregido
+
+- El Snap materializa los PNG OpenGFX derivados durante el build; al iniciar
+  no intenta escribir dentro del mount de sólo lectura `$SNAP`.
+- Se agregó un smoke del artefacto Snap con raíz de assets read-only y perfil
+  de usuario efímero.
+
 ## [0.1.0-alpha.1] - 2026-07-25
 
 ### Agregado

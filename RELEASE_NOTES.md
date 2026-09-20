@@ -8,6 +8,14 @@ completados; el [workflow de release](https://github.com/cavazquez/openttdrs/act
 publicó los paquetes de escritorio. El código actual mantiene las validaciones
 de carretera como fixtures internos, sin exponer un modo guiado específico.
 
+> **Corrección posterior (2026-09-19):** la revisión 1 del Snap no puede
+> iniciar porque intenta generar tiles OpenGFX en el mount `$SNAP` de sólo
+> lectura. Los paquetes de escritorio de esta prerelease no están afectados.
+> [#582](https://github.com/cavazquez/openttdrs/issues/582) y
+> [#583](https://github.com/cavazquez/openttdrs/issues/583) preparan y prueban
+> la revisión Snap `0.1.0-alpha.2`; no usar la revisión 1 como instalación
+> jugable.
+
 Incluye un cliente isométrico jugable, servidor dedicado lockstep y herramientas
 headless de paridad con OpenTTD 15.3.
 

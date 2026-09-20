@@ -44,6 +44,8 @@ def main() -> None:
     ).read_text(encoding="utf-8")
     package_smoke = (ROOT / "scripts" / "smoke_release_package.sh").read_text(encoding="utf-8")
     package_builder = (ROOT / "scripts" / "package_release.sh").read_text(encoding="utf-8")
+    snap_recipe = (ROOT / "snap" / "snapcraft.yaml").read_text(encoding="utf-8")
+    snap_smoke = (ROOT / "scripts" / "smoke_snap_package.sh").read_text(encoding="utf-8")
 
     require(f"## [{version}]" in changelog, "falta la versión en CHANGELOG.md")
     require(f"# openttdrs {version}" in notes, "RELEASE_NOTES.md tiene otra versión")
@@ -77,10 +79,32 @@ def main() -> None:
         "assets/shaders/rail_glass_post_process.wgsl" in package_builder,
         "package_release.sh no incluye el shader requerido por el cliente",
     )
+    materialize_tiles = 'OPENTTDRS_ASSET_ROOT="$CRAFT_PART_SRC"'
+    require(
+        materialize_tiles in snap_recipe
+        and "target/release/openttdrs-client --check-assets" in snap_recipe,
+        "snapcraft.yaml no materializa los tiles derivados antes del empaquetado",
+    )
+    require(
+        snap_recipe.index(materialize_tiles)
+        < snap_recipe.index(
+            'cp -a "$CRAFT_PART_SRC/assets" "$CRAFT_PART_INSTALL/assets"'
+        ),
+        "snapcraft.yaml copia assets antes de materializar los tiles",
+    )
+    for marker in (
+        "unsquashfs",
+        "openttdrs-launch",
+        "chmod -R a-w",
+        "SNAP_USER_COMMON",
+        "OPENTTDRS_MAIN_MENU_SHOT",
+    ):
+        require(marker in snap_smoke, f"smoke_snap_package.sh no cubre {marker!r}")
 
     for script_name in (
         "package_release.sh",
         "smoke_release_package.sh",
+        "smoke_snap_package.sh",
         "check_linux_glibc_floor.sh",
     ):
         script = ROOT / "scripts" / script_name

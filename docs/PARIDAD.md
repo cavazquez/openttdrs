@@ -9,9 +9,12 @@ capturas siguen en `docs/parity/`.
 **Dirección vigente (2026-09-19):** el corte de validación de la alpha está
 completado. #568–#576 entregaron ajustes P0, una ruta de carbón por comandos,
 su continuación JSON y feedback visible de F5/F9; [#577](https://github.com/cavazquez/openttdrs/issues/577)
-certificó el paquete Linux y su sesión de aceptación. El acceso guiado y su
-panel fueron retirados del cliente; la evidencia de carretera queda como fixture
-interno. Una dirección nueva requiere otra auditoría y una tarea atómica. Los
+certificó el paquete Linux extraído y su sesión de aceptación. El acceso guiado
+y su panel fueron retirados del cliente; la evidencia de carretera queda como
+fixture interno. La revisión Snap 1 no cubrió su mount de assets read-only y
+tiene un bloqueo de arranque; [#582](https://github.com/cavazquez/openttdrs/issues/582)
+y [#583](https://github.com/cavazquez/openttdrs/issues/583) son el único corte
+activo para corregirlo y validarlo. Los
 quince issues anteriores se retiran como `not planned`; sus brechas técnicas
 siguen existiendo. Las menciones posteriores a padres «abiertos» son registros
 del corte de evidencia de cada sección, no instrucciones para reactivarlos. Ver
@@ -20,7 +23,9 @@ la [auditoría y disposición completa](audits/2026-09-18-direction.md).
 **Distribución alpha (2026-09-19):** el corte se publicó como
 [prerelease `v0.1.0-alpha.1`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
 y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) para Linux amd64
-(revisión 1). Distribuir el cliente no certifica paridad global, compatibilidad
+(revisión 1). Esa revisión Snap tiene un bloqueo de arranque conocido; la
+próxima `0.1.0-alpha.2` se validará con raíz `$SNAP` de sólo lectura antes de
+publicarse. Distribuir el cliente no certifica paridad global, compatibilidad
 universal de saves, NewGRF ni multijugador.
 
 Para investigar una discrepancia de render de una partida `.sav`, seguir la

@@ -758,9 +758,9 @@ ilustración archivada, no una segunda métrica vigente.
 ### Contrato focal V1-RAS — Kale `(132,2)`
 
 Separado de este baseline global histórico, la candidata
-`1f170b076ce4f79c961082277cf5a35877e5d930` pasa el contrato V1 de Kale a
-`800×600` Normal: tres PNG idénticos por motor, `dx=dy=0`, 437 píxeles RGBA
-distintos (límite 480), 5 píxeles con delta >64 (límite 24), media 0,0210869792
+`48f4d9a9830dfc088961577969082b25b5b02aa9` pasa el contrato V1 de Kale a
+`800×600` Normal: tres PNG idénticos por motor, `dx=dy=0`, 45 píxeles RGBA
+distintos (límite 480), 5 píxeles con delta >64 (límite 24), media 0,0024390625
 (límite 0,05) y cero cobertura faltante. Los cinco zooms restantes se
 conservan como diagnósticos y no cambian la madurez de composición global.
 Los PNG, assets, pins y logs están en [la evidencia V1-RAS](parity/raster-v1-kale.md).

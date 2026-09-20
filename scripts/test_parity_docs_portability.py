@@ -16,7 +16,7 @@ from check_raster_baseline import BASELINE
 ROOT = Path(__file__).resolve().parents[1]
 CHECKER = Path("scripts/check_parity_docs_fresh.sh")
 RASTER_BASELINE = BASELINE.relative_to(ROOT)
-V1_RASTER_REPORT = Path("docs/parity/evidence/kale-132-2/2026-09-20-1f170b07/v1-raster-report.json")
+V1_RASTER_REPORT = Path("docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9/v1-raster-report.json")
 V1_RASTER_EVIDENCE = V1_RASTER_REPORT.parent
 
 

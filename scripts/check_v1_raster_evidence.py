@@ -11,13 +11,13 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = ROOT / "docs/parity/evidence/kale-132-2/2026-09-20-1f170b07"
+EVIDENCE = ROOT / "docs/parity/evidence/kale-132-2/2026-09-20-48f4d9a9"
 REPORT = EVIDENCE / "v1-raster-report.json"
-CANDIDATE_COMMIT = "1f170b076ce4f79c961082277cf5a35877e5d930"
+CANDIDATE_COMMIT = "48f4d9a9830dfc088961577969082b25b5b02aa9"
 EXPECTED_CHECKS = {
-    "changed_pixels": (437, 480),
+    "changed_pixels": (45, 480),
     "pixels_over_channel_delta_64": (5, 24),
-    "mean_absolute_rgba_channel_delta": (0.021086979166666665, 0.05),
+    "mean_absolute_rgba_channel_delta": (0.0024390625, 0.05),
     "outside_candidate_pixels": (0, 0),
 }
 EXPECTED_SCALES = [0.25, 0.5, 2.0, 4.0, 8.0]

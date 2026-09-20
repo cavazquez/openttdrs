@@ -79,8 +79,8 @@ se cambia cámara/culling/overview, se ejecutan las seis escalas según
 motor, `dx=dy=0`, los cuatro límites combinados, assets/pins/logs y los cinco
 diagnósticos. Sus pruebas cubren cada frontera del presupuesto, evidencia
 faltante, geometría inválida y no determinismo. La corrida real de
-`1f170b076ce4f79c961082277cf5a35877e5d930` pasó con 437 píxeles, 5 >64,
-media 0,0210869792 y cobertura 0; ver [evidencia Kale V1](raster-v1-kale.md).
+`48f4d9a9830dfc088961577969082b25b5b02aa9` pasó con 45 píxeles, 5 >64,
+media 0,0024390625 y cobertura 0; ver [evidencia Kale V1](raster-v1-kale.md).
 El cierre de la issue aún exige CI remota verde del SHA vigente.
 
 ### UI propia

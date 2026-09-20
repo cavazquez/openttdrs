@@ -8,19 +8,19 @@ paridad global de framebuffer. Fija `save/Kale_TitleGame.sav` (SHA-256
 ## Resultado certificado
 
 La corrida de 2026-09-20 para la candidata
-`1f170b076ce4f79c961082277cf5a35877e5d930` pasó el gate V1:
+`48f4d9a9830dfc088961577969082b25b5b02aa9` pasó el gate V1:
 
 | Regla | Resultado | Límite |
 |---|---:|---:|
-| Píxeles RGBA distintos | 437 | ≤480 |
+| Píxeles RGBA distintos | 45 | ≤480 |
 | Píxeles con delta de canal >64 | 5 | ≤24 |
-| Media absoluta por canal RGBA | 0,0210869792 | ≤0,05 |
+| Media absoluta por canal RGBA | 0,0024390625 | ≤0,05 |
 | Cobertura faltante | 0 | 0 |
 
 Las tres capturas OpenTTD tienen SHA-256
 `81f49dd2e245475d6dec35b1ab4d857a49014ddb7526e40d0363b029ce3d4155`; las tres
 capturas de openttdrs tienen SHA-256
-`981cdf48e8b09971498aa228420503859200d64bc982d3f2c357149ebb869a88`.
+`6eb808c54266c118374ab882692604af801fd6b1df9380c63acd3f8f88c70eb5`.
 El oracle es OpenTTD 15.3 oficial
 `14ec60f248547d4d062a1160f0fc26d742319888`, con el exportador instrumentado
 en `c2661164bcb6cbf5ab97b56ccbee7506a3b26833`.
@@ -33,7 +33,7 @@ adicional.
 
 ## Evidencia conservada
 
-[`2026-09-20-1f170b07/v1-raster-report.json`](evidence/kale-132-2/2026-09-20-1f170b07/v1-raster-report.json)
+[`2026-09-20-48f4d9a9/v1-raster-report.json`](evidence/kale-132-2/2026-09-20-48f4d9a9/v1-raster-report.json)
 contiene pins, SHA de assets, las tres muestras de cada motor, el diff y los
 cuatro checks. Los PNG y logs usados por la corrida están en el mismo
 directorio:

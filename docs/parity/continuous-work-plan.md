@@ -111,7 +111,7 @@ corte. Orden para implementar una tarea a la vez:
    Siguen barco **#593**, avión **#594**, late join **#595** (después de
    #585), NewGRF/JSON **#592** y persistencia GS **#599** (después de #598).
 4. Presentación y herramientas: raster Normal **#589** está implementado y
-   certificado localmente en `1f170b07` (tres hashes por motor, presupuesto y
+   certificado localmente en `48f4d9a9` (tres hashes por motor, presupuesto y
    cinco diagnósticos en [la evidencia Kale](raster-v1-kale.md)); espera CI
    remota vigente. Órdenes **#590** quedó certificada localmente en
    `c4251e4c` ([ocho perfiles y presupuesto fijo](orders-v1.md)); sigue editor

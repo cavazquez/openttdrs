@@ -4502,7 +4502,7 @@ mod tests {
         assert_eq!(map_frame(&state, pos), 1, "NewCargo ordinal llega a CB140");
         assert!(state.newgrf_animated_station_tiles.contains(&pos));
         assert!(
-            state
+            !state
                 .runtime
                 .pending_sim_events
                 .iter()
@@ -4513,7 +4513,48 @@ mod tests {
                         kind: VehicleKind::Train,
                         ..
                     }
-                ))
+                )),
+            "una descarga sin pago de ruta ni transferencia visual no emite VSE_LOAD_UNLOAD"
+        );
+    }
+
+    #[test]
+    fn unloading_freight_with_route_payment_emits_vehicle_load_unload_event() {
+        let source = TileCoord::new(1, 1);
+        let station_pos = TileCoord::new(32, 1);
+        let mut state = GameState::new(64, 4);
+        state.stations.push(crate::Station::new_with_kind(
+            station_pos,
+            crate::StopKind::RailStation,
+        ));
+
+        let mut train = crate::Vehicle::new(9, VehicleKind::Train, station_pos, station_pos);
+        train
+            .cargo_packets
+            .push(crate::CargoPacket::new(CargoType::Coal, 4, source).with_first_station(source));
+        train.sync_cargo_from_packets();
+        train.last_pickup_station = Some(source);
+        state.vehicles.push(train);
+
+        let mut unloaded = vec![false];
+        unload_vehicles(&mut state, 1, &[false], &mut unloaded);
+
+        assert!(unloaded[0]);
+        assert!(state.stations[0].income > 0, "la ruta debe obtener un pago");
+        assert!(
+            state
+                .runtime
+                .pending_sim_events
+                .iter()
+                .any(|event| matches!(
+                    event,
+                    crate::sim_events::SimEvent::VehicleLoadUnload {
+                        vehicle_id: 9,
+                        kind: VehicleKind::Train,
+                        ..
+                    }
+                )),
+            "un pago de ruta no nulo emite VSE_LOAD_UNLOAD"
         );
     }
 

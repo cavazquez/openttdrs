@@ -317,3 +317,60 @@ fn spawn_order_button(
         )],
     ));
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use std::collections::HashSet;
+
+    use bevy::asset::AssetPlugin;
+    use bevy::ecs::system::RunSystemOnce;
+
+    use super::*;
+
+    #[test]
+    fn v1_orders_panel_exposes_every_certified_control_as_visible_button() {
+        let asset_root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins).add_plugins(AssetPlugin {
+            file_path: asset_root.into(),
+            ..default()
+        });
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+        app.world_mut().run_system_once(setup_order_panel).unwrap();
+
+        let world = app.world_mut();
+        let mut buttons = world.query::<(&OrderPanelButton, &Button, &Interaction, &Node)>();
+        let controls = buttons
+            .iter(world)
+            .map(|(control, _, interaction, node)| {
+                assert!(matches!(*interaction, Interaction::None));
+                assert_ne!(node.display, Display::None);
+                *control
+            })
+            .collect::<HashSet<_>>();
+
+        let expected = HashSet::from([
+            OrderPanelButton::PickDestOnMap,
+            OrderPanelButton::DeleteSelected,
+            OrderPanelButton::SkipOrder,
+            OrderPanelButton::ToggleFullLoad,
+            OrderPanelButton::ToggleNonStop,
+            OrderPanelButton::CycleStopLocation,
+            OrderPanelButton::ToggleNoUnload,
+            OrderPanelButton::ToggleDepotStop,
+            OrderPanelButton::CycleDepotRefit,
+            OrderPanelButton::OpenTimetableWindow,
+            OrderPanelButton::MoveOrderUp,
+            OrderPanelButton::MoveOrderDown,
+            OrderPanelButton::ShareOrders,
+            OrderPanelButton::UnlinkSharedOrders,
+            OrderPanelButton::OpenSharedOrders,
+            OrderPanelButton::AddConditionalAbove,
+            OrderPanelButton::AddConditionalBelow,
+            OrderPanelButton::CycleConditional,
+        ]);
+        assert_eq!(controls, expected);
+    }
+}

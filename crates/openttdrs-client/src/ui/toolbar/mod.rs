@@ -619,7 +619,7 @@ impl OrderEditState {
 #[derive(Component)]
 pub(crate) struct OrderPanelRoot;
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum OrderPanelButton {
     /// «Ir a»: empieza a elegir el destino de una nueva orden.
     PickDestOnMap,

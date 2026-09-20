@@ -179,6 +179,8 @@ do_bench() {
 do_parity_docs() {
     info "Frescura docs de paridad (#125)..."
     ./scripts/check_parity_docs_fresh.sh
+    info "Certificación visual Órdenes V1 (#590)..."
+    ./scripts/check_orders_v1_certification.sh
     info "parity-docs OK ✓"
 }
 

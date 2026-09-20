@@ -329,7 +329,7 @@ Para el paquete Snap y su publicación, usar la receta documentada en
 
 ## Qué está hecho / qué falta (resumen)
 
-> Corte V1: 2026-09-20, base inspeccionada `84144747`. ✅ significa que pasa
+> Corte V1: 2026-09-20, base inspeccionada `72d906d8`. ✅ significa que pasa
 > **el contrato acotado de esta fila**, no paridad completa con OpenTTD.
 > 🟡 significa que falta implementación o evidencia de aceptación.
 
@@ -346,7 +346,7 @@ siguen registrando las brechas generales aunque un caso V1 esté aprobado.
 | Economía Temperate + packets | 11 cargas, pagos, transfer/deliver, ratings y CargoDist | 🟡 | 198 pagos exactos [#586](https://github.com/cavazquez/openttdrs/issues/586) ✅ ([oráculo](docs/parity/temperate-payment-oracle.md) nativo) y transferencia de carbón en dos tramos [#587](https://github.com/cavazquez/openttdrs/issues/587) ✅ ([traza](docs/parity/coal-transfer-v1.md), conservación y feeder); ambos esperan CI remota vigente antes del cierre |
 | Import/export `.sav` | [Subconjunto interoperable](docs/parity/sav-compatibility.md); gate de 6 cargas y un roundtrip | 🟡 | [#588](https://github.com/cavazquez/openttdrs/issues/588) implementa una edición ORDL pública y exacta tras re-guardado nativo ([evidencia](docs/parity/sav-ordl-v1.md)); espera CI remota vigente, no SAV universal |
 | Render OpenGFX vanilla | Sprites y compositor amplios; framebuffer global todavía divergente | ✅ | [#589](https://github.com/cavazquez/openttdrs/issues/589) certifica Kale `(132,2)` Normal: 437/480 píxeles, 5/24 >64, media 0,02109/0,05 y cobertura 0 ([evidencia](docs/parity/raster-v1-kale.md)); los otros zooms siguen diagnósticos y el cierre espera CI remota vigente |
-| UI solitario | Menú ES/EN, ventanas y feedback F5/F9 | 🟡 | Gate de certificación separado y presupuesto fijo [#584](https://github.com/cavazquez/openttdrs/issues/584) ✅; faltan edición de Órdenes en 8 perfiles [#590](https://github.com/cavazquez/openttdrs/issues/590) y otras ventanas/opciones |
+| UI solitario | Menú ES/EN, ventanas y feedback F5/F9 | ✅ | Gate de certificación separado y presupuesto fijo [#584](https://github.com/cavazquez/openttdrs/issues/584) ✅; [#590](https://github.com/cavazquez/openttdrs/issues/590) certifica edición de Órdenes en 8 perfiles con 0 píxeles fuera de presupuesto ([evidencia](docs/parity/orders-v1.md)). Quedan otras ventanas/opciones fuera de este corte |
 | Multi-compañía | Ownership y asignación de compañía por cliente | 🟡 | [#591](https://github.com/cavazquez/openttdrs/issues/591) implementado: 4 rechazos atómicos sobre bienes ajenos, 4 controles válidos de A y issuer inválido ([evidencia](docs/parity/ownership-v1.md)); falta CI remota vigente |
 | NewGRF | [Action0/3/5](docs/parity/newgrf-action0-matrix.md) y [callbacks runtime](docs/parity/newgrf-callback-matrix.md) parciales | 🟡 | Un GRF de camión con CB36, catálogo y continuación JSON de 2.000 ticks [#592](https://github.com/cavazquez/openttdrs/issues/592) |
 | Barcos | Depósitos, docks, boyas, esclusas y controlador naval | 🟡 | Compra → boya → entrega pagada en una ruta marítima [#593](https://github.com/cavazquez/openttdrs/issues/593); quedan fuera canales/locks/YAPF global |

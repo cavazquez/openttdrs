@@ -113,7 +113,9 @@ corte. Orden para implementar una tarea a la vez:
 4. Presentación y herramientas: raster Normal **#589** está implementado y
    certificado localmente en `1f170b07` (tres hashes por motor, presupuesto y
    cinco diagnósticos en [la evidencia Kale](raster-v1-kale.md)); espera CI
-   remota vigente. Siguen Órdenes **#590** (después de #584) y editor **#600**.
+   remota vigente. Órdenes **#590** quedó certificada localmente en
+   `72d906d8` ([ocho perfiles y presupuesto fijo](orders-v1.md)); sigue editor
+   **#600**.
 5. Paquetes Windows **#601** y macOS **#602**. Emitir con **#603** el reporte
    completo del SHA candidato; ninguna ausencia cuenta como aprobación.
 

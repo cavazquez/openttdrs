@@ -1,0 +1,100 @@
+{
+  "schema_version": 2,
+  "comparison_role": "client_regression",
+  "description": "Certificación V1 propia de la ventana Órdenes (#590). Compara dos ejecuciones runtime de la demo vial integrada; no afirma similitud visual con OpenTTD.",
+  "certified_candidate_sha": "72d906d8ed53532ba33c7c6fbe4eaf39fbf946ae",
+  "windows": [
+    {
+      "id": "OrdersEs",
+      "family": "vehicles",
+      "capture_route": "demo-road-truck-9010/vehicle-window/orders",
+      "fixture": "builtin-demo-road-truck-9010",
+      "artifact_root": "docs/parity/screenshots/orders-v1/OrdersEs",
+      "profiles": [
+        {"width": 1280, "height": 720, "ui_scale": 1, "roi": {"x": 888, "y": 80, "width": 384, "height": 310}},
+        {"width": 1280, "height": 720, "ui_scale": 2, "roi": {"x": 496, "y": 44, "width": 768, "height": 620}},
+        {"width": 1920, "height": 1080, "ui_scale": 1, "roi": {"x": 1528, "y": 80, "width": 384, "height": 310}},
+        {"width": 1920, "height": 1080, "ui_scale": 2, "roi": {"x": 1136, "y": 160, "width": 768, "height": 620}}
+      ],
+      "tolerance": {
+        "pixel_delta_threshold": 8,
+        "max_pixels_over_threshold_ratio": 0.005,
+        "max_mean_abs_channel_delta": 0.00392156862745098
+      },
+      "accepted_differences": [],
+      "required_controls": [
+        "orders-list",
+        "open-timetable",
+        "toggle-full-load",
+        "toggle-no-unload",
+        "toggle-non-stop",
+        "cycle-stop-location",
+        "toggle-depot-stop",
+        "cycle-depot-refit",
+        "move-order-up",
+        "move-order-down",
+        "skip-order",
+        "delete-selected",
+        "pick-dest-on-map",
+        "share-orders",
+        "unlink-shared-orders",
+        "open-shared-orders",
+        "add-conditional-above",
+        "add-conditional-below",
+        "cycle-conditional"
+      ],
+      "baseline_provenance": {
+        "baseline_sha": "72d906d8ed53532ba33c7c6fbe4eaf39fbf946ae",
+        "captured_at": "2026-09-20T10:03:16Z",
+        "capture_command": "bash scripts/capture_orders_v1_certification.sh baseline",
+        "source": "runtime"
+      }
+    },
+    {
+      "id": "OrdersEn",
+      "family": "vehicles",
+      "capture_route": "demo-road-truck-9010/vehicle-window/orders",
+      "fixture": "builtin-demo-road-truck-9010",
+      "artifact_root": "docs/parity/screenshots/orders-v1/OrdersEn",
+      "profiles": [
+        {"width": 1280, "height": 720, "ui_scale": 1, "roi": {"x": 888, "y": 80, "width": 384, "height": 310}},
+        {"width": 1280, "height": 720, "ui_scale": 2, "roi": {"x": 496, "y": 44, "width": 768, "height": 620}},
+        {"width": 1920, "height": 1080, "ui_scale": 1, "roi": {"x": 1528, "y": 80, "width": 384, "height": 310}},
+        {"width": 1920, "height": 1080, "ui_scale": 2, "roi": {"x": 1136, "y": 160, "width": 768, "height": 620}}
+      ],
+      "tolerance": {
+        "pixel_delta_threshold": 8,
+        "max_pixels_over_threshold_ratio": 0.005,
+        "max_mean_abs_channel_delta": 0.00392156862745098
+      },
+      "accepted_differences": [],
+      "required_controls": [
+        "orders-list",
+        "open-timetable",
+        "toggle-full-load",
+        "toggle-no-unload",
+        "toggle-non-stop",
+        "cycle-stop-location",
+        "toggle-depot-stop",
+        "cycle-depot-refit",
+        "move-order-up",
+        "move-order-down",
+        "skip-order",
+        "delete-selected",
+        "pick-dest-on-map",
+        "share-orders",
+        "unlink-shared-orders",
+        "open-shared-orders",
+        "add-conditional-above",
+        "add-conditional-below",
+        "cycle-conditional"
+      ],
+      "baseline_provenance": {
+        "baseline_sha": "72d906d8ed53532ba33c7c6fbe4eaf39fbf946ae",
+        "captured_at": "2026-09-20T10:03:16Z",
+        "capture_command": "bash scripts/capture_orders_v1_certification.sh baseline",
+        "source": "runtime"
+      }
+    }
+  ]
+}

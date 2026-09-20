@@ -56,6 +56,8 @@ target-agent
 # Manifiesto de artefactos visuales por familia (#297).
 !docs/parity/screenshots/window-regression.json
 !docs/parity/screenshots/window-regression/**/sidecar.json
+!docs/parity/screenshots/orders-v1-regression.json
+!docs/parity/screenshots/orders-v1/**/sidecar.json
 !scripts/ci_python_manifest.json
 !scripts/generated_tables_manifest.json
 # Inventario verificable del corpus de regresión de fuzz.

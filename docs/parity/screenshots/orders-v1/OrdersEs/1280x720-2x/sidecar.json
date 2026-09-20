@@ -1,0 +1,197 @@
+{
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/orders-v1/OrdersEs/1280x720-2x/candidate.png",
+      "sha256": "454e4c94dbf371e1842cff48b5f2d4364acfdda55af1d036b933359049ccd83c"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/orders-v1/OrdersEs/1280x720-2x/diff.png",
+      "sha256": "a968e638205358fc665e99a6b5b323bb319652deed0cd5204432f6f26d885479"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/orders-v1/OrdersEs/1280x720-2x/reference.png",
+      "sha256": "454e4c94dbf371e1842cff48b5f2d4364acfdda55af1d036b933359049ccd83c"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "baseline_provenance": {
+    "baseline_sha": "72d906d8ed53532ba33c7c6fbe4eaf39fbf946ae",
+    "capture_command": "bash scripts/capture_orders_v1_certification.sh baseline",
+    "captured_at": "2026-09-20T10:03:16Z",
+    "source": "runtime"
+  },
+  "candidate_provenance": {
+    "candidate_png_sha256": "454e4c94dbf371e1842cff48b5f2d4364acfdda55af1d036b933359049ccd83c",
+    "candidate_sha": "72d906d8ed53532ba33c7c6fbe4eaf39fbf946ae",
+    "capture_command": "bash scripts/capture_orders_v1_certification.sh candidate",
+    "capture_id": "aea51acecf133a9a2d426aadcee1b5fdde03bb7c00598b53aaf07ca92eaf3353",
+    "captured_at": "2026-09-20T10:03:54Z",
+    "control_assertions": {
+      "add-conditional-above": {
+        "actionable": true,
+        "present": true
+      },
+      "add-conditional-below": {
+        "actionable": true,
+        "present": true
+      },
+      "cycle-conditional": {
+        "actionable": true,
+        "present": true
+      },
+      "cycle-depot-refit": {
+        "actionable": true,
+        "present": true
+      },
+      "cycle-stop-location": {
+        "actionable": true,
+        "present": true
+      },
+      "delete-selected": {
+        "actionable": true,
+        "present": true
+      },
+      "move-order-down": {
+        "actionable": true,
+        "present": true
+      },
+      "move-order-up": {
+        "actionable": true,
+        "present": true
+      },
+      "open-shared-orders": {
+        "actionable": true,
+        "present": true
+      },
+      "open-timetable": {
+        "actionable": true,
+        "present": true
+      },
+      "orders-list": {
+        "actionable": true,
+        "present": true
+      },
+      "pick-dest-on-map": {
+        "actionable": true,
+        "present": true
+      },
+      "share-orders": {
+        "actionable": true,
+        "present": true
+      },
+      "skip-order": {
+        "actionable": true,
+        "present": true
+      },
+      "toggle-depot-stop": {
+        "actionable": true,
+        "present": true
+      },
+      "toggle-full-load": {
+        "actionable": true,
+        "present": true
+      },
+      "toggle-no-unload": {
+        "actionable": true,
+        "present": true
+      },
+      "toggle-non-stop": {
+        "actionable": true,
+        "present": true
+      },
+      "unlink-shared-orders": {
+        "actionable": true,
+        "present": true
+      }
+    },
+    "profile": "1280x720-2x",
+    "source": "runtime"
+  },
+  "capture_route": "demo-road-truck-9010/vehicle-window/orders",
+  "comparison_role": "client_regression",
+  "family": "vehicles",
+  "fixture": "builtin-demo-road-truck-9010",
+  "geometry": {
+    "candidate_screen": [
+      1280,
+      720
+    ],
+    "expected_screen": [
+      1280,
+      720
+    ],
+    "reference_screen": [
+      1280,
+      720
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1280,
+      720
+    ],
+    "changed_pixels": 0,
+    "changed_ratio": 0.0,
+    "max_channel_delta": 0,
+    "mean_channel_delta": 0.0,
+    "reference_size": [
+      1280,
+      720
+    ]
+  },
+  "profile": {
+    "height": 720,
+    "roi": {
+      "height": 620,
+      "width": 768,
+      "x": 496,
+      "y": 44
+    },
+    "ui_scale": 2,
+    "width": 1280
+  },
+  "regression_metrics": {
+    "mean_abs_channel_delta": 0.0,
+    "pixel_delta_threshold": 8,
+    "pixels_over_rgba_delta_threshold": 0,
+    "pixels_over_rgba_delta_threshold_ratio": 0.0,
+    "roi": {
+      "height": 620,
+      "width": 768,
+      "x": 496,
+      "y": 44
+    },
+    "roi_pixels": 476160
+  },
+  "required_controls": [
+    "orders-list",
+    "open-timetable",
+    "toggle-full-load",
+    "toggle-no-unload",
+    "toggle-non-stop",
+    "cycle-stop-location",
+    "toggle-depot-stop",
+    "cycle-depot-refit",
+    "move-order-up",
+    "move-order-down",
+    "skip-order",
+    "delete-selected",
+    "pick-dest-on-map",
+    "share-orders",
+    "unlink-shared-orders",
+    "open-shared-orders",
+    "add-conditional-above",
+    "add-conditional-below",
+    "cycle-conditional"
+  ],
+  "schema_version": 2,
+  "tolerance": {
+    "max_mean_abs_channel_delta": 0.00392156862745098,
+    "max_pixels_over_threshold_ratio": 0.005,
+    "pixel_delta_threshold": 8
+  },
+  "window": "OrdersEs"
+}

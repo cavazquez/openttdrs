@@ -251,9 +251,11 @@ python3 scripts/window_visual_regression.py \
 ```
 
 El reporte JSON separa `artifact_integrity`, `client_regression` y
-`openttd_similarity`; una categoría no implica las otras. La certificación de
-Órdenes con sus ocho perfiles se incorpora en [#590](https://github.com/cavazquez/openttdrs/issues/590), que debe aportar el manifiesto y las capturas
-reales del runtime.
+`openttd_similarity`; una categoría no implica las otras. [#590](https://github.com/cavazquez/openttdrs/issues/590)
+incorpora la certificación runtime de Órdenes: ocho perfiles, manifiesto
+[`orders-v1-regression.json`](orders-v1-regression.json), PNG y sidecars
+versionados. Su alcance y reproducción están en
+[`../orders-v1.md`](../orders-v1.md).
 
 Durante la regeneración local puede limitarse a una ventana sin que las otras
 ausencias oculten el resultado:

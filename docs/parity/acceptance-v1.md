@@ -103,9 +103,11 @@ distintos. Verificar sus hashes/sidecars prueba integridad del archivo, no
 similitud ni ausencia de regresiones en el ejecutable actual. [#584](https://github.com/cavazquez/openttdrs/issues/584)
 ya separa roles, exige SHA/procedencia fresca y aplica el presupuesto fijo a
 manifiestos `client_regression`; [#590](https://github.com/cavazquez/openttdrs/issues/590)
-debe aportar las ocho capturas reales de Órdenes. Hasta entonces, la categoría
-`client_regression` no es aplicable, nunca verde por el archivo histórico. No
-se exige clonar la apariencia de OpenTTD.
+aporta las ocho capturas runtime de Órdenes en
+[`orders-v1-regression.json`](screenshots/orders-v1-regression.json), ligadas
+al SHA `72d906d8ed53532ba33c7c6fbe4eaf39fbf946ae`. La categoría
+`client_regression` pasa con sus sidecars y presupuesto fijo; no se exige
+clonar la apariencia de OpenTTD.
 
 ### Paquetes
 

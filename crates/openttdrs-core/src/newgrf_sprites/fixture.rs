@@ -924,6 +924,38 @@ pub fn build_grf_v2_feature_with_action2_chain(
     grfid: [u8; 4],
     name: &str,
 ) -> Vec<u8> {
+    build_grf_v2_feature_with_action2_groups(
+        action0,
+        feature,
+        local_id,
+        action2_set_id,
+        &[action2_payload],
+        width,
+        height,
+        indices,
+        grfid,
+        name,
+    )
+}
+
+/// GRF v2: feature genérico con Action3 y varios grupos Action2 relacionados.
+///
+/// El primer id de grupo queda enlazado desde Action3; los demás permiten que
+/// fixtures pequeños prueben dispatches Action2 reales sin simular callbacks.
+#[must_use]
+#[expect(clippy::too_many_arguments)]
+pub fn build_grf_v2_feature_with_action2_groups(
+    action0: &[u8],
+    feature: u8,
+    local_id: u8,
+    action2_set_id: u8,
+    action2_payloads: &[&[u8]],
+    width: u16,
+    height: u16,
+    indices: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
     const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
     let action1 = build_action1_feature_payload(feature, 1, 1);
     let action3 = build_action3_feature_payload(feature, local_id, u16::from(action2_set_id));
@@ -950,7 +982,13 @@ pub fn build_grf_v2_feature_with_action2_chain(
     }
     append_v2_real_sprite(&mut data_section, 0x01, &sprite_body);
 
-    for payload in [action2_payload, action3.as_slice(), action8.as_slice()] {
+    for payload in action2_payloads {
+        let sz = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    for payload in [action3.as_slice(), action8.as_slice()] {
         let sz = u32::try_from(payload.len()).unwrap_or(0);
         data_section.extend_from_slice(&sz.to_le_bytes());
         data_section.push(0xFF);

@@ -21,6 +21,7 @@ SETTLE_FRAMES="${OPENTTDRS_WORLD_SCREENSHOT_SETTLE_FRAMES:-180}"
 TIMEOUT_SECONDS="${OPENTTDRS_WORLD_SCREENSHOT_TIMEOUT_SECONDS:-120}"
 CLEAN="${OPENTTDRS_WORLD_SCREENSHOT_CLEAN:-1}"
 SORT_OUT="${OPENTTDRS_VIEWPORT_SORT_TRACE_OUT:-}"
+LOG="${OPENTTDRS_WORLD_SCREENSHOT_CANDIDATE_LOG:-/tmp/openttdrs-world-screenshot-candidate.log}"
 
 if [[ ! -f "$SAV" ]]; then
   echo "error: no existe $SAV" >&2
@@ -49,6 +50,8 @@ fi
 
 mkdir -p "$(dirname "$OUT")"
 rm -f "$OUT"
+mkdir -p "$(dirname "$LOG")"
+rm -f "$LOG"
 if [[ -n "$SORT_OUT" ]]; then
   SORT_OUT="$(realpath -m "$SORT_OUT")"
   mkdir -p "$(dirname "$SORT_OUT")"
@@ -72,18 +75,18 @@ OPENTTDRS_SAV_LOAD="$SAV" \
   CARGO_NET_OFFLINE="${CARGO_NET_OFFLINE:-true}" \
   RUSTC_WRAPPER="${RUSTC_WRAPPER:-}" \
   timeout "${TIMEOUT_SECONDS}s" cargo run -q -p openttdrs-client \
-  >/tmp/openttdrs-world-screenshot-candidate.log 2>&1
+  >"$LOG" 2>&1
 rc=$?
 set -e
 
 if [[ ! -s "$OUT" ]]; then
   echo "error: openttdrs no generó $OUT (exit=$rc). Log:" >&2
-  tail -n 100 /tmp/openttdrs-world-screenshot-candidate.log >&2 || true
+  tail -n 100 "$LOG" >&2 || true
   exit 1
 fi
 if [[ -n "$SORT_OUT" ]] && [[ ! -s "$SORT_OUT" ]]; then
   echo "error: openttdrs no generó la traza de sorter $SORT_OUT (exit=$rc). Log:" >&2
-  tail -n 100 /tmp/openttdrs-world-screenshot-candidate.log >&2 || true
+  tail -n 100 "$LOG" >&2 || true
   exit 1
 fi
 

@@ -19,6 +19,7 @@ RESOLUTION="${5:-${OPENTTDRS_WORLD_SCREENSHOT_RES:-1280x720}}"
 SCALE="${OPENTTDRS_WORLD_SCREENSHOT_SCALE:-1}"
 CLEAN="${OPENTTDRS_WORLD_SCREENSHOT_CLEAN:-1}"
 SORT_OUT="${OPENTTDRS_WORLD_SCREENSHOT_SORT_OUT:-}"
+LOG="${OPENTTDRS_WORLD_SCREENSHOT_REFERENCE_LOG:-/tmp/openttdrs-world-screenshot-run.log}"
 BUILD_DIR="$(dirname "$BIN")"
 BASESET_SRC="${OPENTTDRS_OPENGFX_DIR:-${ROOT}/.deps/openttd-baseset/opengfx-8.0}"
 GRAPHICS_SET="${OPENTTDRS_GRAPHICS_SET:-opengfx}"
@@ -60,6 +61,8 @@ fi
 
 mkdir -p "$(dirname "$OUT")"
 rm -f "$OUT"
+mkdir -p "$(dirname "$LOG")"
+rm -f "$LOG"
 if [[ -n "$SORT_OUT" ]]; then
   SORT_OUT="$(realpath -m "$SORT_OUT")"
   mkdir -p "$(dirname "$SORT_OUT")"
@@ -85,18 +88,18 @@ set +e
 # habilitado por `integrate.sh` + `-DOPENTTDRS_HEADLESS_RASTER=ON`. Así usa el
 # framebuffer en memoria del driver dedicado, pero no requiere SDL ni una
 # sesión gráfica para componer la referencia raster.
-timeout 120s "$BIN" -X -x -I "$GRAPHICS_SET" -v dedicated -b "$BLITTER" -s null -m null -r "$RESOLUTION" -g "$SAV" >/tmp/openttdrs-world-screenshot-run.log 2>&1
+timeout 120s "$BIN" -X -x -I "$GRAPHICS_SET" -v dedicated -b "$BLITTER" -s null -m null -r "$RESOLUTION" -g "$SAV" >"$LOG" 2>&1
 rc=$?
 set -e
 
 if [[ ! -s "$OUT" ]]; then
   echo "error: no se generó $OUT (exit=$rc). Log:" >&2
-  tail -n 80 /tmp/openttdrs-world-screenshot-run.log >&2 || true
+  tail -n 80 "$LOG" >&2 || true
   exit 1
 fi
 if [[ -n "$SORT_OUT" ]] && [[ ! -s "$SORT_OUT" ]]; then
   echo "error: no se generó la traza de sorter $SORT_OUT (exit=$rc). Log:" >&2
-  tail -n 80 /tmp/openttdrs-world-screenshot-run.log >&2 || true
+  tail -n 80 "$LOG" >&2 || true
   exit 1
 fi
 

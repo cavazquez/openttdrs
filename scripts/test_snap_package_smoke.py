@@ -129,12 +129,14 @@ class SnapPackageSmokeTest(unittest.TestCase):
             tools = fake_toolchain(root)
             menu = root / "menu.png"
             write_menu(menu)
+            evidence = root / "evidence"
 
             env = os.environ | {
                 "PATH": f"{tools}:{os.environ['PATH']}",
                 "FAKE_SNAP_SOURCE": str(snap_source),
                 "MOCK_MENU": str(menu),
                 "OPENTTDRS_ASSET_ROOT": "",
+                "OPENTTDRS_SNAP_SMOKE_ARTIFACT_DIR": str(evidence),
             }
             # El script busca Lavapipe en la ruta normal. El test evita tocar
             # el host y sólo cubre el contrato de extracción/launcher; si el
@@ -152,6 +154,8 @@ class SnapPackageSmokeTest(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("Smoke Snap OK", result.stdout)
+            for name in ("package.sha256", "check-assets.log", "menu.log", "menu.png"):
+                self.assertTrue((evidence / name).is_file(), name)
 
     def test_smoke_rejects_a_snap_without_derived_tiles(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

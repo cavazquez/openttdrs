@@ -33,6 +33,8 @@ if ! [[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
+artifact_dir="${OPENTTDRS_SNAP_SMOKE_ARTIFACT_DIR:-}"
+
 for command in unsquashfs xvfb-run xauth timeout python3; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Falta $command para el smoke del Snap." >&2
@@ -57,6 +59,16 @@ asset_log="${workdir}/check-assets.log"
 menu_log="${workdir}/menu.log"
 menu_shot="${workdir}/menu.png"
 
+collect_artifacts() {
+  [[ -n "$artifact_dir" ]] || return 0
+  mkdir -p "$artifact_dir"
+  sha256sum "$artifact" >"${artifact_dir}/package.sha256"
+  for source in "$asset_log" "$menu_log" "$menu_shot"; do
+    [[ -f "$source" ]] || continue
+    cp "$source" "${artifact_dir}/$(basename "$source")"
+  done
+}
+
 cleanup() {
   local status=$?
   set +e
@@ -64,6 +76,7 @@ cleanup() {
   # la limpieza funcione también en un host donde rm requiere escribir dentro
   # de cada directorio extraído.
   chmod -R u+w "$snap_root" 2>/dev/null
+  collect_artifacts
   rm -rf "$workdir"
   exit "$status"
 }

@@ -147,9 +147,10 @@ pendientes. Las dependencias por ID V1 resuelven a los enlaces de esta lista.
 
 Se conservan **[#582](https://github.com/cavazquez/openttdrs/issues/582)**
 y **[#583](https://github.com/cavazquez/openttdrs/issues/583)** para Snap:
-el commit `84144747` incluye el fix y smoke read-only local, pero eso no
-acredita una nueva revisión instalada desde la tienda. No se duplican esos
-issues ni se cierran como parte de este trabajo documental.
+el commit `84144747` incluye el fix y el [smoke read-only](snap-v1.md) conserva
+SHA, logs y captura incluso al fallar, pero eso no acredita una nueva revisión
+instalada desde la tienda. No se duplican esos issues ni se cierran como parte
+de este trabajo documental.
 
 ## Evidencia comprobada al preparar el corte
 

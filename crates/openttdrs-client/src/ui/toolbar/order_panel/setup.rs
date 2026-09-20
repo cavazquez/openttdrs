@@ -13,6 +13,8 @@ use super::{ORDER_PANEL_LIST_MAX_HEIGHT, ORDER_PANEL_ROWS, OrderPanelRow, OrderP
 
 const BASE_POS: Vec2 = Vec2::new(520.0, 72.0);
 const SLOT_OFFSET: Vec2 = Vec2::new(40.0, 40.0);
+/// Tres botones por línea dentro de la geometría V1 de 384 px.
+const ORDER_PANEL_BUTTON_MIN_WIDTH: f32 = 116.0;
 
 pub(crate) fn setup_order_panel(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
@@ -97,7 +99,9 @@ fn spawn_order_panel_content(
             .spawn(Node {
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Row,
+                flex_wrap: FlexWrap::Wrap,
                 column_gap: Val::Px(4.0),
+                row_gap: Val::Px(4.0),
                 ..default()
             })
             .with_children(|row| {
@@ -106,49 +110,51 @@ fn spawn_order_panel_content(
                     asset_server,
                     chain,
                     OrderPanelButton::ToggleFullLoad,
-                    "Modo carga",
+                    "Cargar",
                 );
                 spawn_order_button(
                     row,
                     asset_server,
                     chain,
                     OrderPanelButton::ToggleNoUnload,
-                    "Modo descarga",
+                    "Descarga",
                 );
                 spawn_order_button(
                     row,
                     asset_server,
                     chain,
                     OrderPanelButton::ToggleNonStop,
-                    "Paradas intermedias",
+                    "Sin parar",
                 );
                 spawn_order_button(
                     row,
                     asset_server,
                     chain,
                     OrderPanelButton::CycleStopLocation,
-                    "Posición andén",
+                    "Andén",
                 );
                 spawn_order_button(
                     row,
                     asset_server,
                     chain,
                     OrderPanelButton::ToggleDepotStop,
-                    "Parar depósito",
+                    "Depósito",
                 );
                 spawn_order_button(
                     row,
                     asset_server,
                     chain,
                     OrderPanelButton::CycleDepotRefit,
-                    "Refit orden",
+                    "Refit",
                 );
             });
         panel
             .spawn(Node {
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Row,
+                flex_wrap: FlexWrap::Wrap,
                 column_gap: Val::Px(4.0),
+                row_gap: Val::Px(4.0),
                 ..default()
             })
             .with_children(|row| {
@@ -291,7 +297,7 @@ fn spawn_order_button(
         action,
         chain_slot,
         Node {
-            min_width: Val::Px(78.0),
+            min_width: Val::Px(ORDER_PANEL_BUTTON_MIN_WIDTH),
             flex_grow: 1.0,
             padding: UiRect::horizontal(Val::Px(4.0)),
             height: Val::Px(24.0),

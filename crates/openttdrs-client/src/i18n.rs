@@ -599,6 +599,11 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Posición andén" => "Platform position",
         "Parar depósito" => "Stop at depot",
         "Refit orden" => "Order refit",
+        "Cargar" => "Load",
+        "Descarga" => "Unload",
+        "Sin parar" => "Non-stop",
+        "Andén" => "Platform",
+        "Refit" => "Refit",
         "Saltarse" => "Skip",
         "Eliminar" => "Delete",
         "Ir a" => "Go to",
@@ -1699,7 +1704,7 @@ mod tests {
         assert_eq!(text(Locale::En, "Densidad de pueblos"), "Town density");
         assert_eq!(text(Locale::En, "Esc cancelar"), "Esc cancel");
         assert_eq!(text(Locale::En, "Horario"), "Timetable");
-        assert_eq!(text(Locale::En, "Modo carga"), "Loading mode");
+        assert_eq!(text(Locale::En, "Cargar"), "Load");
         assert_eq!(text(Locale::En, "Compartir"), "Share");
         assert_eq!(text(Locale::En, "Trucos..."), "Cheats...");
         assert_eq!(

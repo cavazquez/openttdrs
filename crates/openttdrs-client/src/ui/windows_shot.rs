@@ -1053,7 +1053,10 @@ pub(crate) const WINDOW_REFERENCE_GEOMETRY: &[ReferenceGeometry] = &[
     reference_geometry!(NewGrf, "settings", Center, Some(300), Some(263)),
     reference_geometry!(SoundMusic, "main", Auto, None, None),
     reference_geometry!(Timetable, "default", Auto, Some(400), Some(130)),
-    reference_geometry!(Orders, "owned", Auto, Some(384), Some(100)),
+    // La lista de órdenes comparte el alto disponible con las acciones y no
+    // las deja desbordar fuera del marco. La altura entra completa también en
+    // 1280×720 @ 2× gracias al clamp de ventana.
+    reference_geometry!(Orders, "owned", Auto, Some(384), Some(310)),
     reference_geometry!(Orders, "competitor", Auto, Some(384), Some(86)),
     reference_geometry!(Refit, "default", Auto, Some(240), Some(174)),
     reference_geometry!(GraphIncome, "default", Auto, None, None),
@@ -1859,6 +1862,20 @@ fn timetable_shot_instance_visible(
             .is_some_and(Option::is_some)
 }
 
+/// La captura individual de Órdenes sólo conserva el panel realmente ligado a
+/// un vehículo. Sin este filtro, el slot vacío se superponía al panel V1
+/// activo y ocultaba parte de su evidencia visual.
+fn orders_shot_instance_visible(
+    selected: Option<FloatingWindowId>,
+    slot: Option<&VehicleChainSlot>,
+    order_slots: &[Option<u32>; MAX_VEHICLE_CHAIN_SLOTS],
+) -> bool {
+    selected != Some(FloatingWindowId::Orders)
+        || slot
+            .and_then(|slot| order_slots.get(slot.0 as usize))
+            .is_some_and(Option::is_some)
+}
+
 /// Ajuste explícito de QA: `None` conserva cámara y peticiones de remap.
 fn apply_window_shot_scale(world: &mut World, requested: Option<f32>) -> Option<f32> {
     let requested = requested?;
@@ -1922,11 +1939,17 @@ fn windows_shot_driver(world: &mut World, mut frame: Local<u32>) {
     if (OPEN_FRAME..=SHOT_FRAME).contains(&*frame) {
         let selection = requested_window_shot_id();
         let timetable_slots = world.resource::<TimetableWindowState>().slots;
+        let order_slots = world
+            .resource::<OrderEditState>()
+            .slots
+            .clone()
+            .map(|slot| slot.vehicle_id);
         let mut q = world.query::<(&FloatingWindow, Option<&VehicleChainSlot>, &mut Visibility)>();
         for (window, slot, mut vis) in q.iter_mut(world) {
             *vis = if selection.as_ref().is_ok_and(|selected| {
                 selected.is_none_or(|id| id == window.id)
                     && timetable_shot_instance_visible(*selected, slot, &timetable_slots)
+                    && orders_shot_instance_visible(*selected, slot, &order_slots)
             }) {
                 Visibility::Visible
             } else {
@@ -2404,6 +2427,33 @@ mod tests {
         assert!(timetable_shot_instance_visible(
             Some(FloatingWindowId::Orders),
             Some(&VehicleChainSlot(1)),
+            &[None, None]
+        ));
+    }
+
+    #[test]
+    fn orders_shot_hides_only_unpopulated_individual_slots() {
+        let selected = Some(FloatingWindowId::Orders);
+        let slots = [Some(0), None];
+        assert!(orders_shot_instance_visible(
+            selected,
+            Some(&VehicleChainSlot(0)),
+            &slots
+        ));
+        assert!(!orders_shot_instance_visible(
+            selected,
+            Some(&VehicleChainSlot(1)),
+            &slots
+        ));
+        assert!(!orders_shot_instance_visible(
+            selected,
+            Some(&VehicleChainSlot(2)),
+            &slots
+        ));
+        assert!(!orders_shot_instance_visible(selected, None, &slots));
+        assert!(orders_shot_instance_visible(
+            Some(FloatingWindowId::Timetable),
+            None,
             &[None, None]
         ));
     }

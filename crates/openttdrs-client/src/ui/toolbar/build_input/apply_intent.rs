@@ -462,3 +462,236 @@ fn confirm_drag_placement(
         push_build_command_error(hud_feedback, e, time_secs);
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::state::insert_test_order_pick_state;
+    use crate::ui::refit_window::RefitWindowState;
+    use crate::ui::shared_orders_window::SharedOrdersWindowState;
+    use crate::ui::timetable_window::TimetableWindowState;
+    use crate::ui::toolbar::build_input::click_intent::{MapClickContext, resolve_click_intent};
+    use crate::ui::toolbar::{
+        BridgeBuildState, DepotPanelState, DragBuildState, OrderPanelButton, StationBuildState,
+        StationCargoPanelState, handle_order_panel_buttons,
+    };
+    use crate::ui::vehicle_chain::{VehicleChainRegistry, VehicleChainSlot};
+    use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
+    use crate::ui::vehicle_window::{
+        VehicleWindowButton, VehicleWindowState, handle_vehicle_window_buttons,
+    };
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::math::Vec2;
+
+    const DEMO_TRUCK_ID: u32 = 9010;
+
+    #[derive(Resource)]
+    struct V1OrderIntent(MapClickIntent);
+
+    fn apply_v1_order_intent(intent: Res<V1OrderIntent>, mut ctx: IntentApplyContext) {
+        apply_intent(intent.0.clone(), &mut ctx, 0.0);
+    }
+
+    fn v1_orders_world() -> World {
+        let mut world = World::new();
+        world.insert_resource(SimWorld::default());
+        world.init_resource::<SelectedTileInfo>();
+        world.init_resource::<DragBuildState>();
+        world.init_resource::<StationBuildState>();
+        world.init_resource::<BridgeBuildState>();
+        world.init_resource::<RemapMapVisualsPending>();
+        world.init_resource::<HudBuildFeedback>();
+        world.init_resource::<OrderEditState>();
+        insert_test_order_pick_state(&mut world);
+        world.init_resource::<DepotPanelState>();
+        world.init_resource::<StationCargoPanelState>();
+        world.init_resource::<IndustryPanelState>();
+        world.init_resource::<TownWindowState>();
+        world.init_resource::<VehicleWindowState>();
+        world.init_resource::<VehicleChainRegistry>();
+        world.init_resource::<crate::ui::station_pool::StationPoolRegistry>();
+        world.init_resource::<VehicleDetailsWindowState>();
+        world.init_resource::<RefitWindowState>();
+        world.init_resource::<TimetableWindowState>();
+        world.init_resource::<SharedOrdersWindowState>();
+        world.insert_resource(Time::<()>::default());
+        world
+    }
+
+    fn apply_v1_intent(world: &mut World, intent: MapClickIntent) {
+        world.insert_resource(V1OrderIntent(intent));
+        world
+            .run_system_once(apply_v1_order_intent)
+            .expect("aplicar intención UI V1");
+    }
+
+    fn press_vehicle_orders_button(world: &mut World) {
+        let button = world
+            .spawn((Button, VehicleWindowButton::Orders, Interaction::Pressed))
+            .id();
+        world
+            .run_system_once(handle_vehicle_window_buttons)
+            .expect("pulsar Órdenes en la ventana de vehículo");
+        world.despawn(button);
+    }
+
+    fn press_order_panel_button(world: &mut World, button: OrderPanelButton) {
+        let button = world
+            .spawn((Button, button, VehicleChainSlot(0), Interaction::Pressed))
+            .id();
+        world
+            .run_system_once(handle_order_panel_buttons)
+            .expect("pulsar control del panel de órdenes");
+        world.despawn(button);
+    }
+
+    fn map_destination_click(pos: TileCoord) -> MapClickIntent {
+        let intent = resolve_click_intent(&MapClickContext {
+            tile_pos: pos,
+            world_pos: Vec2::ZERO,
+            tile_fract: (0, 0),
+            mouse_left_pressed: true,
+            mouse_right_pressed: false,
+            mouse_left_released: false,
+            active_tool: None,
+            drag_armed: false,
+            drag_last_action: None,
+            drag_start_tile: None,
+            drag_press_world_pos: None,
+            vehicle_under_cursor: None,
+            town_label_under_cursor: None,
+            tile_kind: Some(TileKind::Station),
+            orders_mode: true,
+            order_pick_active: true,
+            order_vehicle_selected: true,
+            is_hangar: false,
+            station_pos_at_tile: Some(pos),
+            join_station_keep: None,
+            signal_tile_has_signals: false,
+            ctrl_held: false,
+            shift_held: false,
+        });
+        assert_eq!(intent, MapClickIntent::HandleOrderDestination(pos));
+        intent
+    }
+
+    #[test]
+    fn v1_orders_ui_edits_demo_truck_route_and_runs_it() {
+        use crate::state::bootstrap::{DEMO_ECONOMY_DELIVER_STATION, DEMO_ECONOMY_LOAD_STATION};
+
+        let mut world = v1_orders_world();
+        assert_eq!(
+            world
+                .resource::<SimWorld>()
+                .state
+                .vehicles
+                .iter()
+                .find(|vehicle| vehicle.id == DEMO_TRUCK_ID)
+                .expect("camión vial del fixture")
+                .orders
+                .len(),
+            2
+        );
+
+        // La vista se abre por el mismo intent de mapa que usa el cliente.
+        apply_v1_intent(
+            &mut world,
+            MapClickIntent::SelectVehicleOnMap(DEMO_TRUCK_ID),
+        );
+        assert_eq!(
+            world.resource::<VehicleWindowState>().vehicle_id,
+            Some(DEMO_TRUCK_ID)
+        );
+        press_vehicle_orders_button(&mut world);
+        assert_eq!(
+            world.resource::<OrderEditState>().vehicle_id(),
+            Some(DEMO_TRUCK_ID)
+        );
+
+        // Vaciar el recorrido existente únicamente mediante el control visible.
+        press_order_panel_button(&mut world, OrderPanelButton::DeleteSelected);
+        press_order_panel_button(&mut world, OrderPanelButton::DeleteSelected);
+        assert!(
+            world
+                .resource::<SimWorld>()
+                .state
+                .vehicles
+                .iter()
+                .find(|vehicle| vehicle.id == DEMO_TRUCK_ID)
+                .expect("camión vial del fixture")
+                .orders
+                .is_empty(),
+            "el test no muta la lista directamente"
+        );
+
+        // «Ir a» inicia el picker y cada clic se resuelve/aplica por el ECS de producción.
+        press_order_panel_button(&mut world, OrderPanelButton::PickDestOnMap);
+        apply_v1_intent(&mut world, map_destination_click(DEMO_ECONOMY_LOAD_STATION));
+        apply_v1_intent(
+            &mut world,
+            map_destination_click(DEMO_ECONOMY_DELIVER_STATION),
+        );
+        let expected = vec![
+            VehicleOrder::station(DEMO_ECONOMY_LOAD_STATION),
+            VehicleOrder::station(DEMO_ECONOMY_DELIVER_STATION),
+        ];
+        assert_eq!(
+            world
+                .resource::<SimWorld>()
+                .state
+                .vehicles
+                .iter()
+                .find(|vehicle| vehicle.id == DEMO_TRUCK_ID)
+                .expect("camión vial del fixture")
+                .orders,
+            expected
+        );
+
+        // Eliminar y reponer el segundo destino prueba ambas acciones de la UI.
+        press_order_panel_button(&mut world, OrderPanelButton::DeleteSelected);
+        assert_eq!(
+            world
+                .resource::<SimWorld>()
+                .state
+                .vehicles
+                .iter()
+                .find(|vehicle| vehicle.id == DEMO_TRUCK_ID)
+                .expect("camión vial del fixture")
+                .orders,
+            vec![VehicleOrder::station(DEMO_ECONOMY_LOAD_STATION)]
+        );
+        apply_v1_intent(
+            &mut world,
+            map_destination_click(DEMO_ECONOMY_DELIVER_STATION),
+        );
+
+        let mut carried_cargo = false;
+        let mut reached_delivery = false;
+        for _ in 0..1_200 {
+            let mut sim = world.resource_mut::<SimWorld>();
+            sim.state.step();
+            let truck = sim
+                .state
+                .vehicles
+                .iter()
+                .find(|vehicle| vehicle.id == DEMO_TRUCK_ID)
+                .expect("camión vial del fixture");
+            carried_cargo |= truck.cargo > 0;
+            reached_delivery |= truck.last_station_visited == Some(DEMO_ECONOMY_DELIVER_STATION);
+        }
+        let truck = world
+            .resource::<SimWorld>()
+            .state
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.id == DEMO_TRUCK_ID)
+            .expect("camión vial del fixture");
+        assert_eq!(truck.orders, expected);
+        assert!(carried_cargo, "el camión debe cargar en la mina");
+        assert!(
+            reached_delivery,
+            "el camión debe ejecutar la orden de central tras reponerla"
+        );
+    }
+}

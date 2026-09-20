@@ -6,6 +6,7 @@
 //! [`FloatingWindowClosed`] para que cada ventana limpie su estado.
 
 use bevy::prelude::*;
+use bevy::ui::UiScale;
 use bevy::ui::widget::ImageNode;
 use bevy::window::PrimaryWindow;
 
@@ -686,8 +687,16 @@ pub(crate) fn place_window(
 #[must_use]
 pub(crate) fn clamp_window_position(pos: Vec2, size: Vec2, viewport: Vec2) -> Vec2 {
     let max_x = (viewport.x - size.x.min(viewport.x)).max(0.0);
-    let min_y = TOOLBAR_AVOID.min((viewport.y - TITLE_BAR_H).max(0.0));
-    let max_y = (viewport.y - STATUSBAR_AVOID - TITLE_BAR_H)
+    let viewport_bottom = (viewport.y - STATUSBAR_AVOID).max(0.0);
+    // Una ventana que cabe entre ambas barras conserva el margen de la
+    // toolbar. Si no cabe (por ejemplo Órdenes a 2× sobre 1280×720), se
+    // prioriza que el marco completo siga alcanzable sobre ese margen.
+    let min_y = if size.y <= (viewport_bottom - TOOLBAR_AVOID).max(0.0) {
+        TOOLBAR_AVOID
+    } else {
+        0.0
+    };
+    let max_y = (viewport_bottom - size.y)
         .max(min_y)
         .min((viewport.y - TITLE_BAR_H).max(0.0));
     Vec2::new(pos.x.clamp(0.0, max_x), pos.y.clamp(min_y, max_y))
@@ -760,6 +769,20 @@ fn window_node_size(node: &Node, computed: Option<&ComputedNode>) -> Vec2 {
         _ => MIN_WINDOW_HEIGHT,
     };
     Vec2::new(width, height)
+}
+
+/// Tamaño del marco en las unidades lógicas de UI que usa [`Node`].
+///
+/// `ComputedNode` está expresado en píxeles físicos, mientras que
+/// `Node::left/top` y las preferencias persistidas usan unidades de UI. La
+/// conversión evita que el auto-placement desplace los paneles fuera de la
+/// pantalla cuando `UiScale` es distinto de 1.
+#[must_use]
+fn placement_window_node_size(node: &Node, computed: Option<&ComputedNode>, ui_scale: f32) -> Vec2 {
+    if let Some(size) = resolved_window_node_size(computed) {
+        return size / ui_scale.max(0.5);
+    }
+    window_node_size(node, None)
 }
 
 /// Las ventanas con altura automática esperan un frame de layout antes de
@@ -972,6 +995,7 @@ fn resolve_window_placement_candidates(
 /// la cascada automática. Los cuadros de diálogo modales permanecen centrados.
 fn place_newly_visible_floating_windows(
     primary: Query<&Window, With<PrimaryWindow>>,
+    ui_scale: Option<Res<UiScale>>,
     prefs: Option<Res<ClientPreferences>>,
     mut queries: ParamSet<(
         Query<(
@@ -994,8 +1018,9 @@ fn place_newly_visible_floating_windows(
         >,
     )>,
 ) {
+    let ui_scale = ui_scale.as_ref().map_or(1.0, |scale| scale.0.max(0.5));
     let viewport = primary.single().map_or(DEFAULT_LAYOUT_VIEWPORT, |window| {
-        Vec2::new(window.width(), window.height())
+        Vec2::new(window.width(), window.height()) / ui_scale
     });
     // Las ventanas ya abiertas sí ocupan lugar. Las que están abriendo en
     // este mismo frame se resuelven abajo como un lote, no desde sus fallbacks
@@ -1008,7 +1033,7 @@ fn place_newly_visible_floating_windows(
         })
         .map(|(_, _, node, computed, _)| WindowPlacementRect {
             pos: window_node_position(node),
-            size: window_node_size(node, computed),
+            size: placement_window_node_size(node, computed, ui_scale),
         })
         .collect();
     let mut candidates = Vec::new();
@@ -1027,7 +1052,7 @@ fn place_newly_visible_floating_windows(
 
             let rect = WindowPlacementRect {
                 pos: window_node_position(&node),
-                size: window_node_size(&node, computed),
+                size: placement_window_node_size(&node, computed, ui_scale),
             };
             if !uses_automatic_window_placement(window.id) {
                 // Los modales mantienen su geometría centrada, pero cuentan
@@ -1270,6 +1295,8 @@ pub(crate) fn spawn_floating_window_keyed(
                     FloatingWindowContent(id),
                     Node {
                         width: Val::Percent(100.0),
+                        flex_grow: 1.0,
+                        min_height: Val::Px(0.0),
                         flex_direction: FlexDirection::Column,
                         padding: UiRect {
                             left: Val::Px(6.0),
@@ -1839,6 +1866,18 @@ mod tests {
         assert!(off_right.x <= viewport.x - size.x);
         let off_bottom = drag_window_position(Vec2::new(100.0, 5000.0), Vec2::ZERO, viewport, size);
         assert!(off_bottom.y <= viewport.y - TITLE_BAR_H);
+    }
+
+    #[test]
+    fn tall_orders_frame_uses_toolbar_band_when_that_keeps_it_reachable() {
+        // 1280×720 a 2× equivale a este viewport lógico. Un marco de
+        // Órdenes de 310 px no cabe entre toolbar y statusbar, pero sí entero
+        // al ocupar el margen superior.
+        let viewport = Vec2::new(640.0, 360.0);
+        let size = Vec2::new(384.0, 310.0);
+        let pos = clamp_window_position(Vec2::new(520.0, 72.0), size, viewport);
+        assert_eq!(pos, Vec2::new(256.0, 22.0));
+        assert!(pos.y + size.y <= viewport.y - STATUSBAR_AVOID);
     }
 
     #[test]

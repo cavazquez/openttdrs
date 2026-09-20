@@ -27,7 +27,9 @@ modificados.
 ```bash
 ./scripts/fetch-openttd-reference.sh
 python3 scripts/temperate_payment_oracle.py reference/openttd-upstream --check
-cargo test -p openttdrs-core transported_goods_income_matches_openttd_15_3_temperate_oracle
+cargo test --locked --offline -p openttdrs-core --lib \
+  economy::tests::transported_goods_income_matches_openttd_15_3_temperate_oracle \
+  -- --exact --nocapture
 ```
 
 La regresión Rust lee sólo la tabla externa, ejecuta el cálculo productivo y

@@ -129,7 +129,7 @@ pendientes. Las dependencias por ID V1 resuelven a los enlaces de esta lista.
 - **V1-SAV — [#588](https://github.com/cavazquez/openttdrs/issues/588):** una orden `Station` mutada por `SetSharedOrderAt`, preservada después del re-guardado nativo; mantiene las 6 cargas, el roundtrip obligatorio y hashes/IDs/ORDL en [su evidencia](sav-ordl-v1.md). Implementado; espera CI remota vigente antes del cierre.
 - **V1-RAS — [#589](https://github.com/cavazquez/openttdrs/issues/589):** gate y evidencia de la escena Normal con el presupuesto anterior.
 - **V1-UI — [#590](https://github.com/cavazquez/openttdrs/issues/590):** edición de órdenes, 8 perfiles; depende de V1-VIS.
-- **V1-OWN — [#591](https://github.com/cavazquez/openttdrs/issues/591):** compra, start/stop, órdenes y demolición ajenas; 4 rechazos atómicos + 4 controles propios.
+- **V1-OWN — [#591](https://github.com/cavazquez/openttdrs/issues/591):** compra, start/stop, órdenes y demolición ajenas: [4 rechazos atómicos, 4 controles propios e issuer inválido](ownership-v1.md) con el API productivo de red; implementado, a la espera de CI remota vigente antes del cierre.
 - **V1-GRF — [#592](https://github.com/cavazquez/openttdrs/issues/592):** un camión CB36 reatachado al catálogo tras JSON, 2.000 ticks.
 - **V1-SHIP — [#593](https://github.com/cavazquez/openttdrs/issues/593):** primera entrega marítima con boya, sin locks/canales.
 - **V1-AIR — [#594](https://github.com/cavazquez/openttdrs/issues/594):** un avión vanilla entre dos aeropuertos Country, primera entrega pagada.

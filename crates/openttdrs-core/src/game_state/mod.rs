@@ -313,6 +313,25 @@ mod runtime_hydration_tests {
             .expect("hidrata fixture");
         assert_eq!(restored.vehicles[0].sim_tick, restored.tick.get());
     }
+
+    #[test]
+    fn newly_added_rivals_keep_the_scaled_max_loan_after_json() {
+        let mut state = GameState::new(16, 16);
+        let scaled_max_loan = state.global_economy.scaled_max_loan();
+        state.ensure_rival_ais();
+        assert!(state.companies.iter().all(|company| {
+            company.economy.max_loan == scaled_max_loan
+                && company.economy.max_loan_override.is_none()
+        }));
+
+        let restored = GameState::load_json(&state.save_json().expect("serializa rivales"))
+            .expect("hidrata rivales");
+        assert_eq!(restored.canonical_hash(), state.canonical_hash());
+        assert!(restored.companies.iter().all(|company| {
+            company.economy.max_loan == scaled_max_loan
+                && company.economy.max_loan_override.is_none()
+        }));
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -1739,7 +1758,7 @@ impl GameState {
             CompanyEconomy {
                 money: 200_000,
                 loan: 0,
-                max_loan: crate::economy::DEFAULT_MAX_LOAN,
+                max_loan: self.global_economy.scaled_max_loan(),
                 max_loan_override: None,
             },
             colour,
@@ -1762,7 +1781,7 @@ impl GameState {
             CompanyEconomy {
                 money: 150_000,
                 loan: 0,
-                max_loan: crate::economy::DEFAULT_MAX_LOAN,
+                max_loan: self.global_economy.scaled_max_loan(),
                 max_loan_override: None,
             },
             colour,

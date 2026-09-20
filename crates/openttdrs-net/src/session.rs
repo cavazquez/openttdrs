@@ -203,6 +203,9 @@ impl ListenServerHandle {
             .map_err(|_| NetError::Closed)
     }
 
+    /// Retransmite un avance. Si el host no aporta un snapshot, el listener
+    /// conserva su copia autoritativa y materializa la frontera sólo al
+    /// sincronizar, re-sincronizar o aceptar un join posterior.
     pub fn broadcast_advance(&self, count: u32) -> Result<(), NetError> {
         self.cmd_tx
             .send(ServerCmd::Advance {
@@ -265,7 +268,8 @@ impl ListenServerHandle {
     }
 
     /// Espera a que el hilo de transporte procese lo que estaba antes en su
-    /// cola. Es principalmente útil para oráculos deterministas de red.
+    /// cola y materializa una frontera de snapshot pendiente. Es principalmente
+    /// útil para oráculos deterministas de red.
     pub fn synchronize(&self) -> Result<(), NetError> {
         let (ack_tx, ack_rx) = mpsc::channel();
         self.cmd_tx
@@ -533,22 +537,28 @@ fn server_thread(
     let mut pending_handshakes: Vec<PendingHandshake> = Vec::new();
     let mut next_peer_id: u64 = 1;
     // Copia autoritativa para validar propuestas antes de asignarles secuencia.
-    // El host publica snapshots; cuando cambian, esta copia se realinea para
-    // incluir ticks y mutaciones locales.
+    // El host publica snapshots con mucha más frecuencia que las propuestas;
+    // retenemos la frontera textual y recargamos esta copia sólo cuando una
+    // propuesta realmente necesita validación. Así un late join sigue viendo
+    // el snapshot exacto sin deserializar el estado completo en cada tick.
     let mut authority_snapshot = snapshot_frontier(&shared_frontier).snapshot_json;
     let mut authority_state = GameState::load_json(&authority_snapshot).ok();
+    let mut authority_state_needs_reload = false;
+    // Un `Advance` sin snapshot conserva la copia autoritativa y difiere la
+    // serialización hasta que un consumidor realmente la necesita.
+    let mut frontier_snapshot_needs_publish = false;
     eprintln!("openttdrs-net: listen-server on {bind}");
 
     loop {
-        let current_frontier = snapshot_frontier(&shared_frontier);
-        let current_snapshot = current_frontier.snapshot_json;
-        if current_snapshot != authority_snapshot
-            && let Ok(state) = GameState::load_json(&current_snapshot)
-        {
-            authority_state = Some(state);
-            authority_snapshot.clone_from(&current_snapshot);
+        let frontier_before_handshake = snapshot_frontier(&shared_frontier);
+        if frontier_before_handshake.snapshot_json != authority_snapshot {
+            defer_authority_snapshot(
+                &mut authority_snapshot,
+                &mut authority_state_needs_reload,
+                frontier_before_handshake.snapshot_json,
+            );
+            frontier_snapshot_needs_publish = false;
         }
-        let next_seq = current_frontier.next_seq;
 
         if let Err(error) =
             accept_pending_handshakes(&listener, &mut pending_handshakes, &mut next_peer_id)
@@ -558,6 +568,18 @@ fn server_thread(
             });
             return;
         }
+        if !pending_handshakes.is_empty() {
+            publish_authority_snapshot_if_needed(
+                &mut authority_state,
+                &mut authority_snapshot,
+                &mut authority_state_needs_reload,
+                &mut frontier_snapshot_needs_publish,
+                &shared_frontier,
+            );
+        }
+        let current_frontier = snapshot_frontier(&shared_frontier);
+        let current_snapshot = current_frontier.snapshot_json;
+        let next_seq = current_frontier.next_seq;
         poll_pending_handshakes(
             &mut pending_handshakes,
             &mut clients,
@@ -577,6 +599,11 @@ fn server_thread(
                     company_id,
                     command,
                 })) => {
+                    refresh_authority_state_if_needed(
+                        &mut authority_state,
+                        &authority_snapshot,
+                        &mut authority_state_needs_reload,
+                    );
                     let assigned_company = clients[i].company_id;
                     if company_id != assigned_company {
                         let message = format!(
@@ -625,6 +652,8 @@ fn server_thread(
                     );
                     if let Some(snapshot) = snapshot_after_commit {
                         authority_snapshot = snapshot;
+                        authority_state_needs_reload = false;
+                        frontier_snapshot_needs_publish = false;
                     }
                     let commit = NetMessage::Commit {
                         seq,
@@ -657,6 +686,13 @@ fn server_thread(
                     broadcast_and_refresh_peer_list(&mut clients, &shared_peer_ids, &report);
                     if let Some(index) = clients.iter().position(|client| client.peer_id == peer_id)
                     {
+                        publish_authority_snapshot_if_needed(
+                            &mut authority_state,
+                            &mut authority_snapshot,
+                            &mut authority_state_needs_reload,
+                            &mut frontier_snapshot_needs_publish,
+                            &shared_frontier,
+                        );
                         let resync_frontier = snapshot_frontier(&shared_frontier);
                         let resync = NetMessage::Welcome {
                             protocol: PROTOCOL_VERSION,
@@ -701,12 +737,18 @@ fn server_thread(
                 command,
                 snapshot_json,
             }) => {
+                refresh_authority_state_if_needed(
+                    &mut authority_state,
+                    &authority_snapshot,
+                    &mut authority_state_needs_reload,
+                );
                 if let Some(state) = authority_state.as_mut() {
                     // El host ya aplicó la mutación en su hilo de simulación;
                     // esta copia sólo necesita avanzar para validar propuestas
                     // posteriores. Un error aquí indica snapshot atrasado.
                     let _ = apply_command_as_company(state, company_id, &command);
                 }
+                let snapshot_was_supplied = snapshot_json.is_some();
                 let snapshot_after_commit = snapshot_json.or_else(|| {
                     authority_state
                         .as_ref()
@@ -717,11 +759,17 @@ fn server_thread(
                     snapshot_after_commit.as_deref(),
                 );
                 if let Some(snapshot) = snapshot_after_commit {
-                    update_authority_from_snapshot(
-                        &mut authority_state,
-                        &mut authority_snapshot,
-                        snapshot,
-                    );
+                    if snapshot_was_supplied {
+                        defer_authority_snapshot(
+                            &mut authority_snapshot,
+                            &mut authority_state_needs_reload,
+                            snapshot,
+                        );
+                    } else {
+                        authority_snapshot = snapshot;
+                        authority_state_needs_reload = false;
+                    }
+                    frontier_snapshot_needs_publish = false;
                 }
                 let commit = NetMessage::Commit {
                     seq,
@@ -734,21 +782,26 @@ fn server_thread(
                 count,
                 snapshot_json,
             }) => {
-                let snapshot_after_advance = snapshot_json.or_else(|| {
-                    authority_state.as_mut().and_then(|state| {
-                        for _ in 0..count {
-                            state.step();
-                        }
-                        state.save_json().ok()
-                    })
-                });
-                if let Some(snapshot) = snapshot_after_advance {
-                    update_authority_from_snapshot(
-                        &mut authority_state,
+                if let Some(snapshot) = snapshot_json {
+                    defer_authority_snapshot(
                         &mut authority_snapshot,
+                        &mut authority_state_needs_reload,
                         snapshot.clone(),
                     );
                     publish_snapshot(&shared_frontier, snapshot);
+                    frontier_snapshot_needs_publish = false;
+                } else {
+                    refresh_authority_state_if_needed(
+                        &mut authority_state,
+                        &authority_snapshot,
+                        &mut authority_state_needs_reload,
+                    );
+                    if let Some(state) = authority_state.as_mut() {
+                        for _ in 0..count {
+                            state.step();
+                        }
+                        frontier_snapshot_needs_publish = true;
+                    }
                 }
                 broadcast_and_refresh_peer_list(
                     &mut clients,
@@ -757,14 +810,22 @@ fn server_thread(
                 );
             }
             Ok(ServerCmd::PublishSnapshot { snapshot_json }) => {
-                update_authority_from_snapshot(
-                    &mut authority_state,
+                defer_authority_snapshot(
                     &mut authority_snapshot,
+                    &mut authority_state_needs_reload,
                     snapshot_json.clone(),
                 );
                 publish_snapshot(&shared_frontier, snapshot_json);
+                frontier_snapshot_needs_publish = false;
             }
             Ok(ServerCmd::Synchronize(ack)) => {
+                publish_authority_snapshot_if_needed(
+                    &mut authority_state,
+                    &mut authority_snapshot,
+                    &mut authority_state_needs_reload,
+                    &mut frontier_snapshot_needs_publish,
+                    &shared_frontier,
+                );
                 let _ = ack.send(());
             }
             Ok(ServerCmd::HashCheck { tick, hash }) => {
@@ -1027,15 +1088,61 @@ fn reserve_next_seq_and_publish(
     seq
 }
 
-fn update_authority_from_snapshot(
-    authority_state: &mut Option<GameState>,
+/// Registra un snapshot de host como frontera autoritativa sin forzar su
+/// recarga. El estado se materializa al validar la próxima propuesta remota.
+fn defer_authority_snapshot(
     authority_snapshot: &mut String,
+    authority_state_needs_reload: &mut bool,
     snapshot_json: String,
 ) {
-    if let Ok(state) = GameState::load_json(&snapshot_json) {
+    *authority_snapshot = snapshot_json;
+    *authority_state_needs_reload = true;
+}
+
+/// Recarga la copia de validación sólo cuando una propuesta la necesita.
+/// Conserva el comportamiento histórico frente a un JSON inválido: la última
+/// copia válida permanece disponible para no convertir una publicación de
+/// snapshot en un cierre del listener.
+fn refresh_authority_state_if_needed(
+    authority_state: &mut Option<GameState>,
+    authority_snapshot: &str,
+    authority_state_needs_reload: &mut bool,
+) {
+    if !*authority_state_needs_reload {
+        return;
+    }
+    if let Ok(state) = GameState::load_json(authority_snapshot) {
         *authority_state = Some(state);
     }
-    *authority_snapshot = snapshot_json;
+    *authority_state_needs_reload = false;
+}
+
+/// Materializa la frontera diferida antes de entregarla a un join, resync o
+/// barrera. Un `Advance` normal ya actualizó `authority_state`; serializar aquí
+/// mantiene la misma semántica observable sin pagar ese costo por cada tick.
+fn publish_authority_snapshot_if_needed(
+    authority_state: &mut Option<GameState>,
+    authority_snapshot: &mut String,
+    authority_state_needs_reload: &mut bool,
+    frontier_snapshot_needs_publish: &mut bool,
+    shared_frontier: &SharedFrontier,
+) {
+    if !*frontier_snapshot_needs_publish {
+        return;
+    }
+    refresh_authority_state_if_needed(
+        authority_state,
+        authority_snapshot,
+        authority_state_needs_reload,
+    );
+    if let Some(snapshot) = authority_state
+        .as_ref()
+        .and_then(|state| state.save_json().ok())
+    {
+        authority_snapshot.clone_from(&snapshot);
+        publish_snapshot(shared_frontier, snapshot);
+    }
+    *frontier_snapshot_needs_publish = false;
 }
 
 fn remove_peer_id(shared: &SharedPeerIds, peer_id: u64) {

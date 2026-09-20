@@ -19,6 +19,13 @@ distinta. El log servidor esperado queda limitado a esos dos `Commit` con
 `seq` 1 y 2; el late join sólo debe recibir el sufijo desde el `next_seq` de su
 `Welcome`, para no reaplicar lo que el snapshot ya contenía.
 
+Los peers ya conectados consumen cada `AdvanceTicks(1)` por TCP. El listener
+conserva su copia autoritativa durante esos avances y materializa el snapshot
+en la barrera FIFO del join; el contrato publica explícitamente el snapshot
+del host en el tick 500 antes de abrir el segundo cliente. Esto evita trabajo
+de serialización repetido, pero no reduce los 2.000 avances ni las
+comparaciones de hash y log por tick.
+
 ## Aceptación reproducible
 
 ```sh

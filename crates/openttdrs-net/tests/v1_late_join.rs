@@ -395,10 +395,7 @@ fn v1_late_join_two_clients_stay_lockstep_for_2000_ticks() {
         host.step();
         let world_tick = host.tick.get();
         server
-            .broadcast_advance_with_snapshot(
-                1,
-                host.save_json().expect("serializa frontera de tick"),
-            )
+            .broadcast_advance(1)
             .expect("publica avance del dedicated");
 
         receive_advance(&first, &mut first_state, deadline, "cliente inicial");
@@ -417,6 +414,13 @@ fn v1_late_join_two_clients_stay_lockstep_for_2000_ticks() {
         ticks_observed = session_tick;
 
         if session_tick == LATE_JOIN_TICK {
+            // Sólo el late join necesita materializar un snapshot: los peers
+            // existentes ya consumieron cada AdvanceTicks(1) por TCP. La
+            // barrera deja la frontera exacta del host lista antes del Welcome.
+            server.update_snapshot(
+                host.save_json()
+                    .expect("serializa frontera del snapshot de late join"),
+            );
             server
                 .synchronize()
                 .expect("fija la frontera del snapshot de late join");
@@ -492,7 +496,7 @@ fn v1_late_join_two_clients_stay_lockstep_for_2000_ticks() {
             "cliente inicial",
             session_tick,
         );
-        if let Some(state) = late_state.as_ref() {
+        if late_state.is_some() {
             assert_log_matches(
                 &server_log,
                 late_next_seq,
@@ -500,12 +504,17 @@ fn v1_late_join_two_clients_stay_lockstep_for_2000_ticks() {
                 "late join",
                 session_tick,
             );
+        }
+        // La comparación de arriba ya cubre el estado posterior a cada
+        // AdvanceTicks(1). En el tick del join repetimos sólo la comprobación
+        // necesaria después de incorporar el Commit del nuevo peer.
+        if session_tick == LATE_JOIN_TICK
+            && let Some(state) = late_state.as_ref()
+        {
             first_difference = first_disagreement(session_tick, &host, &first_state, state);
             if first_difference.is_some() {
                 break;
             }
-        } else {
-            assert_eq!(host.canonical_hash(), first_state.canonical_hash());
         }
     }
 

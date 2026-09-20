@@ -650,15 +650,25 @@ fn late_joiner_gets_live_snapshot_not_boot() {
     let boot = host.save_json().unwrap();
     let server = start_server("127.0.0.1:0", boot);
     let bind = server.local_addr().to_string();
+    let observer = connect_client(&bind);
+    assert!(matches!(
+        wait_event(&observer, Duration::from_secs(2)),
+        SessionEvent::Welcome { .. }
+    ));
 
     apply_command(&mut host, &Command::PlaceRail(TileCoord::new(5, 5))).unwrap();
+    server.update_snapshot(host.save_json().unwrap());
     for _ in 0..200 {
         host.step();
     }
-    server.update_snapshot(host.save_json().unwrap());
-    server
-        .synchronize()
-        .expect("snapshot live publicado antes del late join");
+    // La entrega al peer ya conectado confirma que el hilo de transporte cruzó
+    // el avance. Al aceptar el join posterior debe materializar el estado vivo,
+    // no el snapshot de arranque, sin requerir una barrera explícita.
+    server.broadcast_advance(200).unwrap();
+    assert!(matches!(
+        wait_event(&observer, Duration::from_secs(2)),
+        SessionEvent::AdvanceTicks { count: 200 }
+    ));
 
     let client = connect_client(&bind);
     let welcome = wait_event(&client, Duration::from_secs(2));

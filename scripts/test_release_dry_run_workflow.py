@@ -82,9 +82,13 @@ class ReleaseDryRunWorkflowTest(unittest.TestCase):
             '"cargo check (macos-latest)"',
             '"cargo check (windows-latest)"',
             "gh release create",
+            "mapfile -t release_assets",
+            "find dist -maxdepth 1 -type f",
         ):
             self.assertIn(marker, workflow)
         self.assertNotIn("continue-on-error", workflow)
+        self.assertNotIn('gh release upload "$GITHUB_REF_NAME" dist/*', workflow)
+        self.assertNotIn('gh release create "$GITHUB_REF_NAME" dist/*', workflow)
         smoke = SMOKE.read_text(encoding="utf-8")
         for marker in (
             "xvfb-run",

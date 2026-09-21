@@ -325,10 +325,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          mapfile -t release_assets < <(
+            find dist -maxdepth 1 -type f \
+              \( -name 'openttdrs-*.tar.gz' -o -name 'openttdrs-*.tar.gz.sha256' \
+                 -o -name 'openttdrs-*.zip' -o -name 'openttdrs-*.zip.sha256' \
+                 -o -name 'release-report-*.json' \) \
+              -printf '%p\n' | sort
+          )
+          if [ "${#release_assets[@]}" -eq 0 ]; then
+            echo "No se encontraron archivos de release en dist/." >&2
+            exit 1
+          fi
+
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+            gh release upload "$GITHUB_REF_NAME" "${release_assets[@]}" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" dist/* \
+            gh release create "$GITHUB_REF_NAME" "${release_assets[@]}" \
               --verify-tag \
               --prerelease \
               --title "openttdrs ${{ needs.validate.outputs.version }}" \

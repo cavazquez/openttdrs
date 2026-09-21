@@ -3,7 +3,7 @@
 
 Comprueba que:
 - los paths del manifiesto existen;
-- ``ci.yml`` invoca ``./scripts/check.sh ci-python`` y ``tnbp`` (sin listas duplicadas);
+- ``ci.yml`` divide los grupos del manifiesto Python en una matriz (sin listas duplicadas);
 - ``check.sh`` delega al runner del manifiesto.
 """
 
@@ -55,8 +55,18 @@ def main() -> int:
         errors.append("ci.yml no conserva la cobertura para una revalidación manual en main")
     if "- name: Instalar cargo-llvm-cov\n        if: github.ref == 'refs/heads/main'" not in yml:
         errors.append("ci.yml no instala cargo-llvm-cov durante la revalidación manual en main")
-    if "scripts/check.sh ci-python" not in yml:
-        errors.append("ci.yml no invoca ./scripts/check.sh ci-python")
+    if "scripts/check.sh ci-python" in yml:
+        errors.append("ci.yml volvió a ejecutar los checks Python serialmente")
+    if "group: [golden, py_compile, runs]" not in yml:
+        errors.append("ci.yml no conserva los tres grupos Python del manifiesto")
+    if "python3 scripts/run_ci_python.py ${{ matrix.group }}" not in yml:
+        errors.append("ci.yml no delega cada grupo Python a run_ci_python.py")
+    if "matrix.group == 'runs'" not in yml or "openttdrs-python-runs" not in yml:
+        errors.append("ci.yml no prepara ni cachea Cargo para el grupo Python runs")
+    if "needs: [rust, python]" not in yml:
+        errors.append("ci.yml no conserva el agregador check para los jobs paralelos")
+    if 'test "$RUST_RESULT" = success' not in yml or 'test "$PYTHON_RESULT" = success' not in yml:
+        errors.append("el agregador check no propaga fallos Rust/Python")
     if "scripts/check.sh tnbp" not in yml:
         errors.append("ci.yml no invoca ./scripts/check.sh tnbp")
     if "scripts/check.sh generated-tables-ci" not in yml:

@@ -30,10 +30,10 @@ env:
   CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
 
 jobs:
-  # Un solo job: clippy + nextest con perfil Cargo `ci`.
+  # Núcleo Rust: clippy + nextest con perfil Cargo `ci`.
   # En main, llvm-cov nextest sustituye a nextest (2ª compilación instrumentada,
-  # pero sin un segundo job ni checkout/caché/APT duplicados).
-  check:
+  # pero sin una segunda compilación Rust ni checkout/caché/APT duplicados).
+  rust:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -110,17 +110,54 @@ jobs:
           name: coverage-lcov
           path: lcov.info
 
-      # TNBP + Python: misma entrada que `./scripts/check.sh ci` (#120).
+      # TNBP y checks auxiliares: la lista Python se divide en paralelo abajo,
+      # pero sigue saliendo del mismo manifiesto que `./scripts/check.sh ci`.
       # Excepciones solo-GHA: rustdoc, audit, deny, llvm-cov en main,
       # y fetch OpenTTD para regenerate de tablas (#119).
       - name: Validar TNBP (fixture v5p12_tnbp.ottdmap)
         run: ./scripts/check.sh tnbp
-
-      - name: Checks Python compartidos (golden + py_compile + runs)
-        run: ./scripts/check.sh ci-python
 
       - name: Tablas generadas reproducibles (#119)
         run: ./scripts/check.sh generated-tables-ci
 
       - name: Frescura de documentación de paridad
         run: ./scripts/check.sh parity-docs
+
+  # Los grupos se definen en scripts/ci_python_manifest.json. Se ejecutan en
+  # paralelo para reducir el tiempo de pared sin duplicar la lista de scripts.
+  python:
+    name: Python (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [golden, py_compile, runs]
+    steps:
+      - uses: actions/checkout@v7
+
+      # `runs` invoca snapshot_dumper mediante Cargo y contiene pruebas PIL.
+      # Su caché separada evita competir con la compilación instrumentada de
+      # cobertura del job Rust y se reutiliza entre ejecuciones de este grupo.
+      - name: Entorno Rust para validaciones Python con Cargo
+        if: matrix.group == 'runs'
+        uses: ./.github/composite/rust-setup
+        with:
+          cache-key: openttdrs-python-runs
+
+      - name: Checks Python (${{ matrix.group }})
+        run: python3 scripts/run_ci_python.py ${{ matrix.group }}
+
+  # Conserva el contexto `check` para las protecciones de rama existentes y
+  # sólo queda verde si el núcleo Rust y todos los grupos Python concluyeron.
+  check:
+    if: ${{ always() }}
+    needs: [rust, python]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consolidar resultado de CI
+        env:
+          RUST_RESULT: ${{ needs.rust.result }}
+          PYTHON_RESULT: ${{ needs.python.result }}
+        run: |
+          test "$RUST_RESULT" = success
+          test "$PYTHON_RESULT" = success

@@ -1,23 +1,23 @@
-# openttdrs 0.1.0-alpha.1
+# openttdrs 0.1.0-alpha.3
 
-**Publicada el 2026-09-19.** La alpha está disponible como
-[prerelease de GitHub](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
-y como [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) para Linux
-amd64. El smoke gráfico y la sesión de aceptación de la alpha ya están
-completados; el [workflow de release](https://github.com/cavazquez/openttdrs/actions/runs/35453383079)
-publicó los paquetes de escritorio. El código actual mantiene las validaciones
-de carretera como fixtures internos, sin exponer un modo guiado específico.
+**Publicada el 2026-09-20.** Esta alpha reúne la distribución de escritorio
+como [prerelease de GitHub](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.3)
+y el [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) para Linux
+amd64. Incluye un cliente isométrico jugable, servidor dedicado lockstep y
+herramientas headless de paridad con OpenTTD 15.3.
 
-> **Corrección posterior (2026-09-19):** la revisión 1 del Snap no puede
-> iniciar porque intenta generar tiles OpenGFX en el mount `$SNAP` de sólo
-> lectura. Los paquetes de escritorio de esta prerelease no están afectados.
-> [#582](https://github.com/cavazquez/openttdrs/issues/582) y
-> [#583](https://github.com/cavazquez/openttdrs/issues/583) preparan y prueban
-> la revisión Snap `0.1.0-alpha.2`; no usar la revisión 1 como instalación
-> jugable.
+## Novedades destacadas
 
-Incluye un cliente isométrico jugable, servidor dedicado lockstep y herramientas
-headless de paridad con OpenTTD 15.3.
+- Nueva partida ahora genera una semilla automática concreta y distinta en
+  cada intento; la semilla se ve, se puede editar y se puede regenerar desde
+  el menú.
+- Empezar otra partida no hace volver el reloj de simulación a cero: conserva
+  el tick ya alcanzado cuando éste es posterior al año de inicio elegido.
+- El formulario de Nueva partida usa dos columnas en pantallas amplias, con
+  mapa/inicio/dinero a la izquierda y semilla/mundo a la derecha. En pantallas
+  angostas se pliega a una columna con scroll.
+- El Snap `core24` incluye los PNG OpenGFX derivados antes del empaquetado y
+  pasa el smoke sobre un mount de assets de sólo lectura.
 
 ## Qué probar
 
@@ -43,7 +43,7 @@ El Snap incluye assets y conserva las partidas JSON en
 Para Linux x86_64, Windows x86_64 o macOS arm64:
 
 1. Descargá el archivo de tu plataforma desde la
-   [prerelease](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
+   [prerelease](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.3)
    y verificá el `.sha256` asociado.
 2. Extraelo completo; `assets/` y `static/` deben quedar junto al ejecutable.
 3. Ejecutá `openttdrs-client` (`openttdrs-client.exe` en Windows).

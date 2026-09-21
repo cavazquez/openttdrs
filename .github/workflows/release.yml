@@ -38,6 +38,9 @@ jobs:
           fi
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
 
+      - name: Validar metadatos de release
+        run: python3 scripts/check_release_metadata.py
+
       - name: Exigir CI y Platform verdes para un tag
         if: github.ref_type == 'tag'
         env:

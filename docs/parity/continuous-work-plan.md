@@ -9,12 +9,12 @@ evidencia; no convierte esos cierres en una certificación de paridad global.
 El escenario guiado anterior permanece retirado y sus fixtures siguen siendo
 evidencia interna. No hay tarea activa hasta una nueva auditoría.
 
-La entrega de escritorio está publicada como
-[prerelease `v0.1.0-alpha.1`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1)
+La entrega actual de escritorio está publicada como
+[prerelease `v0.1.0-alpha.3`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.3)
 y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) para Linux amd64.
-El Snap `0.1.0-alpha.2` revisión 2 materializa los tiles en build y fue
-validado recién instalado, con assets desde el mount SquashFS de sólo lectura y
-menú gráfico ES/EN.
+El Snap `0.1.0-alpha.3` materializa los tiles en build, fue validado recién
+instalado con assets desde el mount SquashFS de sólo lectura y ofrece el menú
+gráfico ES/EN de nueva partida con semilla editable.
 
 ## Entrega alpha anterior (cumplida)
 

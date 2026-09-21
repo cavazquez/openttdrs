@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import subprocess
 import tomllib
 
@@ -46,6 +47,13 @@ def main() -> None:
     package_builder = (ROOT / "scripts" / "package_release.sh").read_text(encoding="utf-8")
     snap_recipe = (ROOT / "snap" / "snapcraft.yaml").read_text(encoding="utf-8")
     snap_smoke = (ROOT / "scripts" / "smoke_snap_package.sh").read_text(encoding="utf-8")
+
+    snap_version = re.search(r'^version:\s*"([^"]+)"\s*$', snap_recipe, re.MULTILINE)
+    require(snap_version is not None, "snapcraft.yaml no declara version")
+    require(
+        snap_version.group(1) == version,
+        f"snapcraft.yaml no coincide con {version}: {snap_version.group(1)}",
+    )
 
     require(f"## [{version}]" in changelog, "falta la versión en CHANGELOG.md")
     require(f"# openttdrs {version}" in notes, "RELEASE_NOTES.md tiene otra versión")

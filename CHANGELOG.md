@@ -6,8 +6,23 @@ Los cambios relevantes de cada release se documentan aquí. El formato sigue
 
 ## [Unreleased]
 
+## [0.1.0-alpha.3] - 2026-09-20
+
+### Agregado
+
+- La semilla de una partida nueva se muestra y se puede editar o regenerar
+  desde el mismo menú.
+
+### Mejorado
+
+- El formulario de Nueva partida aprovecha pantallas amplias con dos columnas
+  y conserva un diseño de una columna con scroll como respaldo para ventanas
+  angostas.
+
 ### Corregido
 
+- Cada partida nueva automática recibe una semilla concreta distinta y crear
+  otra partida no hace retroceder el tick de una sesión ya iniciada.
 - El Snap materializa los PNG OpenGFX derivados durante el build; al iniciar
   no intenta escribir dentro del mount de sólo lectura `$SNAP`.
 - Se agregó un smoke del artefacto Snap con raíz de assets read-only y perfil
@@ -35,5 +50,6 @@ Los cambios relevantes de cada release se documentan aquí. El formato sigue
 - Los paquetes no están firmados ni notarizados.
 - La compatibilidad completa de ida y vuelta con `.sav` de OpenTTD no está garantizada.
 
-[Unreleased]: https://github.com/cavazquez/openttdrs/compare/v0.1.0-alpha.1...HEAD
+[Unreleased]: https://github.com/cavazquez/openttdrs/compare/v0.1.0-alpha.3...HEAD
+[0.1.0-alpha.3]: https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.3
 [0.1.0-alpha.1]: https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1

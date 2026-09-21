@@ -15,9 +15,10 @@ use crate::ui::main_menu::{
     main_menu_highscores_interaction, main_menu_interaction, main_menu_options_interaction,
     main_menu_preferences_interaction, main_menu_roughness_interaction,
     main_menu_scenarios_interaction, main_menu_seed_input_interaction, main_menu_sound_interaction,
-    setup_main_menu, sync_main_menu_continue_button, sync_main_menu_heightmap_slots,
-    sync_main_menu_highscores, sync_main_menu_localized_labels, sync_main_menu_panel_visibility,
-    sync_main_menu_preferences, sync_main_menu_seed_input, sync_main_menu_summary,
+    setup_main_menu, sync_main_menu_continue_button, sync_main_menu_frame_layout,
+    sync_main_menu_heightmap_slots, sync_main_menu_highscores, sync_main_menu_localized_labels,
+    sync_main_menu_panel_visibility, sync_main_menu_preferences, sync_main_menu_seed_input,
+    sync_main_menu_summary,
 };
 use crate::ui::main_menu_intro::{
     animate_main_menu_intro_traffic, cleanup_main_menu_on_exit, pan_main_menu_intro_camera,
@@ -69,6 +70,7 @@ impl Plugin for MainMenuUiPlugin {
                     main_menu_options_interaction,
                     main_menu_roughness_interaction,
                     sync_main_menu_panel_visibility,
+                    sync_main_menu_frame_layout,
                     sync_main_menu_summary,
                     sync_main_menu_seed_input,
                     sync_main_menu_continue_button,

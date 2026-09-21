@@ -149,7 +149,7 @@ pub(crate) use viewport::{
 pub(crate) use water::WaterAnimationPlugin;
 pub(crate) use water::water_anim_frames_from_assets;
 pub(crate) use world::{
-    LoadedMapTileChunks, MapTileSpawnViewport, RemapMapVisualsPending, WorldRenderPlugin,
-    initial_map_camera_pose, request_map_visual_remap, request_map_visual_remap_with_labels,
-    spawn_intro_map_render,
+    LoadedMapTileChunks, MapTileSpawnViewport, RemapMapVisualsPending, WORLD_CAMERA_FAR,
+    WORLD_CAMERA_NEAR, WorldRenderPlugin, initial_map_camera_pose, request_map_visual_remap,
+    request_map_visual_remap_with_labels, spawn_intro_map_render,
 };

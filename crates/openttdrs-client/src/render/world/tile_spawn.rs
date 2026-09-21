@@ -30,8 +30,8 @@ use crate::state::SimWorld;
 /// invierte los argumentos de profundidad de la proyección 2D: el campo
 /// `far=1000` termina recortando el lado delantero en `z≈-1000`, antes de que
 /// el suelo (z≈-100) llegue al framebuffer.
-pub(super) const WORLD_CAMERA_NEAR: f32 = -2000.0;
-pub(super) const WORLD_CAMERA_FAR: f32 = 2000.0;
+pub(crate) const WORLD_CAMERA_NEAR: f32 = -2000.0;
+pub(crate) const WORLD_CAMERA_FAR: f32 = 2000.0;
 
 use super::plugin::{LoadedMapTileChunks, MapTileSpawnViewport};
 use super::viewport::{

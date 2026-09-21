@@ -6,8 +6,8 @@ use openttdrs_core::prelude::*;
 use crate::iso::{road_vehicle_tile_anchor, tile_min_z, tile_pos};
 use crate::network::NetCli;
 use crate::render::{
-    MapVisualLayer, ShoreTile, TruckHandles, WaterTile, initial_map_camera_pose,
-    spawn_intro_map_render,
+    MapVisualLayer, ShoreTile, TruckHandles, WORLD_CAMERA_FAR, WORLD_CAMERA_NEAR, WaterTile,
+    initial_map_camera_pose, spawn_intro_map_render,
 };
 use crate::state::SimWorld;
 use crate::state::bootstrap::{
@@ -54,10 +54,26 @@ const INTRO_SETTINGS: NewGameSettings = NewGameSettings {
 const INTRO_PAN_AMPLITUDE_X: f32 = 30.0;
 const INTRO_PAN_AMPLITUDE_Y: f32 = 18.0;
 const INTRO_PAN_PERIOD_SECS: f32 = 42.0;
+// El mapa de 64×64 completo se veía más como una maqueta que como una partida.
+// Un encuadre algo más cercano mantiene contexto y hace legibles ciudad,
+// industrias y vehículos detrás de la portada.
+const INTRO_CAMERA_SCALE: f32 = 0.64;
 
 const INTRO_MAGLEV_X0: i32 = 30;
 const INTRO_MAGLEV_X1: i32 = 58;
 const INTRO_MAGLEV_Y: i32 = 53;
+
+fn intro_camera_projection(cam_scale: f32) -> OrthographicProjection {
+    OrthographicProjection {
+        scale: cam_scale * INTRO_CAMERA_SCALE,
+        // El suelo de OpenTTD vive en una banda de profundidad negativa.
+        // Sin estos planos se recorta y sólo quedan edificios/árboles
+        // flotando sobre el color de limpieza.
+        near: WORLD_CAMERA_NEAR,
+        far: WORLD_CAMERA_FAR,
+        ..OrthographicProjection::default_2d()
+    }
+}
 
 #[derive(Clone, Copy)]
 enum IntroVehicleKind {
@@ -232,10 +248,7 @@ pub(crate) fn setup_main_menu_intro(
             ..default()
         },
         Transform::from_translation(cam_pos),
-        Projection::Orthographic(OrthographicProjection {
-            scale: cam_scale * 0.92,
-            ..OrthographicProjection::default_2d()
-        }),
+        Projection::Orthographic(intro_camera_projection(cam_scale)),
     ));
 
     spawn_intro_map_render(
@@ -424,6 +437,13 @@ mod tests {
     fn intro_uses_deterministic_showcase_settings() {
         assert!(!super::INTRO_SETTINGS.world_gen);
         assert!(super::INTRO_SETTINGS.preserve_demo);
+    }
+
+    #[test]
+    fn intro_camera_keeps_the_ground_depth_band_visible() {
+        let projection = super::intro_camera_projection(1.0);
+        assert_eq!(projection.near, crate::render::WORLD_CAMERA_NEAR);
+        assert_eq!(projection.far, crate::render::WORLD_CAMERA_FAR);
     }
 
     #[test]

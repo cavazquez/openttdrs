@@ -15,9 +15,9 @@ pub(crate) use systems::{
     main_menu_interaction, main_menu_options_interaction, main_menu_preferences_interaction,
     main_menu_roughness_interaction, main_menu_scenarios_interaction,
     main_menu_seed_input_interaction, main_menu_sound_interaction, return_to_main_menu,
-    sync_main_menu_continue_button, sync_main_menu_heightmap_slots, sync_main_menu_highscores,
-    sync_main_menu_localized_labels, sync_main_menu_panel_visibility, sync_main_menu_preferences,
-    sync_main_menu_seed_input, sync_main_menu_summary,
+    sync_main_menu_continue_button, sync_main_menu_frame_layout, sync_main_menu_heightmap_slots,
+    sync_main_menu_highscores, sync_main_menu_localized_labels, sync_main_menu_panel_visibility,
+    sync_main_menu_preferences, sync_main_menu_seed_input, sync_main_menu_summary,
 };
 
 use bevy::prelude::*;
@@ -44,6 +44,13 @@ pub(crate) enum MainMenuPanel {
 
 #[derive(Component, Clone, Copy)]
 pub(crate) struct MainMenuSubPanel(pub MainMenuPanel);
+
+/// Marco que adapta su tamaño al panel activo del menú.
+///
+/// La portada deja ver el mapa de fondo; el formulario de nueva partida se
+/// expande para preservar sus dos columnas de opciones.
+#[derive(Component)]
+pub(crate) struct MainMenuFrame;
 
 #[derive(Component)]
 pub(crate) struct MainMenuTitleText;

@@ -15,7 +15,7 @@ use bevy::ecs::system::RunSystemOnce;
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input_focus::InputFocus;
-use bevy::prelude::{Entity, KeyCode, Messages, Text, World};
+use bevy::prelude::{Entity, KeyCode, Messages, Text, Val, World};
 use bevy::text::EditableText;
 use openttdrs_core::Climate;
 
@@ -40,6 +40,18 @@ fn setup_main_menu_and_camera_run() {
             .count(),
         2
     );
+}
+
+#[test]
+fn menu_frame_keeps_the_portada_compact_and_new_game_wide() {
+    let (root_width, root_max_width, _) = super::setup::main_menu_frame_style(MainMenuPanel::Root);
+    assert_eq!(root_width, Val::Px(400.0));
+    assert_eq!(root_max_width, Val::Percent(90.0));
+
+    let (new_game_width, new_game_max_width, _) =
+        super::setup::main_menu_frame_style(MainMenuPanel::NewGame);
+    assert_eq!(new_game_width, Val::Percent(90.0));
+    assert_eq!(new_game_max_width, Val::Px(900.0));
 }
 
 #[test]

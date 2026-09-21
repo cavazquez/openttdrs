@@ -18,13 +18,14 @@ use super::super::labels::{
     localized_climate_label, localized_density_label, localized_roughness_label, panel_hints,
     panel_title,
 };
+use super::super::setup::main_menu_frame_style;
 use super::super::widgets::{hover_primary, hover_secondary};
 use super::super::{
     MainMenuBackButton, MainMenuCamera, MainMenuContinueButton, MainMenuContinueWrap,
-    MainMenuDemoButton, MainMenuDynamicText, MainMenuEditorButton, MainMenuHintsText,
-    MainMenuLoadButton, MainMenuLocalizedText, MainMenuNewGameButton, MainMenuPanel,
-    MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuStartButton,
-    MainMenuSubPanel, MainMenuTitleText, MainMenuUi,
+    MainMenuDemoButton, MainMenuDynamicText, MainMenuEditorButton, MainMenuFrame,
+    MainMenuHintsText, MainMenuLoadButton, MainMenuLocalizedText, MainMenuNewGameButton,
+    MainMenuPanel, MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes,
+    MainMenuStartButton, MainMenuSubPanel, MainMenuTitleText, MainMenuUi,
 };
 use super::session::{enter_editor, enter_new_game, resume_suspended_game};
 
@@ -66,6 +67,24 @@ pub(crate) fn sync_main_menu_panel_visibility(
         if **hints != translated {
             **hints = translated.to_owned();
         }
+    }
+}
+
+/// Hace compacta la portada para revelar el showcase y expande el formulario
+/// cuando hace falta conservar las dos columnas de opciones.
+pub(crate) fn sync_main_menu_frame_layout(
+    panel: Res<MainMenuPanel>,
+    mut frames: Query<(&mut Node, &mut BackgroundColor), With<MainMenuFrame>>,
+) {
+    if !panel.is_changed() {
+        return;
+    }
+
+    let (width, max_width, alpha) = main_menu_frame_style(*panel);
+    for (mut node, mut background) in &mut frames {
+        node.width = width;
+        node.max_width = max_width;
+        *background = BackgroundColor(Color::srgba(0.18, 0.17, 0.12, alpha));
     }
 }
 

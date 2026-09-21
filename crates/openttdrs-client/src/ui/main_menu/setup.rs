@@ -17,21 +17,44 @@ use super::widgets::{
 };
 use super::{
     MainMenuBackButton, MainMenuContinueButton, MainMenuContinueWrap, MainMenuDemoButton,
-    MainMenuDensityTarget, MainMenuEditorButton, MainMenuHeightmapSlot, MainMenuHighscoresButton,
-    MainMenuHighscoresText, MainMenuHintsText, MainMenuLanguageButton, MainMenuLanguageLabel,
-    MainMenuLoadButton, MainMenuLocalizedText, MainMenuMapSizeButton, MainMenuNewGameButton,
-    MainMenuNewGameOptionsColumn, MainMenuOpenHeightmapsDirButton, MainMenuOpenScenariosDirButton,
-    MainMenuPanel, MainMenuPreferencesButton, MainMenuQuitButton, MainMenuQuitConfirmNo,
-    MainMenuQuitConfirmYes, MainMenuResolutionButton, MainMenuScenariosButton,
-    MainMenuSeedDecButton, MainMenuSeedIncButton, MainMenuSeedInput, MainMenuSeedInputState,
-    MainMenuSeedRandomButton, MainMenuSoundButton, MainMenuStartButton, MainMenuSubPanel,
-    MainMenuSummaryText, MainMenuTitleText, MainMenuToggle, MainMenuUi,
+    MainMenuDensityTarget, MainMenuEditorButton, MainMenuFrame, MainMenuHeightmapSlot,
+    MainMenuHighscoresButton, MainMenuHighscoresText, MainMenuHintsText, MainMenuLanguageButton,
+    MainMenuLanguageLabel, MainMenuLoadButton, MainMenuLocalizedText, MainMenuMapSizeButton,
+    MainMenuNewGameButton, MainMenuNewGameOptionsColumn, MainMenuOpenHeightmapsDirButton,
+    MainMenuOpenScenariosDirButton, MainMenuPanel, MainMenuPreferencesButton, MainMenuQuitButton,
+    MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuResolutionButton,
+    MainMenuScenariosButton, MainMenuSeedDecButton, MainMenuSeedIncButton, MainMenuSeedInput,
+    MainMenuSeedInputState, MainMenuSeedRandomButton, MainMenuSoundButton, MainMenuStartButton,
+    MainMenuSubPanel, MainMenuSummaryText, MainMenuTitleText, MainMenuToggle, MainMenuUi,
 };
 
-const MAIN_MENU_BACKDROP_ALPHA: f32 = 0.28;
+const MAIN_MENU_BACKDROP_ALPHA: f32 = 0.14;
+const MAIN_MENU_ROOT_PANEL_ALPHA: f32 = 0.78;
 const MAIN_MENU_PANEL_ALPHA: f32 = 0.86;
+const MAIN_MENU_ROOT_PANEL_WIDTH: f32 = 400.0;
 const MAIN_MENU_PANEL_MAX_WIDTH: f32 = 900.0;
+const MAIN_MENU_AUXILIARY_PANEL_WIDTH: f32 = 540.0;
 const NEW_GAME_OPTIONS_COLUMN_WIDTH: f32 = 420.0;
+
+pub(super) fn main_menu_frame_style(panel: MainMenuPanel) -> (Val, Val, f32) {
+    match panel {
+        MainMenuPanel::Root | MainMenuPanel::QuitConfirm => (
+            Val::Px(MAIN_MENU_ROOT_PANEL_WIDTH),
+            Val::Percent(90.0),
+            MAIN_MENU_ROOT_PANEL_ALPHA,
+        ),
+        MainMenuPanel::NewGame => (
+            Val::Percent(90.0),
+            Val::Px(MAIN_MENU_PANEL_MAX_WIDTH),
+            MAIN_MENU_PANEL_ALPHA,
+        ),
+        MainMenuPanel::Highscores | MainMenuPanel::Scenarios | MainMenuPanel::Preferences => (
+            Val::Px(MAIN_MENU_AUXILIARY_PANEL_WIDTH),
+            Val::Percent(90.0),
+            0.84,
+        ),
+    }
+}
 
 pub(crate) fn setup_main_menu(
     mut commands: Commands,
@@ -58,10 +81,11 @@ pub(crate) fn setup_main_menu(
             MainMenuUi,
         ))
         .with_children(|p| {
+            let (width, max_width, alpha) = main_menu_frame_style(MainMenuPanel::Root);
             p.spawn((
                 Node {
-                    width: Val::Percent(90.0),
-                    max_width: Val::Px(MAIN_MENU_PANEL_MAX_WIDTH),
+                    width,
+                    max_width,
                     height: Val::Percent(90.0),
                     max_height: Val::Percent(90.0),
                     flex_direction: FlexDirection::Column,
@@ -78,8 +102,9 @@ pub(crate) fn setup_main_menu(
                     overflow: Overflow::clip(),
                     ..default()
                 },
-                BackgroundColor(Color::srgba(0.18, 0.17, 0.12, MAIN_MENU_PANEL_ALPHA)),
+                BackgroundColor(Color::srgba(0.18, 0.17, 0.12, alpha)),
                 BorderColor::all(Color::srgb(0.74, 0.68, 0.5)),
+                MainMenuFrame,
             ))
             .with_children(|panel| {
                 panel.spawn((

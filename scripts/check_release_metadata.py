@@ -35,6 +35,21 @@ def main() -> None:
         f"Cargo.lock no coincide con {version}: {workspace_packages}",
     )
 
+    fuzz_lock = tomllib.loads((ROOT / "fuzz" / "Cargo.lock").read_text(encoding="utf-8"))
+    fuzz_workspace_packages = {
+        package["name"]: package["version"]
+        for package in fuzz_lock["package"]
+        if package["name"] in {"openttdrs-core", "openttdrs-net"}
+    }
+    require(
+        len(fuzz_workspace_packages) == 2,
+        "faltan crates del workspace en fuzz/Cargo.lock",
+    )
+    require(
+        set(fuzz_workspace_packages.values()) == {version},
+        f"fuzz/Cargo.lock no coincide con {version}: {fuzz_workspace_packages}",
+    )
+
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     notes = (ROOT / "RELEASE_NOTES.md").read_text(encoding="utf-8")
     notices = (ROOT / "THIRD_PARTY_ASSETS.md").read_text(encoding="utf-8")

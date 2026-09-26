@@ -273,11 +273,11 @@ pub fn vehicle_render_direction_at_with_map(
     pose: VehiclePose,
     map: Option<&Map>,
 ) -> VehicleDirection {
-    // La FTA mueve aeronaves en coordenadas sub-tesela y actualiza `direction`
-    // con el desplazamiento real de cada tick. Su `path` permanece vacío; si
-    // se reconstruye aquí un movimiento Manhattan hacia la orden global, el
-    // sprite queda apuntando al aeropuerto aunque el avión esté girando.
-    if v.kind == VehicleKind::Aircraft && v.airport_fta_active {
+    // Tanto la FTA como el vuelo libre mantienen el rumbo físico. Al salir
+    // del aeropuerto queda un `path` de teselas que no describe los giros:
+    // usarlo aquí hace que el sprite mire a otro lado durante el crucero.
+    // OpenTTD entrega v->direction a GetImage también fuera del aeropuerto.
+    if v.kind == VehicleKind::Aircraft {
         return v.direction;
     }
     if v.kind == VehicleKind::Ship {

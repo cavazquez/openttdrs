@@ -53,6 +53,17 @@ pub(crate) fn handle_tile_click(
     mut newgrf_cache: Option<ResMut<NewGrfTrainSpriteCache>>,
     mut images: Option<ResMut<Assets<Image>>>,
 ) {
+    // Consume the UI-origin press even while UI owns the pointer; otherwise
+    // this one-frame flag swallows the player's next click on the map.
+    if mouse.just_pressed(MouseButton::Left) && tool_state.block_map_click {
+        tool_state.block_map_click = false;
+        apply_intent(
+            MapClickIntent::CancelDrag,
+            &mut apply_ctx,
+            time.elapsed_secs(),
+        );
+        return;
+    }
     // Cancel before any early exit: a lost release must never leave a latent
     // construction that can be confirmed by a later, unrelated click.
     if pointer_capture.active()
@@ -69,10 +80,6 @@ pub(crate) fn handle_tile_click(
             &mut apply_ctx,
             time.elapsed_secs(),
         );
-        return;
-    }
-    if mouse.just_pressed(MouseButton::Left) && tool_state.block_map_click {
-        tool_state.block_map_click = false;
         return;
     }
     let Ok(window) = windows.single() else {

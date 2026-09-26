@@ -114,3 +114,9 @@ construye las cinco teselas; liberación fuera de mapa conserva sólo las dos
 válidas; cinco interrupciones dejan snapshot JSON idéntico incluso después
 de una confirmación tardía. Suite cliente 1.650 aprobados/dos ignores,
 Clippy --all-targets -D warnings, formato, docs y diff aprobados.
+
+Revisión de integración: consumir block_map_click antes de la captura UI
+evita que la pulsación de la barra quede pendiente y se coma el siguiente
+clic del mapa. Test ECS adicional conserva mapa/saldo, limpia el arrastre y
+libera esa bandera. Validado con suite cliente 1.656 aprobados/dos ignores
+(incluye la regresión de ancla aérea), Clippy, formato, docs y diff.

@@ -779,6 +779,32 @@ mod tests {
         }
     }
 
+    #[test]
+    fn captured_toolbar_press_does_not_swallow_the_next_map_click() {
+        use crate::ui::hud::HoveredTileCoord;
+        use crate::ui::toolbar::UiToolState;
+        use crate::ui::toolbar::build_input::click::handle_tile_click;
+        let mut world = v1_orders_world();
+        start_road_drag(&mut world);
+        let before = world.resource::<SimWorld>().state.save_json().unwrap();
+        let mut mouse = ButtonInput::<MouseButton>::default();
+        mouse.press(MouseButton::Left);
+        world.insert_resource(mouse);
+        world.init_resource::<HoveredTileCoord>();
+        world.insert_resource(UiToolState {
+            block_map_click: true,
+            ..default()
+        });
+        world.spawn((Node::default(), Interaction::Pressed));
+        world.run_system_once(handle_tile_click).unwrap();
+        assert!(!world.resource::<UiToolState>().block_map_click);
+        assert!(!world.resource::<DragBuildState>().armed);
+        assert_eq!(
+            world.resource::<SimWorld>().state.save_json().unwrap(),
+            before
+        );
+    }
+
     fn press_vehicle_orders_button(world: &mut World) {
         let button = world
             .spawn((Button, VehicleWindowButton::Orders, Interaction::Pressed))

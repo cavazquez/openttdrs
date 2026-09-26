@@ -5,7 +5,7 @@ use crate::ui::hud::HoveredTileCoord;
 use crate::ui::toolbar::{BuildMenuAction, DragBuildState, StationBuildState, UiToolState};
 
 pub(crate) fn rotate_station_with_right_click(
-    mouse: Res<ButtonInput<MouseButton>>,
+    gesture: Res<crate::ui::RightPointerGesture>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mut tool_state: ResMut<UiToolState>,
     mut station_state: ResMut<StationBuildState>,
@@ -13,7 +13,7 @@ pub(crate) fn rotate_station_with_right_click(
     sim: Option<Res<SimWorld>>,
     hovered: Option<Res<HoveredTileCoord>>,
 ) {
-    if !mouse.just_pressed(MouseButton::Right) {
+    if !gesture.right_click {
         return;
     }
     if drag_state.armed {

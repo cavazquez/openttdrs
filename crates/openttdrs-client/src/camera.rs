@@ -12,7 +12,9 @@ use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, clamp_ortho_scale, large_map_viewport_cull_enabled,
 };
 use crate::state::{ClientScreen, SimWorld};
-use crate::ui::{KeyboardCapture, PointerCapture};
+use crate::ui::{
+    KeyboardCapture, PointerCapture, RightPointerGesture, update_right_pointer_gesture,
+};
 
 /// Paneo con botón derecho: factor × `OrthographicProjection::scale` × delta en píxeles.
 const PAN_RMB_SCALE: f32 = 1.35;
@@ -315,9 +317,16 @@ pub(crate) struct CameraControlPlugin;
 impl Plugin for CameraControlPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CameraVelocity>()
+            .init_resource::<RightPointerGesture>()
             .init_resource::<ZoomMode>()
             .init_resource::<CameraFocusRequest>()
             .init_resource::<MapShotCameraState>()
+            .add_systems(
+                Update,
+                update_right_pointer_gesture
+                    .before(UpdateSet::Input)
+                    .run_if(in_state(ClientScreen::InGame)),
+            )
             .add_systems(
                 Update,
                 (
@@ -434,6 +443,7 @@ pub fn move_camera(
     zoom_mode: Option<Res<ZoomMode>>,
     keyboard_capture: KeyboardCapture,
     pointer_capture: PointerCapture,
+    right_gesture: Option<Res<RightPointerGesture>>,
     mut cam_q: Query<
         (&mut Transform, &mut Projection),
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
@@ -461,10 +471,22 @@ pub fn move_camera(
     let pointer_captured = pointer_capture.active();
 
     // Arrastre con botón derecho (inmediato, sin inercia)
-    if !pointer_captured && mouse.pressed(MouseButton::Right) && motion.delta != Vec2::ZERO {
+    // The app always installs the classifier. The raw fallback supports
+    // isolated camera consumers that do not install CameraControlPlugin.
+    let pan_delta = right_gesture.map_or_else(
+        || {
+            if mouse.pressed(MouseButton::Right) {
+                motion.delta
+            } else {
+                Vec2::ZERO
+            }
+        },
+        |gesture| gesture.pan_delta,
+    );
+    if !pointer_captured && pan_delta != Vec2::ZERO {
         let s = proj.scale * PAN_RMB_SCALE;
-        transform.translation.x -= motion.delta.x * s;
-        transform.translation.y += motion.delta.y * s;
+        transform.translation.x -= pan_delta.x * s;
+        transform.translation.y += pan_delta.y * s;
         vel.0 = Vec2::ZERO;
     }
 

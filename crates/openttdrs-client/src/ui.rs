@@ -9,7 +9,7 @@ mod lifecycle;
 mod plugins;
 mod pointer;
 
-pub(crate) use pointer::PointerCapture;
+pub(crate) use pointer::{PointerCapture, RightPointerGesture, update_right_pointer_gesture};
 
 mod ai_settings_window;
 pub(crate) mod audio_settings_window;

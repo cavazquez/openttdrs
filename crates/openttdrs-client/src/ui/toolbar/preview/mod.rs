@@ -321,6 +321,9 @@ mod tests {
         let mut mouse = ButtonInput::<MouseButton>::default();
         mouse.press(MouseButton::Right);
         world.insert_resource(mouse);
+        let mut gesture = crate::ui::RightPointerGesture::default();
+        gesture.right_click = true;
+        world.insert_resource(gesture);
         world.insert_resource(ButtonInput::<KeyCode>::default());
         world.insert_resource(UiToolState {
             active_tool: tool,

@@ -10,7 +10,7 @@ revisión local. No incluye nuevos atajos, cambios de preferencias ni release.
   uno, incluyendo autoslope. No prohíbe otros saldos negativos de simulación.
 - INPUT-01 — completado: rueda/paneo pertenecen a UI o mapa, nunca ambos;
   modales, ventanas y listas no dejan pasar gestos de cámara.
-- INPUT-02 — pendiente: arrastrar con derecho no rota ni cancela herramientas;
+- INPUT-02 — completado: arrastrar con derecho no rota ni cancela herramientas;
   conservar el clic contextual y diferenciarlo del arrastre en pantalla.
 - BUILD-01 — pendiente: al soltar se usa el extremo actual, no el del frame
   anterior; cancelar y perder foco no confirman obras involuntarias.
@@ -65,3 +65,17 @@ Guardado/minimapa capturan aunque no haya un botón hovered; ocultar UI libera
 la rueda. Cuatro tests nuevos, suite cliente 1.643 aprobados/dos ignores,
 Clippy --all-targets -D warnings, formato, docs y diff aprobados.
 La clasificación de clic frente a arrastre derecho queda en INPUT-02.
+
+### INPUT-02
+
+Un clasificador compartido mantiene el dueño del gesto derecho desde presión
+hasta liberación. A partir de cuatro píxeles recorridos se considera paneo;
+el clic contextual se emite una sola vez al soltar. Abrir un modal, perder
+foco o salir de la ventana cancela el gesto. Comenzar sobre UI no permite
+continuarlo sobre el mapa. Se conserva la rotación contextual del cliente;
+no se declara que este binding sea idéntico a OpenTTD.
+
+Cuatro regresiones ECS ejecutan clasificación, rotación y cámara: seis zooms,
+jitter, ida/vuelta, pérdida de foco, modal y origen UI. Paneo conserva la
+herramienta y el drag de construcción. Suite cliente: 1.647 aprobados, dos
+ignores; Clippy --all-targets -D warnings, formato, docs y diff aprobados.

@@ -25,6 +25,7 @@ use super::drag::action_supports_drag;
 /// exceder el límite de parámetros de sistema de Bevy.
 #[derive(bevy::ecs::system::SystemParam)]
 pub(crate) struct PanelStates<'w> {
+    right_gesture: Option<Res<'w, crate::ui::RightPointerGesture>>,
     pick_state: Res<'w, State<OrderPickState>>,
     minimap_layers: Res<'w, MinimapLayerState>,
 }
@@ -206,7 +207,10 @@ pub(crate) fn handle_tile_click(
         world_pos,
         tile_fract,
         mouse_left_pressed: mouse.just_pressed(MouseButton::Left),
-        mouse_right_pressed: mouse.just_pressed(MouseButton::Right),
+        mouse_right_pressed: panels
+            .right_gesture
+            .as_deref()
+            .is_some_and(|g| g.right_click),
         mouse_left_released: mouse.just_released(MouseButton::Left),
         active_tool: tool_state.active_tool,
         drag_armed: apply_ctx.drag_state.armed,

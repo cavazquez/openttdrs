@@ -322,55 +322,123 @@ pub(crate) fn command_for_tunnel_action(
     }
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct DragBuildReport {
+    pub applied: usize,
+    pub rejected: Vec<(Option<TileCoord>, CommandError)>,
+    pub cost: i64,
+    pub queued: bool,
+}
+
+impl DragBuildReport {
+    fn execute(&mut self, sim: &mut SimWorld, cmd: &Command, pos: Option<TileCoord>) {
+        match crate::network::apply_player_command(&mut sim.state, cmd) {
+            Ok(()) => self.applied += 1,
+            Err(e) => self.rejected.push((pos, e)),
+        }
+    }
+
+    pub fn message(&self) -> String {
+        use crate::ui::command_error_text::command_error_message;
+        if self.queued {
+            return format!(
+                "{} solicitudes enviadas; pendientes de confirmación del servidor.",
+                self.applied
+            );
+        }
+        let mut message = format!(
+            "Obra: {} acciones aplicadas; {} rechazadas. Gasto neto: ${}.",
+            self.applied,
+            self.rejected.len(),
+            self.cost
+        );
+        // Keep the toast bounded, while retaining every rejected coordinate
+        // in the report for callers/tests. Group commands count as one action.
+        for (pos, error) in self.rejected.iter().take(3) {
+            if let Some(pos) = pos {
+                message.push_str(&format!(" ({},{}):", pos.x, pos.y));
+            }
+            message.push(' ');
+            message.push_str(command_error_message(*error));
+        }
+        if self.rejected.len() > 3 {
+            message.push_str(&format!(" Y {} rechazos más.", self.rejected.len() - 3));
+        }
+        message
+    }
+}
+
 pub(crate) fn apply_drag_action(
     sim: &mut SimWorld,
     action: BuildMenuAction,
     tiles: Vec<(i32, i32)>,
     station_state: &StationBuildState,
     rail_lane_bit: Option<u8>,
-) -> (bool, Option<CommandError>) {
+) -> DragBuildReport {
+    let before = sim.state.economy.money;
+    let mut report = DragBuildReport {
+        queued: crate::network::player_commands_are_proposals(),
+        ..Default::default()
+    };
+    apply_drag_commands(
+        sim,
+        action,
+        tiles,
+        station_state,
+        rail_lane_bit,
+        &mut report,
+    );
+    report.cost = before.saturating_sub(sim.state.economy.money);
+    report
+}
+
+fn apply_drag_commands(
+    sim: &mut SimWorld,
+    action: BuildMenuAction,
+    tiles: Vec<(i32, i32)>,
+    station_state: &StationBuildState,
+    rail_lane_bit: Option<u8>,
+    report: &mut DragBuildReport,
+) {
+    let origin = tiles.first().map(|&(x, y)| TileCoord::new(x, y));
     if action_is_tunnel(action) {
         if let Some(cmd) = command_for_tunnel_action(&sim.state, action, &tiles) {
-            return match crate::network::apply_player_command(&mut sim.state, &cmd) {
-                Ok(()) => (true, None),
-                Err(e) => (false, Some(e)),
-            };
+            report.execute(sim, &cmd, origin);
+        } else {
+            report
+                .rejected
+                .push((origin, CommandError::InvalidTunnelEndpoints));
         }
-        return (false, Some(CommandError::InvalidTunnelEndpoints));
+        return;
     }
     if action == BuildMenuAction::BuyLand {
         if let Some(cmd) = buy_land_command_for_tiles(&tiles) {
-            return match crate::network::apply_player_command(&mut sim.state, &cmd) {
-                Ok(()) => (true, None),
-                Err(e) => (false, Some(e)),
-            };
+            report.execute(sim, &cmd, origin);
+        } else {
+            report
+                .rejected
+                .push((origin, CommandError::CannotBuyLandHere));
         }
-        return (false, Some(CommandError::CannotBuyLandHere));
+        return;
     }
     if let Some(cmd) = terraform_command_for_tiles(action, &tiles) {
-        return match crate::network::apply_player_command(&mut sim.state, &cmd) {
-            Ok(()) => (true, None),
-            Err(e) => (false, Some(e)),
-        };
+        report.execute(sim, &cmd, origin);
+        return;
     }
 
     if matches!(
         action,
         BuildMenuAction::RoadBridge | BuildMenuAction::RailBridge
     ) {
-        return (false, None);
+        return;
     }
 
     if let Some(cmd) = command_for_line_action(action, &tiles, openttdrs_core::BridgeType::Wooden) {
-        return match crate::network::apply_player_command(&mut sim.state, &cmd) {
-            Ok(()) => (true, None),
-            Err(e) => (false, Some(e)),
-        };
+        report.execute(sim, &cmd, origin);
+        return;
     }
 
     if let Some(tool_axis) = road_bits_for_drag_action(action, &tiles) {
-        let mut changed = false;
-        let mut last_err = None;
         let placed: Vec<TileCoord> = tiles.iter().map(|&(x, y)| TileCoord::new(x, y)).collect();
         let start = placed.first().copied().unwrap_or(TileCoord::new(0, 0));
         let end = placed.last().copied().unwrap_or(start);
@@ -382,21 +450,21 @@ pub(crate) fn apply_drag_action(
             } else {
                 Command::PlaceRoadBits(*c, axis | ROAD_PLACE_FORCE_AXIS)
             };
-            match crate::network::apply_player_command(&mut sim.state, &cmd) {
-                Ok(()) => changed = true,
-                Err(e) => last_err = Some(e),
-            }
+            report.execute(sim, &cmd, Some(*c));
         }
-        if changed && !tram {
-            let _ = crate::network::apply_player_command(
+        if report.applied > 0
+            && !tram
+            && let Err(e) = crate::network::apply_player_command(
                 &mut sim.state,
                 &Command::FinalizeRoadDragLine {
                     tiles: placed,
                     axis,
                 },
-            );
+            )
+        {
+            report.rejected.push((None, e));
         }
-        return (changed, if changed { None } else { last_err });
+        return;
     }
 
     if matches!(
@@ -408,8 +476,6 @@ pub(crate) fn apply_drag_action(
             | BuildMenuAction::RailVert
             | BuildMenuAction::RailRemove
     ) {
-        let mut changed = false;
-        let mut last_err = None;
         let remove = action == BuildMenuAction::RailRemove;
         for (i, (x, y)) in tiles.iter().copied().enumerate() {
             let Some(rail_bits) = rail_bits_for_drag_tile(action, &tiles, i, rail_lane_bit) else {
@@ -420,20 +486,15 @@ pub(crate) fn apply_drag_action(
             } else {
                 Command::PlaceRailBits(TileCoord::new(x, y), rail_bits)
             };
-            match crate::network::apply_player_command(&mut sim.state, &cmd) {
-                Ok(()) => changed = true,
-                Err(e) => last_err = Some(e),
-            }
+            report.execute(sim, &cmd, Some(TileCoord::new(x, y)));
         }
-        return (changed, if changed { None } else { last_err });
+        return;
     }
 
     if action == BuildMenuAction::RailSignals {
         let density = station_state.signal_density.max(1);
         let (fx, fy) = station_state.signal_drag_fract.unwrap_or((128, 128));
         let spaced = subsample_drag_tiles(&tiles, density);
-        let mut changed = false;
-        let mut last_err = None;
         for (x, y) in spaced {
             let cmd = Command::PlaceRailSignalWithVariant(
                 TileCoord::new(x, y),
@@ -443,16 +504,11 @@ pub(crate) fn apply_drag_action(
                 station_state.signal_type,
                 station_state.signal_variant,
             );
-            match crate::network::apply_player_command(&mut sim.state, &cmd) {
-                Ok(()) => changed = true,
-                Err(e) => last_err = Some(e),
-            }
+            report.execute(sim, &cmd, Some(TileCoord::new(x, y)));
         }
-        return (changed, if changed { None } else { last_err });
+        return;
     }
 
-    let mut changed = false;
-    let mut last_err = None;
     for (x, y) in tiles {
         if let Some(cmd) = command_for_action(
             action,
@@ -466,13 +522,9 @@ pub(crate) fn apply_drag_action(
             sim.state.current_rail_type,
             sim.state.current_object_spec,
         ) {
-            match crate::network::apply_player_command(&mut sim.state, &cmd) {
-                Ok(()) => changed = true,
-                Err(e) => last_err = Some(e),
-            }
+            report.execute(sim, &cmd, Some(TileCoord::new(x, y)));
         }
     }
-    (changed, if changed { None } else { last_err })
 }
 
 /// Teselas de arrastre espaciadas cada `density` (incluye la primera).
@@ -641,28 +693,28 @@ mod tests {
             ottdmap_extras: None,
         };
         let junction = (3, 3);
-        let (changed, err) = apply_drag_action(
+        let report = apply_drag_action(
             &mut sim,
             BuildMenuAction::RoadX,
             vec![(1, 3), (2, 3), junction, (4, 3), (5, 3)],
             &StationBuildState::default(),
             None,
         );
-        assert!(changed);
-        assert!(err.is_none());
+        assert!(report.applied > 0);
+        assert!(report.rejected.is_empty(), "{report:?}");
         assert_eq!(
             sim.state.map.get(TileCoord::new(3, 3)).unwrap().m5 & 0x0F,
             0x0A
         );
-        let (changed, err) = apply_drag_action(
+        let report = apply_drag_action(
             &mut sim,
             BuildMenuAction::RoadY,
             vec![(3, 1), (3, 2), junction, (3, 4), (3, 5)],
             &StationBuildState::default(),
             None,
         );
-        assert!(changed);
-        assert!(err.is_none());
+        assert!(report.applied > 0);
+        assert!(report.rejected.is_empty(), "{report:?}");
         assert_eq!(
             sim.state.map.get(TileCoord::new(3, 3)).unwrap().m5 & 0x0F,
             0x0F,
@@ -691,14 +743,22 @@ mod tests {
         assert!(cost > 0);
         sim.state = GameState::new(8, 8);
         sim.state.economy.money = cost;
-        let (changed, _) = apply_drag_action(
+        let report = apply_drag_action(
             &mut sim,
             BuildMenuAction::RoadX,
             vec![(2, 3), (3, 3), (4, 3)],
             &StationBuildState::default(),
             None,
         );
-        assert!(changed);
+        assert_eq!(report.applied, 1);
+        assert_eq!(report.cost, cost);
+        assert_eq!(
+            report.rejected,
+            vec![
+                (Some(TileCoord::new(3, 3)), CommandError::InsufficientFunds),
+                (Some(TileCoord::new(4, 3)), CommandError::InsufficientFunds),
+            ]
+        );
         assert_eq!(sim.state.economy.money, 0);
         assert_eq!(
             sim.state.map.get_kind(TileCoord::new(2, 3)),
@@ -719,15 +779,15 @@ mod tests {
             loaded_file: false,
             ottdmap_extras: None,
         };
-        let (changed, err) = apply_drag_action(
+        let report = apply_drag_action(
             &mut sim,
             BuildMenuAction::RoadX,
             vec![(1, 5), (2, 5), (3, 5)],
             &StationBuildState::default(),
             None,
         );
-        assert!(changed);
-        assert!(err.is_none());
+        assert!(report.applied > 0);
+        assert!(report.rejected.is_empty(), "{report:?}");
         assert_eq!(
             sim.state.map.get(TileCoord::new(1, 5)).unwrap().m5 & 0x0F,
             0x0A,
@@ -828,15 +888,15 @@ mod tests {
         }
         let line = drag_line_tiles(Some(&sim.state.map), BuildMenuAction::RoadX, (3, 4), (6, 4));
         assert_eq!(line, vec![(3, 4), (4, 4), (5, 4), (6, 4)]);
-        let (changed, err) = apply_drag_action(
+        let report = apply_drag_action(
             &mut sim,
             BuildMenuAction::RoadX,
             line,
             &StationBuildState::default(),
             None,
         );
-        assert!(changed);
-        assert!(err.is_none());
+        assert!(report.applied > 0);
+        assert!(report.rejected.is_empty(), "{report:?}");
         for x in 3..=6 {
             assert_eq!(
                 sim.state.map.get(TileCoord::new(x, 4)).unwrap().m5 & 0x0F,
@@ -862,15 +922,15 @@ mod tests {
         }
         let line = drag_line_tiles(Some(&sim.state.map), BuildMenuAction::Road, (8, 6), (11, 8));
         assert_eq!(line, vec![(8, 6), (9, 6), (10, 6), (11, 6)]);
-        let (changed, err) = apply_drag_action(
+        let report = apply_drag_action(
             &mut sim,
             BuildMenuAction::Road,
             line,
             &StationBuildState::default(),
             None,
         );
-        assert!(changed);
-        assert!(err.is_none());
+        assert!(report.applied > 0);
+        assert!(report.rejected.is_empty(), "{report:?}");
         for x in 8..=11 {
             assert_eq!(
                 sim.state.map.get(TileCoord::new(x, 6)).unwrap().m5 & 0x0F,
@@ -883,6 +943,78 @@ mod tests {
     fn subsample_drag_tiles_density_4() {
         let line: Vec<(i32, i32)> = (0..12).map(|x| (x, 0)).collect();
         assert_eq!(subsample_drag_tiles(&line, 4), vec![(0, 0), (4, 0), (8, 0)]);
+    }
+
+    #[test]
+    fn partial_transport_build_keeps_every_rejection_and_real_cost() {
+        for action in [
+            BuildMenuAction::RoadX,
+            BuildMenuAction::TramX,
+            BuildMenuAction::RailX,
+        ] {
+            let mut sim = SimWorld {
+                state: GameState::new(8, 8),
+                loaded_file: false,
+                ottdmap_extras: None,
+            };
+            openttdrs_core::map::make_water_tile(
+                &mut sim.state.map,
+                TileCoord::new(3, 3),
+                openttdrs_core::map::WaterClass::Sea,
+            )
+            .unwrap();
+            let before = sim.state.economy.money;
+            let report = apply_drag_action(
+                &mut sim,
+                action,
+                vec![(2, 3), (3, 3), (4, 3)],
+                &StationBuildState::default(),
+                None,
+            );
+            assert_eq!(report.applied, 2, "{action:?}: {report:?}");
+            assert_eq!(report.rejected.len(), 1);
+            assert_eq!(report.rejected[0].0, Some(TileCoord::new(3, 3)));
+            assert_eq!(report.cost, before - sim.state.economy.money);
+            assert!(report.cost > 0);
+            assert_eq!(
+                sim.state.map.get_kind(TileCoord::new(3, 3)),
+                Some(TileKind::Water)
+            );
+            assert!(report.message().contains("(3,3)"));
+            assert!(report.message().contains("agua"));
+        }
+    }
+
+    #[test]
+    fn all_rejected_and_queued_builds_do_not_claim_success_or_spending() {
+        let mut sim = SimWorld {
+            state: GameState::new(8, 8),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        sim.state.economy.money = 0;
+        // Synchronize the company mirror after directly preparing the fixture.
+        sim.state.prepare_player_command();
+        let before = sim.state.save_json().unwrap();
+        let report = apply_drag_action(
+            &mut sim,
+            BuildMenuAction::RoadX,
+            vec![(2, 3), (3, 3)],
+            &StationBuildState::default(),
+            None,
+        );
+        assert_eq!(report.applied, 0);
+        assert_eq!(report.rejected.len(), 2);
+        assert_eq!(report.cost, 0);
+        assert_eq!(sim.state.save_json().unwrap(), before);
+        let queued = DragBuildReport {
+            applied: 2,
+            queued: true,
+            ..Default::default()
+        };
+        assert!(queued.message().contains("pendientes"));
+        assert!(!queued.message().contains("aplicadas"));
+        assert!(!queued.message().contains("Gasto"));
     }
 
     #[test]
@@ -905,10 +1037,10 @@ mod tests {
             ..Default::default()
         };
         let line: Vec<(i32, i32)> = (1..=12).map(|x| (x, 2)).collect();
-        let (changed, err) =
+        let report =
             apply_drag_action(&mut sim, BuildMenuAction::RailSignals, line, &station, None);
-        assert!(changed, "{err:?}");
-        assert!(err.is_none());
+        assert_eq!(report.applied, 3);
+        assert!(report.rejected.is_empty(), "{report:?}");
         let signaled: Vec<_> = (1..=12)
             .filter(|&x| {
                 let t = sim.state.map.get(TileCoord::new(x, 2)).unwrap();

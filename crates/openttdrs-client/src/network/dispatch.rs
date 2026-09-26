@@ -37,6 +37,11 @@ pub fn player_command_revision() -> u64 {
     PLAYER_COMMAND_REVISION.load(Ordering::Relaxed)
 }
 
+/// Client-only dispatch proposes commands; it does not confirm construction.
+pub fn player_commands_are_proposals() -> bool {
+    DISPATCH.read().is_ok_and(|g| g.role == NetworkRole::Client)
+}
+
 pub(super) fn install_offline() {
     if let Ok(mut g) = DISPATCH.write() {
         *g = DispatchState::default();

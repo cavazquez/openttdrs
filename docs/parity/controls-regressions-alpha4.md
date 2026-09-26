@@ -14,7 +14,7 @@ revisión local. No incluye nuevos atajos, cambios de preferencias ni release.
   conservar el clic contextual y diferenciarlo del arrastre en pantalla.
 - BUILD-01 — completado: al soltar se usa el extremo actual, no el del frame
   anterior; cancelar y perder foco no confirman obras involuntarias.
-- BUILD-02 — pendiente: construcción parcial informa teselas rechazadas y
+- BUILD-02 — completado: construcción parcial informa teselas rechazadas y
   causas, conserva las válidas y muestra el gasto real.
 - POSE-01 — pendiente: avión usa posición física en todas las fases; igualdad
   a alpha cero y continuidad entre ticks sin modificar simulación.
@@ -64,6 +64,26 @@ MouseWheel real avanza exactamente un paso sin mover ni ampliar el mapa.
 Guardado/minimapa capturan aunque no haya un botón hovered; ocultar UI libera
 la rueda. Cuatro tests nuevos, suite cliente 1.643 aprobados/dos ignores,
 Clippy --all-targets -D warnings, formato, docs y diff aprobados.
+
+### BUILD-02
+
+DragBuildReport conserva cada rechazo con coordenada/causa, acciones aceptadas
+y diferencia real de saldo. El toast no desaparece porque otra tesela sí se
+construyó: muestra conteos, gasto neto y hasta tres rechazos para mantenerlo
+legible. Comandos de área cuentan como una acción, no como múltiples teselas
+supuestamente construidas. Cliente de red muestra solicitudes pendientes,
+no construcción ni costo confirmado. La política sigue siendo parcial.
+
+Regresiones de carretera/tranvía/vía con agua en medio: dos acciones aplicadas,
+un rechazo, coordenada (3,3), causa y costo exactos. Presupuesto para una sola
+tesela conserva ambos rechazos restantes; presupuesto cero conserva el
+snapshot normalizado. El test ECS de confirmación verifica el mensaje final.
+
+La prueba integrada de señales reveló densidad aplicada dos veces (preview
+y ejecución): ahora se ejecuta el path completo con un solo muestreo. Preview
+y resultado coinciden exactamente en [1,5,9], densidad cuatro.
+Suite cliente: 1.654 aprobados/dos ignores; Clippy --all-targets -D warnings,
+formato, docs y diff aprobados. No se modificaron reglas de simulación.
 La clasificación de clic frente a arrastre derecho queda en INPUT-02.
 
 ### INPUT-02

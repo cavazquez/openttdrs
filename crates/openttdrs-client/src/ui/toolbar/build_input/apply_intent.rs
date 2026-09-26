@@ -11,7 +11,7 @@ use crate::settings::ClientPreferences;
 use crate::state::{OrderPickState, SimWorld};
 use crate::ui::hud::{
     HudBuildFeedback, SelectedTileInfo, enqueue_build_place_flash, push_build_command_error,
-    push_object_slope_error, push_station_slope_error,
+    push_hud_feedback, push_object_slope_error, push_station_slope_error,
 };
 use crate::ui::industry_panel::IndustryPanelState;
 use crate::ui::toolbar::bridge_window::{BridgeBuildState, PendingBridge};
@@ -466,16 +466,35 @@ fn confirm_drag_placement(
         return;
     }
 
-    let tiles = std::mem::take(&mut drag_state.pending_tiles);
+    let mut tiles = std::mem::take(&mut drag_state.pending_tiles);
+    // The preview already spaces signals. Dispatch needs the full path so
+    // density is applied exactly once, not twice.
+    if action == BuildMenuAction::RailSignals
+        && let (Some(start), Some(end)) = (drag_state.start_tile, drag_state.last_tile)
+    {
+        tiles = drag_line_tiles_with_rail_bit(
+            Some(&sim.state.map),
+            action,
+            start,
+            end,
+            drag_state.rail_lane_bit,
+        );
+    }
     let remap_tiles = tiles_for_visual_remap(Some(&sim.state.map), action, build_pos, &tiles);
     let lane = drag_state.rail_lane_bit;
-    let (changed, err) = apply_drag_action(sim, action, tiles, station_state, lane);
+    let report = apply_drag_action(sim, action, tiles, station_state, lane);
     cancel_placement(drag_state);
-    if changed {
+    if report.applied > 0 {
         let (mw, mh) = sim.state.map.dimensions();
         request_map_visual_remap_with_labels(pending, mw, mh, &remap_tiles);
-    } else if let Some(e) = err {
-        push_build_command_error(hud_feedback, e, time_secs);
+    }
+    if report.applied > 0 || !report.rejected.is_empty() {
+        push_hud_feedback(
+            hud_feedback,
+            report.message(),
+            time_secs,
+            !report.rejected.is_empty(),
+        );
     }
 }
 
@@ -621,6 +640,88 @@ mod tests {
         assert_eq!(map.get_kind(TileCoord::new(2, 3)), Some(TileKind::Road));
         assert_eq!(map.get_kind(TileCoord::new(0, 0)), Some(TileKind::Grass));
         assert_eq!(map.get_kind(TileCoord::new(3, 3)), Some(TileKind::Grass));
+    }
+
+    #[test]
+    fn partial_build_feedback_remains_visible_after_successful_tiles() {
+        let mut world = v1_orders_world();
+        start_road_drag(&mut world);
+        let before = world.resource::<SimWorld>().state.economy.money;
+        openttdrs_core::map::make_water_tile(
+            &mut world.resource_mut::<SimWorld>().state.map,
+            TileCoord::new(3, 3),
+            openttdrs_core::map::WaterClass::Sea,
+        )
+        .unwrap();
+        apply_v1_intent(
+            &mut world,
+            MapClickIntent::ConfirmDrag {
+                end_tile: Some((5, 3)),
+                signal_tap: false,
+            },
+        );
+        let feedback = world.resource::<HudBuildFeedback>();
+        let message = feedback.message.as_deref().unwrap();
+        assert!(
+            message.contains("4 acciones aplicadas; 1 rechazadas"),
+            "{message}"
+        );
+        assert!(message.contains("(3,3)"));
+        assert!(message.contains("agua"));
+        let cost = before - world.resource::<SimWorld>().state.economy.money;
+        assert!(message.contains(&format!("Gasto neto: ${cost}.")));
+        assert!(feedback.pending_soft_ping);
+    }
+
+    #[test]
+    fn signal_drag_confirmation_applies_preview_density_only_once() {
+        let mut world = v1_orders_world();
+        world.resource_mut::<SimWorld>().state = GameState::new(16, 8);
+        for x in 1..=12 {
+            openttdrs_core::apply_command(
+                &mut world.resource_mut::<SimWorld>().state,
+                &Command::SetRailBits(TileCoord::new(x, 2), 0x01),
+            )
+            .unwrap();
+        }
+        world.resource_mut::<StationBuildState>().signal_density = 4;
+        apply_v1_intent(
+            &mut world,
+            MapClickIntent::StartDrag {
+                action: BuildMenuAction::RailSignals,
+                start_tile: (1, 2),
+                rail_lane_bit: None,
+                signal_drag_fract: Some((128, 128)),
+                press_world_pos: Vec2::ZERO,
+            },
+        );
+        apply_v1_intent(
+            &mut world,
+            MapClickIntent::UpdateDrag {
+                end_tile: (12, 2),
+                signal_tap: false,
+            },
+        );
+        assert_eq!(
+            world.resource::<DragBuildState>().pending_tiles,
+            vec![(1, 2), (5, 2), (9, 2)]
+        );
+        apply_v1_intent(
+            &mut world,
+            MapClickIntent::ConfirmDrag {
+                end_tile: Some((12, 2)),
+                signal_tap: false,
+            },
+        );
+        let map = &world.resource::<SimWorld>().state.map;
+        let signaled: Vec<_> = (1..=12)
+            .filter(|&x| {
+                openttdrs_core::rail_signals::rail_tile_is_signals(
+                    map.get(TileCoord::new(x, 2)).unwrap().m5,
+                )
+            })
+            .collect();
+        assert_eq!(signaled, vec![1, 5, 9]);
     }
 
     #[test]

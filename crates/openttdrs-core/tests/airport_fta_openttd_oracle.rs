@@ -1,7 +1,7 @@
 //! Fixture FTA de aeropuerto real de `OpenTTD` 15.3 (Helidepot): import +
 //! comparación con oráculo (issue #198).
 //!
-//! El estado *inicial* y la secuencia dinámica de `pos`/`state`/`z_pos` se
+//! El estado *inicial* y la secuencia dinámica de `pos`/`state`/`z_pos`/`direction` se
 //! comparan contra el oráculo. El comparador Python también exige `x_pos`/`y_pos`
 //! físicos cuando ambas trazas los publican. El vuelo libre posterior al
 //! despegue conserva todavía un contrato separado y no se usa para declarar
@@ -192,7 +192,7 @@ fn initial_state_matches_openttd_oracle_strongly() {
 }
 
 /// Recorre los ticks del oráculo y exige igualdad en la secuencia dinámica
-/// `pos`/`state`/`z_pos` del FTA.
+/// `pos`/`state`/`z_pos`/`direction` del FTA.
 #[test]
 fn tick_sequence_matches_oracle_for_fta_and_flight_level() {
     let oracle = load_oracle();
@@ -220,6 +220,10 @@ fn tick_sequence_matches_oracle_for_fta_and_flight_level() {
             heli.z_pos.map_or(0, i32::from),
             expected.z_pos,
             "z_pos en tick {tick} (índice {i})"
+        );
+        assert_eq!(
+            heli.direction, expected.direction,
+            "direction en tick {tick} (índice {i})"
         );
     }
 }

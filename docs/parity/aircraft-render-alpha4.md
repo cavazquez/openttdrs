@@ -17,7 +17,7 @@ acotados; no certifican paridad completa de vuelo ni sustituyen V1-AIR.
 - **MENU-POS — pendiente:** posición fraccional para aviones/barcos, con
   continuidad en fronteras de tesela. Tolerancia numérica explícita de
   `0,001` unidades de mundo; comprobar 0,12×/0,25×/0,50×/1,00×.
-- **AIR-ORACLE — pendiente:** comparar `direction` por tick con la traza
+- **AIR-ORACLE — completado:** comparar `direction` por tick con la traza
   Helidepot de OpenTTD 15.3 existente. Cero diferencias, sin cambiar el golden
   ni relajar umbrales; no extender el resultado a todos los aeropuertos.
 - **ALPHA4 — pendiente:** formato, Clippy, tests, CI, paquetes y smoke sobre
@@ -50,3 +50,11 @@ warnings`, suite completa core, `aircraft_render_heading` (2),
 `airport_fta_openttd_oracle` (4), `v1_air_delivery` (1), checker de documentación
 y `git diff --check`. Se conservan los seis ignores explícitos preexistentes
 del core; no se cuentan como pruebas ejecutadas.
+
+### AIR-ORACLE
+
+La regresión de `airport_fta_openttd_oracle` exige ahora igualdad exacta de
+dirección en cada tick de la traza Helidepot 15.3, además de nodo, estado y
+altura. Pasaron los cuatro tests sin tocar el golden ni el controlador.
+Comparte la validación completa core de AIR-POSE; no certifica vuelo libre
+universal ni otros layouts de aeropuerto.

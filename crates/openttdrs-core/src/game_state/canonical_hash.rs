@@ -103,13 +103,14 @@ fn hash_value(value: &Value, hasher: &mut Fnv1a64) {
         }
         Value::Object(map) => {
             hasher.write_u8(5);
-            let mut keys: Vec<&String> = map.keys().collect();
-            keys.sort_unstable();
-            hasher.write_u64(keys.len() as u64);
-            for key in keys {
+            // serde_json's default object map is BTreeMap-backed, so iteration
+            // is already lexicographic. Avoid allocating and sorting a second
+            // key list on every canonical hash (including every lockstep tick).
+            hasher.write_u64(map.len() as u64);
+            for (key, value) in map {
                 hasher.write_u64(key.len() as u64);
                 hasher.write_bytes(key.as_bytes());
-                hash_value(&map[key], hasher);
+                hash_value(value, hasher);
             }
         }
     }
@@ -190,6 +191,24 @@ mod tests {
         let a = GameState::new(8, 8);
         let b = GameState::new(8, 8);
         assert_eq!(a.canonical_hash(), b.canonical_hash());
+    }
+
+    #[test]
+    fn object_hash_is_independent_of_key_insertion_order() {
+        let mut forward = serde_json::Map::new();
+        forward.insert("alpha".to_owned(), Value::from(1));
+        forward.insert("omega".to_owned(), Value::from(2));
+
+        let mut reverse = serde_json::Map::new();
+        reverse.insert("omega".to_owned(), Value::from(2));
+        reverse.insert("alpha".to_owned(), Value::from(1));
+
+        let mut forward_hasher = Fnv1a64::new();
+        hash_value(&Value::Object(forward), &mut forward_hasher);
+        let mut reverse_hasher = Fnv1a64::new();
+        hash_value(&Value::Object(reverse), &mut reverse_hasher);
+
+        assert_eq!(forward_hasher.finish(), reverse_hasher.finish());
     }
 
     #[test]

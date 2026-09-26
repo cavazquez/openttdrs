@@ -262,14 +262,20 @@ fn previous_tile_on_route(
 }
 
 /// Extrapola la pose entre ticks de sim. En carretera avanza el frame continuo
-/// de la tabla. Aeronaves mantienen la posición física confirmada por su
-/// controlador: una ruta lógica no representa su movimiento subtesela.
+/// de la tabla. Aeronaves y barcos con coordenadas físicas mantienen la
+/// posición confirmada por su controlador: una ruta lógica no representa
+/// su movimiento subtesela. Nunca combinar tesela extrapolada y subtesela
+/// física del tick actual.
 #[must_use]
 #[allow(clippy::cast_precision_loss)]
 pub fn extrapolate_vehicle_pose(v: &Vehicle, alpha: f32) -> VehiclePose {
     let mut pose = VehiclePose::from_vehicle(v);
     let alpha = alpha.clamp(0.0, 1.0);
-    if alpha <= 0.0 || !v.running || v.kind == VehicleKind::Aircraft {
+    if alpha <= 0.0
+        || !v.running
+        || v.kind == VehicleKind::Aircraft
+        || (v.kind == VehicleKind::Ship && v.ship_pos_valid)
+    {
         return pose;
     }
     if matches!(

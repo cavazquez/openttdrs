@@ -314,3 +314,43 @@ fn v1_ship_delivers_paid_coal_via_buoy_deterministically() {
         "dos ejecuciones del mismo log deben conservar eventos y hash canónico"
     );
 }
+
+#[test]
+#[allow(clippy::cast_precision_loss)]
+fn ship_render_tile_and_subtile_share_physical_position_for_entire_route() {
+    let mut state = configured_ship_route();
+    let mut samples = 0;
+    let mut tile_crossings = 0;
+    let mut previous = ship(&state).pos;
+    for elapsed in 1..=MAX_ROUTE_TICKS {
+        state.step();
+        let vessel = ship(&state);
+        if !vessel.ship_pos_valid {
+            continue;
+        }
+        samples += 1;
+        tile_crossings += usize::from(vessel.pos != previous);
+        previous = vessel.pos;
+        for alpha in [0.0, 0.5, 0.8382349, 0.83823586, 1.0] {
+            let pose = openttdrs_core::extrapolate_vehicle_pose(vessel, alpha);
+            let (x, y) =
+                openttdrs_core::vehicle_subtile_at_with_map(vessel, pose, Some(&state.map));
+            assert_eq!(
+                (pose.pos.x as f32 * 16.0 + x, pose.pos.y as f32 * 16.0 + y),
+                (vessel.ship_x as f32, vessel.ship_y as f32),
+                "tick={elapsed} alpha={alpha}"
+            );
+            assert_eq!(
+                openttdrs_core::vehicle_render_direction_at_with_map(
+                    vessel,
+                    pose,
+                    Some(&state.map)
+                ),
+                vessel.ship_rotation & 7
+            );
+        }
+    }
+    assert_eq!(samples, MAX_ROUTE_TICKS);
+    assert!(tile_crossings > 10, "exercise actual tile boundaries");
+    assert!(state.stats.cargo_units_final_delivered > 0);
+}

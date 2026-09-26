@@ -96,7 +96,9 @@ paquetes y evidencia de aceptación según corresponda. El [manifiesto]
 AIR-POSE, MENU-DIR, MENU-POS y AIR-ORACLE están resueltos en el
 [contrato del corte](aircraft-render-alpha4.md). Antes de ALPHA4, el usuario
 autorizó las siete correcciones de [controles y poses](controls-regressions-alpha4.md),
-empezando por BUILD-03. Nuevos atajos y publicación quedan fuera de ese bloque.
+ahora cerradas en sus fixtures y límites documentados, con regresiones locales.
+Nuevos atajos y publicación quedan fuera de ese bloque; CI remota y ALPHA4
+se certifican por separado sobre su SHA candidata.
 
 El agregador #603 sigue siendo fail-closed: sin 20 resultados explícitos para
 la misma SHA, su salida es `not-run`, no verde. Eso impide inferir una

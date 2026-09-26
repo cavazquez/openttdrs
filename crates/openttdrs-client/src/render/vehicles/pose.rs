@@ -335,6 +335,36 @@ mod physical_position_tests {
     use super::*;
 
     #[test]
+    fn ship_anchor_does_not_jump_at_fractional_tile_thresholds() {
+        let state = GameState::new(32, 32);
+        let mut ship = Vehicle::new(
+            1,
+            VehicleKind::Ship,
+            TileCoord::new(5, 5),
+            TileCoord::new(10, 5),
+        );
+        ship.ship_pos_valid = true;
+        ship.ship_x = 5 * 16 + 15;
+        ship.ship_y = 5 * 16 + 1;
+        ship.cur_speed = 200;
+        ship.progress = 254;
+        ship.running = true;
+        ship.path = [TileCoord::new(6, 5)].into();
+        let physical_anchor = road_vehicle_tile_anchor(5, 5, 15.0, 1.0, 0.0);
+        for scale in [1.0, 2.0, 4.0, 8.0] {
+            for step in 0..=1024_u16 {
+                let alpha = f32::from(step) / 1024.0;
+                let pose = vehicle_pose_for_construction(&ship, alpha, state.construction);
+                let (anchor, _, _, _) = vehicle_draw_anchor_from_pose(&ship, &state.map, pose);
+                assert!(
+                    (anchor / scale - physical_anchor / scale).length() <= 0.001,
+                    "scale={scale} alpha={alpha}: {anchor:?} != {physical_anchor:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn aircraft_anchor_keeps_physical_subtile_at_four_zooms() {
         let state = GameState::new(32, 32);
         let mut plane = Vehicle::new(

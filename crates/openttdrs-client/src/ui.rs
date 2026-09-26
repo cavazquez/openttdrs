@@ -7,6 +7,9 @@ use bevy::text::EditableText;
 
 mod lifecycle;
 mod plugins;
+mod pointer;
+
+pub(crate) use pointer::PointerCapture;
 
 mod ai_settings_window;
 pub(crate) mod audio_settings_window;

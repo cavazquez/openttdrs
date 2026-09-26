@@ -12,7 +12,7 @@ use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, clamp_ortho_scale, large_map_viewport_cull_enabled,
 };
 use crate::state::{ClientScreen, SimWorld};
-use crate::ui::KeyboardCapture;
+use crate::ui::{KeyboardCapture, PointerCapture};
 
 /// Paneo con botón derecho: factor × `OrthographicProjection::scale` × delta en píxeles.
 const PAN_RMB_SCALE: f32 = 1.35;
@@ -433,6 +433,7 @@ pub fn move_camera(
     sim: Res<SimWorld>,
     zoom_mode: Option<Res<ZoomMode>>,
     keyboard_capture: KeyboardCapture,
+    pointer_capture: PointerCapture,
     mut cam_q: Query<
         (&mut Transform, &mut Projection),
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
@@ -457,9 +458,10 @@ pub fn move_camera(
 
     let dt = presentation_delta_secs(&time);
     let keyboard_captured = keyboard_capture.active();
+    let pointer_captured = pointer_capture.active();
 
     // Arrastre con botón derecho (inmediato, sin inercia)
-    if mouse.pressed(MouseButton::Right) && motion.delta != Vec2::ZERO {
+    if !pointer_captured && mouse.pressed(MouseButton::Right) && motion.delta != Vec2::ZERO {
         let s = proj.scale * PAN_RMB_SCALE;
         transform.translation.x -= motion.delta.x * s;
         transform.translation.y += motion.delta.y * s;
@@ -527,7 +529,7 @@ pub fn move_camera(
     }
 
     // Zoom con rueda del ratón hacia la posición del cursor
-    if scroll.delta.y.abs() > 0.0 {
+    if !pointer_captured && scroll.delta.y.abs() > 0.0 {
         let Ok(window) = windows.single() else {
             return;
         };

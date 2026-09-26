@@ -424,6 +424,66 @@ mod tests {
     use super::scroll_limit_from_sizes;
 
     #[test]
+    #[allow(clippy::unwrap_used)]
+    fn list_wheel_scrolls_once_without_zooming_the_map() {
+        use super::*;
+        use bevy::ecs::system::RunSystemOnce;
+        use bevy::input::mouse::AccumulatedMouseScroll;
+        let (mut world, camera) = crate::ui::pointer::tests::camera_world(1.0);
+        let content = world
+            .spawn(ComputedNode {
+                size: Vec2::new(100.0, 300.0),
+                ..default()
+            })
+            .id();
+        let viewport = world
+            .spawn((
+                Node::default(),
+                ClassicScrollViewport,
+                Interaction::Hovered,
+                ScrollPosition::default(),
+                ComputedNode {
+                    size: Vec2::new(100.0, 100.0),
+                    ..default()
+                },
+            ))
+            .id();
+        world.entity_mut(viewport).add_child(content);
+        let window = world
+            .query_filtered::<Entity, With<bevy::window::PrimaryWindow>>()
+            .single(&world)
+            .unwrap();
+        world.init_resource::<Messages<MouseWheel>>();
+        world
+            .resource_mut::<Messages<MouseWheel>>()
+            .write(MouseWheel {
+                unit: MouseScrollUnit::Line,
+                x: 0.0,
+                y: -1.0,
+                window,
+                phase: bevy::input::touch::TouchPhase::Moved,
+            });
+        world.insert_resource(AccumulatedMouseScroll {
+            unit: MouseScrollUnit::Line,
+            delta: Vec2::NEG_Y,
+        });
+        world.run_system_once(crate::camera::move_camera).unwrap();
+        world.run_system_once(scroll_with_wheel).unwrap();
+        assert_eq!(
+            world.get::<ScrollPosition>(viewport).unwrap().y,
+            SCROLL_STEP
+        );
+        let Projection::Orthographic(proj) = world.get::<Projection>(camera).unwrap() else {
+            panic!()
+        };
+        assert_eq!(proj.scale, 1.0);
+        assert_eq!(
+            world.get::<Transform>(camera).unwrap().translation,
+            Vec3::ZERO
+        );
+    }
+
+    #[test]
     fn scroll_limit_is_never_negative() {
         assert_eq!(scroll_limit_from_sizes(100.0, 80.0), 0.0);
         assert_eq!(scroll_limit_from_sizes(100.0, 280.0), 180.0);

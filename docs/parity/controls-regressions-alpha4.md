@@ -8,7 +8,7 @@ revisión local. No incluye nuevos atajos, cambios de preferencias ni release.
 - BUILD-03 — completado: carretera sin fondos no modifica mapa/saldo/propiedad;
   preview y ejecución coinciden para presupuesto cero, exacto y costo menos
   uno, incluyendo autoslope. No prohíbe otros saldos negativos de simulación.
-- INPUT-01 — pendiente: rueda/paneo pertenecen a UI o mapa, nunca ambos;
+- INPUT-01 — completado: rueda/paneo pertenecen a UI o mapa, nunca ambos;
   modales, ventanas y listas no dejan pasar gestos de cámara.
 - INPUT-02 — pendiente: arrastrar con derecho no rota ni cancela herramientas;
   conservar el clic contextual y diferenciarlo del arrastre en pantalla.
@@ -48,3 +48,20 @@ construida y dos intactas. El aviso de obra parcial pertenece a BUILD-02.
 Validación: suites completas core y cliente (1.639 aprobados, dos ignores
 preexistentes en cliente), Clippy core/cliente --all-targets -D warnings,
 formato, checker documental y diff. No se cambió ningún golden ni presupuesto.
+
+### INPUT-01
+
+La política compartida PointerCapture bloquea rueda y paneo de cámara sobre
+UI interactiva, minimapa visible, guardado, consola y modales. No consume
+los eventos de rueda: las listas conservan su desplazamiento. Nodos ocultos
+no retienen captura. La referencia conceptual es el despacho al viewport o
+ventana bajo el puntero en OpenTTD 15.3 (`window.cpp`, DispatchMouseWheelEvent).
+
+Se conservaron como regresiones los diagnósticos de la auditoría: un modal
+o UI bajo el mouse antes cambiaban escala de 1 a 0,5. Ahora la cámara queda
+idéntica en los seis zooms; además, la prueba con ClassicScrollViewport y un
+MouseWheel real avanza exactamente un paso sin mover ni ampliar el mapa.
+Guardado/minimapa capturan aunque no haya un botón hovered; ocultar UI libera
+la rueda. Cuatro tests nuevos, suite cliente 1.643 aprobados/dos ignores,
+Clippy --all-targets -D warnings, formato, docs y diff aprobados.
+La clasificación de clic frente a arrastre derecho queda en INPUT-02.

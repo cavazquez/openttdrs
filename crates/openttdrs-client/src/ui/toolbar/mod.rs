@@ -10,6 +10,7 @@ pub(crate) mod editor_toolbar;
 mod icons;
 mod layout;
 mod minimap;
+pub(crate) use minimap::minimap_contains_cursor;
 mod object_picker_window;
 mod order_panel;
 mod orders_cursor;

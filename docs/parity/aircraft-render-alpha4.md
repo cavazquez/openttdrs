@@ -14,7 +14,7 @@ acotados; no certifican paridad completa de vuelo ni sustituyen V1-AIR.
 - **MENU-DIR — completado:** deducir el rumbo de la trayectoria decorativa,
   no de constantes S/N. Cero discrepancias en ambas direcciones de las
   rutas; inversión coherente al volver.
-- **MENU-POS — pendiente:** posición fraccional para aviones/barcos y conversión
+- **MENU-POS — completado:** posición fraccional para aviones/barcos y conversión
   correcta de fracciones de tesela a píxeles en el mismo helper terrestre, con
   continuidad en fronteras de tesela. Tolerancia numérica explícita de
   `0,001` unidades de mundo; comprobar 0,12×/0,25×/0,50×/1,00×.
@@ -71,3 +71,18 @@ instantánea, sin prometer un giro físico de aeronave.
 Pasaron seis tests del intro, Clippy cliente `--all-targets -D warnings`,
 la suite de cliente (1.635 aprobados, dos ignores preexistentes), formato y
 diff. La revisión gráfica del candidato se conserva en ALPHA4.
+
+### MENU-POS
+
+Se corrige la unidad del helper terrestre (16 píxeles por tesela, no una
+fracción 0–1), se conserva el desplazamiento fraccional de barcos/aviones y
+el exceso de recorrido al invertir una ruta, incluso tras varios recorridos
+en un frame. La prueba de interpolación falló antes del arreglo en la primera
+ruta de autobús. Después pasaron las doce rutas, cruces de tesela, cuatro
+zooms y avance grande frente a 22 pasos pequeños, con tolerancia máxima de
+`0,001` unidades de mundo. No se relajó la tolerancia.
+
+Validación: nueve tests del intro; suite cliente completa con 1.638 aprobados
+y dos ignores preexistentes; Clippy cliente `--all-targets -D warnings` y
+formato. No se confunde esta comprobación geométrica con paridad visual
+global ni con una simulación física del menú.

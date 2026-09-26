@@ -317,12 +317,16 @@ fn actor_world_pos(map: &Map, actor: &MainMenuIntroTrafficActor) -> Vec3 {
     let ty_f = from_y as f32 + (to_y - from_y) as f32 * t;
     let tile_x = tx_f.floor() as i32;
     let tile_y = ty_f.floor() as i32;
-    let sub_x = tx_f - tile_x as f32;
-    let sub_y = ty_f - tile_y as f32;
+    // El ancla usa píxeles OpenTTD (16 por tesela), no fracciones 0..1.
+    let sub_x = (tx_f - tile_x as f32) * 16.0;
+    let sub_y = (ty_f - tile_y as f32) * 16.0;
     let height = tile_min_z(map, TileCoord::new(tile_x, tile_y));
     let base = tile_pos(tile_x, tile_y, height, 1.0);
     let (x, y) = match actor.kind {
-        IntroVehicleKind::Ship | IntroVehicleKind::Aircraft => (base.x, base.y),
+        IntroVehicleKind::Ship | IntroVehicleKind::Aircraft => {
+            let offset = road_vehicle_tile_anchor(0, 0, sub_x, sub_y, 0.0);
+            (base.x + offset.x, base.y + offset.y)
+        }
         IntroVehicleKind::Bus
         | IntroVehicleKind::Truck
         | IntroVehicleKind::Train
@@ -342,16 +346,20 @@ pub(crate) fn animate_main_menu_intro_traffic(
 ) {
     let dt = time.delta_secs();
     for (mut actor, mut transform, mut sprite) in &mut q {
-        actor.progress += actor.speed * dt;
-        if actor.progress >= 1.0 {
-            actor.progress -= 1.0;
-            let (new_from, new_to) = (actor.to, actor.from);
-            actor.from = new_from;
-            actor.to = new_to;
-            actor.direction = reverse_intro_direction(actor.direction);
-        }
+        advance_intro_actor(&mut actor, dt);
         transform.translation = actor_world_pos(&map.0, &actor);
         sprite.image = intro_sprite_handle(&trucks, &actor);
+    }
+}
+
+fn advance_intro_actor(actor: &mut MainMenuIntroTrafficActor, dt: f32) {
+    // Dos tramos completan el ciclo de ida/vuelta. Conservar el resto incluso
+    // si un frame largo cruza varios extremos; no recortar a una tesela final.
+    actor.progress = (actor.progress + actor.speed * dt).rem_euclid(2.0);
+    if actor.progress >= 1.0 {
+        actor.progress -= 1.0;
+        std::mem::swap(&mut actor.from, &mut actor.to);
+        actor.direction = reverse_intro_direction(actor.direction);
     }
 }
 
@@ -449,6 +457,84 @@ mod tests {
                 intro_route_direction(route.to, route.from),
                 reverse_intro_direction(expected),
             );
+        }
+    }
+
+    fn test_actor(
+        route: &super::IntroTrafficRoute,
+        progress: f32,
+    ) -> super::MainMenuIntroTrafficActor {
+        super::MainMenuIntroTrafficActor {
+            from: route.from,
+            to: route.to,
+            progress,
+            speed: route.speed,
+            direction: intro_route_direction(route.from, route.to),
+            kind: route.kind,
+        }
+    }
+
+    #[test]
+    fn intro_traffic_interpolates_fractional_tiles_at_all_qa_zooms() {
+        let map = openttdrs_core::Map::new_flat(64, 64, 1);
+        for route in INTRO_TRAFFIC_ROUTES {
+            let start = super::actor_world_pos(&map, &test_actor(&route, 0.0)).truncate();
+            let end = super::actor_world_pos(&map, &test_actor(&route, 1.0)).truncate();
+            for progress in [0.001, 0.1, 0.37, 0.5, 0.73, 0.999] {
+                let actual = super::actor_world_pos(&map, &test_actor(&route, progress)).truncate();
+                for zoom in [0.12, 0.25, 0.5, 1.0] {
+                    let expected = start.lerp(end, progress) * zoom;
+                    assert!(
+                        (actual * zoom).distance(expected) <= 0.001 * zoom,
+                        "ruta {:?}->{:?}, progreso {progress}, zoom {zoom}: no debe truncar teselas ni confundir fracciones con píxeles",
+                        route.from,
+                        route.to,
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn intro_traffic_is_continuous_across_tile_boundaries() {
+        let map = openttdrs_core::Map::new_flat(64, 64, 1);
+        for route in INTRO_TRAFFIC_ROUTES {
+            let start = super::actor_world_pos(&map, &test_actor(&route, 0.0)).truncate();
+            let end = super::actor_world_pos(&map, &test_actor(&route, 1.0)).truncate();
+            let boundary = 1.0 / (route.to.0 - route.from.0).abs() as f32;
+            let before =
+                super::actor_world_pos(&map, &test_actor(&route, boundary - 0.000_001)).truncate();
+            let after =
+                super::actor_world_pos(&map, &test_actor(&route, boundary + 0.000_001)).truncate();
+            let expected_delta = (end - start) * 0.000_002;
+            assert!((after - before).distance(expected_delta) <= 0.001);
+        }
+    }
+
+    #[test]
+    fn intro_traffic_preserves_overshoot_across_multiple_turnarounds() {
+        let map = openttdrs_core::Map::new_flat(64, 64, 1);
+        for route in INTRO_TRAFFIC_ROUTES {
+            let mut large_step = test_actor(&route, 0.9);
+            let mut small_steps = large_step;
+            let dt = 2.2 / route.speed;
+            super::advance_intro_actor(&mut large_step, dt);
+            for _ in 0..22 {
+                super::advance_intro_actor(&mut small_steps, dt / 22.0);
+            }
+            assert!(
+                super::actor_world_pos(&map, &large_step)
+                    .truncate()
+                    .distance(super::actor_world_pos(&map, &small_steps).truncate())
+                    <= 0.001,
+            );
+            assert_eq!(large_step.from, route.to);
+            assert_eq!(large_step.to, route.from);
+            assert_eq!(
+                large_step.direction,
+                intro_route_direction(route.to, route.from)
+            );
+            assert!((large_step.progress - 0.1).abs() <= 0.000_01);
         }
     }
 

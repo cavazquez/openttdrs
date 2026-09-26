@@ -16,6 +16,7 @@ pub(crate) fn vehicle_pose_for_construction(
 }
 
 use crate::iso::{overlay_pos, road_vehicle_tile_anchor, tile_min_z, tile_slope_and_min_z};
+
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{viewport_insertion_key, viewport_source_depth};
 
@@ -327,4 +328,41 @@ pub(super) fn aircraft_aux_sprite_pos_at_offsets(
         tx,
         ty,
     )
+}
+
+#[cfg(test)]
+mod physical_position_tests {
+    use super::*;
+
+    #[test]
+    fn aircraft_anchor_keeps_physical_subtile_at_four_zooms() {
+        let state = GameState::new(32, 32);
+        let mut plane = Vehicle::new(
+            1,
+            VehicleKind::Aircraft,
+            TileCoord::new(5, 5),
+            TileCoord::new(10, 5),
+        );
+        plane.airport_subpos_valid = true;
+        plane.airport_sub_x = 5 * 16 + 15;
+        plane.airport_sub_y = 5 * 16 + 1;
+        plane.cur_speed = 200;
+        plane.progress = 254;
+        plane.running = true;
+        plane.path = [TileCoord::new(6, 5)].into();
+        let physical_anchor = road_vehicle_tile_anchor(5, 5, 15.0, 1.0, 0.0);
+        for fta in [false, true] {
+            plane.airport_fta_active = fta;
+            for scale in [1.0, 2.0, 4.0, 8.0] {
+                for alpha in [0.0, 0.5, 0.8382349, 0.83823586, 1.0] {
+                    let pose = vehicle_pose_for_construction(&plane, alpha, state.construction);
+                    let (anchor, _, _, _) = vehicle_draw_anchor_from_pose(&plane, &state.map, pose);
+                    assert!(
+                        (anchor / scale - physical_anchor / scale).length() <= 0.001,
+                        "FTA={fta} scale={scale} alpha={alpha}: {anchor:?} != {physical_anchor:?}"
+                    );
+                }
+            }
+        }
+    }
 }

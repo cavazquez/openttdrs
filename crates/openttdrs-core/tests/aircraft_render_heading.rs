@@ -103,6 +103,42 @@ fn aircraft_sprite_keeps_physical_heading_through_complete_flights() {
 }
 
 #[test]
+#[allow(clippy::cast_precision_loss)]
+fn aircraft_render_position_matches_physics_in_airport_and_cruise() {
+    let mut state = air_service();
+    let mut samples = [0; 2];
+    let mut moving_ticks = 0;
+    let mut previous = (0, 0);
+    for elapsed in 1..=10_000 {
+        state.step();
+        let plane = &state.vehicles[0];
+        if !plane.airport_subpos_valid {
+            continue;
+        }
+        samples[usize::from(!plane.airport_fta_active)] += 1;
+        moving_ticks += usize::from(previous != (plane.airport_sub_x, plane.airport_sub_y));
+        previous = (plane.airport_sub_x, plane.airport_sub_y);
+        for alpha in [0.0, 0.5, 0.8382349, 0.83823586, 1.0] {
+            let pose = extrapolate_vehicle_pose(plane, alpha);
+            let (x, y) = openttdrs_core::vehicle_subtile_at_with_map(plane, pose, Some(&state.map));
+            assert_eq!(
+                (pose.pos.x as f32 * 16.0 + x, pose.pos.y as f32 * 16.0 + y),
+                (plane.airport_sub_x as f32, plane.airport_sub_y as f32),
+                "tick={elapsed} alpha={alpha} FTA={}",
+                plane.airport_fta_active
+            );
+        }
+    }
+    assert_eq!(
+        samples,
+        [1835, 8158],
+        "same deterministic physical route as the audit"
+    );
+    assert!(moving_ticks > 1000, "not a stationary-aircraft test");
+    assert!(state.stats.cargo_units_final_delivered > 0);
+}
+
+#[test]
 fn all_aircraft_headings_preserve_physical_direction_and_newgrf_mirroring() {
     let mut plane = Vehicle::new(
         1,

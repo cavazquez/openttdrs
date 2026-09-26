@@ -54,7 +54,7 @@ pub fn vehicle_subtile_at_with_map(
     pose: VehiclePose,
     map: Option<&Map>,
 ) -> (f32, f32) {
-    if v.kind == VehicleKind::Aircraft && v.airport_fta_active && v.airport_subpos_valid {
+    if v.kind == VehicleKind::Aircraft && v.airport_subpos_valid {
         return (
             f32::from(u8::try_from(v.airport_sub_x.rem_euclid(16)).unwrap_or(0)),
             f32::from(u8::try_from(v.airport_sub_y.rem_euclid(16)).unwrap_or(0)),

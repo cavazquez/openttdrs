@@ -16,8 +16,8 @@ revisión local. No incluye nuevos atajos, cambios de preferencias ni release.
   anterior; cancelar y perder foco no confirman obras involuntarias.
 - BUILD-02 — completado: construcción parcial informa teselas rechazadas y
   causas, conserva las válidas y muestra el gasto real.
-- POSE-01 — pendiente: avión usa posición física en todas las fases; igualdad
-  a alpha cero y continuidad entre ticks sin modificar simulación.
+- POSE-01 — completado: avión usa posición física en todas las fases; igualdad
+  a alpha cero y coherencia de tesela/subtesela sin modificar simulación.
 - POSE-02 — pendiente: barco interpola tesela/subtesela coherentemente; no
   salta 16 píxeles al cruzar un umbral de alpha.
 
@@ -120,3 +120,27 @@ evita que la pulsación de la barra quede pendiente y se coma el siguiente
 clic del mapa. Test ECS adicional conserva mapa/saldo, limpia el arrastre y
 libera esa bandera. Validado con suite cliente 1.656 aprobados/dos ignores
 (incluye la regresión de ancla aérea), Clippy, formato, docs y diff.
+
+### POSE-01
+
+El renderer lee airport_sub_x/y siempre que sean válidos, también en crucero.
+No extrapola la tesela de aeronaves usando un path vial: mantiene la última
+posición física confirmada en todos los alphas. Es render a cadencia del tick,
+no un nuevo suavizado entre ticks; evita inventar velocidad/dirección a partir
+de la ruta lógica. Referencia: OpenTTD 15.3 SetAircraftPosition actualiza
+x_pos/y_pos y después UpdatePosition/UpdateViewport.
+
+La regresión falló antes del arreglo en tick 76, alpha cero. Ahora 1.835
+muestras FTA + 8.158 de crucero coinciden exactamente con coordenadas físicas
+en cinco alphas, incluido un par separado por menos de 0,000001. Siete ticks
+sin coordenadas válidas quedan fuera de ese denominador. El avión se mueve,
+regresa al FTA y entrega carga; no es una prueba de vehículo estacionario.
+V1-AIR conserva entrega tick 1.391, ocho pasajeros, ingreso 303 y hash
+14221659823881627150. No se cambió ningún golden.
+
+Ancla real del cliente probada en cuatro zooms, tolerancia 0,001. Capturas
+Xvfb revisadas: /tmp/openttdrs-alpha4-qa-w4CWoB/plane-fixed-{1,2,4,8}.png.
+Son diagnóstico, no prueba de movimiento. Suites completas core/cliente
+(cliente 1.656 aprobados/dos ignores), Clippy de ambos --all-targets,
+formato, docs y diff aprobados. Alcance de vuelo: fixture Dakota/Small;
+no equivale a paridad de todos los modelos/aeropuertos.

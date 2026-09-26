@@ -167,11 +167,19 @@ Cliente: barrido de 1.025 alphas por cada uno de los cuatro zooms, tolerancia
 core/cliente (1.657 aprobados/dos ignores en cliente), Clippy de ambos
 --all-targets -D warnings, formato, docs y diff aprobados.
 
+### Arranque de capturas con JSON precargado
+
+La revisión de logs aisló los avisos de despawn: `auto_start_preloaded_json`
+y el driver de `OPENTTDRS_MAP_SHOT`/`OPENTTDRS_WINDOWS_SHOT` llamaban ambos a
+`leave_main_menu` durante el mismo frame. El automatismo genérico ahora cede
+la transición al driver de captura cuando éste está activo. Una prueba unitaria
+cubre JSON presente/ausente y captura activa/inactiva; pasa y no silencia
+errores ECS.
+
 ## Límites del cierre
 
 Las siete divergencias de este corte tienen regresiones y validación local;
-no se afirma paridad global ni certificación de release. La publicación de
-alpha/Snap, nuevos atajos y suavizado físico adicional no se ejecutaron.
-En las capturas persisten avisos preexistentes de entidades ya eliminadas
-al cargar la partida; no se presentan como corregidos. Los checks remotos
-se evalúan por SHA, sin confundir un push exitoso con CI aprobada.
+no se afirma paridad global. La regresión de captura corrige sólo la doble
+transición descrita, no oculta ni descarta errores de despawn de otras causas.
+Nuevos atajos y suavizado físico adicional siguen fuera de alcance. Los checks
+remotos se evalúan por SHA, sin confundir un push exitoso con CI aprobada.

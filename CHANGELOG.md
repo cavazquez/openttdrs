@@ -6,6 +6,29 @@ Los cambios relevantes de cada release se documentan aquí. El formato sigue
 
 ## [Unreleased]
 
+## [0.1.0-alpha.4] - 2026-09-26
+
+### Mejorado
+
+- La cámara no roba el mouse de ventanas y controles; el clic derecho se
+  distingue del paneo, y los arrastres de construcción confirman el extremo
+  actual o se cancelan al perder foco.
+- Las obras comprueban fondos antes de mutar el mapa y muestran rechazos,
+  causa y costo real cuando una construcción por arrastre queda parcial.
+- El fondo del menú muestra una partida isométrica animada. Aviones y barcos
+  conservan poses coherentes al rotar y cruzar subteselas.
+
+### Corregido
+
+- El arranque de capturas que cargan un JSON ya no intenta abandonar el menú
+  desde dos automatismos a la vez ni encola despawns duplicados.
+- El primer clic en el mapa después de usar la barra de herramientas ya no se
+  pierde.
+
+### CI
+
+- El job de GitHub Actions que valida scripts Python reutiliza su caché.
+
 ## [0.1.0-alpha.3] - 2026-09-20
 
 ### Agregado
@@ -50,6 +73,7 @@ Los cambios relevantes de cada release se documentan aquí. El formato sigue
 - Los paquetes no están firmados ni notarizados.
 - La compatibilidad completa de ida y vuelta con `.sav` de OpenTTD no está garantizada.
 
-[Unreleased]: https://github.com/cavazquez/openttdrs/compare/v0.1.0-alpha.3...HEAD
+[Unreleased]: https://github.com/cavazquez/openttdrs/compare/v0.1.0-alpha.4...HEAD
+[0.1.0-alpha.4]: https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.3
 [0.1.0-alpha.1]: https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1

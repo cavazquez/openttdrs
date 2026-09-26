@@ -13,9 +13,9 @@ evidencia interna. La auditoría del 26/09 abrió el corte acotado
 locales y criterios independientes. No reactiva las brechas históricas V1.
 
 La entrega actual de escritorio está publicada como
-[prerelease `v0.1.0-alpha.3`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.3)
+[prerelease `v0.1.0-alpha.4`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.4)
 y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) para Linux amd64.
-El Snap `0.1.0-alpha.3` materializa los tiles en build, fue validado recién
+El Snap `0.1.0-alpha.4` materializa los tiles en build, fue validado recién
 instalado con assets desde el mount SquashFS de sólo lectura y ofrece el menú
 gráfico ES/EN de nueva partida con semilla editable.
 

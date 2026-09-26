@@ -71,7 +71,15 @@ pub(crate) fn auto_start_preloaded_json(
     mut next_screen: ResMut<NextState<ClientScreen>>,
     mut done: Local<bool>,
 ) {
-    if *done || !sim.loaded_file || std::env::var_os("OTTDJSON_LOAD").is_none() {
+    let capture_driver_active = std::env::var_os("OPENTTDRS_MAP_SHOT").is_some()
+        || std::env::var_os("OPENTTDRS_WINDOWS_SHOT").is_some();
+    if *done
+        || !should_auto_start_preloaded_json(
+            sim.loaded_file,
+            std::env::var_os("OTTDJSON_LOAD").is_some(),
+            capture_driver_active,
+        )
+    {
         return;
     }
     *done = true;
@@ -82,6 +90,14 @@ pub(crate) fn auto_start_preloaded_json(
         &intro_layers,
         &mut next_screen,
     );
+}
+
+fn should_auto_start_preloaded_json(
+    loaded_file: bool,
+    json_load_requested: bool,
+    capture_driver_active: bool,
+) -> bool {
+    loaded_file && json_load_requested && !capture_driver_active
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -141,7 +157,7 @@ pub(in crate::ui::main_menu) fn enter_editor(
 
 #[cfg(test)]
 mod tests {
-    use super::{NewGameSeedSequence, build_new_game_session};
+    use super::{NewGameSeedSequence, build_new_game_session, should_auto_start_preloaded_json};
     use crate::state::bootstrap::NewGameSettings;
     use openttdrs_core::GameTick;
 
@@ -194,5 +210,13 @@ mod tests {
         );
 
         assert_eq!(sim.state.tick, previous_tick);
+    }
+
+    #[test]
+    fn preloaded_json_auto_start_defers_to_the_active_capture_driver() {
+        assert!(should_auto_start_preloaded_json(true, true, false));
+        assert!(!should_auto_start_preloaded_json(true, true, true));
+        assert!(!should_auto_start_preloaded_json(false, true, false));
+        assert!(!should_auto_start_preloaded_json(true, false, false));
     }
 }

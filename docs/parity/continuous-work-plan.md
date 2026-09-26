@@ -1,13 +1,16 @@
 # Corte V1 — aceptación acotada por área
 
-Actualizado: **2026-09-20**. Base histórica inspeccionada: `84144747`.
+Actualizado: **2026-09-26**. Base histórica V1: `84144747`;
+base del corte alpha.4: `f1c3a5fc`.
 
 El corte V1 que actualizó el resumen del README, fijó tolerancias y creó tareas
 atómicas ya concluyó: los contratos #582–#604 están cerrados. El
 [contrato V1](acceptance-v1.md) conserva fixtures, tolerancias, exclusiones y
 evidencia; no convierte esos cierres en una certificación de paridad global.
 El escenario guiado anterior permanece retirado y sus fixtures siguen siendo
-evidencia interna. No hay tarea activa hasta una nueva auditoría.
+evidencia interna. La auditoría del 26/09 abrió el corte acotado
+[alpha.4: aeronaves y menú](aircraft-render-alpha4.md), con cinco tareas
+locales y criterios independientes. No reactiva las brechas históricas V1.
 
 La entrega actual de escritorio está publicada como
 [prerelease `v0.1.0-alpha.3`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.3)
@@ -87,15 +90,17 @@ o generación.
 
 ## Backlog ejecutable
 
-No hay issues activos. Los contratos #582–#604 cerraron con CI, dry-runs de
+No hay issues GitHub V1 activos. Los contratos #582–#604 cerraron con CI, dry-runs de
 paquetes y evidencia de aceptación según corresponda. El [manifiesto]
 (active-backlog.json) y el bloque activo de `PARIDAD.md` están vacíos.
+El trabajo actual se limita a AIR-POSE, MENU-DIR, MENU-POS, AIR-ORACLE y
+ALPHA4, definidos y seguidos en el [contrato del corte](aircraft-render-alpha4.md).
 
 El agregador #603 sigue siendo fail-closed: sin 20 resultados explícitos para
 la misma SHA, su salida es `not-run`, no verde. Eso impide inferir una
 certificación V1 o paridad global a partir de los cierres.
 
-El próximo corte debe comenzar con una auditoría nueva y un issue atómico con
+Cada corte nuevo debe comenzar con una auditoría y tareas atómicas con
 reproducción, métrica, tolerancia y criterio de cierre propios.
 
 Construcción básica, fixtures PBS y ruta vial/JSON ya tienen evidencia acotada

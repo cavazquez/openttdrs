@@ -11,10 +11,11 @@ acotados; no certifican paridad completa de vuelo ni sustituyen V1-AIR.
   sin averías/desastres. Cero discrepancias con alphas 0/0,5/1, con y sin
   mapa; mantener inversión NewGRF. Regresión adicional para los ocho rumbos.
   Base: 6.530 discrepancias con pose de tick; 6.422/7.742 con alpha 0,5/1.
-- **MENU-DIR — pendiente:** deducir el rumbo de la trayectoria decorativa,
+- **MENU-DIR — completado:** deducir el rumbo de la trayectoria decorativa,
   no de constantes S/N. Cero discrepancias en ambas direcciones de las
   rutas; inversión coherente al volver.
-- **MENU-POS — pendiente:** posición fraccional para aviones/barcos, con
+- **MENU-POS — pendiente:** posición fraccional para aviones/barcos y conversión
+  correcta de fracciones de tesela a píxeles en el mismo helper terrestre, con
   continuidad en fronteras de tesela. Tolerancia numérica explícita de
   `0,001` unidades de mundo; comprobar 0,12×/0,25×/0,50×/1,00×.
 - **AIR-ORACLE — completado:** comparar `direction` por tick con la traza
@@ -58,3 +59,15 @@ dirección en cada tick de la traza Helidepot 15.3, además de nodo, estado y
 altura. Pasaron los cuatro tests sin tocar el golden ni el controlador.
 Comparte la validación completa core de AIR-POSE; no certifica vuelo libre
 universal ni otros layouts de aeropuerto.
+
+### MENU-DIR
+
+Se eliminaron las direcciones literales de las doce rutas. El octante se
+deduce de su geometría; la vuelta usa el octante opuesto. Los dos tests nuevos
+comprueban los ocho rumbos y ambos sentidos de cada ruta (incluido el barco
+no alineado), con cero diferencias. Se mantiene la vuelta decorativa
+instantánea, sin prometer un giro físico de aeronave.
+
+Pasaron seis tests del intro, Clippy cliente `--all-targets -D warnings`,
+la suite de cliente (1.635 aprobados, dos ignores preexistentes), formato y
+diff. La revisión gráfica del candidato se conserva en ALPHA4.

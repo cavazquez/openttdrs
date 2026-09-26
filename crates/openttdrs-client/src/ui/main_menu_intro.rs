@@ -99,7 +99,6 @@ struct IntroTrafficRoute {
     from: (i32, i32),
     to: (i32, i32),
     speed: f32,
-    direction: usize,
     kind: IntroVehicleKind,
     start_progress: f32,
 }
@@ -109,7 +108,6 @@ const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 12] = [
         from: (14, 4),
         to: (46, 4),
         speed: 0.11,
-        direction: 4,
         kind: IntroVehicleKind::Bus,
         start_progress: 0.1,
     },
@@ -117,7 +115,6 @@ const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 12] = [
         from: (46, 4),
         to: (14, 4),
         speed: 0.09,
-        direction: 0,
         kind: IntroVehicleKind::Bus,
         start_progress: 0.55,
     },
@@ -125,7 +122,6 @@ const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 12] = [
         from: (15, 10),
         to: (22, 10),
         speed: 0.1,
-        direction: 4,
         kind: IntroVehicleKind::Truck,
         start_progress: 0.3,
     },
@@ -133,7 +129,6 @@ const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 12] = [
         from: (22, 12),
         to: (15, 12),
         speed: 0.08,
-        direction: 0,
         kind: IntroVehicleKind::Truck,
         start_progress: 0.8,
     },
@@ -141,7 +136,6 @@ const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 12] = [
         from: (14, 36),
         to: (48, 36),
         speed: 0.075,
-        direction: 4,
         kind: IntroVehicleKind::Train,
         start_progress: 0.25,
     },
@@ -149,7 +143,6 @@ const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 12] = [
         from: (48, 36),
         to: (14, 36),
         speed: 0.065,
-        direction: 0,
         kind: IntroVehicleKind::Train,
         start_progress: 0.7,
     },
@@ -157,7 +150,6 @@ const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 12] = [
         from: (INTRO_MAGLEV_X0, INTRO_MAGLEV_Y),
         to: (INTRO_MAGLEV_X1, INTRO_MAGLEV_Y),
         speed: 0.085,
-        direction: 4,
         kind: IntroVehicleKind::Maglev,
         start_progress: 0.42,
     },
@@ -165,7 +157,6 @@ const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 12] = [
         from: (INTRO_MAGLEV_X1, INTRO_MAGLEV_Y),
         to: (INTRO_MAGLEV_X0, INTRO_MAGLEV_Y),
         speed: 0.075,
-        direction: 0,
         kind: IntroVehicleKind::Maglev,
         start_progress: 0.82,
     },
@@ -173,7 +164,6 @@ const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 12] = [
         from: (12, 24),
         to: (51, 26),
         speed: 0.05,
-        direction: 4,
         kind: IntroVehicleKind::Ship,
         start_progress: 0.15,
     },
@@ -181,7 +171,6 @@ const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 12] = [
         from: (51, 26),
         to: (12, 24),
         speed: 0.045,
-        direction: 0,
         kind: IntroVehicleKind::Ship,
         start_progress: 0.65,
     },
@@ -189,7 +178,6 @@ const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 12] = [
         from: (9, 50),
         to: (44, 50),
         speed: 0.04,
-        direction: 4,
         kind: IntroVehicleKind::Aircraft,
         start_progress: 0.33,
     },
@@ -197,7 +185,6 @@ const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 12] = [
         from: (44, 50),
         to: (9, 50),
         speed: 0.035,
-        direction: 0,
         kind: IntroVehicleKind::Aircraft,
         start_progress: 0.76,
     },
@@ -271,7 +258,7 @@ fn spawn_intro_traffic(commands: &mut Commands, map: &Map, trucks: &TruckHandles
             to: route.to,
             progress: route.start_progress,
             speed: route.speed,
-            direction: route.direction,
+            direction: intro_route_direction(route.from, route.to),
             kind: route.kind,
         };
         let pos = actor_world_pos(map, &actor);
@@ -368,6 +355,18 @@ pub(crate) fn animate_main_menu_intro_traffic(
     }
 }
 
+/// Octante más cercano en coordenadas del mapa: +x es SW, +y es SE.
+/// Cuantizar el ángulo también cubre rutas largas no alineadas, como el barco.
+fn intro_route_direction(from: (i32, i32), to: (i32, i32)) -> usize {
+    if from == to {
+        return 0;
+    }
+    let dx = (to.0 - from.0) as f32;
+    let dy = (to.1 - from.1) as f32;
+    let octant = (dy.atan2(dx) / std::f32::consts::FRAC_PI_4).round() as i32;
+    (5 - octant).rem_euclid(8) as usize
+}
+
 fn reverse_intro_direction(dir: usize) -> usize {
     match dir {
         0 => 4,
@@ -415,7 +414,43 @@ pub(crate) fn cleanup_main_menu_on_exit(mut commands: Commands) {
 #[cfg(test)]
 #[allow(clippy::assertions_on_constants, clippy::expect_used)]
 mod tests {
+    use super::{INTRO_TRAFFIC_ROUTES, intro_route_direction, reverse_intro_direction};
     use openttdrs_core::{GameState, TileCoord, TileKind};
+
+    #[test]
+    fn intro_heading_covers_eight_directions_and_reverse() {
+        for (direction, target) in [
+            (-1, -1),
+            (-1, 0),
+            (-1, 1),
+            (0, 1),
+            (1, 1),
+            (1, 0),
+            (1, -1),
+            (0, -1),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            assert_eq!(intro_route_direction((0, 0), target), direction);
+            assert_eq!(
+                intro_route_direction(target, (0, 0)),
+                reverse_intro_direction(direction),
+            );
+        }
+    }
+
+    #[test]
+    fn intro_routes_follow_their_geometry_in_both_directions() {
+        for route in INTRO_TRAFFIC_ROUTES {
+            let expected = if route.to.0 > route.from.0 { 5 } else { 1 };
+            assert_eq!(intro_route_direction(route.from, route.to), expected);
+            assert_eq!(
+                intro_route_direction(route.to, route.from),
+                reverse_intro_direction(expected),
+            );
+        }
+    }
 
     #[test]
     fn intro_traffic_covers_road_rail_and_water() {

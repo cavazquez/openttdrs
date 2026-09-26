@@ -252,7 +252,23 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                 ctx.drag_state.last_tile = Some(end_tile);
             }
         }
-        MapClickIntent::ConfirmDrag { signal_tap: _ } => {
+        MapClickIntent::ConfirmDrag {
+            end_tile,
+            signal_tap,
+        } => {
+            if !ctx.drag_state.armed {
+                return;
+            }
+            if let Some(end_tile) = end_tile {
+                apply_intent(
+                    MapClickIntent::UpdateDrag {
+                        end_tile,
+                        signal_tap,
+                    },
+                    ctx,
+                    time_secs,
+                );
+            }
             if let Some(action) = ctx.drag_state.last_action {
                 let build_pos = ctx
                     .drag_state
@@ -524,6 +540,142 @@ mod tests {
         world
             .run_system_once(apply_v1_order_intent)
             .expect("aplicar intención UI V1");
+    }
+
+    fn start_road_drag(world: &mut World) {
+        world.resource_mut::<SimWorld>().state = GameState::new(8, 8);
+        apply_v1_intent(
+            world,
+            MapClickIntent::StartDrag {
+                action: BuildMenuAction::RoadX,
+                start_tile: (1, 3),
+                rail_lane_bit: None,
+                signal_drag_fract: None,
+                press_world_pos: Vec2::ZERO,
+            },
+        );
+        apply_v1_intent(
+            world,
+            MapClickIntent::UpdateDrag {
+                end_tile: (2, 3),
+                signal_tap: false,
+            },
+        );
+    }
+
+    #[test]
+    fn release_rebuilds_the_path_using_the_current_endpoint() {
+        let mut world = v1_orders_world();
+        start_road_drag(&mut world);
+        let ctx = MapClickContext {
+            tile_pos: TileCoord::new(5, 3),
+            world_pos: Vec2::ZERO,
+            tile_fract: (128, 128),
+            mouse_left_pressed: false,
+            mouse_left_released: true,
+            mouse_right_pressed: false,
+            active_tool: Some(BuildMenuAction::RoadX),
+            drag_armed: true,
+            drag_last_action: Some(BuildMenuAction::RoadX),
+            drag_start_tile: Some((1, 3)),
+            drag_press_world_pos: Some(Vec2::ZERO),
+            vehicle_under_cursor: None,
+            town_label_under_cursor: None,
+            tile_kind: Some(TileKind::Grass),
+            orders_mode: false,
+            order_pick_active: false,
+            order_vehicle_selected: false,
+            is_hangar: false,
+            station_pos_at_tile: None,
+            join_station_keep: None,
+            signal_tile_has_signals: false,
+            ctrl_held: false,
+            shift_held: false,
+        };
+        apply_v1_intent(&mut world, resolve_click_intent(&ctx));
+        for x in 1..=5 {
+            assert_eq!(
+                world
+                    .resource::<SimWorld>()
+                    .state
+                    .map
+                    .get_kind(TileCoord::new(x, 3)),
+                Some(TileKind::Road)
+            );
+        }
+        assert!(!world.resource::<DragBuildState>().armed);
+    }
+
+    #[test]
+    fn release_outside_map_uses_last_valid_path_not_map_origin() {
+        let mut world = v1_orders_world();
+        start_road_drag(&mut world);
+        apply_v1_intent(
+            &mut world,
+            MapClickIntent::ConfirmDrag {
+                end_tile: None,
+                signal_tap: false,
+            },
+        );
+        let map = &world.resource::<SimWorld>().state.map;
+        assert_eq!(map.get_kind(TileCoord::new(2, 3)), Some(TileKind::Road));
+        assert_eq!(map.get_kind(TileCoord::new(0, 0)), Some(TileKind::Grass));
+        assert_eq!(map.get_kind(TileCoord::new(3, 3)), Some(TileKind::Grass));
+    }
+
+    #[test]
+    fn interrupted_drag_cancels_without_spending_or_later_confirmation() {
+        use crate::ui::hud::HoveredTileCoord;
+        use crate::ui::toolbar::UiToolState;
+        use crate::ui::toolbar::build_input::click::handle_tile_click;
+        use bevy::window::PrimaryWindow;
+        for interrupt in 0..5 {
+            let mut world = v1_orders_world();
+            start_road_drag(&mut world);
+            let before = world.resource::<SimWorld>().state.clone();
+            let mut mouse = ButtonInput::<MouseButton>::default();
+            mouse.press(MouseButton::Left);
+            mouse.clear();
+            if interrupt == 3 {
+                mouse.release(MouseButton::Left);
+                mouse.clear();
+            }
+            if interrupt == 4 {
+                mouse.release(MouseButton::Left);
+            }
+            world.insert_resource(mouse);
+            world.init_resource::<HoveredTileCoord>();
+            world.insert_resource(UiToolState {
+                active_tool: Some(BuildMenuAction::RoadX),
+                ..default()
+            });
+            let mut window = Window::default();
+            window.set_cursor_position(Some(Vec2::new(100.0, 100.0)));
+            if interrupt == 0 {
+                window.focused = false;
+            }
+            if interrupt == 1 {
+                window.set_cursor_position(None);
+            }
+            if interrupt == 2 || interrupt == 4 {
+                world.spawn((Node::default(), Interaction::Hovered));
+            }
+            world.spawn((window, PrimaryWindow));
+            world.run_system_once(handle_tile_click).unwrap();
+            assert!(
+                !world.resource::<DragBuildState>().armed,
+                "interrupt={interrupt}"
+            );
+            apply_v1_intent(
+                &mut world,
+                MapClickIntent::ConfirmDrag {
+                    end_tile: Some((5, 3)),
+                    signal_tap: false,
+                },
+            );
+            let after = &world.resource::<SimWorld>().state;
+            assert_eq!(before.save_json().unwrap(), after.save_json().unwrap());
+        }
     }
 
     fn press_vehicle_orders_button(world: &mut World) {

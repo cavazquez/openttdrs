@@ -87,7 +87,11 @@ pub(crate) enum MapClickIntent {
         signal_tap: bool,
     },
     /// Confirmar colocación drag.
-    ConfirmDrag { signal_tap: bool },
+    ConfirmDrag {
+        /// None when released outside the map: retain the last valid path.
+        end_tile: Option<(i32, i32)>,
+        signal_tap: bool,
+    },
     /// Herramienta JoinStation: primer, segundo o tercer clic.
     JoinStationClick {
         clicked: TileCoord,
@@ -263,7 +267,10 @@ fn resolve_drag_intent(ctx: &MapClickContext, action: BuildMenuAction) -> MapCli
     };
 
     if ctx.mouse_left_released {
-        return MapClickIntent::ConfirmDrag { signal_tap };
+        return MapClickIntent::ConfirmDrag {
+            end_tile: Some(end),
+            signal_tap,
+        };
     }
 
     MapClickIntent::UpdateDrag {
@@ -427,7 +434,10 @@ mod tests {
         ctx.mouse_left_released = true;
         assert_eq!(
             resolve_click_intent(&ctx),
-            MapClickIntent::ConfirmDrag { signal_tap: false }
+            MapClickIntent::ConfirmDrag {
+                end_tile: Some((14, 10)),
+                signal_tap: false
+            }
         );
     }
 

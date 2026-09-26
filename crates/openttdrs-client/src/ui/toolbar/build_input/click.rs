@@ -10,15 +10,14 @@ use crate::render::{
     pick_vehicle_id_at_world, pick_vehicle_id_at_world_with_newgrf, town_id_at_label_pos,
 };
 use crate::state::{OrderPickState, order_pick_active};
+use crate::ui::PointerCapture;
 use crate::ui::hud::HoveredTileCoord;
-use crate::ui::save_window::SaveWindowState;
-use crate::ui::toolbar::minimap::minimap_contains_cursor;
-use crate::ui::toolbar::minimap::{MinimapCell, MinimapLayerState, MinimapRoot};
+use crate::ui::toolbar::minimap::{MinimapCell, MinimapRoot};
 use crate::ui::toolbar::{BuildMenuAction, BuildMenuUi, UiToolState};
 use crate::ui::town_window::town_for_house_tile;
 
 use super::apply_intent::{IntentApplyContext, apply_intent};
-use super::click_intent::{MapClickContext, resolve_click_intent};
+use super::click_intent::{MapClickContext, MapClickIntent, resolve_click_intent};
 use super::drag::action_supports_drag;
 
 /// Estados de paneles/ventanas mutuamente excluyentes, agrupados para no
@@ -27,7 +26,6 @@ use super::drag::action_supports_drag;
 pub(crate) struct PanelStates<'w> {
     right_gesture: Option<Res<'w, crate::ui::RightPointerGesture>>,
     pick_state: Res<'w, State<OrderPickState>>,
-    minimap_layers: Res<'w, MinimapLayerState>,
 }
 
 /// Sistema principal delgado que maneja clics en el mapa.
@@ -35,7 +33,7 @@ pub(crate) struct PanelStates<'w> {
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn handle_tile_click(
     mouse: Res<ButtonInput<MouseButton>>,
-    save_window: Option<Res<SaveWindowState>>,
+    pointer_capture: PointerCapture,
     windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<(&Camera, &GlobalTransform), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut tool_state: ResMut<UiToolState>,
@@ -55,31 +53,34 @@ pub(crate) fn handle_tile_click(
     mut newgrf_cache: Option<ResMut<NewGrfTrainSpriteCache>>,
     mut images: Option<ResMut<Assets<Image>>>,
 ) {
-    let minimap_layers = &*panels.minimap_layers;
-
-    // Early exits: guardar ventana, block_map_click, toolbar, etc.
-    if save_window.is_some_and(|w| w.open) {
+    // Cancel before any early exit: a lost release must never leave a latent
+    // construction that can be confirmed by a later, unrelated click.
+    if pointer_capture.active()
+        || toolbar_pointer.iter().any(|i| *i != Interaction::None)
+        || !windows
+            .single()
+            .is_ok_and(|w| w.focused && w.cursor_position().is_some())
+        || (apply_ctx.drag_state.armed
+            && !mouse.pressed(MouseButton::Left)
+            && !mouse.just_released(MouseButton::Left))
+    {
+        apply_intent(
+            MapClickIntent::CancelDrag,
+            &mut apply_ctx,
+            time.elapsed_secs(),
+        );
         return;
     }
     if mouse.just_pressed(MouseButton::Left) && tool_state.block_map_click {
         tool_state.block_map_click = false;
         return;
     }
-    if toolbar_pointer.iter().any(|i| *i != Interaction::None)
-        && mouse.just_pressed(MouseButton::Left)
-    {
-        return;
-    }
-
     let Ok(window) = windows.single() else {
         return;
     };
     let Some(cursor_pos) = window.cursor_position() else {
         return;
     };
-    if minimap_contains_cursor(cursor_pos, window, minimap_layers) {
-        return;
-    }
     let Ok((camera, cam_tf)) = cam_q.single() else {
         return;
     };
@@ -95,32 +96,10 @@ pub(crate) fn handle_tile_click(
             && action_supports_drag(action)
             && apply_ctx.drag_state.last_action == Some(action)
         {
-            let ctx = MapClickContext {
-                tile_pos: openttdrs_core::TileCoord::new(0, 0),
-                world_pos,
-                tile_fract: (128, 128),
-                mouse_left_pressed: false,
-                mouse_right_pressed: false,
-                mouse_left_released: true,
-                active_tool: tool_state.active_tool,
-                drag_armed: apply_ctx.drag_state.armed,
-                drag_last_action: apply_ctx.drag_state.last_action,
-                drag_start_tile: apply_ctx.drag_state.start_tile,
-                drag_press_world_pos: apply_ctx.drag_state.press_world_pos,
-                vehicle_under_cursor: None,
-                town_label_under_cursor: None,
-                tile_kind: None,
-                orders_mode: false,
-                order_pick_active: false,
-                order_vehicle_selected: false,
-                is_hangar: false,
-                station_pos_at_tile: None,
-                join_station_keep: apply_ctx.station_state.join_keep,
-                signal_tile_has_signals: false,
-                ctrl_held: apply_ctx.station_state.ctrl_held,
-                shift_held: apply_ctx.station_state.shift_held,
+            let intent = MapClickIntent::ConfirmDrag {
+                end_tile: None,
+                signal_tap: false,
             };
-            let intent = resolve_click_intent(&ctx);
             apply_intent(intent, &mut apply_ctx, time.elapsed_secs());
         }
         return;

@@ -12,7 +12,7 @@ revisión local. No incluye nuevos atajos, cambios de preferencias ni release.
   modales, ventanas y listas no dejan pasar gestos de cámara.
 - INPUT-02 — completado: arrastrar con derecho no rota ni cancela herramientas;
   conservar el clic contextual y diferenciarlo del arrastre en pantalla.
-- BUILD-01 — pendiente: al soltar se usa el extremo actual, no el del frame
+- BUILD-01 — completado: al soltar se usa el extremo actual, no el del frame
   anterior; cancelar y perder foco no confirman obras involuntarias.
 - BUILD-02 — pendiente: construcción parcial informa teselas rechazadas y
   causas, conserva las válidas y muestra el gasto real.
@@ -79,3 +79,18 @@ Cuatro regresiones ECS ejecutan clasificación, rotación y cámara: seis zooms,
 jitter, ida/vuelta, pérdida de foco, modal y origen UI. Paneo conserva la
 herramienta y el drag de construcción. Suite cliente: 1.647 aprobados, dos
 ignores; Clippy --all-targets -D warnings, formato, docs y diff aprobados.
+
+### BUILD-01
+
+ConfirmDrag lleva el extremo actual y reconstruye la selección antes de
+aplicar comandos. Fuera del mapa conserva explícitamente el último tramo
+válido, sin simular un cursor en (0,0). UI, pérdida de foco/cursor y una
+liberación perdida cancelan y limpian el drag; una confirmación tardía queda
+sin efecto. El contrato local es la selección visible al soltar, relacionado
+con OnPlaceMouseUp/selend en OpenTTD 15.3; no se cambia su geometría.
+
+Tres regresiones: presión (1,3), frame anterior (2,3), liberación (5,3)
+construye las cinco teselas; liberación fuera de mapa conserva sólo las dos
+válidas; cinco interrupciones dejan snapshot JSON idéntico incluso después
+de una confirmación tardía. Suite cliente 1.650 aprobados/dos ignores,
+Clippy --all-targets -D warnings, formato, docs y diff aprobados.

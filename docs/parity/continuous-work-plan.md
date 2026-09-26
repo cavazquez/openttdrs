@@ -93,8 +93,10 @@ o generación.
 No hay issues GitHub V1 activos. Los contratos #582–#604 cerraron con CI, dry-runs de
 paquetes y evidencia de aceptación según corresponda. El [manifiesto]
 (active-backlog.json) y el bloque activo de `PARIDAD.md` están vacíos.
-El trabajo actual se limita a AIR-POSE, MENU-DIR, MENU-POS, AIR-ORACLE y
-ALPHA4, definidos y seguidos en el [contrato del corte](aircraft-render-alpha4.md).
+AIR-POSE, MENU-DIR, MENU-POS y AIR-ORACLE están resueltos en el
+[contrato del corte](aircraft-render-alpha4.md). Antes de ALPHA4, el usuario
+autorizó las siete correcciones de [controles y poses](controls-regressions-alpha4.md),
+empezando por BUILD-03. Nuevos atajos y publicación quedan fuera de ese bloque.
 
 El agregador #603 sigue siendo fail-closed: sin 20 resultados explícitos para
 la misma SHA, su salida es `not-run`, no verde. Eso impide inferir una

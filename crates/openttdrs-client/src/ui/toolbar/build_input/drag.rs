@@ -675,6 +675,44 @@ mod tests {
     }
 
     #[test]
+    fn road_drag_stops_spending_when_the_budget_is_exhausted() {
+        let mut sim = SimWorld {
+            state: GameState::new(8, 8),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let before = sim.state.economy.money;
+        openttdrs_core::apply_command(
+            &mut sim.state,
+            &Command::PlaceRoadBits(TileCoord::new(2, 3), 0x0A | ROAD_PLACE_FORCE_AXIS),
+        )
+        .unwrap();
+        let cost = before - sim.state.economy.money;
+        assert!(cost > 0);
+        sim.state = GameState::new(8, 8);
+        sim.state.economy.money = cost;
+        let (changed, _) = apply_drag_action(
+            &mut sim,
+            BuildMenuAction::RoadX,
+            vec![(2, 3), (3, 3), (4, 3)],
+            &StationBuildState::default(),
+            None,
+        );
+        assert!(changed);
+        assert_eq!(sim.state.economy.money, 0);
+        assert_eq!(
+            sim.state.map.get_kind(TileCoord::new(2, 3)),
+            Some(TileKind::Road)
+        );
+        for x in [3, 4] {
+            assert_eq!(
+                sim.state.map.get_kind(TileCoord::new(x, 3)),
+                Some(TileKind::Grass)
+            );
+        }
+    }
+
+    #[test]
     fn drag_road_x_force_axis_on_first_isolated_tile() {
         let mut sim = SimWorld {
             state: GameState::new(8, 8),

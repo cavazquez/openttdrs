@@ -98,7 +98,15 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::SetRoadBits(c, _) => require_tile_owned_by_active(state, *c)
             .err()
             .or_else(|| check_object_can_be_auto_cleared(state, *c).err())
-            .or_else(|| check_place_road_bits(map, *c).err()),
+            .or_else(|| check_place_road_bits(map, *c).err())
+            .or_else(|| {
+                super::transport::check_road_build_budget(
+                    state,
+                    *c,
+                    !matches!(cmd, Command::SetRoadBits(..)),
+                )
+                .err()
+            }),
         Command::RemoveTramBits(c) => require_tile_owned_by_active(state, *c)
             .err()
             .or_else(|| check_place_road_bits(map, *c).err()),

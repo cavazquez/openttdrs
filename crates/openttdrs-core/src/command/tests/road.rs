@@ -8,6 +8,57 @@ use crate::{
 use super::helpers::set_w_only_slope;
 
 #[test]
+fn road_build_budget_matches_preview_and_rejects_without_mutation() {
+    let c = TileCoord::new(3, 4);
+    for cmd in [
+        Command::PlaceRoad(c),
+        Command::PlaceRoadBits(c, 0x0A),
+        Command::PlaceTramBits(c, 0x0A),
+        Command::SetRoadBits(c, 0x0A),
+    ] {
+        for sloped in [false, true] {
+            let mut base = GameState::new(8, 8);
+            if sloped {
+                set_w_only_slope(&mut base.map, c.x, c.y, 1);
+            }
+            let mut quoted = base.clone();
+            let before = quoted.economy.money;
+            apply_command(&mut quoted, &cmd).unwrap();
+            let cost = before - quoted.economy.money;
+            assert!(cost > 0);
+            for budget in [0, cost - 1, cost] {
+                let mut state = base.clone();
+                state.economy.money = budget;
+                state.prepare_player_command();
+                let snapshot = state.save_json().unwrap();
+                let expected = (budget < cost).then_some(CommandError::InsufficientFunds);
+                assert_eq!(
+                    command_would_fail(&state, &cmd),
+                    expected,
+                    "{cmd:?}, slope={sloped}, budget={budget}"
+                );
+                assert_eq!(
+                    state.save_json().unwrap(),
+                    snapshot,
+                    "preview mutated state"
+                );
+                assert_eq!(apply_command(&mut state, &cmd).err(), expected);
+                if budget < cost {
+                    assert_eq!(
+                        state.save_json().unwrap(),
+                        snapshot,
+                        "rejected command mutated state"
+                    );
+                } else {
+                    assert_eq!(state.economy.money, 0);
+                    assert_eq!(state.map.get_kind(c), Some(TileKind::Road));
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn place_road_mutates_tile_kind() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(3, 4);

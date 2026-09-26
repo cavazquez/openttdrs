@@ -2,12 +2,7 @@ use crate::GameState;
 use crate::economy::{road_build_cost_factored, road_depot_build_cost};
 
 fn charge_road_build(state: &mut GameState) {
-    let mult = state
-        .road_type_catalog
-        .iter()
-        .find(|d| d.id == state.current_road_type)
-        .map_or(0, |d| d.cost_multiplier);
-    state.economy.money -= road_build_cost_factored(&state.global_economy, mult);
+    state.economy.money -= road_build_amount(state);
 }
 
 fn road_build_amount(state: &GameState) -> i64 {
@@ -17,6 +12,29 @@ fn road_build_amount(state: &GameState) -> i64 {
         .find(|d| d.id == state.current_road_type)
         .map_or(0, |d| d.cost_multiplier);
     road_build_cost_factored(&state.global_economy, mult)
+}
+
+/// Quote terrain and construction together before either can mutate the map.
+/// Shared by execution and preview; depot connections already paid elsewhere
+/// bypass this construction charge.
+pub(in crate::command) fn check_road_build_budget(
+    state: &GameState,
+    c: TileCoord,
+    with_autoslope: bool,
+) -> Result<(), CommandError> {
+    let terrain = if with_autoslope {
+        super::super::terraform::check_autoslope_flat(
+            &state.map,
+            c,
+            state.global_economy.inflation_prices,
+        )?
+    } else {
+        0
+    };
+    if state.economy.money < road_build_amount(state).saturating_add(terrain) {
+        return Err(CommandError::InsufficientFunds);
+    }
+    Ok(())
 }
 use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::{diag_dir_offset, station_site_tile_allows_build};
@@ -196,6 +214,9 @@ fn place_road_bits_inner(
 ) -> Result<(), CommandError> {
     check_place_road_bits(&state.map, c)?;
     check_object_can_be_auto_cleared(state, c)?;
+    if charge {
+        check_road_build_budget(state, c, true)?;
+    }
     apply_autoslope_if_needed(state, c)?;
     let force_axis = bits & ROAD_PLACE_FORCE_AXIS != 0;
     let requested = bits & 0x0F;
@@ -457,6 +478,7 @@ pub(in crate::command) fn set_road_bits(
 ) -> Result<(), CommandError> {
     check_place_road_bits(&state.map, c)?;
     check_object_can_be_auto_cleared(state, c)?;
+    check_road_build_budget(state, c, false)?;
     let road_bits = (bits & 0x0F).max(0x01);
     write_normal_road_tile(state, c, road_bits)?;
     charge_road_build(state);
@@ -506,6 +528,7 @@ pub(in crate::command) fn place_tram_bits(
 ) -> Result<(), CommandError> {
     check_place_road_bits(&state.map, c)?;
     check_object_can_be_auto_cleared(state, c)?;
+    check_road_build_budget(state, c, true)?;
     apply_autoslope_if_needed(state, c)?;
     let force_axis = bits & ROAD_PLACE_FORCE_AXIS != 0;
     let requested = bits & 0x0F;

@@ -1568,9 +1568,7 @@ impl super::model::Vehicle {
             .find(|step| step.tile == self.pos)
             .map(|step| step.track)
             .filter(|track| bits & track != 0);
-        let imported = (self.train_track < 6)
-            .then_some(1_u8 << self.train_track)
-            .filter(|track| bits & track != 0);
+        let imported = imported_train_track_bit(self.train_track, bits);
         reserved
             .or(imported)
             .or_else(|| crate::train_movement::track_bit_for_movement(self.direction, bits))
@@ -1950,10 +1948,17 @@ impl super::model::Vehicle {
     }
 }
 
+fn imported_train_track_bit(train_track: u8, bits: u8) -> Option<u8> {
+    let track = (train_track < 6).then(|| 1_u8 << train_track)?;
+    (bits & track != 0).then_some(track)
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
-    use super::{aircraft_progress_step_for_plane_speed, train_breakdown_speed_cap};
+    use super::{
+        aircraft_progress_step_for_plane_speed, imported_train_track_bit, train_breakdown_speed_cap,
+    };
     use crate::{DIR_SW, Map, TileCoord, TileKind, Vehicle, VehicleKind};
     use std::collections::VecDeque;
 
@@ -1972,6 +1977,14 @@ mod tests {
         assert_eq!(train_breakdown_speed_cap(26), Some(15));
         assert_eq!(train_breakdown_speed_cap(72), Some(60));
         assert_eq!(train_breakdown_speed_cap(1), None);
+    }
+
+    #[test]
+    fn imported_train_track_bit_ignores_invalid_track_indexes() {
+        assert_eq!(imported_train_track_bit(u8::MAX, u8::MAX), None);
+        assert_eq!(imported_train_track_bit(6, u8::MAX), None);
+        assert_eq!(imported_train_track_bit(5, 1 << 5), Some(1 << 5));
+        assert_eq!(imported_train_track_bit(5, 1 << 4), None);
     }
 
     #[test]

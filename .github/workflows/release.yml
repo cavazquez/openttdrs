@@ -257,7 +257,9 @@ jobs:
         shell: bash
         env:
           OPENTTDRS_RELEASE_GRAPHICAL_SMOKE: "1"
-          OPENTTDRS_RELEASE_GRAPHICAL_TIMEOUT_SECONDS: "60"
+          # The Windows software renderer takes ~40s to reach the capture frame
+          # and needs another minute to finish the deterministic smoke session.
+          OPENTTDRS_RELEASE_GRAPHICAL_TIMEOUT_SECONDS: ${{ runner.os == 'Windows' && '120' || '60' }}
           OPENTTDRS_RELEASE_CANDIDATE_SHA: ${{ github.sha }}
           OPENTTDRS_RELEASE_SMOKE_ARTIFACT_DIR: dist/release-smoke-${{ needs.validate.outputs.version }}-${{ matrix.platform }}
         run: >-

@@ -70,7 +70,7 @@ class ReleaseDryRunWorkflowTest(unittest.TestCase):
             "./scripts/smoke_release_package.sh",
             "Smoke gráfico nativo del paquete extraído",
             'OPENTTDRS_RELEASE_GRAPHICAL_SMOKE: "1"',
-            'OPENTTDRS_RELEASE_GRAPHICAL_TIMEOUT_SECONDS: "60"',
+            "OPENTTDRS_RELEASE_GRAPHICAL_TIMEOUT_SECONDS: ${{ runner.os == 'Windows' && '120' || '60' }}",
             "OPENTTDRS_RELEASE_CANDIDATE_SHA: ${{ github.sha }}",
             "OPENTTDRS_RELEASE_SMOKE_ARTIFACT_DIR",
             "release-${{ matrix.platform }}-graphics-smoke-",

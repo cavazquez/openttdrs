@@ -6,6 +6,7 @@ Perfiles de mapas grandes y benchmarks headless (`./scripts/check.sh bench`).
 
 - [Mapas grandes](#rendimiento-mapas-grandes)
 - [Flotas grandes y presupuesto de 30 FPS](#flotas-grandes-y-presupuesto-de-30-fps)
+- [Revisión de fuentes OpenTTD: mejoras y diferencias](parity/openttd-source-performance-review.md)
 - [Benchmarks](#benchmarks)
 
 ---

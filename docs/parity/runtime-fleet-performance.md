@@ -44,6 +44,11 @@ completa de CargoDist ni la garantía de 30 FPS.
 
 ## Cuellos de botella y siguiente etapa
 
+La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
+32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
+una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios
+de validación; no acredita mejoras implementadas ni cierra este objetivo.
+
 En el cliente en marcha, `perf record -e cpu-clock:u` atribuyó el **83,55 %**
 del tiempo de CPU a `fill_relative_vehicle_vars`, usado por los efectos
 visuales. Ese coste no aparecía en el perfil aislado de `GameState::step`.

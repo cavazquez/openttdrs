@@ -315,6 +315,7 @@ pub(crate) fn build_client_app(
         #[cfg(target_os = "linux")]
         app.add_plugins(TrayIconPlugin::new(asset_root));
         app.add_systems(Update, sync_rem_size_from_window.in_set(UpdateSet::Status));
+        app.add_plugins(crate::performance::PerformancePlugin);
     }
     Ok(app)
 }

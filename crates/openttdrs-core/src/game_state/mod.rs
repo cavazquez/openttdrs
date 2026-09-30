@@ -1370,9 +1370,7 @@ impl GameState {
     /// Reconstruye `StationFlows` con el pipeline `OpenTTD` (Demand + MCF1/2).
     pub fn rebuild_station_flows(&mut self) {
         use crate::flow_stat::StationFlows;
-        use crate::linkgraph_parity::{
-            build_jobs_from_cargo_dist, run_full_pipeline, to_station_flows_helper,
-        };
+        use crate::linkgraph_parity::build_jobs_from_cargo_dist;
 
         self.runtime.station_flow_rebuilds = self.runtime.station_flow_rebuilds.saturating_add(1);
 
@@ -1391,15 +1389,14 @@ impl GameState {
             map_h,
         );
         let mut merged = StationFlows::default();
-        for (cargo, mut job) in jobs {
-            run_full_pipeline(&mut job);
-            let part = to_station_flows_helper(&job, cargo);
-            for (station, table) in part.by_station {
+        for (cargo, job) in jobs {
+            let part = self.runtime.station_flow_cache.resolve(cargo, job);
+            for (&station, table) in &part.by_station {
                 let dest = merged.by_station.entry(station).or_default();
-                for (c, map) in table.by_cargo {
+                for (&c, map) in &table.by_cargo {
                     let dest_map = dest.by_cargo.entry(c).or_default();
-                    for (origin, fs) in map.by_origin {
-                        for (via, amount) in fs.shares {
+                    for (&origin, fs) in &map.by_origin {
+                        for &(via, amount) in &fs.shares {
                             dest_map.add_flow(origin, via, amount);
                         }
                     }

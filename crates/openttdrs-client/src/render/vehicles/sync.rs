@@ -33,10 +33,17 @@ impl VehicleIndex {
     pub(crate) fn rebuild(&mut self, vehicles: &[Vehicle]) {
         self.core.rebuild(vehicles);
     }
+
+    /// Refresh after a load/tick/command so sprite callbacks see topology
+    /// changes made late in the tick, including retired or replaced units.
+    pub(crate) fn rebuild_state(&mut self, state: &mut GameState) {
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+        self.core.clone_from(&state.runtime.fleet_index);
+    }
 }
 
-pub(crate) fn rebuild_vehicle_index(sim: Res<SimWorld>, mut idx: ResMut<VehicleIndex>) {
-    idx.rebuild(&sim.state.vehicles);
+pub(crate) fn rebuild_vehicle_index(mut sim: ResMut<SimWorld>, mut idx: ResMut<VehicleIndex>) {
+    idx.rebuild_state(&mut sim.state);
 }
 
 #[derive(Component)]
@@ -292,6 +299,7 @@ pub(crate) fn update_vehicles(
         ),
     >,
 ) {
+    let _measurement = crate::performance::measure(crate::performance::Phase::Vehicles);
     for c in &sim.state.companies {
         company.ensure_palette(
             crate::sprites::CompanyColour::from_u8(c.colour),

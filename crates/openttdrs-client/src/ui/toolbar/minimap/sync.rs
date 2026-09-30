@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::prelude::*;
@@ -80,6 +82,7 @@ pub(crate) fn sync_minimap(
     mut grid_q: Query<&mut Node, MinimapGridFilter>,
     mut grid_rows: Query<&mut Node, MinimapGridRowFilter>,
 ) {
+    let _measurement = crate::performance::measure(crate::performance::Phase::Minimap);
     let Ok((mut vis, mut root_node, mut z)) = root_q.single_mut() else {
         return;
     };
@@ -126,14 +129,35 @@ pub(crate) fn sync_minimap(
     if mw == 0 || mh == 0 {
         return;
     }
+    // One fleet pass replaces a search through every vehicle for every cell.
+    // First insertion preserves the previous `iter().find` owner tie break.
+    let mut vehicle_owners = HashMap::new();
+    if layers.vehicles {
+        for vehicle in sim.state.vehicles.iter().filter(|v| v.is_consist_head()) {
+            vehicle_owners.entry(vehicle.pos).or_insert(vehicle.owner);
+        }
+    }
     for (map_cell, mut bg, mut node) in &mut cells {
-        node.width = Val::Px(cell);
-        node.height = Val::Px(cell);
+        if node.width != Val::Px(cell) {
+            node.width = Val::Px(cell);
+        }
+        if node.height != Val::Px(cell) {
+            node.height = Val::Px(cell);
+        }
         let x = (MINIMAP_COLS.saturating_sub(1).saturating_sub(map_cell.col)) * mw / MINIMAP_COLS;
         let y = map_cell.row * mh / MINIMAP_ROWS;
         let c = TileCoord::new(x as i32, y as i32);
         let kind = sim.state.map.get_kind(c).unwrap_or(TileKind::Void);
-        *bg = BackgroundColor(minimap_cell_color(&sim.state, &layers, c, kind));
+        let color = BackgroundColor(minimap_cell_color(
+            &sim.state,
+            &layers,
+            c,
+            kind,
+            vehicle_owners.get(&c).copied(),
+        ));
+        if *bg != color {
+            *bg = color;
+        }
     }
 
     for (toggle, mut bg) in &mut toggles {
@@ -227,8 +251,20 @@ mod tests {
     #[test]
     fn sync_minimap_accepts_spawned_ui_without_b0001() {
         let mut world = World::new();
+        let mut state = GameState::new(16, 16);
+        state.ensure_companies();
+        let mut second_company = state.companies[0].clone();
+        second_company.colour = 9;
+        state.companies.push(second_company);
+        let tile = TileCoord::new(0, 0);
+        let mut wagon = Vehicle::new(3, VehicleKind::Train, tile, tile);
+        wagon.prev_unit = Some(1);
+        let mut first_head = Vehicle::new(1, VehicleKind::Truck, tile, tile);
+        first_head.owner = CompanyId(1);
+        let second_head = Vehicle::new(2, VehicleKind::Truck, tile, tile);
+        state.vehicles = vec![wagon, first_head, second_head];
         world.insert_resource(SimWorld {
-            state: GameState::new(16, 16),
+            state,
             loaded_file: false,
             ottdmap_extras: None,
         });
@@ -259,6 +295,30 @@ mod tests {
                 .iter(&world)
                 .next()
                 .is_some()
+        );
+        let cell = world
+            .query::<(Entity, &MinimapCell)>()
+            .iter(&world)
+            .find(|(_, cell)| cell.col == MINIMAP_COLS - 1 && cell.row == 0)
+            .map(|(entity, _)| entity)
+            .unwrap();
+        assert_eq!(
+            world.get::<BackgroundColor>(cell).unwrap().0,
+            crate::sprites::company_colour_swatch_color(9),
+            "wagons are skipped; the first head at a tile determines its colour"
+        );
+        world.resource_mut::<SimWorld>().state.vehicles[1].pos = TileCoord::new(1, 1);
+        world.run_system_once(sync_minimap).unwrap();
+        let colour = world.resource::<SimWorld>().state.companies[0].colour;
+        assert_eq!(
+            world.get::<BackgroundColor>(cell).unwrap().0,
+            crate::sprites::company_colour_swatch_color(colour)
+        );
+        world.resource_mut::<MinimapLayerState>().vehicles = false;
+        world.run_system_once(sync_minimap).unwrap();
+        assert_eq!(
+            world.get::<BackgroundColor>(cell).unwrap().0,
+            super::super::palette::minimap_color(TileKind::Grass)
         );
     }
 

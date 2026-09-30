@@ -261,6 +261,9 @@ pub struct SimulationRuntime {
     /// no forma parte del estado autoritativo ni se persiste.
     pub station_flow_rebuilds: u64,
 
+    /// Solver results keyed by exact per-cargo inputs; never serialized.
+    pub(crate) station_flow_cache: crate::linkgraph_parity::StationFlowCache,
+
     /// Jobs de link graph en vuelo; reemplaza el scheduler thread de `OpenTTD`
     /// por una cola determinista entre los ticks de spawn y join.
     pub pending_linkgraph_jobs: Vec<PendingLinkGraphJob>,
@@ -366,6 +369,7 @@ impl SimulationRuntime {
             rail_type_max_speed: [0; 4],
             station_flows: crate::flow_stat::StationFlows::default(),
             station_flow_rebuilds: 0,
+            station_flow_cache: crate::linkgraph_parity::StationFlowCache::default(),
             pending_linkgraph_jobs: Vec::new(),
             command_recorder: None,
             newgrf_diagnostics: Vec::new(),

@@ -132,6 +132,7 @@ pub(crate) fn animate_water(
     mut stats: Option<ResMut<WaterAnimationStats>>,
     mut last_frame: Local<Option<(usize, usize)>>,
 ) {
+    let _measurement = crate::performance::measure(crate::performance::Phase::Water);
     let Some(frames) = frames else {
         return;
     };

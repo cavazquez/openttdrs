@@ -12,7 +12,7 @@ use crate::tick::GameTick;
 use crate::vehicle::Vehicle;
 
 use super::metrics::cargo_unit_weight_16ths;
-use super::topology::{consist_head_id, consist_unit_ids};
+use crate::fleet_index::FleetIndex;
 
 /// Mapa fijo `CargoType` → cargo type A (clima templado TTD, sin tabla GRF).
 #[must_use]
@@ -57,14 +57,41 @@ pub fn action2_eval_ctx_for_unit(
     engine_catalog: &[EngineDef],
     owner_colour: u8,
 ) -> Action2EvalCtx {
+    let mut index = FleetIndex::default();
+    index.rebuild(vehicles);
+    action2_eval_ctx_for_unit_indexed(
+        vehicles,
+        &index,
+        unit_id,
+        tick,
+        engine_catalog,
+        owner_colour,
+    )
+}
+
+/// Same scopes using a current fleet index shared by the tick or render pass.
+#[must_use]
+#[allow(clippy::too_many_lines)]
+pub fn action2_eval_ctx_for_unit_indexed(
+    vehicles: &[Vehicle],
+    index: &FleetIndex,
+    unit_id: u32,
+    tick: GameTick,
+    engine_catalog: &[EngineDef],
+    owner_colour: u8,
+) -> Action2EvalCtx {
+    if index.slot(unit_id).is_none() && vehicles.iter().any(|unit| unit.id == unit_id) {
+        // Standalone previews/tests may construct vehicles without a tick.
+        return action2_eval_ctx_for_unit(vehicles, unit_id, tick, engine_catalog, owner_colour);
+    }
     let mut ctx = Action2EvalCtx::default();
-    let current = vehicles.iter().find(|v| v.id == unit_id);
+    let current = indexed_vehicle(vehicles, index, unit_id);
     let mut cur = Some(unit_id);
     for offset in 0u8..=15 {
         let Some(id) = cur else {
             break;
         };
-        let Some(unit) = vehicles.iter().find(|v| v.id == id) else {
+        let Some(unit) = indexed_vehicle(vehicles, index, id) else {
             break;
         };
         let bits = u32::from(unit.newgrf_random_bits);
@@ -84,6 +111,7 @@ pub fn action2_eval_ctx_for_unit(
         fill_relative_vehicle_vars(
             &mut ctx,
             vehicles,
+            index,
             unit,
             0,
             unit,
@@ -96,7 +124,7 @@ pub fn action2_eval_ctx_for_unit(
             let Some(id) = next else {
                 break;
             };
-            let Some(candidate) = vehicles.iter().find(|v| v.id == id) else {
+            let Some(candidate) = indexed_vehicle(vehicles, index, id) else {
                 break;
             };
             ctx.relative_random_bits
@@ -104,6 +132,7 @@ pub fn action2_eval_ctx_for_unit(
             fill_relative_vehicle_vars(
                 &mut ctx,
                 vehicles,
+                index,
                 unit,
                 distance,
                 candidate,
@@ -118,7 +147,7 @@ pub fn action2_eval_ctx_for_unit(
             let Some(id) = previous else {
                 break;
             };
-            let Some(candidate) = vehicles.iter().find(|v| v.id == id) else {
+            let Some(candidate) = indexed_vehicle(vehicles, index, id) else {
                 break;
             };
             ctx.relative_random_bits
@@ -126,6 +155,7 @@ pub fn action2_eval_ctx_for_unit(
             fill_relative_vehicle_vars(
                 &mut ctx,
                 vehicles,
+                index,
                 unit,
                 -distance,
                 candidate,
@@ -146,7 +176,7 @@ pub fn action2_eval_ctx_for_unit(
             let mut first_same_offset = 0i16;
             let mut previous = unit.prev_unit;
             while let Some(id) = previous {
-                let Some(candidate) = vehicles.iter().find(|v| v.id == id) else {
+                let Some(candidate) = indexed_vehicle(vehicles, index, id) else {
                     break;
                 };
                 if vehicle_engine_identity(candidate) != Some(engine_id) {
@@ -166,6 +196,7 @@ pub fn action2_eval_ctx_for_unit(
     fill_vehicle_action2_vars(
         &mut ctx,
         vehicles,
+        index,
         unit_id,
         tick,
         engine_catalog,
@@ -180,6 +211,7 @@ pub fn action2_eval_ctx_for_unit(
         fill_vehicle_action2_vars(
             &mut parent_ctx,
             vehicles,
+            index,
             parent_id,
             tick,
             engine_catalog,
@@ -188,13 +220,9 @@ pub fn action2_eval_ctx_for_unit(
         ctx.parent_vars = parent_ctx.vars;
         ctx.parent_parameterized_vars = parent_ctx.parameterized_vars;
         ctx.parent_persistent_registers = parent_ctx.persistent_registers;
-        ctx.parent_random_bits = vehicles
-            .iter()
-            .find(|vehicle| vehicle.id == parent_id)
+        ctx.parent_random_bits = indexed_vehicle(vehicles, index, parent_id)
             .map_or(0, |vehicle| u32::from(vehicle.newgrf_random_bits));
-        ctx.parent_vehicle_palette_generation = vehicles
-            .iter()
-            .find(|vehicle| vehicle.id == parent_id)
+        ctx.parent_vehicle_palette_generation = indexed_vehicle(vehicles, index, parent_id)
             .map_or(0, |vehicle| vehicle.newgrf_palette_generation);
     }
     ctx
@@ -386,16 +414,17 @@ pub fn enrich_vehicle_track_badge_vars(
 fn fill_vehicle_action2_vars(
     ctx: &mut Action2EvalCtx,
     vehicles: &[Vehicle],
+    index: &FleetIndex,
     unit_id: u32,
     tick: GameTick,
     engine_catalog: &[EngineDef],
     owner_colour: u8,
 ) {
-    let Some(unit) = vehicles.iter().find(|v| v.id == unit_id) else {
+    let Some(unit) = indexed_vehicle(vehicles, index, unit_id) else {
         return;
     };
-    let head_id = consist_head_id(vehicles, unit_id).unwrap_or(unit_id);
-    let ids = consist_unit_ids(vehicles, head_id);
+    let head_id = index.head_id(unit_id).unwrap_or(unit_id);
+    let ids = index.consist(head_id);
     let n = ids.len();
     let ff = ids.iter().position(|&id| id == unit_id).unwrap_or(0);
     let bb = n.saturating_sub(1).saturating_sub(ff);
@@ -478,7 +507,7 @@ fn fill_vehicle_action2_vars(
             let occurrence = if unit.kind == crate::vehicle::VehicleKind::Train {
                 ids.iter()
                     .skip(ff)
-                    .filter_map(|&id| vehicles.iter().find(|vehicle| vehicle.id == id))
+                    .filter_map(|&id| indexed_vehicle(vehicles, index, id))
                     .filter(|vehicle| vehicle_has_badge(vehicle, engine_catalog, badge_id))
                     .count()
             } else {
@@ -514,6 +543,7 @@ fn fill_vehicle_action2_vars(
 fn fill_relative_vehicle_vars(
     ctx: &mut Action2EvalCtx,
     vehicles: &[Vehicle],
+    index: &FleetIndex,
     current: &Vehicle,
     offset: i16,
     candidate: &Vehicle,
@@ -525,6 +555,7 @@ fn fill_relative_vehicle_vars(
     fill_vehicle_action2_vars(
         &mut candidate_ctx,
         vehicles,
+        index,
         candidate.id,
         tick,
         engine_catalog,
@@ -541,17 +572,14 @@ fn fill_relative_vehicle_vars(
     // id. When it is reached through var 61, the parameter lives in register
     // 0x10E, so retain the values for every local id present in the selected
     // vehicle's remaining chain.
-    let candidate_chain = consist_unit_ids(
-        vehicles,
-        consist_head_id(vehicles, candidate.id).unwrap_or(candidate.id),
-    );
+    let candidate_chain = index.consist(index.head_id(candidate.id).unwrap_or(candidate.id));
     let candidate_position = candidate_chain
         .iter()
         .position(|&id| id == candidate.id)
         .unwrap_or(0);
     let mut local_ids = Vec::<u16>::new();
     for &id in candidate_chain.iter().skip(candidate_position) {
-        let Some(vehicle) = vehicles.iter().find(|vehicle| vehicle.id == id) else {
+        let Some(vehicle) = indexed_vehicle(vehicles, index, id) else {
             continue;
         };
         let local_id = vehicle_engine_local_id(vehicle, engine_catalog);
@@ -568,7 +596,7 @@ fn fill_relative_vehicle_vars(
             candidate_chain
                 .iter()
                 .skip(candidate_position)
-                .filter_map(|&id| vehicles.iter().find(|vehicle| vehicle.id == id))
+                .filter_map(|&id| indexed_vehicle(vehicles, index, id))
                 .filter(|vehicle| vehicle_engine_local_id(vehicle, engine_catalog) == local_id)
                 .count()
         } else {
@@ -595,17 +623,7 @@ fn fill_relative_vehicle_vars(
         // relative to the original resolver.  Materialize the signed byte
         // offsets in the parameterized table so the Action2 evaluator can do
         // the same without retaining a live vehicle pointer.
-        for nested_offset in i16::from(i8::MIN)..=i16::from(i8::MAX) {
-            let Some(nested_candidate) = vehicle_at_relative(vehicles, candidate, nested_offset)
-            else {
-                continue;
-            };
-            let nested_curvature =
-                vehicle_relative_curvature(candidate, nested_candidate, nested_offset);
-            let encoded_offset = u16::from(nested_offset.to_le_bytes()[0]);
-            ctx.relative_parameterized_vars
-                .insert((offset, 0x62, encoded_offset), nested_curvature);
-        }
+        fill_relative_curvature_vars(ctx, vehicles, index, candidate, offset);
     }
 
     ctx.relative_vars.insert(
@@ -624,6 +642,41 @@ fn is_ground_vehicle(vehicle: &Vehicle) -> bool {
     )
 }
 
+fn fill_relative_curvature_vars(
+    ctx: &mut Action2EvalCtx,
+    vehicles: &[Vehicle],
+    index: &FleetIndex,
+    candidate: &Vehicle,
+    scope_offset: i16,
+) {
+    let mut write = |nested: &Vehicle, displacement: i16| {
+        ctx.relative_parameterized_vars.insert(
+            (scope_offset, 0x62, u16::from(displacement.to_le_bytes()[0])),
+            vehicle_relative_curvature(candidate, nested, displacement),
+        );
+    };
+    write(candidate, 0);
+    // Traverse each direction once. Restarting from the selected unit for
+    // every signed byte did quadratic walks with a fleet scan at each link.
+    // Keep bounded traversal (including cycles) to preserve all 256 lookups.
+    for (sign, limit) in [(-1_i16, 128_i16), (1, 127)] {
+        let mut nested = candidate;
+        for distance in 1..=limit {
+            let next = if sign < 0 {
+                nested.prev_unit
+            } else {
+                nested.next_unit
+            };
+            let Some(next) = next.and_then(|id| indexed_vehicle(vehicles, index, id)) else {
+                break;
+            };
+            nested = next;
+            write(nested, sign * distance);
+        }
+    }
+}
+
+#[cfg(test)]
 fn vehicle_at_relative<'a>(
     vehicles: &'a [Vehicle],
     current: &Vehicle,
@@ -684,4 +737,73 @@ fn vehicle_relative_curvature(current: &Vehicle, candidate: &Vehicle, offset: i1
     curvature |= (dy.cast_unsigned() & 0xFF) << 16;
     curvature |= (dz.cast_unsigned() & 0xFF) << 24;
     curvature
+}
+
+fn indexed_vehicle<'a>(
+    vehicles: &'a [Vehicle],
+    index: &FleetIndex,
+    id: u32,
+) -> Option<&'a Vehicle> {
+    index
+        .slot(id)
+        .and_then(|slot| vehicles.get(slot))
+        .filter(|vehicle| vehicle.id == id)
+        .or_else(|| vehicles.iter().find(|vehicle| vehicle.id == id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[allow(clippy::cast_possible_truncation)] // Fixture lengths are at most 260.
+    fn nested_curvature_matches_signed_byte_scan_for_long_and_cyclic_chains() {
+        for size in [1_usize, 4, 260] {
+            let mut vehicles: Vec<_> = (0..size)
+                .map(|slot| {
+                    let mut unit = Vehicle::new(
+                        1000 + slot as u32 * 7,
+                        crate::VehicleKind::Train,
+                        crate::TileCoord::new(1, 2),
+                        crate::TileCoord::new(3, 4),
+                    );
+                    unit.direction = (slot % 8) as u8;
+                    unit.crashed = slot % 5 == 0;
+                    unit
+                })
+                .collect();
+            for slot in 0..size {
+                vehicles[slot].prev_unit = slot.checked_sub(1).map(|prev| vehicles[prev].id);
+                vehicles[slot].next_unit = (slot + 1 < size).then(|| vehicles[slot + 1].id);
+            }
+            for cyclic in [false, true] {
+                if cyclic {
+                    vehicles[0].prev_unit = Some(vehicles[size - 1].id);
+                    vehicles[size - 1].next_unit = Some(vehicles[0].id);
+                }
+                let mut index = FleetIndex::default();
+                index.rebuild(&vehicles);
+                for slot in [0, size / 2, size - 1] {
+                    let candidate = &vehicles[slot];
+                    let mut actual = Action2EvalCtx::default();
+                    fill_relative_curvature_vars(&mut actual, &vehicles, &index, candidate, -3);
+                    let mut expected = std::collections::HashMap::new();
+                    for displacement in -128_i16..=127 {
+                        if let Some(nested) =
+                            vehicle_at_relative(&vehicles, candidate, displacement)
+                        {
+                            expected.insert(
+                                (-3, 0x62, u16::from(displacement.to_le_bytes()[0])),
+                                vehicle_relative_curvature(candidate, nested, displacement),
+                            );
+                        }
+                    }
+                    assert_eq!(
+                        actual.relative_parameterized_vars, expected,
+                        "size {size}, cyclic {cyclic}, slot {slot}"
+                    );
+                }
+            }
+        }
+    }
 }

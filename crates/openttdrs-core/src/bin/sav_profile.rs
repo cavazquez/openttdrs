@@ -19,6 +19,7 @@ use openttdrs_core::{
 struct Args {
     save: PathBuf,
     ticks: u32,
+    newgrf: bool,
 }
 
 #[derive(Default)]
@@ -94,12 +95,13 @@ impl VisualDirtySummary {
 }
 
 fn print_usage() {
-    eprintln!("uso: sav_profile <partida.sav> [--ticks N]");
+    eprintln!("uso: sav_profile <partida.sav> [--ticks N] [--newgrf]");
 }
 
 fn parse_args() -> Result<Args, String> {
     let mut save = None;
     let mut ticks = 180_u32;
+    let mut newgrf = false;
     let mut values = std::env::args().skip(1);
 
     while let Some(value) = values.next() {
@@ -116,6 +118,7 @@ fn parse_args() -> Result<Args, String> {
                     .parse()
                     .map_err(|error| format!("--ticks inválido {raw:?}: {error}"))?;
             }
+            "--newgrf" => newgrf = true,
             value if value.starts_with('-') => {
                 return Err(format!("opción desconocida: {value}"));
             }
@@ -125,7 +128,11 @@ fn parse_args() -> Result<Args, String> {
     }
 
     let save = save.ok_or_else(|| "falta <partida.sav>".to_string())?;
-    Ok(Args { save, ticks })
+    Ok(Args {
+        save,
+        ticks,
+        newgrf,
+    })
 }
 
 fn milliseconds(duration: Duration) -> f64 {
@@ -345,6 +352,11 @@ fn run(args: &Args) -> Result<(), String> {
     let import_start = Instant::now();
     let mut state = GameState::from_sav_game(sav);
     let import_time = import_start.elapsed();
+    let newgrf_time = args.newgrf.then(|| {
+        let start = Instant::now();
+        openttdrs_core::apply_newgrf_stack_catalogs_default_dirs(&mut state);
+        start.elapsed()
+    });
     state
         .runtime
         .terminal_spatial_index
@@ -364,6 +376,12 @@ fn run(args: &Args) -> Result<(), String> {
     println!("read:   {:>8.1} ms", milliseconds(read_time));
     println!("decode: {:>8.1} ms", milliseconds(decode_time));
     println!("import: {:>8.1} ms", milliseconds(import_time));
+    if let Some(duration) = newgrf_time {
+        println!(
+            "NewGRF: {:>8.1} ms (catálogos activos, igual que el cliente)",
+            milliseconds(duration)
+        );
+    }
     println!(
         "vehículos: {} (tren cabeza {}, carretera {}, barco {}, avión {}); activos {}, con órdenes {}, rutas pendientes {}",
         state.vehicles.len(),

@@ -167,6 +167,7 @@ fn sync_rail_glass_mask_proxies(
         Option<&mut MapTileChunk>,
     )>,
 ) {
+    let _measurement = crate::performance::measure(crate::performance::Phase::Glass);
     let mut proxies_by_source = HashMap::with_capacity(proxies.iter().len());
     for (proxy_entity, proxy, _sprite, _anchor, _transform, _visibility, _chunk) in &mut proxies {
         proxies_by_source.insert(proxy.source, proxy_entity);

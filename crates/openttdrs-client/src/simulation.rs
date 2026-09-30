@@ -94,8 +94,9 @@ fn step_sim(
     if net.is_some_and(|n| n.role() == NetworkRole::Client) {
         return;
     }
+    let _measurement = crate::performance::measure(crate::performance::Phase::Simulation);
     sim.state.step();
-    vehicle_index.rebuild(&sim.state.vehicles);
+    vehicle_index.rebuild_state(&mut sim.state);
 }
 
 fn flag_map_tile_dirty_remap(
@@ -172,13 +173,15 @@ fn flag_map_tile_dirty_remap(
 pub(crate) fn sync_tick_alpha(
     run_state: Res<State<SimRunState>>,
     fixed_time: Res<Time<Fixed>>,
+    capture_freeze: Option<Res<VisualCaptureFreeze>>,
     mut sim_clock: ResMut<SimClock>,
 ) {
-    sim_clock.tick_alpha = if sim_is_paused(&run_state) {
-        0.0
-    } else {
-        fixed_time.overstep_fraction()
-    };
+    sim_clock.tick_alpha =
+        if sim_is_paused(&run_state) || capture_freeze.is_some_and(|freeze| freeze.0) {
+            0.0
+        } else {
+            fixed_time.overstep_fraction()
+        };
 }
 
 #[cfg(test)]
@@ -263,11 +266,15 @@ mod tests {
         advance_app_time(&mut app, 500);
         let after = app.world().resource::<SimWorld>().state.tick.get();
         assert_eq!(before, after);
+        assert_eq!(app.world().resource::<SimClock>().tick_alpha, 0.0);
     }
 
     #[test]
     fn visual_capture_blocks_ticks_before_the_pause_state_applies() {
         let mut app = sim_test_app();
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_millis(13),
+        ));
         app.world_mut().resource_mut::<VisualCaptureFreeze>().0 = true;
 
         // El primer update entra en InGame y crea el subestado Running. La
@@ -278,6 +285,7 @@ mod tests {
         let after = app.world().resource::<SimWorld>().state.tick.get();
 
         assert_eq!(before, after);
+        assert_eq!(app.world().resource::<SimClock>().tick_alpha, 0.0);
     }
 
     #[test]

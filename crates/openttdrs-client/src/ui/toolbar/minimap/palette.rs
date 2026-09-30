@@ -34,6 +34,7 @@ pub(super) fn minimap_cell_color(
     layers: &MinimapLayerState,
     coord: TileCoord,
     kind: TileKind,
+    vehicle_owner: Option<CompanyId>,
 ) -> Color {
     let mut color = minimap_color(kind);
 
@@ -54,17 +55,8 @@ pub(super) fn minimap_cell_color(
     }
 
     if layers.vehicles
-        && state
-            .vehicles
-            .iter()
-            .any(|v| v.is_consist_head() && v.pos == coord)
+        && let Some(owner) = vehicle_owner
     {
-        let owner = state
-            .vehicles
-            .iter()
-            .find(|v| v.is_consist_head() && v.pos == coord)
-            .map(|v| v.owner)
-            .unwrap_or(CompanyId::PLAYER);
         color = company_color(state, owner);
     }
 

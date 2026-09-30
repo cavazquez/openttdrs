@@ -5,6 +5,7 @@ Perfiles de mapas grandes y benchmarks headless (`./scripts/check.sh bench`).
 ## Índice
 
 - [Mapas grandes](#rendimiento-mapas-grandes)
+- [Flotas grandes y presupuesto de 30 FPS](#flotas-grandes-y-presupuesto-de-30-fps)
 - [Benchmarks](#benchmarks)
 
 ---
@@ -112,6 +113,10 @@ Medición de estrés reproducible (2026-08-10) con la partida ignorada
 No se versiona la partida; el perfil describe el caso, no es un golden de
 tiempo.
 
+**Resultado histórico:** los 26 ms de esta sección no describen el checkout
+actual. El perfil de flotas del 2026-09-29, más abajo, vuelve a medir esta
+partida con el pipeline CargoDist actual y separa el render de la simulación.
+
 ```bash
 RUSTC_WRAPPER= CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true \
   cargo run -p openttdrs-core --release --bin sav_profile -- \
@@ -149,9 +154,9 @@ unidades** enlazados desde `STNN.goods` y **48.096 paquetes físicos (`CAPA`)**
 decodificados. La diferencia corresponde a paquetes que no están referidos por
 una cola de estación importada.
 
-Con esa carga real, `load_vehicles` ya visita sus fuentes y el coste medio de
-`cargo_load` es ~8,1 ms; el total medio sigue dentro del presupuesto de
-27.000 µs/tick (≈37 Hz), aunque el primer tick conserva el pico de rutas
+En esa medición, `load_vehicles` visitaba sus fuentes y el coste medio de
+`cargo_load` era ~8,1 ms; el total medio estaba dentro del presupuesto de
+27.000 µs/tick (≈37 Hz), aunque el primer tick conservaba el pico de rutas
 pendientes. La importación semántica vive en core, de modo que cliente,
 herramientas y servidor parten de las mismas industrias, stock y paquetes de
 estación.
@@ -227,6 +232,145 @@ cargo bench -p openttdrs-core --bench sim_tick -- cargodist/unload_burst_128
 
 1. ~~[#196](https://github.com/cavazquez/openttdrs/issues/196)~~ — nieve tile-loop
 2. [#197](https://github.com/cavazquez/openttdrs/issues/197) — Remap Bevy dirty → viewport (mitigado en cliente; verificar/cerrar)
+
+## Flotas grandes y presupuesto de 30 FPS
+
+Fechas locales: 2026-09-29/30. Linux, Ryzen 5 9600X, RX 7600/Vulkan, ventana de
+1280×720. Baseline: `4cf5a855`; binarios release preservados antes de los
+cambios. Partida ignorada `save/Kale_TitleGame.sav`, SHA-256
+`584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69`:
+256×256, 3.293 unidades de flota, 245 estaciones, 59 industrias y 34.044
+paquetes de estación. No se versionan la partida ni las capturas.
+
+El objetivo permanece **abierto**. Frame: 33,33 ms para 30 FPS; simulación:
+27 ms/tick, sin reducir la frecuencia nativa. El issue local conserva el
+alcance y los siguientes pasos en
+[`runtime-fleet-performance.md`](parity/runtime-fleet-performance.md).
+
+### Simulación aislada
+
+Comparación de ocho ticks desde la misma carga, sin compilar ni ejecutar otros
+benchmarks a la vez. `sav_profile` sin `--newgrf` mide el estado importado,
+incluido el primer tick con rutas pendientes; no equivale al cliente con todos
+los catálogos activos:
+
+- Tick medio: **2.946,0 → 1.215,3 ms**, mejora de 2,42×. Sigue por encima de
+  27 ms.
+- Descarga: **2.555,1 → 1.034,8 ms**; representa el 85,1 % del tick nuevo.
+- Carga: **105,3 → 103,9 ms**. Movimiento: **225,3 → 19,3 ms**.
+- Primer tick nuevo: 1.684,6 ms, con 241,5 ms de resolución de rutas.
+
+El principal coste es `unload_vehicles → rebuild_station_flows → Demand +
+MCF`. La descarga modifica el grafo y obliga a resolver pasajeros casi cada
+tick. La caché exacta por cargo evita resolver cargos sin cambios, pero no
+retira ese cálculo global del hilo de simulación. El scheduler periódico
+existente también ejecuta MCF sincrónicamente al hacer join.
+
+```bash
+cargo build --release -p openttdrs-core --bin sav_profile
+target/release/sav_profile save/Kale_TitleGame.sav --ticks 8
+OPENTTDRS_PERF_CARGODIST=1 target/release/sav_profile \
+  save/Kale_TitleGame.sav --ticks 4 --newgrf
+```
+
+`--newgrf` hidrata los catálogos activos desde los directorios estándar o
+`OPENTTDRS_NEWGRF_DIR`; imprime ese coste de arranque por separado. El flag
+debe coincidir al comparar versiones.
+
+La repetición con el binario final dio **1.221,2 ms/tick** sin hidratar
+NewGRF (ocho ticks). Con `--newgrf`, cuatro ticks dieron **1.352,1 ms/tick**:
+descarga 1.150,7 ms (85,1 %), carga 103,8 ms y movimiento 8,8 ms. La
+hidratación inicial tomó 15,3 ms y se informa fuera del tiempo de tick.
+
+### Efectos NewGRF en el cliente en marcha
+
+Una captura de CPU con `perf record -F 99 -e cpu-clock:u --call-graph
+dwarf,16384` encontró **83,55 % de tiempo propio** en
+`train_consist::newgrf_vars::fill_relative_vehicle_vars`. Para los efectos
+visuales se construían scopes relativos y, dentro de cada uno, los 256
+desplazamientos de la variable 62: cada desplazamiento volvía a recorrer la
+cadena, buscando cada enlace en toda la flota. Esta fase quedaba fuera de
+`sav_profile`, que sólo mide la simulación.
+
+Los efectos reutilizan ahora el índice de flota y la curvatura anidada recorre
+cada dirección una vez. El oracle compara exactamente las tablas de los 256
+desplazamientos, incluidas cadenas largas y cíclicas. El CSV registra esta
+fase como `effects_ms`.
+
+La corrección de curvatura redujo el frame medio de **15.146,4 a 1.377,1 ms**
+en tres muestras de los mismos ticks `3703077..3703079`, con la cámara inicial
+guardada y 125.555 sprites. El CSV posterior registra **34,93 ms de efectos**
+y **1.184,24 ms de simulación**. Es una comparación corta para aislar el
+bloqueo; no acredita estabilidad ni 30 FPS.
+
+La captura posterior en marcha, con escala 2 aplicada y warmup de 30 frames,
+registró diez muestras de los ticks `3703104..3703113`: **1,04 FPS**, frame
+medio **964,55 ms**, p95 **1.281,00 ms**, máximo **1.758,46 ms**. Los diez
+frames excedieron 33,33 ms; la simulación tomó 731,86 ms de media y los efectos
+33,19 ms. Esta ejecución incluyó el muestreo de `perf`; las llamadas de MCF y
+su cola reemplazan a la curvatura como mayor consumo de CPU. El objetivo
+requiere retirar el solver global del hilo del cliente, reducir el coste de
+carga y efectos, y resolver el vidrio de los zooms alejados.
+
+### Ventana real e instrumentación
+
+El modo opt-in registra CSV con `frame_ms` (entre dos entradas a First,
+incluye render/present del frame previo), `update_ms` (First→Last, sin el render
+posterior), subfases, tick y cantidades de sprites/meshes. Las subfases pueden
+solaparse; no deben sumarse para reconstruir el tiempo de frame. Los tiempos
+individuales de frame y fase tienen un desfase de un frame.
+
+```bash
+cargo build --release -p openttdrs-client
+OPENTTDRS_SAV_LOAD=save/Kale_TitleGame.sav \
+OPENTTDRS_DISABLE_AUDIO=1 \
+OPENTTDRS_PERF_OUT=/tmp/flota-pausada.csv \
+OPENTTDRS_PERF_PAUSED=1 OPENTTDRS_PERF_SCALE=2 \
+OPENTTDRS_PERF_WARMUP=120 OPENTTDRS_PERF_FRAMES=300 \
+target/release/openttdrs-client
+```
+
+`OPENTTDRS_PERF_PAUSED=1` congela ticks e interpolación; quitarlo permite
+medir la partida en marcha. `OPENTTDRS_PERF_PAN=1` mueve la cámara durante la
+ventana de muestras. Las escalas ortográficas `0.25, 0.5, 1, 2, 4, 8` son los
+seis zooms soportados, con magnificación inversa en el HUD. La escala se
+aplica en el frame 30, por lo que un warmup menor no acredita ese zoom.
+
+Sin `OPENTTDRS_PERF_OUT` no se instalan sistemas de captura. Estas mediciones
+no necesitan permisos de kernel para `perf`. Un CSV sin muestras tras un
+timeout no es una medición de FPS.
+
+### Render congelado, seis zooms y movimiento de cámara
+
+Para comparar ambas versiones se usó el driver de mapshot: centro `128,128`,
+escala 2, `CLEAN=0`, 120 frames de warmup y 300 muestras. El límite de captura
+de mapshot se fijó en 600, para que la salida del profiler ocurriera primero.
+Así ambas versiones congelan ticks e interpolación desde el arranque.
+En las capturas raster se verificó además la traza de cámara centrada y el
+contenido del recorte: esperar 90 frames no basta si el driver omite el
+ajuste de cámara al entrar al juego. Una captura con otro zoom se descartó.
+
+- Cámara fija: **16,51 → 58,82 FPS**; p95 del frame **72,44 → 17,90 ms**.
+  Después del cambio, el máximo fue 29,69 ms: 0/300 frames excedieron 33,33 ms.
+  Actualizar vehículos pasó de 38,69 a 3,32 ms y el minimapa de 7,25 a 0,16 ms.
+- Cámara en movimiento: **42,27 FPS**, p95 25,95 ms y máximo 71,30 ms.
+  **6/300** frames excedieron el presupuesto; persisten picos de remap.
+- Escalas 0.25, 0.5 y 1: aproximadamente 60 FPS, con **0/120** frames sobre
+  el presupuesto en cada zoom.
+- Escala 4: **28,33 FPS**, p95 37,75 ms, **116/120** frames sobre presupuesto.
+  El compositor de vidrio tomó 17,18 ms de media.
+- Escala 8: **18,74 FPS**, p95 55,57 ms, **120/120** sobre presupuesto.
+  El compositor de vidrio tomó 28,73 ms de media.
+
+Las capturas finales congeladas coinciden con el baseline en **0 píxeles
+diferentes** en los seis zooms, más una captura `CLEAN=1` en escala 2. Las
+regresiones de núcleo y cliente aportan oracles de valores, RNG y composición
+visual. Una variante de optimización del vidrio se retiró al detectar una
+divergencia raster: estas cifras usan el compositor original.
+
+Estos resultados sólo acreditan el render congelado. Los costes de efectos,
+simulación, joins de CargoDist y remap deben verificarse en una partida en
+marcha antes de afirmar 30 FPS estables.
 
 ## Benchmarks
 

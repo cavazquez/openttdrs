@@ -76,7 +76,8 @@ pub(crate) fn auto_start_preloaded_json(
     if *done
         || !should_auto_start_preloaded_json(
             sim.loaded_file,
-            std::env::var_os("OTTDJSON_LOAD").is_some(),
+            std::env::var_os("OTTDJSON_LOAD").is_some()
+                || std::env::var_os("OPENTTDRS_PERF_OUT").is_some(),
             capture_driver_active,
         )
     {

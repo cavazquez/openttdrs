@@ -26,7 +26,8 @@ pub use metrics::{
     consist_weight_t_with_catalog,
 };
 pub use newgrf_vars::{
-    action2_eval_ctx_for_unit, cargo_class_bits, cargo_type_a_id, enrich_vehicle_track_badge_vars,
+    action2_eval_ctx_for_unit, action2_eval_ctx_for_unit_indexed, cargo_class_bits,
+    cargo_type_a_id, enrich_vehicle_track_badge_vars,
 };
 pub use pose::{TrainUnitPose, consist_unit_poses};
 pub(crate) use topology::unit_capacity_for_vehicle;
@@ -113,6 +114,49 @@ mod tests {
         assert_eq!(ctx.relative_random_bits.get(&0), Some(&0x33));
         assert_eq!(ctx.relative_random_bits.get(&-1), Some(&0x22));
         assert_eq!(ctx.relative_random_bits.get(&-2), Some(&0x11));
+    }
+
+    #[test]
+    fn action2_indexed_scopes_use_shuffled_ids_and_current_vehicle_values() {
+        let mut vehicles = vec![train(700), train(42), train(999), train(1)];
+        vehicles[1].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);
+        vehicles[2].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);
+        vehicles[0].newgrf_random_bits = 0x11;
+        vehicles[1].newgrf_random_bits = 0x22;
+        vehicles[2].newgrf_random_bits = 0x33;
+        assert!(attach_wagon(&mut vehicles, 700, 42).is_ok());
+        assert!(attach_wagon(&mut vehicles, 700, 999).is_ok());
+        vehicles.rotate_left(2);
+        let mut index = crate::FleetIndex::default();
+        index.rebuild(&vehicles);
+        let tick = crate::tick::GameTick::new(0);
+        let ctx = action2_eval_ctx_for_unit_indexed(&vehicles, &index, 42, tick, &[], 4);
+        assert_eq!(
+            ctx.vars.get(&0x40).map(|v| v & 0x00FF_FFFF),
+            Some(0x0002_0101)
+        );
+        assert_eq!(ctx.parent_random_bits, 0x11);
+        assert_eq!(ctx.relative_random_bits.get(&-1), Some(&0x11));
+        assert_eq!(ctx.relative_random_bits.get(&1), Some(&0x33));
+        let slot = index.slot(42).expect("current unit");
+        vehicles[slot].cur_speed = 40;
+        vehicles[slot].cargo_type = Some(CargoType::Coal);
+        let ctx = action2_eval_ctx_for_unit_indexed(&vehicles, &index, 42, tick, &[], 4);
+        assert_eq!(ctx.vars.get(&0xB4), Some(&40));
+        assert_eq!(ctx.vars.get(&0xB9), Some(&1));
+        assert_eq!(index.rebuilds(), 1);
+        // A preview without a prepared runtime retains the same scopes.
+        let preview = action2_eval_ctx_for_unit_indexed(
+            &vehicles,
+            &crate::FleetIndex::default(),
+            42,
+            tick,
+            &[],
+            4,
+        );
+        assert_eq!(ctx.vars, preview.vars);
+        assert_eq!(ctx.parent_vars, preview.parent_vars);
+        assert_eq!(ctx.relative_vars, preview.relative_vars);
     }
 
     #[test]

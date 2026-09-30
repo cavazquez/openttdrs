@@ -189,10 +189,13 @@ fn vehicle_uses_newgrf_stack(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) 
 /// desde un SAV sean acíclicos. OpenTTD aplica la librea de la cabeza a todas
 /// sus unidades, incluidos vagones y partes articuladas.
 fn vehicle_head_id(state: &GameState, vehicle: &openttdrs_core::Vehicle) -> u32 {
+    if vehicle.prev_unit.is_none() {
+        return vehicle.id;
+    }
     let mut current_id = vehicle.id;
     let mut seen = std::collections::HashSet::new();
     while seen.insert(current_id) {
-        let Some(current) = state.vehicles.iter().find(|v| v.id == current_id) else {
+        let Some(current) = vehicle_by_id(state, current_id) else {
             break;
         };
         let Some(previous_id) = current.prev_unit else {
@@ -201,6 +204,16 @@ fn vehicle_head_id(state: &GameState, vehicle: &openttdrs_core::Vehicle) -> u32 
         current_id = previous_id;
     }
     vehicle.id
+}
+
+fn vehicle_by_id(state: &GameState, id: u32) -> Option<&openttdrs_core::Vehicle> {
+    state
+        .runtime
+        .fleet_index
+        .slot(id)
+        .and_then(|slot| state.vehicles.get(slot))
+        .filter(|vehicle| vehicle.id == id)
+        .or_else(|| state.vehicles.iter().find(|vehicle| vehicle.id == id))
 }
 
 /// Colores de librea que debe usar el renderer para una unidad.
@@ -217,11 +230,11 @@ pub(crate) fn vehicle_livery_colours_for_state(
         return (fallback, fallback);
     };
     let head_id = vehicle_head_id(state, vehicle);
-    let head = state
-        .vehicles
-        .iter()
-        .find(|candidate| candidate.id == head_id)
-        .unwrap_or(vehicle);
+    let head = if head_id == vehicle.id {
+        vehicle
+    } else {
+        vehicle_by_id(state, head_id).unwrap_or(vehicle)
+    };
     let engine = vehicle
         .engine_id
         .and_then(|id| openttdrs_core::engine_in_catalog(&state.engine_catalog, id))
@@ -1162,6 +1175,15 @@ mod tests {
         ));
 
         world.run_system_once(rebuild_vehicle_index).unwrap();
+        assert_eq!(
+            world
+                .resource::<SimWorld>()
+                .state
+                .runtime
+                .fleet_index
+                .slot(11),
+            Some(0)
+        );
         world.run_system_once(update_vehicles).unwrap();
 
         let mut labels = world.query_filtered::<&Text2d, With<sync::VehicleCargoLabel>>();

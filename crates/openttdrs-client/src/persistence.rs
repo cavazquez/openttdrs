@@ -91,7 +91,7 @@ pub(crate) fn apply_loaded_state(
     openttdrs_core::apply_newgrf_stack_catalogs_default_dirs(&mut sim.state);
     sim.ottdmap_extras = None;
     sim.loaded_file = true;
-    vehicle_index.rebuild(&sim.state.vehicles);
+    vehicle_index.rebuild_state(&mut sim.state);
     // Una carga sustituye el estado aunque conserve dimensiones: nunca se
     // pueden reutilizar sprites/chunks de la partida anterior.
     remap.request_full_and_sync_camera();

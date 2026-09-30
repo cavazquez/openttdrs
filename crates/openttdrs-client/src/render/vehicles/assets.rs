@@ -823,8 +823,9 @@ fn custom_aircraft_rotor_layers_for_engine(
         let mut ctx = vehicle.map_or_else(
             || vehicle_preview_action2_context(sim, engine, primary, secondary),
             |vehicle| {
-                let mut ctx = openttdrs_core::action2_eval_ctx_for_unit(
+                let mut ctx = openttdrs_core::action2_eval_ctx_for_unit_indexed(
                     &sim.state.vehicles,
+                    &sim.state.runtime.fleet_index,
                     vehicle.id,
                     sim.state.tick,
                     &sim.state.engine_catalog,
@@ -1145,8 +1146,9 @@ impl TruckHandles {
             let colour = owner_colour.unwrap_or(livery_primary);
             if eng.newgrf_runtime.is_some() {
                 let colour_u8 = colour.as_u8();
-                let mut ctx = openttdrs_core::action2_eval_ctx_for_unit(
+                let mut ctx = openttdrs_core::action2_eval_ctx_for_unit_indexed(
                     &sim.state.vehicles,
+                    &sim.state.runtime.fleet_index,
                     v.id,
                     sim.state.tick,
                     &sim.state.engine_catalog,

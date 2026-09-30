@@ -40,6 +40,7 @@ mod debug_gizmos;
 mod i18n;
 mod iso;
 mod news_prefs;
+mod performance;
 mod persistence;
 mod render;
 mod render_trace;

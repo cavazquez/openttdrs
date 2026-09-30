@@ -388,7 +388,7 @@ fn handle_event(
         } => {
             sim.state = GameState::load_json(snapshot_json).map_err(|e| e.to_string())?;
             status.desync = None;
-            vehicle_index.rebuild(&sim.state.vehicles);
+            vehicle_index.rebuild_state(&mut sim.state);
             if let Some(fo) = failover {
                 fo.peer_id = Some(*peer_id);
                 fo.next_seq = *next_seq;
@@ -412,7 +412,7 @@ fn handle_event(
             seq,
         } => {
             apply_command_as_company(&mut sim.state, *company_id, command)?;
-            vehicle_index.rebuild(&sim.state.vehicles);
+            vehicle_index.rebuild_state(&mut sim.state);
             if let Some(fo) = failover {
                 fo.next_seq = seq.saturating_add(1);
             }
@@ -423,7 +423,7 @@ fn handle_event(
             for _ in 0..*count {
                 sim.state.step();
             }
-            vehicle_index.rebuild(&sim.state.vehicles);
+            vehicle_index.rebuild_state(&mut sim.state);
             Ok(EventOutcome::Ok)
         }
         SessionEvent::HashCheck { tick, hash } => {

@@ -912,9 +912,10 @@ pub use town_expand::{
 pub use townname::generate_town_name;
 pub use train_collision::{TrainCollision, detect_train_collisions, resolve_train_collisions};
 pub use train_consist::{
-    TrainUnitPose, VEHICLE_LENGTH, action2_eval_ctx_for_unit, attach_wagon, attach_wagon_chain,
-    cargo_class_bits, cargo_type_a_id, consist_changed, consist_changed_with_map,
-    consist_changed_with_map_and_catalog, consist_changed_with_map_and_catalog_and_cargo,
+    TrainUnitPose, VEHICLE_LENGTH, action2_eval_ctx_for_unit, action2_eval_ctx_for_unit_indexed,
+    attach_wagon, attach_wagon_chain, cargo_class_bits, cargo_type_a_id, consist_changed,
+    consist_changed_with_map, consist_changed_with_map_and_catalog,
+    consist_changed_with_map_and_catalog_and_cargo,
     consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier, consist_head_id,
     consist_occupied_tiles, consist_power_hp, consist_power_hp_with_catalog, consist_tile_span,
     consist_unit_ids, consist_unit_ids_indexed, consist_unit_poses, consist_weight_t,

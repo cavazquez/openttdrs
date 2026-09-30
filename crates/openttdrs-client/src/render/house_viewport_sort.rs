@@ -1294,6 +1294,7 @@ pub(crate) fn sort_viewport_sortable_parents(
     mut previous_scope: Local<Option<ViewportSortScopeState>>,
     mut previous_trace_signature: Local<Option<u64>>,
 ) {
+    let _measurement = crate::performance::measure(crate::performance::Phase::Sort);
     let scope = viewport_sort_scope(
         viewport.sim.as_deref(),
         &viewport.windows,
@@ -2020,6 +2021,7 @@ pub(crate) fn sync_viewport_sortable_children(
     mut child_transforms: Query<&mut Transform, With<ViewportSortableChild>>,
     child_depth_windows: Res<ViewportSortableChildDepthWindows>,
 ) {
+    let _measurement = crate::performance::measure(crate::performance::Phase::Children);
     let mut children_by_parent: HashMap<Entity, Vec<(Entity, f32)>> = HashMap::new();
     for (entity, child) in &children {
         if child_depth_windows.independent_children.contains(&entity) {

@@ -96,6 +96,7 @@ pub(crate) fn apply_remap_map_visuals(
     if !pending.is_pending() {
         return;
     }
+    let _measurement = crate::performance::measure(crate::performance::Phase::Remap);
     let Some(assets) = assets else {
         return;
     };

@@ -1,6 +1,9 @@
 //! Port literal del pipeline linkgraph de `OpenTTD` (enteros / órdenes / fórmulas).
 //! El stub BFS de [`crate::cargodist::legacy::mcf`] queda legado; el juego usa este módulo.
 
+mod cache;
+pub(crate) use cache::StationFlowCache;
+
 pub mod demands;
 pub mod flow_stat;
 pub mod flowmapper;

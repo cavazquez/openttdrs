@@ -1,6 +1,15 @@
 use crate::vehicle::{OrderUnloadType, VehicleKind, VehicleRandomTrigger};
 use crate::{CargoType, GameState, TileCoord, TileKind, economy, station, town};
 
+/// Tick callers already own the topology; standalone tests retain the fallback.
+fn indexed_consist_head_id(state: &GameState, id: u32) -> Option<u32> {
+    state
+        .runtime
+        .fleet_index
+        .head_id(id)
+        .or_else(|| crate::consist_head_id(&state.vehicles, id))
+}
+
 /// Convierte un pago de economía en el contador acumulativo de ingresos.
 ///
 /// `Money` es firmado porque un callback `NewGRF` puede devolver un ajuste
@@ -49,6 +58,21 @@ fn ensure_cargo_payment(state: &mut GameState, front_vehicle_id: u32) -> usize {
 /// unidades terminaron la descarga. Las entradas importadas desde `CAPY`
 /// conservan su referencia nativa y se mantienen para round-trip.
 fn purge_finished_runtime_payments(state: &mut GameState) {
+    let vehicles = &state.vehicles;
+    let index = &state.runtime.fleet_index;
+    let pending = |&id: &u32| {
+        index
+            .slot(id)
+            .and_then(|slot| vehicles.get(slot))
+            .filter(|vehicle| vehicle.id == id)
+            .or_else(|| vehicles.iter().find(|vehicle| vehicle.id == id))
+            .is_some_and(|vehicle| {
+                vehicle.cargo > 0
+                    || vehicle.cargo_unloading
+                    || vehicle.cargo_loading
+                    || !vehicle.aircraft_mail_packets.is_empty()
+            })
+    };
     state.cargo_payments.retain(|payment| {
         let Some(front_id) = payment.front_vehicle_id else {
             return true;
@@ -56,15 +80,13 @@ fn purge_finished_runtime_payments(state: &mut GameState) {
         if payment.front_vehicle_ref.is_some() {
             return true;
         }
-        crate::consist_unit_ids(&state.vehicles, front_id)
-            .into_iter()
-            .filter_map(|id| state.vehicles.iter().find(|vehicle| vehicle.id == id))
-            .any(|vehicle| {
-                vehicle.cargo > 0
-                    || vehicle.cargo_unloading
-                    || vehicle.cargo_loading
-                    || !vehicle.aircraft_mail_packets.is_empty()
-            })
+        if index.slot(front_id).is_some() {
+            index.consist(front_id).iter().any(pending)
+        } else {
+            crate::consist_unit_ids(vehicles, front_id)
+                .iter()
+                .any(pending)
+        }
     });
 }
 
@@ -183,10 +205,14 @@ fn trigger_vehicle_empty_if_consist_empty(state: &mut GameState, vehicle_idx: us
         return;
     }
     let vehicle_id = vehicle.id;
-    let Some(head_id) = crate::consist_head_id(&state.vehicles, vehicle_id) else {
+    let Some(head_id) = indexed_consist_head_id(state, vehicle_id) else {
         return;
     };
-    let unit_ids = crate::consist_unit_ids(&state.vehicles, head_id);
+    let unit_ids = if state.runtime.fleet_index.slot(head_id).is_some() {
+        state.runtime.fleet_index.consist(head_id).to_vec()
+    } else {
+        crate::consist_unit_ids(&state.vehicles, head_id)
+    };
     if unit_ids.is_empty()
         || !unit_ids.iter().all(|id| {
             state
@@ -636,9 +662,8 @@ fn try_unload_aircraft_mail_packets(
         return false;
     }
 
-    let payment_front_id =
-        crate::train_consist::consist_head_id(&state.vehicles, state.vehicles[vehicle_idx].id)
-            .unwrap_or(state.vehicles[vehicle_idx].id);
+    let payment_front_id = indexed_consist_head_id(state, state.vehicles[vehicle_idx].id)
+        .unwrap_or(state.vehicles[vehicle_idx].id);
     let payment_index = ensure_cargo_payment(state, payment_front_id);
     let speed = aircraft_mail_load_unload_speed(state, vehicle_idx);
     let unloadable = state.vehicles[vehicle_idx]
@@ -867,8 +892,7 @@ fn try_unload_aircraft_mail_packets(
             .saturating_add(positive_money(payment));
     }
     let profit_vehicle_id = state.vehicles[vehicle_idx].id;
-    let head_id =
-        crate::consist_head_id(&state.vehicles, profit_vehicle_id).unwrap_or(profit_vehicle_id);
+    let head_id = indexed_consist_head_id(state, profit_vehicle_id).unwrap_or(profit_vehicle_id);
     if let Some(head) = state
         .vehicles
         .iter_mut()
@@ -1063,8 +1087,7 @@ pub(super) fn unload_vehicles(
         // la cabeza del consist evita generar una entrada por vagón y permite
         // guardar un CAPY coherente incluso si la descarga es gradual.
         let payment_front_id =
-            crate::train_consist::consist_head_id(&state.vehicles, state.vehicles[i].id)
-                .unwrap_or(state.vehicles[i].id);
+            indexed_consist_head_id(state, state.vehicles[i].id).unwrap_or(state.vehicles[i].id);
         let payment_index = ensure_cargo_payment(state, payment_front_id);
 
         let speed = vehicle_load_unload_speed(state, i, cargo_type);
@@ -1329,7 +1352,7 @@ pub(super) fn unload_vehicles(
         }
         let profit_vehicle_id = state.vehicles[i].id;
         let head_id =
-            crate::consist_head_id(&state.vehicles, profit_vehicle_id).unwrap_or(profit_vehicle_id);
+            indexed_consist_head_id(state, profit_vehicle_id).unwrap_or(profit_vehicle_id);
         if let Some(head) = state.vehicles.iter_mut().find(|v| v.id == head_id) {
             head.profit_this_year = head.profit_this_year.saturating_add(payment);
         }
@@ -1856,7 +1879,7 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
     {
         return false;
     }
-    let head_id = crate::consist_head_id(&state.vehicles, state.vehicles[vehicle_idx].id)
+    let head_id = indexed_consist_head_id(state, state.vehicles[vehicle_idx].id)
         .unwrap_or(state.vehicles[vehicle_idx].id);
     // Una orden pertenece a la cabeza. Las unidades articuladas pueden tener
     // la misma tesela, pero no deben iniciar una segunda operación.

@@ -885,8 +885,9 @@ fn vehicle_visual_effect_context(
         return openttdrs_core::Action2EvalCtx::default();
     };
     let primary = crate::render::vehicles::vehicle_livery_colour_for_state(state, vehicle);
-    let mut ctx = openttdrs_core::action2_eval_ctx_for_unit(
+    let mut ctx = openttdrs_core::action2_eval_ctx_for_unit_indexed(
         &state.vehicles,
+        &state.runtime.fleet_index,
         vehicle_id,
         state.tick,
         &state.engine_catalog,
@@ -929,6 +930,8 @@ fn spawn_train_smoke(
         return;
     }
     spawn_clock.last_tick = Some(tick);
+
+    let _measurement = crate::performance::measure(crate::performance::Phase::Effects);
 
     let mut active_count = existing.iter().count();
     let state = &mut sim.state;

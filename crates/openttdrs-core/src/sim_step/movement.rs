@@ -781,7 +781,16 @@ fn sync_road_articulated_parts(
     else {
         return Vec::new();
     };
-    let ids = crate::train_consist::consist_unit_ids(&state.vehicles, head.id);
+    // The tick already prepared this topology. Ordinary road vehicles have
+    // no followers and must not rebuild the whole fleet to discover that.
+    if head.next_unit.is_none() {
+        return Vec::new();
+    }
+    let ids = if state.runtime.fleet_index.slot(head.id).is_some() {
+        state.runtime.fleet_index.consist(head.id).to_vec()
+    } else {
+        crate::train_consist::consist_unit_ids(&state.vehicles, head.id)
+    };
     if ids.len() < 2 {
         return Vec::new();
     }

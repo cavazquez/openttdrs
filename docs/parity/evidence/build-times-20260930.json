@@ -1,0 +1,363 @@
+{
+  "date": "2026-09-30",
+  "base_commit": "2fed024dae7eff59ae1701a6e5a60ccac32a719b",
+  "rust": "1.98.0",
+  "linker": "clang + mold",
+  "opt_level_workspace": 1,
+  "opt_level_dependencies": 3,
+  "note": "Dependencies cached. CargoDist JSON working changes present. Initial incremental-cache warmth differs; two later edits change only a topology error diagnostic (first also follows runtime documentation edits). Pair order reversed for edit 2. These are six samples, not averages or cold-checkout times.",
+  "builds": [
+    {
+      "case": "baseline_full",
+      "cargo_report": "cargo-timing-20261001T012811333Z-1a164ba2ba8c43cf.html",
+      "units": [
+        {
+          "name": "openttdrs-core",
+          "target": "",
+          "start": 0.35,
+          "duration": 25.12,
+          "sections": [
+            [
+              "frontend",
+              {
+                "start": 0.0,
+                "end": 6.18
+              }
+            ],
+            [
+              "codegen",
+              {
+                "start": 6.18,
+                "end": 25.12
+              }
+            ]
+          ]
+        },
+        {
+          "name": "openttdrs-net",
+          "target": "",
+          "start": 6.54,
+          "duration": 3.81,
+          "sections": [
+            [
+              "frontend",
+              {
+                "start": 0.0,
+                "end": 0.28
+              }
+            ],
+            [
+              "codegen",
+              {
+                "start": 0.28,
+                "end": 3.81
+              }
+            ]
+          ]
+        },
+        {
+          "name": "openttdrs-client",
+          "target": " openttdrs-client \"bin\"",
+          "start": 25.47,
+          "duration": 64.03,
+          "sections": null
+        }
+      ],
+      "critical_path_s": 89.5
+    },
+    {
+      "case": "initial_lines",
+      "cargo_report": "cargo-timing-20261001T013021396Z-1a164ba2ba8c43cf.html",
+      "units": [
+        {
+          "name": "openttdrs-core",
+          "target": "",
+          "start": 0.15,
+          "duration": 25.0,
+          "sections": [
+            [
+              "frontend",
+              {
+                "start": 0.0,
+                "end": 11.03
+              }
+            ],
+            [
+              "codegen",
+              {
+                "start": 11.03,
+                "end": 25.0
+              }
+            ]
+          ]
+        },
+        {
+          "name": "openttdrs-net",
+          "target": "",
+          "start": 11.18,
+          "duration": 3.59,
+          "sections": [
+            [
+              "frontend",
+              {
+                "start": 0.0,
+                "end": 0.37
+              }
+            ],
+            [
+              "codegen",
+              {
+                "start": 0.37,
+                "end": 3.59
+              }
+            ]
+          ]
+        },
+        {
+          "name": "openttdrs-client",
+          "target": " openttdrs-client \"bin\"",
+          "start": 25.15,
+          "duration": 59.99,
+          "sections": null
+        }
+      ],
+      "critical_path_s": 85.14
+    },
+    {
+      "case": "edit1_full",
+      "cargo_report": "cargo-timing-20261001T013424098Z-1a164ba2ba8c43cf.html",
+      "units": [
+        {
+          "name": "openttdrs-core",
+          "target": "",
+          "start": 0.14,
+          "duration": 20.76,
+          "sections": [
+            [
+              "frontend",
+              {
+                "start": 0.0,
+                "end": 2.89
+              }
+            ],
+            [
+              "codegen",
+              {
+                "start": 2.89,
+                "end": 20.76
+              }
+            ]
+          ]
+        },
+        {
+          "name": "openttdrs-net",
+          "target": "",
+          "start": 3.04,
+          "duration": 0.7,
+          "sections": [
+            [
+              "frontend",
+              {
+                "start": 0.0,
+                "end": 0.14
+              }
+            ],
+            [
+              "codegen",
+              {
+                "start": 0.14,
+                "end": 0.7
+              }
+            ]
+          ]
+        },
+        {
+          "name": "openttdrs-client",
+          "target": " openttdrs-client \"bin\"",
+          "start": 20.93,
+          "duration": 35.65,
+          "sections": null
+        }
+      ],
+      "critical_path_s": 56.58
+    },
+    {
+      "case": "edit1_lines",
+      "cargo_report": "cargo-timing-20261001T013520707Z-1a164ba2ba8c43cf.html",
+      "units": [
+        {
+          "name": "openttdrs-core",
+          "target": "",
+          "start": 0.13,
+          "duration": 9.92,
+          "sections": [
+            [
+              "frontend",
+              {
+                "start": 0.0,
+                "end": 2.71
+              }
+            ],
+            [
+              "codegen",
+              {
+                "start": 2.71,
+                "end": 9.92
+              }
+            ]
+          ]
+        },
+        {
+          "name": "openttdrs-net",
+          "target": "",
+          "start": 2.84,
+          "duration": 0.17,
+          "sections": [
+            [
+              "frontend",
+              {
+                "start": 0.0,
+                "end": 0.14
+              }
+            ],
+            [
+              "codegen",
+              {
+                "start": 0.14,
+                "end": 0.17
+              }
+            ]
+          ]
+        },
+        {
+          "name": "openttdrs-client",
+          "target": " openttdrs-client \"bin\"",
+          "start": 10.06,
+          "duration": 18.46,
+          "sections": null
+        }
+      ],
+      "critical_path_s": 28.520000000000003
+    },
+    {
+      "case": "edit2_lines",
+      "cargo_report": "cargo-timing-20261001T013638370Z-1a164ba2ba8c43cf.html",
+      "units": [
+        {
+          "name": "openttdrs-core",
+          "target": "",
+          "start": 0.16,
+          "duration": 9.68,
+          "sections": [
+            [
+              "frontend",
+              {
+                "start": 0.0,
+                "end": 2.37
+              }
+            ],
+            [
+              "codegen",
+              {
+                "start": 2.37,
+                "end": 9.68
+              }
+            ]
+          ]
+        },
+        {
+          "name": "openttdrs-net",
+          "target": "",
+          "start": 2.52,
+          "duration": 0.16,
+          "sections": [
+            [
+              "frontend",
+              {
+                "start": 0.0,
+                "end": 0.13
+              }
+            ],
+            [
+              "codegen",
+              {
+                "start": 0.13,
+                "end": 0.16
+              }
+            ]
+          ]
+        },
+        {
+          "name": "openttdrs-client",
+          "target": " openttdrs-client \"bin\"",
+          "start": 9.83,
+          "duration": 4.9,
+          "sections": null
+        }
+      ],
+      "critical_path_s": 14.73
+    },
+    {
+      "case": "edit2_full",
+      "cargo_report": "cargo-timing-20261001T013653138Z-1a164ba2ba8c43cf.html",
+      "units": [
+        {
+          "name": "openttdrs-core",
+          "target": "",
+          "start": 0.14,
+          "duration": 11.07,
+          "sections": [
+            [
+              "frontend",
+              {
+                "start": 0.0,
+                "end": 2.74
+              }
+            ],
+            [
+              "codegen",
+              {
+                "start": 2.74,
+                "end": 11.07
+              }
+            ]
+          ]
+        },
+        {
+          "name": "openttdrs-net",
+          "target": "",
+          "start": 2.88,
+          "duration": 0.18,
+          "sections": [
+            [
+              "frontend",
+              {
+                "start": 0.0,
+                "end": 0.14
+              }
+            ],
+            [
+              "codegen",
+              {
+                "start": 0.14,
+                "end": 0.18
+              }
+            ]
+          ]
+        },
+        {
+          "name": "openttdrs-client",
+          "target": " openttdrs-client \"bin\"",
+          "start": 11.24,
+          "duration": 5.0,
+          "sections": null
+        }
+      ],
+      "critical_path_s": 16.240000000000002
+    }
+  ],
+  "executable_bytes": {
+    "full": 760658944,
+    "line_tables_only": 388736000
+  }
+}

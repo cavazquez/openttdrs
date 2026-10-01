@@ -128,6 +128,15 @@ cámara. Las mediciones del candidato no muestran una ganancia clara de FPS.
 Sólo se conserva la regresión CPU y la evidencia; F08/F31 y 30 FPS siguen
 abiertos. Los datos completos están en la etapa 31 del registro de implementación.
 
+La etapa 32 evita obtener todos los componentes de proxies estables y conserva
+la reparación de cambios externos y su existencia. En GPU real, vidrio baja
+3,28–3,29 → 2,62–2,67 ms y fijo mide 22,35–22,40 → 23,03–23,06 FPS,
+con ventanas desplazadas un tick. Pan mejora menos y todos sus frames exceden
+33,33 ms. Doce PNG en seis zooms, los seis streams y las entradas completas,
+bytes y máscaras In2x/Out2x son exactos. Es conservación del port, no cierre
+de paridad nativa. Las cifras y limitaciones completas están en la etapa 32;
+cadencia y 30 FPS siguen abiertos.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

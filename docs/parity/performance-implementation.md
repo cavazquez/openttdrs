@@ -2225,3 +2225,121 @@ tests del comparador de entradas. Esta etapa cierra sólo la reproducción del
 empate f32 y el ensayo documentado. F08/F31, diferencias nativas de máscara,
 variaciones históricas, cadencia y 30 FPS permanecen abiertos. El renderer
 conserva las reglas de la etapa 30 al retirar los dos prototipos.
+
+
+## Etapa 32 — Evitar búsquedas completas de proxies sin cambios (F08/F31)
+
+El renderer conserva el pase de profundidad anterior: no instala el candidato
+retirado de la etapa 31. Esta etapa sólo reduce búsquedas ECS en
+`sync_rail_glass_mask_proxies`. Un scan filtrado recoge los proxies con cambios
+en SpriteMesh, Anchor, Transform, Visibility o MapTileChunk en un EntityHashSet
+local reutilizado. Si fuente y clasificación no cambiaron, tampoco el proxy,
+y la entidad sigue cumpliendo la query, conserva su liveness y evita obtener
+la tupla completa de componentes mutables. Las demás fuentes siguen por el
+camino existente, en el mismo orden de creación y limpieza.
+
+Se mantienen todos los proxies, incluidos los ocultos, las cámaras, cutoff,
+shaders y materiales. El chequeo de existencia cubre despawns y retiro de un
+componente requerido; la clasificación cacheada detecta retiro del marker de
+vidrio. Un ParamSet separa la query de cambios y la query mutable, evitando
+accesos ECS incompatibles. Las regresiones existentes conservan 49 estados
+con 64 fuentes y ciclos de vida; la nueva modifica cada uno de los cinco
+campos del proxy por separado sin cambiar su fuente y exige reparación exacta.
+
+El perfil previo usa el cliente final conservado de la etapa 31, SHA256
+`d3c11e988f75e1b518d5ca886385401e8d0b761df4e38277e88c9888398d7181`.
+`perf record -e cpu-clock:u -F 199 --call-graph dwarf,32768` empieza tras
+warmup 120 y el primer flush de 60 muestras; el ACK del FIFO confirma la
+activación. Guarda 240 frames, con sampling en el intervalo posterior hasta
+el final, 7.909,084 ms entre primera y última muestra. Hay cero samples
+perdidos y un evento fuera de orden reportado. La pila más amplia sigue sin
+reconstruir callers fiables: los porcentajes children casi coinciden con self.
+No se atribuyen callers ni tiempos exactos a partir de esa pila.
+
+Las hojas identificadas incluyen 4,66 % + 0,83 % en el sync de máscaras,
+2,20 % en una query paralela de visibilidad, 1,54 % en extracción Mesh2d,
+1,54 % en sort de parents y 1,05 % en su sorter puro. Los porcentajes son
+CPU del proceso y sus threads, no porcentajes del frame ni FPS sin perf.
+[Scope y porcentajes de hojas](evidence/glass-proxy-lookup-perf-20261001.csv).
+Registro de 77.164.872 bytes (data section 77.149.936), SHA256
+`e10f993245423e4e6c2c504b62c57ce0dcc725458450a4850cbace3353c6e175`.
+El scope, header, reportes y hojas están en
+`target/performance/client-render-residual-20261001`; no se repite el perfil
+para presentar tiempos instrumentados como ganancia normal.
+
+GPU real, Kale activa, 1280×720, escala 2, ABBA sin perf, trazas ni
+compilación concurrentes, 40 muestras/run. Fijo, warmup 120: vidrio
+3,2827 / 3,2905 → 2,6737 / 2,6167 ms. Frame
+44,7374 / 44,6381 → 43,3720 / 43,4176 ms; FPS
+22,353 / 22,402 → 23,056 / 23,032. p95
+58,1447 / 59,0647 → 57,3860 / 56,2535; máximos/p99
+60,2406 / 60,7406 → 58,8897 / 59,2344. TPS
+22,358 / 22,303 → 23,060 / 23,130. Ambos controles cubren
+3703194–3703233, ambos candidatos 3703193–3703232: se conserva ese
+**desplazamiento de un tick** y no se presentan como ventanas alineadas.
+80/80 frames anteriores y 76/80 posteriores superan 33,33 ms.
+[160 muestras fijas](evidence/glass-proxy-lookup-steady-20261001.csv).
+
+Pan, warmup 30: vidrio
+3,0916 / 3,1717 → 2,5613 / 2,6043 ms; frame
+49,4334 / 50,0977 → 49,0999 / 49,4946 ms; FPS
+20,229 / 19,961 → 20,367 / 20,204. p95
+62,3890 / 62,6911 → 61,9150 / 62,6842; máximos/p99
+129,3509 / 132,7875 → 127,7722 / 127,9446. TPS
+21,104 / 20,843 → 21,239 / 21,060. El primer control cubre
+3703104–3703143; los otros, 3703103–3703142. 80/80 frames de ambos
+exceden el presupuesto. La fase de vidrio baja de forma consistente en estas
+cuatro parejas; la ganancia global es pequeña, especialmente en pan, y no
+acredita 30 FPS ni elimina los picos.
+[160 muestras en movimiento](evidence/glass-proxy-lookup-pan-20261001.csv).
+
+Doce capturas congeladas, seis escalas .25/.5/1/2/4/8, centro 128,128,
+settle 180 y CLEAN=0: PNG exactos, cero píxeles y cero bloques 4×4 distintos
+en todas las parejas. Los seis streams completos del sorter coinciden tras
+renumeración biyectiva de entidades, conservando orden, campos y referencias.
+En In2x y Out2x, todas las entradas de sprites/meshes/cámaras y los bytes CPU
+de las 272/384 imágenes también coinciden; ambas máscaras son exactas. No se
+omite ningún campo para aceptar la comparación ni se amplía tolerancia.
+[Seis zooms, entradas y hashes](evidence/glass-proxy-lookup-raster-20261001.csv).
+Las capturas prueban conservación del renderer previo en esta fixture;
+no acreditan paridad nativa ni resuelven los empates y recortes de la etapa 31.
+
+Artefactos en `target/performance/glass-proxy-lookup-20261001`.
+Cliente anterior/posterior SHA256
+`d3c11e988f75e1b518d5ca886385401e8d0b761df4e38277e88c9888398d7181` /
+`531c7acbe43439a265a2fa2453f86d70a1458d748424d89488f5832314d49182`.
+El core usado por ambos builds cliente es el mismo artefacto Cargo fresh,
+`libopenttdrs_core-6f345d3271658885.rlib`, SHA256
+`09d42185d59accd956373a9f95e5e36de6132065ba7cfcee5528da0dfd8734e0`.
+Es una variante de dependencias distinta a la biblioteca fijada de sav_profile,
+`8e9bfada5fcb7f92d96762270768f81ddffdd9322c18e7ebf56f6bad8a970376`,
+usada por el replay de 61 fases de la etapa 29. El core y las sondas no cambian;
+se conserva esa evidencia del perfil aislado sin atribuir un replay nuevo del
+cliente ni intercambiar las dos bibliotecas por fecha de modificación.
+
+Los cuatro JSON completos de entradas se comparan antes de archivarlos; sus
+.gz se verifican contra SHA256 de los bytes originales. Sus carpetas .images
+mantienen los bytes mediante hardlinks readonly verificados, recuperando
+119.811.600 bytes de texturas. También se preserva comprimido el JSON válido
+Out4x del candidato retirado, recuperando 151.872.246 bytes, y el primer
+binario diagnóstico de la etapa 30, recuperando 142.266.520. Release de esta
+etapa: 53,38 s; no prueba una mejora de compilación.
+
+La primera suite completa del cliente tuvo 1.668 pasados, cuatro fallos por
+`StorageFull` al copiar atlas/ejecutable aislado y dos ignorados. Se conserva
+`client-tests.log`; no se cambió código para resolverlos. Con TMPDIR propio
+en /tmp, la repetición completa pasa 1.672/dos. La copia propia del caché
+antiguo de 5.940.131.840 bytes se compacta en 89 bloques gzip verificados
+antes de liberar cada rango; el stream reconstruido conserva SHA256
+`f354bba5fa0b145bd64db2de09668e7d1ce6ea8f4a0941fea0ab3cafd9fcfdfe`.
+Su manifest de recuperación está en
+`/tmp/openttdrs-obsolete-incremental-0g0ynd2erlr29.tar.gzip-chunks/manifest.json`;
+se recuperan 4.134.167.949 bytes. El control a0a959b4 retirado se conserva
+comprimido y verificado en /tmp, con enlaces .gz desde sus artefactos: se
+recuperan otros 187.508.416 bytes en home. No se eliminan archivos ajenos.
+
+Validación: 3.035 core/seis ignorados, 1.672 cliente/dos; Clippy de ambos en
+todos los targets, formato, diff, frescura de docs y tres tests del comparador.
+Cierra sólo la búsqueda completa innecesaria para estos proxies estables.
+F08/F31 completos, muestreo/composición nativos, variaciones históricas,
+cadencia y 30 FPS siguen abiertos.

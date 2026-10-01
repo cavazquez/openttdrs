@@ -11,7 +11,7 @@ use bevy::camera::{RenderTarget, visibility::RenderLayers};
 use bevy::core_pipeline::{
     Core2dSystems, FullscreenShader, schedule::Core2d as Core2dSchedule, tonemapping::tonemapping,
 };
-use bevy::ecs::entity::EntityHashMap;
+use bevy::ecs::entity::{EntityHashMap, EntityHashSet};
 use bevy::prelude::*;
 use bevy::render::camera::ExtractedCamera;
 use bevy::render::extract_component::{ExtractComponent, ExtractComponentPlugin};
@@ -88,6 +88,27 @@ struct RailGlassMaskProxyCache {
     initialized: bool,
     by_source: EntityHashMap<CachedMaskProxy>,
 }
+
+type ChangedMaskProxyFilter = (
+    With<RailGlassMaskProxy>,
+    Or<(
+        Changed<SpriteMesh>,
+        Changed<Anchor>,
+        Changed<Transform>,
+        Changed<Visibility>,
+        Changed<MapTileChunk>,
+    )>,
+);
+
+type MaskProxyData = (
+    Entity,
+    &'static RailGlassMaskProxy,
+    &'static mut SpriteMesh,
+    &'static mut Anchor,
+    &'static mut Transform,
+    &'static mut Visibility,
+    Option<&'static mut MapTileChunk>,
+);
 
 /// Handles compartidos entre el mundo principal y el render world.
 #[derive(Resource, Clone, ExtractResource)]
@@ -202,17 +223,13 @@ fn sync_rail_glass_mask_proxies(
             Without<RailGlassMaskProxy>,
         ),
     >,
-    mut proxies: Query<(
-        Entity,
-        &RailGlassMaskProxy,
-        &mut SpriteMesh,
-        &mut Anchor,
-        &mut Transform,
-        &mut Visibility,
-        Option<&mut MapTileChunk>,
-    )>,
+    mut proxy_queries: ParamSet<(Query<Entity, ChangedMaskProxyFilter>, Query<MaskProxyData>)>,
+    mut changed_proxies: Local<EntityHashSet>,
 ) {
     let _measurement = crate::performance::measure(crate::performance::Phase::Glass);
+    changed_proxies.clear();
+    changed_proxies.extend(proxy_queries.p0().iter());
+    let mut proxies = proxy_queries.p1();
     if !cache.initialized {
         for (entity, proxy, ..) in &mut proxies {
             cache.by_source.insert(
@@ -237,6 +254,23 @@ fn sync_rail_glass_mask_proxies(
         glass_source,
     ) in &sources
     {
+        // Stable sources still participate in liveness and keep their proxy.
+        // A changed-proxy scan catches external edits without fetching every
+        // mutable component tuple. The live query check also repairs despawns
+        // or removal of a required proxy component.
+        if let Some(cached) = cache.by_source.get_mut(&source_entity)
+            && cached.is_glass == Some(glass_source.is_some())
+            && !source_sprite.is_changed()
+            && !source_anchor.is_changed()
+            && !source_transform.is_changed()
+            && !source_visibility.is_changed()
+            && !source_chunk.as_ref().is_some_and(DetectChanges::is_changed)
+            && !changed_proxies.contains(&cached.entity)
+            && proxies.contains(cached.entity)
+        {
+            cached.seen = true;
+            continue;
+        }
         if let Some(cached) = cache.by_source.get_mut(&source_entity)
             && let Ok((
                 _,
@@ -924,6 +958,45 @@ mod tests {
             .iter(app.world())
             .count();
         assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn cached_masks_repair_each_proxy_field_without_source_changes() {
+        let mut app = App::new();
+        app.add_systems(Update, sync_rail_glass_mask_proxies);
+        spawn_source(app.world_mut(), 0, &Handle::default());
+        app.update();
+        app.update();
+        let expected = mask_states(app.world_mut());
+        let proxy = app
+            .world_mut()
+            .query_filtered::<Entity, With<RailGlassMaskProxy>>()
+            .single(app.world())
+            .unwrap();
+        for field in 0..5 {
+            match field {
+                0 => {
+                    *app.world_mut().get_mut::<MapTileChunk>(proxy).unwrap() =
+                        MapTileChunk { cx: 99, cy: 88 };
+                }
+                1 => {
+                    app.world_mut().get_mut::<SpriteMesh>(proxy).unwrap().flip_y = true;
+                }
+                2 => {
+                    *app.world_mut().get_mut::<Anchor>(proxy).unwrap() = Anchor::TOP_LEFT;
+                }
+                3 => {
+                    *app.world_mut().get_mut::<Transform>(proxy).unwrap() =
+                        Transform::from_xyz(999.0, 888.0, 777.0);
+                }
+                _ => {
+                    *app.world_mut().get_mut::<Visibility>(proxy).unwrap() = Visibility::Hidden;
+                }
+            }
+            app.update();
+            assert_eq!(mask_states(app.world_mut()), expected, "field {field}");
+            app.update();
+        }
     }
 
     fn sync_legacy(

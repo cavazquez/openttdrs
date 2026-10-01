@@ -15,7 +15,7 @@ use super::plugin::{
     LoadedMapTileChunks, MapLabelEntities, MapTileSpawnViewport, NewGrfMapSpriteCaches,
     RemapMapVisualsPending,
 };
-use super::tile_spawn::{spawn_map_chunk, spawn_world_layer};
+use super::tile_spawn::{MapTileSpawnScopeCounts, spawn_map_chunk, spawn_world_layer};
 use super::viewport::{overview_stride_for_viewport, resolve_spawn_viewport, sync_camera_for_sim};
 
 /// OpenTTD sólo dibuja los detalles de carretera hasta `Out2x`.
@@ -170,6 +170,7 @@ pub(crate) fn apply_remap_map_visuals(
         // Solo refrescar chunks dirty que siguen en el viewport (no todo el área visible).
         refresh_chunks.retain(|c| needed.contains(c));
         let plan = loaded_chunks.plan_incremental_remap(&needed, &refresh_chunks);
+        let mut scope_counts = None;
 
         for (entity, chunk) in &q_chunks {
             if plan.to_despawn.contains(&(chunk.cx, chunk.cy)) {
@@ -186,6 +187,7 @@ pub(crate) fn apply_remap_map_visuals(
                 company.as_mut(),
                 images.as_mut(),
                 &sim,
+                scope_counts.get_or_insert_with(|| MapTileSpawnScopeCounts::new(&sim.state)),
                 cx,
                 cy,
                 show_pbs,
@@ -212,6 +214,7 @@ pub(crate) fn apply_remap_map_visuals(
                 company.as_mut(),
                 images.as_mut(),
                 &sim,
+                scope_counts.get_or_insert_with(|| MapTileSpawnScopeCounts::new(&sim.state)),
                 cx,
                 cy,
                 show_pbs,

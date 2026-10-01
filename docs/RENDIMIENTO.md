@@ -545,6 +545,41 @@ Regresiones de cambios de componentes, límites de la comparación, alcance
 pendiente y SHA256 en
 [la etapa 16](parity/performance-implementation.md#etapa-16--comparar-máscaras-sólo-tras-cambios-de-componentes-f08).
 
+### Cliente en marcha tras compartir conteos entre chunks (2026-10-01)
+
+Comparación de `516a09c5` con la etapa 17, misma partida/NewGRF, hardware,
+1280×720, escala 2 y audio desactivado. ABBA, 40 muestras por corrida y
+sin compilaciones ni `perf` concurrentes. Se mantienen las ventanas con
+warmup 30 para comparar el mismo protocolo y se añade warmup 120.
+
+- Cámara fija, warmup 30: remap 10,846 / 10,556 → 10,019 / 9,870 ms;
+  frame medio 62,81 / 62,18 → 62,35 / 61,56 ms, equivalentes a
+  15,922 / 16,082 → 16,038 / 16,245 FPS.
+  [Datos](parity/evidence/chunk-scopes-client-20261001.csv).
+- Cámara en movimiento, warmup 30: remap 13,533 / 13,689 → 12,469 / 12,537 ms;
+  frame medio 68,71 / 69,13 → 67,77 / 68,02 ms, equivalentes a
+  14,554 / 14,465 → 14,755 / 14,702 FPS.
+  [Datos de pan](parity/evidence/chunk-scopes-pan-20261001.csv).
+- Cámara fija, warmup 120: remap 11,475 / 11,532 → 10,908 / 10,922 ms;
+  frame medio 60,20 / 59,79 → 59,52 / 59,80 ms, equivalentes a
+  16,610 / 16,725 → 16,801 / 16,724 FPS. p95
+  87,80 / 87,72 → 85,65 / 86,36 ms; máximo/p99
+  95,34 / 95,59 → 93,76 / 95,79 ms. La mejora de FPS es pequeña y no
+  uniforme. [Datos sostenidos](parity/evidence/chunk-scopes-client-steady-20261001.csv).
+
+El driver cambia la escala en el frame 30. Con warmup 30 la primera muestra
+incluye ese intervalo de cambio de viewport; los máximos de cámara fija de
+las etapas 15/16 están precisamente en esa muestra. Se conservan los datos
+y no se interpretan esos máximos como picos periódicos de simulación. Warmup
+120 mide una ventana posterior de la partida: se compara cada variante con
+su propio baseline y no se mezclan las ventanas. Todos los 80 frames de cada
+versión y escenario siguen sobre 33,33 ms; los timers de fases no suman el frame.
+
+Las seis parejas de PNG y trazas completas vuelven a coincidir. Prueba de
+conteos fuera del viewport y después de demoler, percentiles de los tres
+escenarios, ticks, SHA256 y límites en
+[la etapa 17](parity/performance-implementation.md#etapa-17--compartir-conteos-globales-entre-chunks-del-remap-f04f17).
+
 ### Render congelado, seis zooms y movimiento de cámara
 
 Para comparar ambas versiones se usó el driver de mapshot: centro `128,128`,

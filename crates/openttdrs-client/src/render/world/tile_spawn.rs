@@ -40,6 +40,22 @@ use super::viewport::{
 
 use crate::render::vehicles::{NewGrfTrainSpriteCache, TruckHandles, spawn_initial_vehicles};
 
+/// Counts are global to the immutable world snapshot, not to an individual
+/// chunk. Share them within a remap and rebuild on its next invocation.
+pub(super) struct MapTileSpawnScopeCounts {
+    houses: openttdrs_core::HouseScopeCounts,
+    objects: openttdrs_core::ObjectScopeCounts,
+}
+
+impl MapTileSpawnScopeCounts {
+    pub(super) fn new(state: &GameState) -> Self {
+        Self {
+            houses: openttdrs_core::HouseScopeCounts::from_map(&state.map, &state.towns),
+            objects: openttdrs_core::ObjectScopeCounts::from_objects(&state.objects),
+        }
+    }
+}
+
 fn owner_colour_for_tile(
     sim: &SimWorld,
     coord: TileCoord,
@@ -93,12 +109,13 @@ pub(super) fn tile_kind_name(kind: TileKind) -> &'static str {
 }
 
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
-pub(crate) fn spawn_map_tiles_in_bounds(
+pub(super) fn spawn_map_tiles_in_bounds(
     commands: &mut Commands,
     assets: &WorldAssets,
     company: &mut CompanyColoredSprites,
     images: &mut Assets<Image>,
     sim: &SimWorld,
+    scope_counts: Option<&MapTileSpawnScopeCounts>,
     spawn_bounds: TileViewportBounds,
     show_pbs_reservations: bool,
     show_road_detail: bool,
@@ -133,11 +150,13 @@ pub(crate) fn spawn_map_tiles_in_bounds(
     let map = &sim.state.map;
     let climate = sim.state.climate;
     let world_seed = sim.state.world_seed;
-    // `HouseScopeResolver` consulta conteos globales y por pueblo para cada
-    // casa. Prepararlos una sola vez mantiene el coste del pase lineal aun
-    // cuando el viewport contiene miles de teselas de casas.
-    let house_counts = openttdrs_core::HouseScopeCounts::from_map(map, &sim.state.towns);
-    let object_counts = openttdrs_core::ObjectScopeCounts::from_objects(&sim.state.objects);
+    let local_counts;
+    let scope_counts = if let Some(counts) = scope_counts {
+        counts
+    } else {
+        local_counts = MapTileSpawnScopeCounts::new(&sim.state);
+        &local_counts
+    };
     for c in &sim.state.companies {
         company.ensure_palette(CompanyColour::from_u8(c.colour), images);
     }
@@ -354,7 +373,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     &sim.state.object_spec_catalog,
                     &sim.state.towns,
                     &sim.state.objects,
-                    Some(&object_counts),
+                    Some(&scope_counts.objects),
                     Some(object_sprites),
                     Some(images),
                     &sim.state.runtime.foundation_newgrf_sprites,
@@ -452,7 +471,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     map,
                     map_dims: (mw, mh),
                     house_catalog: &sim.state.house_spec_catalog,
-                    house_counts: Some(&house_counts),
+                    house_counts: Some(&scope_counts.houses),
                     towns: &sim.state.towns,
                     climate,
                     newgrf_stack: &sim.state.newgrf_stack,
@@ -758,6 +777,7 @@ pub(crate) fn spawn_world_layer(
             company,
             images,
             sim,
+            None,
             spawn_bounds,
             show_pbs_reservations,
             show_road_detail,
@@ -776,12 +796,13 @@ pub(crate) fn spawn_world_layer(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn spawn_map_chunk(
+pub(super) fn spawn_map_chunk(
     commands: &mut Commands,
     assets: &WorldAssets,
     company: &mut CompanyColoredSprites,
     images: &mut Assets<Image>,
     sim: &SimWorld,
+    scope_counts: &MapTileSpawnScopeCounts,
     cx: u32,
     cy: u32,
     show_pbs_reservations: bool,
@@ -804,6 +825,7 @@ pub(crate) fn spawn_map_chunk(
         company,
         images,
         sim,
+        Some(scope_counts),
         chunk_tile_bounds(cx, cy, mw, mh),
         show_pbs_reservations,
         show_road_detail,
@@ -1102,8 +1124,104 @@ pub(crate) fn spawn_intro_map_render(
 #[cfg(test)]
 #[allow(clippy::expect_used)] // El fixture usa coordenadas fijas que deben estar dentro del mapa.
 mod tests {
-    use super::{OverviewBlockSummary, overview_block_summary};
-    use openttdrs_core::prelude::{Map, TileCoord, TileKind};
+    use super::{MapTileSpawnScopeCounts, OverviewBlockSummary, overview_block_summary};
+    use openttdrs_core::Town;
+    use openttdrs_core::prelude::{GameState, Map, TileCoord, TileKind};
+
+    #[test]
+    fn chunk_scope_counts_include_remote_entities_and_refresh_after_demolition() {
+        let mut state = GameState::new(64, 16);
+        state.towns = vec![
+            Town {
+                id: 3,
+                pos: TileCoord::new(1, 1),
+                ..Default::default()
+            },
+            Town {
+                id: 42,
+                pos: TileCoord::new(50, 10),
+                ..Default::default()
+            },
+        ];
+        for (coord, town) in [
+            (TileCoord::new(1, 1), 3),
+            (TileCoord::new(50, 1), 3),
+            (TileCoord::new(50, 10), 42),
+        ] {
+            state
+                .map
+                .set_completed_house(coord, 7, 0)
+                .expect("house in map");
+            state
+                .map
+                .set_house_town_id(coord, town)
+                .expect("town in map");
+        }
+        state.objects = vec![
+            openttdrs_core::sav::SavObject {
+                object_id: 5,
+                tile: TileCoord::new(30, 1),
+                width: 4,
+                height: 2,
+                town: 4,
+                build_date: 0,
+                colour: 0,
+                view: 0,
+                object_type: 16,
+            },
+            openttdrs_core::sav::SavObject {
+                object_id: 91,
+                tile: TileCoord::new(50, 1),
+                width: 1,
+                height: 1,
+                town: 43,
+                build_date: 0,
+                colour: 0,
+                view: 0,
+                object_type: 16,
+            },
+        ];
+        let first = MapTileSpawnScopeCounts::new(&state);
+        let coord = TileCoord::new(1, 1);
+        let ctx = openttdrs_core::action2_eval_ctx_for_house_tile_with_counts(
+            &state.map,
+            state.map.get(coord).expect("house tile"),
+            coord.x,
+            coord.y,
+            state.climate,
+            &state.towns,
+            &state.house_spec_catalog,
+            &first.houses,
+            &[(0x60, 7)],
+        );
+        assert_eq!(ctx.vars.get(&0x44), Some(&0x0302));
+        assert_eq!(ctx.parameterized_vars.get(&(0x60, 7)), Some(&0x0302));
+        assert_eq!(first.houses.town_count(42, 7), 1);
+        assert_eq!(first.objects.count(16), 2); // instances, not footprint tiles
+
+        state
+            .map
+            .set_kind(TileCoord::new(50, 1), TileKind::Grass)
+            .expect("demolished house in map");
+        state.objects.pop();
+        let next = MapTileSpawnScopeCounts::new(&state);
+        let ctx = openttdrs_core::action2_eval_ctx_for_house_tile_with_counts(
+            &state.map,
+            state.map.get(coord).expect("house tile"),
+            coord.x,
+            coord.y,
+            state.climate,
+            &state.towns,
+            &state.house_spec_catalog,
+            &next.houses,
+            &[(0x60, 7)],
+        );
+        assert_eq!(ctx.vars.get(&0x44), Some(&0x0201));
+        assert_eq!(ctx.parameterized_vars.get(&(0x60, 7)), Some(&0x0201));
+        assert_eq!(next.objects.count(16), 1);
+        assert_eq!(first.houses.map_count(7), 3); // the previous snapshot is owned
+        assert_eq!(first.objects.count(16), 2);
+    }
 
     #[test]
     fn overview_uses_water_on_a_tie_and_rounds_height() {

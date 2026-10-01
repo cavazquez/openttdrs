@@ -821,6 +821,75 @@ targets, formato, diff y frescura de docs. Binarios normales SHA256
 Se cierra la comparación de valores estables en este sincronizador; el barrido,
 la presentación restante, los pases auxiliares y los 30 FPS siguen abiertos.
 
+## Etapa 17 — Compartir conteos globales entre chunks del remap (F04/F17)
+
+Los chunks de una tanda leen el mismo `SimWorld` inmutable. Se preparan los
+conteos de casas/objetos una vez, de forma lazy al primer chunk que realmente
+se materializa, y se comparten entre chunks añadidos y refrescados. Cada nueva
+invocación de remap reconstruye la instantánea; no se guarda entre ticks ni
+mundos. El pase completo conserva su preparación local y el orden de
+chunks, callbacks y spawns no cambia.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`, `newgrf_house.cpp::GetNumHouses`
+consulta contadores globales/por pueblo y `newgrf_object.cpp` usa
+`Object::GetTypeCount`. El port conserva sus builders existentes y la parte
+de contexto que ya soportaban; esta etapa no incorpora clases de casas ni
+amplía la semántica de variables relativas. La regresión coloca casas y
+objetos fuera del chunk visible, verifica vars 44/60 y conteos por pueblo,
+cuenta instancias de objetos con distintos footprints y vuelve a comprobar
+los valores después de demoler. La instantánea anterior conserva sus valores.
+
+Baseline `516a09c5`, misma partida/NewGRF y hardware, 1280×720, escala 2,
+audio desactivado, cuatro corridas ABBA por escenario, 40 muestras cada una,
+sin compilaciones ni `perf` concurrentes. Con warmup 30, remap medio
+10,846 / 10,556 → 10,019 / 9,870 ms; frame medio
+62,806 / 62,183 → 62,350 / 61,557 ms. FPS por duración media:
+15,922 / 16,082 → 16,038 / 16,245. p95
+80,081 / 80,366 → 78,283 / 78,076 ms; máximo/p99
+159,569 / 151,790 → 158,611 / 150,044 ms. Ticks 3.703.103–3.703.142
+en los primeros runs de ambas versiones y 3.703.104–3.703.143 en los segundos.
+[Muestras](evidence/chunk-scopes-client-20261001.csv).
+
+Con cámara en movimiento y warmup 30: remap
+13,533 / 13,689 → 12,469 / 12,537 ms; frame medio
+68,711 / 69,132 → 67,772 / 68,020 ms; FPS
+14,554 / 14,465 → 14,755 / 14,702. p95
+103,413 / 102,231 → 98,491 / 97,806 ms; máximo/p99
+159,491 / 161,411 → 159,367 / 157,661 ms. Todos cubren ticks
+3.703.103–3.703.142. [Muestras](evidence/chunk-scopes-pan-20261001.csv).
+
+Se detectó que el máximo de las corridas de cámara fija de las etapas 15/16
+está en la primera muestra. `begin_frame` cambia la escala en el frame 30;
+la primera muestra de `frame_ms` mide el intervalo iniciado en ese frame.
+Con warmup 30 incluye por tanto ese cambio de viewport. Se conservan íntegros
+los datos anteriores y el protocolo comparable de esta etapa; no se describen
+sus máximos como picos periódicos de simulación ni como rendimiento sostenido.
+
+Se añadió otra comparación ABBA con **warmup 120**, mismo cliente activo,
+escala 2 y 40 muestras. Remap 11,475 / 11,532 → 10,908 / 10,922 ms;
+frame medio 60,205 / 59,791 → 59,522 / 59,795 ms; FPS
+16,610 / 16,725 → 16,801 / 16,724. p95
+87,800 / 87,723 → 85,653 / 86,355 ms; máximo/p99
+95,341 / 95,587 → 93,757 / 95,787 ms. El primer run anterior cubre ticks
+3.703.194–3.703.233; los otros tres, 3.703.193–3.703.232. No se compara esta
+ventana más avanzada de la partida con warmup 30 para atribuir una ganancia.
+La mejora sostenida de FPS es pequeña y no uniforme; el problema de frame
+persiste. En los tres escenarios, los 80 frames de cada versión superan
+33,33 ms. [Muestras sostenidas](evidence/chunk-scopes-client-steady-20261001.csv).
+
+Raster: las seis parejas con flota, centro 128,128, 180 frames de settle y
+`CLEAN=0` conservan PNG y traza completa byte-idénticos, cero píxeles/bloques
+4×4 distintos y los mismos 54–37.998 parents.
+[Resultados](evidence/chunk-scopes-raster-20261001.csv).
+
+Validación: 3.012 core/seis ignorados, 1.664 cliente/dos, Clippy en todos los
+targets, formato, diff y frescura de docs. SHA256 de binarios normales:
+`01e20e3bf67c84098cf506f5d19851f72136885da30e38c3e3d9b82bc6620f87` y
+`e4ea3e72f545188546769e8f9ff522879c90fb8eaf4641055e4d1352aa57c77e`.
+Se cierra la repetición de estos builders dentro de una tanda incremental.
+Siguen pendientes su cálculo a demanda, el coste de rematerialización, F17
+y el objetivo de 30 FPS.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV

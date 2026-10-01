@@ -2,15 +2,20 @@ use crate::{
     ALL_CARGO_TYPES, CUSTOM_CARGO_COUNT, GameState, TileCoord, economy, industry_builder, town,
 };
 
-/// Dispara `NewCargo` sólo para las colas que crecieron durante una operación
+/// Detecta `NewCargo` sólo para las colas que crecieron durante una operación
 /// de producción/distribución. La economía puede repartir un lote entre varias
 /// estaciones; cada estación/cargo que recibió unidades obtiene su CB140 de
 /// área completa sin inventar eventos para las que sólo quedaron en cobertura.
-fn trigger_station_new_cargo_since(state: &mut GameState, before: &[crate::CargoStock]) {
-    let arrivals: Vec<_> = state
-        .stations
+fn station_new_cargo_arrivals(
+    stations: &[crate::Station],
+    before: &[crate::CargoStock],
+) -> Vec<(TileCoord, crate::CargoType)> {
+    stations
         .iter()
         .zip(before)
+        // An unchanged stock cannot have received new cargo. Keep the same
+        // station/cargo order for changed stocks, including airport RNG.
+        .filter(|(station, before)| station.cargo_stock != **before)
         .flat_map(|(station, before)| {
             ALL_CARGO_TYPES
                 .iter()
@@ -25,7 +30,11 @@ fn trigger_station_new_cargo_since(state: &mut GameState, before: &[crate::Cargo
                         .then_some((station.pos, cargo))
                 }))
         })
-        .collect();
+        .collect()
+}
+
+fn trigger_station_new_cargo_since(state: &mut GameState, before: &[crate::CargoStock]) {
+    let arrivals = station_new_cargo_arrivals(&state.stations, before);
     for (station_pos, cargo) in arrivals {
         let mut station_sounds = Vec::new();
         let dirty =
@@ -1308,6 +1317,121 @@ mod tests {
     use crate::economy::EconomyType;
     use crate::industry::Industry;
     use crate::{CargoType, Climate, IndustrySpec};
+
+    #[test]
+    fn new_cargo_deltas_match_unfiltered_scan_for_all_64_cargos() {
+        let cargos: Vec<_> = ALL_CARGO_TYPES
+            .into_iter()
+            .chain((0..CUSTOM_CARGO_COUNT).map(crate::cargo::custom_cargo))
+            .collect();
+        assert_eq!(cargos.len(), 64);
+        let mut stations: Vec<_> = (0..4)
+            .map(|index| crate::Station::new(TileCoord::new(index * 3, 1)))
+            .collect();
+        for (index, station) in stations.iter_mut().enumerate() {
+            for (cargo_index, &cargo) in cargos.iter().enumerate() {
+                station.cargo_stock.set(
+                    cargo,
+                    u32::try_from(cargo_index * 3 + index).expect("small test stock"),
+                );
+            }
+        }
+        let before: Vec<_> = stations.iter().map(|station| station.cargo_stock).collect();
+        for (cargo_index, &cargo) in cargos.iter().enumerate() {
+            for pattern in 0..5 {
+                for (station, &stock) in stations.iter_mut().zip(&before) {
+                    station.cargo_stock = stock;
+                }
+                match pattern {
+                    0 => {}
+                    1 => {
+                        for station in &mut stations {
+                            station.cargo_stock.add(cargo, 1);
+                        }
+                    }
+                    2 => {
+                        for station in &mut stations {
+                            let _ = station.cargo_stock.take(cargo, 1);
+                        }
+                    }
+                    3 => {
+                        // Equal totals still have a new-cargo event. Other
+                        // stations stay unchanged, including the final one.
+                        stations[1].cargo_stock.add(cargo, 1);
+                        let _ = stations[1]
+                            .cargo_stock
+                            .take(cargos[(cargo_index + 1) % cargos.len()], 1);
+                    }
+                    _ => {
+                        stations[2].cargo_stock.add(cargo, 1);
+                        stations[2]
+                            .cargo_stock
+                            .add(crate::cargo::custom_cargo(32), 1);
+                    }
+                }
+                // The published baseline compared every cargo at every
+                // station, with no whole-stock filter. Preserve its sequence.
+                let mut legacy = Vec::new();
+                for (station, previous) in stations.iter().zip(&before) {
+                    for &candidate in &cargos {
+                        if station.cargo_stock.get(candidate) > previous.get(candidate) {
+                            legacy.push((station.pos, candidate));
+                        }
+                    }
+                }
+                assert_eq!(
+                    station_new_cargo_arrivals(&stations, &before),
+                    legacy,
+                    "cargo {cargo:?}, pattern {pattern}",
+                );
+            }
+        }
+        assert!(station_new_cargo_arrivals(&stations, &[]).is_empty());
+        let mut saturated = before[0];
+        saturated.set(crate::CargoType::Custom(32), u32::MAX);
+        stations[0].cargo_stock = saturated;
+        stations[0].cargo_stock.add(crate::CargoType::Custom(32), 1);
+        assert!(station_new_cargo_arrivals(&stations[..1], &[saturated]).is_empty());
+    }
+
+    #[test]
+    fn new_cargo_delta_filter_preserves_vanilla_airport_rng() {
+        let at = TileCoord::new(2, 2);
+        let mut state = GameState::new(8, 4);
+        let mut tile = state.map.get(at).expect("airport tile");
+        tile.kind = crate::TileKind::Airport;
+        tile.mapt = 0x50;
+        tile.m5 = crate::AirportPiece::Apron as u8;
+        state.map.set_tile(at, tile).expect("airport inside map");
+        state
+            .stations
+            .push(crate::Station::new_with_kind(at, crate::StopKind::Airport));
+        state.random = Randomizer {
+            state: [0x1020_3040, 0x5060_7080],
+        };
+        let before = [crate::CargoStock::default()];
+        let initial = state.random;
+        trigger_station_new_cargo_since(&mut state, &before);
+        assert_eq!(state.random, initial, "unchanged airport has no arrivals");
+
+        state.stations[0].cargo_stock.add(CargoType::Passengers, 1);
+        state.stations[0].cargo_stock.add(CargoType::Custom(32), 1);
+        let mut expected = initial;
+        let _ = expected.next();
+        let _ = expected.next();
+        trigger_station_new_cargo_since(&mut state, &before);
+        assert_eq!(
+            state.random, expected,
+            "each arriving cargo consumes the vanilla airport base word"
+        );
+        assert!(state.runtime.industry_tile_dirty.is_empty());
+        assert!(state.newgrf_animated_airport_tiles.is_empty());
+
+        let full_stock = [state.stations[0].cargo_stock];
+        let _ = state.stations[0].cargo_stock.take(CargoType::Passengers, 1);
+        trigger_station_new_cargo_since(&mut state, &full_stock);
+        assert_eq!(state.random, expected, "decreases are not arrivals");
+    }
 
     #[test]
     fn monthly_link_counters_do_not_replace_published_routes() {

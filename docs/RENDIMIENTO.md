@@ -592,6 +592,28 @@ datos iniciales, controles Out4x/Out8x, límites de las pruebas ECS y hashes
 se conservan en [la etapa 18](parity/performance-implementation.md#etapa-18--descartar-la-eliminación-de-máscaras-ocultas-f08f17).
 Esta hipótesis rechazada no se cuenta como una optimización publicada.
 
+### Cliente en marcha tras filtrar stocks de estación estables (2026-10-01)
+
+Sobre `9f5a4c24`, la detección de NewCargo evita el barrido de los 64 cargos
+de una estación cuyo stock no cambió. Mantiene el orden de eventos y el RNG
+del aeropuerto vanilla. La captura de CPU identificó este iterador en el
+13,58 % de las muestras propias del núcleo, incluidos sus workers.
+
+En las corridas normales ABBA, misma partida/NewGRF, escala 2 y 40 muestras
+por corrida, el frame con warmup 30 pasa de 62,50 / 62,53 a
+58,27 / 58,44 ms (15,999 / 15,993 → 17,162 / 17,111 FPS).
+Con cámara en movimiento, 67,99 / 68,50 → 64,44 / 64,21 ms.
+Con warmup 120, 60,13 / 59,30 → 55,53 / 55,52 ms,
+16,630 / 16,863 → 18,007 / 18,010 FPS. Se comparan las versiones dentro
+de cada ventana; todos los frames siguen sobre 33,33 ms.
+
+Los 60 ticks normales conservan estado, eventos y todas las teselas/bloques
+4×4; las seis parejas congeladas conservan PNG y traza. Regresiones de los
+64 cargos y aeropuerto, muestras, percentiles, hashes y límites en
+[la etapa 19](parity/performance-implementation.md#etapa-19--descartar-stocks-sin-cambios-antes-de-buscar-nuevos-cargos-f07f12).
+El coste de remap continúa alrededor de 10–11 ms fijo y 12,6 ms en movimiento;
+el objetivo de 30 FPS permanece abierto.
+
 ### Render congelado, seis zooms y movimiento de cámara
 
 Para comparar ambas versiones se usó el driver de mapshot: centro `128,128`,

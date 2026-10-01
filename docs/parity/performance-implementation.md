@@ -941,6 +941,97 @@ diagnósticos. SHA256 baseline/candidato rechazado:
 `1890f8c047c6a8a98a27b312b4cea4a2b2a6479766231412cf40ed065083c3af`.
 Esta etapa sólo publica evidencia; no cierra F08, F17 ni los 30 FPS.
 
+## Etapa 19 — Descartar stocks sin cambios antes de buscar nuevos cargos (F07/F12)
+
+Una captura del núcleo con `perf record -e cpu-clock:u -F 499 -D 2000
+--call-graph dwarf,8192`, 1.200 ticks y NewGRF, atribuye 1.634 de 12.035
+muestras propias (13,58 %, cero perdidas) al iterador de
+`trigger_station_new_cargo_since`. Cada operación de producción/distribución
+comparaba los 64 cargos de las 245 estaciones, aunque casi todas conservaran
+el stock. El denominador incluye workers de CargoDist; no es un porcentaje
+del frame ni una medición normal de FPS. Los conteos proceden de `perf report`
+con columna `sample`, porque el primer frame de la pila DWARF puede atribuir
+distinto código inline. [Perfil](evidence/station-stock-delta-perf-20261001.csv).
+
+La detección descarta primero stocks completos iguales y conserva el orden
+original estación/cargo para los restantes. No cambia los snapshots, la
+distribución, los callbacks ni su despacho. Oracle de fuente: OpenTTD 15.3
+`14ec60f2`, `station_cmd.cpp::UpdateStationWaiting`, sólo dispara NewCargo
+tras agregar unidades; `newgrf_airporttiles.cpp::TriggerAirportAnimation`
+consume la palabra RNG base también en un aeropuerto vanilla, antes de
+comprobar los GRF de sus teselas. Por eso no se filtra por ausencia de GRF o
+callbacks. Esta etapa conserva la semántica del port anterior; no acredita
+paridad completa de todos los triggers con el nativo.
+
+La regresión compara la secuencia exacta con el barrido anterior para los
+64 cargos y cinco patrones (320 casos): sin cambios, aumentos, descensos,
+aumento con descenso de otro cargo manteniendo el total y cambios en una sola
+estación con cargo custom 32. También cubre saturación y lista anterior vacía.
+Otra prueba verifica cero palabras para un stock estable o decreciente y dos
+palabras para dos cargos nuevos en un aeropuerto vanilla.
+
+Baseline `9f5a4c24`, partida/NewGRF y órdenes importadas sin reordenar:
+61 fases, inicial más 60 ticks normales, con hash canónico v4, hash de eventos,
+teselas completas y bloques 4×4. **Cero fases diferentes**, incluidos RNG y
+entidades persistidas; cero teselas/bloques distintos. Tick final 3.703.134,
+hash `4d3524e48b6bc2e5`, eventos `4857641856429973`.
+[Comparación](evidence/station-stock-delta-state-20261001.csv).
+
+Núcleo normal, sin `perf`, compilaciones ni GPU concurrentes: ABBA con 24 y
+120 ticks. Con 24, paisaje medio 4,265 / 3,561 → 0,269 / 0,272 ms y tick
+28,179 / 27,173 → 24,131 / 23,958 ms. Con 120, paisaje
+3,574 / 3,162 → 0,290 / 0,289 ms y tick
+19,217 / 18,751 → 15,759 / 15,738 ms. Son ventanas desde la carga; incluyen
+las rutas iniciales y no certifican el presupuesto de todos los ticks.
+[Fases](evidence/station-stock-delta-core-20261001.csv).
+
+Cliente normal, mismo hardware, audio desactivado, 1280×720, escala 2,
+cuatro corridas ABBA por escenario y 40 muestras cada una:
+
+- Cámara fija, warmup 30: simulación 20,495 / 20,669 → 16,412 / 16,417 ms;
+  frame 62,505 / 62,527 → 58,269 / 58,442 ms; FPS
+  15,999 / 15,993 → 17,162 / 17,111. p95
+  78,334 / 79,394 → 75,247 / 74,682 ms; máximo/p99
+  163,649 / 158,031 → 156,146 / 155,604 ms.
+  [Muestras](evidence/station-stock-delta-client-20261001.csv).
+- Cámara en movimiento, warmup 30: simulación
+  20,487 / 20,644 → 16,683 / 16,485 ms; frame
+  67,990 / 68,499 → 64,437 / 64,209 ms; FPS
+  14,708 / 14,599 → 15,519 / 15,574. p95
+  97,581 / 98,759 → 94,597 / 94,371 ms; máximo/p99
+  161,658 / 160,420 → 154,596 / 155,258 ms.
+  [Pan](evidence/station-stock-delta-pan-20261001.csv).
+- Cámara fija, warmup 120: simulación
+  20,003 / 19,795 → 15,807 / 15,872 ms; frame
+  60,133 / 59,302 → 55,534 / 55,524 ms; FPS
+  16,630 / 16,863 → 18,007 / 18,010. p95
+  84,822 / 87,400 → 80,818 / 81,963 ms; máximo/p99
+  94,237 / 93,812 → 90,527 / 90,944 ms.
+  [Ventana sostenida](evidence/station-stock-delta-client-steady-20261001.csv).
+
+Ambas ventanas de warmup 30 cubren ticks 3.703.103–3.703.142. Con warmup 120,
+el primer run anterior cubre 3.703.194–3.703.233 y los otros tres
+3.703.193–3.703.232. Se mantiene la salvedad del intervalo de cambio de zoom
+de la etapa 17 y no se mezclan ventanas para atribuir una ganancia. En cada
+escenario, los 80 frames de cada versión exceden 33,33 ms. Remap permanece
+alrededor de 10–11 ms fijo y 12,6 ms en movimiento; las fases no suman el frame.
+
+Las seis parejas congeladas con flota, centro 128,128, settle 180 y `CLEAN=0`
+conservan PNG y traza completa byte-idénticos: cero píxeles/bloques 4×4
+distintos y los mismos 54–37.998 parents. No cierran la variación histórica
+Out8x ni acreditan cada frame activo. [Raster](evidence/station-stock-delta-raster-20261001.csv).
+
+Validación: 3.014 core/seis ignorados y 1.664 cliente/dos, Clippy en todos los
+targets, formato, diff y frescura de docs. Binarios normales SHA256:
+cliente anterior
+`e4ea3e72f545188546769e8f9ff522879c90fb8eaf4641055e4d1352aa57c77e`,
+posterior `d809e1117637e0bb8b3e409baee99a4e01d24a0f047f0d0a4f249505dedd57f2`;
+`sav_profile` anterior
+`61e90735174c56e15fe017f6a1d6d3d956701afae26e50c186a7d49821eeb472`,
+posterior `cbab113c3cdb22ae912bf9227091d8df99493e29f5d1d745628e82f7f8e5a19f`.
+Se cierra el barrido de cargos para stocks iguales. El redibujado, el tráfico
+ferroviario, F07/F12 y los 30 FPS siguen pendientes.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV

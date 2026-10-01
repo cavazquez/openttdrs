@@ -2465,7 +2465,9 @@ impl GameState {
         // `ORDL`, no una copia inline. Agrupar por ese índice vuelve a
         // materializar la identidad de shared orders que el parser ya había
         // usado para obtener el contenido de la lista.
-        let mut shared_vehicle_ids: HashMap<u32, Vec<u32>> = HashMap::new();
+        // Native OrderList::Iterate visits pool IDs in ascending order.
+        // Preserve that order in the persisted vector and canonical hash.
+        let mut shared_vehicle_ids: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
         for vehicle in &sav.vehicles {
             if let Some(order_list_id) = vehicle.order_list_id {
                 shared_vehicle_ids

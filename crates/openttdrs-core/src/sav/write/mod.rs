@@ -1627,6 +1627,75 @@ mod tests {
     }
 
     #[test]
+    fn shared_order_import_keeps_sparse_pool_order_and_stable_hash() {
+        let mut state = tiny_state();
+        state.vehicles.clear();
+        let station_pos = TileCoord::new(28, 39);
+        state.stations = vec![Station::new_with_kind(station_pos, StopKind::RailStation)];
+        for index in 0..16_u32 {
+            let mut vehicle = Vehicle::new(
+                100 + index,
+                VehicleKind::Train,
+                TileCoord::new(10, 20),
+                station_pos,
+            );
+            let orders = vec![VehicleOrder::station(station_pos)];
+            vehicle.shared_order_id = Some(index / 2);
+            if index % 2 == 0 {
+                state.shared_order_lists.push(crate::SharedOrderList {
+                    id: index / 2,
+                    orders: orders.clone(),
+                });
+                vehicle.next_shared_vehicle_id = Some(101 + index);
+            }
+            vehicle.set_vehicle_orders(orders);
+            state.vehicles.push(vehicle);
+        }
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let mut sav = sav::load(&bytes).expect("load");
+        assert_eq!(sav.vehicles.len(), 16);
+        assert!(sav.vehicles.iter().all(|vehicle| vehicle.orders.len() == 1));
+        // Native pool IDs may be sparse and need not follow vehicle order.
+        // Preserve the first vehicle's orders and all member links per ID.
+        let pool_ids: Vec<_> = (0..8_u32).rev().map(|id| id * 7 + 3).collect();
+        for (index, vehicle) in sav.vehicles.iter_mut().enumerate() {
+            vehicle.order_list_id = Some(pool_ids[index / 2]);
+        }
+        let first = GameState::from_sav_game(sav.clone());
+        let mut expected_ids = pool_ids;
+        expected_ids.sort_unstable();
+        assert_eq!(
+            first
+                .shared_order_lists
+                .iter()
+                .map(|list| list.id)
+                .collect::<Vec<_>>(),
+            expected_ids
+        );
+        for imported in &first.vehicles {
+            let source = sav
+                .vehicles
+                .iter()
+                .find(|v| v.sav_id == imported.id)
+                .expect("source");
+            assert_eq!(imported.shared_order_id, source.order_list_id);
+            let list = first
+                .shared_order_lists
+                .iter()
+                .find(|list| Some(list.id) == source.order_list_id)
+                .expect("list");
+            assert_eq!(imported.orders, list.orders);
+        }
+        let second = GameState::from_sav_game(sav);
+        assert_eq!(
+            first.save_json().expect("first JSON"),
+            second.save_json().expect("second JSON")
+        );
+        assert_eq!(first.canonical_hash(), second.canonical_hash());
+        assert_eq!(first.random.state, second.random.state);
+    }
+
+    #[test]
     fn ottn_roundtrip_preserves_opaque_runtime_chunks() {
         let mut state = tiny_state();
         let body = crate::sav::table::tests::build_table_body(&[(2, "grfid")], &[vec![7]]);

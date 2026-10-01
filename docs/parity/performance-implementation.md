@@ -403,6 +403,39 @@ acotado. El movimiento de vehículos queda alrededor de 52 ms y las rutas
 alrededor de 15 ms en 24 ticks; F12 y los 30 FPS siguen abiertos. Aún no hay
 una nueva medición de ventana/GPU para atribuir FPS a esta etapa.
 
+## Etapa 10 — Orden determinista de listas compartidas al importar SAV (F06/F20)
+
+El importador agrupa vehículos por `OrderListID` en un BTreeMap para
+materializar las listas en orden ascendente. Conserva IDs, órdenes y
+referencias de miembros; la selección del primer vehículo de cada grupo
+mantiene el orden de VEHS. No consume RNG. OpenTTD 15.3 `14ec60f2`,
+`saveload/order_sl.cpp::ORDLChunkHandler` y
+`core/pool_type.hpp::PoolIterator`, recorre el pool por índices ascendentes
+y conserva esos índices al cargar.
+
+La regresión primero falló con el HashMap: obtuvo
+`[10,31,17,45,38,3,52,24]` frente a los IDs ascendentes esperados. Con el
+cambio comprueba ocho IDs sparse, dos miembros por grupo, enlaces y órdenes,
+dos imports independientes, JSON, hash y RNG iguales.
+
+Cuatro imports independientes de Kale_TitleGame.sav/NewGRF producen ahora
+directamente el hash inicial v4 `b10f09635218f649`. La cuarta ejecución
+avanza además 24 ticks normales. Sus 25 fases coinciden con la etapa 9 desde
+el mismo orden inicial: hash, eventos/popups/sonidos, todas las teselas y
+bloques 4×4; cero diferencias. Las 28 filas están en
+[shared-order-state-20261001.csv](evidence/shared-order-state-20261001.csv).
+La sonda tiene SHA256 `2747f87f4b52d6980fc1ee4f77d8391707d6b6e9bcb57e9148638250a7807eab`;
+se compila como en la etapa 9 y se ejecuta con
+`save/Kale_TitleGame.sav 24 <directorio> --keep-order-list-order`.
+Ese flag omite la preparación inicial del comparador: la disposición la
+produce el importador real.
+
+Validación: 3.006 core/seis ignorados, 1.659 cliente/dos; Clippy en todos los
+targets de ambos, formato, diff y frescura de docs. Se cierra la divergencia
+de orden de estas listas. Esta corrección permite comparar imports y no se
+presenta como una ganancia de FPS. F06 sigue pendiente por el costo del árbol
+JSON y F20 por el resto de carga/rehidratación.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV

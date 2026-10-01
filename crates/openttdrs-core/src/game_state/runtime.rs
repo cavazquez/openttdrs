@@ -456,12 +456,15 @@ impl SimulationRuntime {
 
     /// Inicia el delta visual de un tick de simulación.
     ///
-    /// Las listas de señales y reservas son consumidas por el cliente después
+    /// Las listas de paisaje, señales y reservas se consumen en el cliente después
     /// de `GameState::step`; por eso se limpian al comienzo del tick siguiente,
     /// no al terminar el actual. `tile_loop_visited` y `signal_globset` no se
     /// tocan aquí: el primero se consume en `AnimateAnimatedTiles` del próximo
     /// tick y el segundo puede contener trabajo pendiente de señales.
     pub fn begin_tick_visual_delta(&mut self) {
+        // AnimateAnimatedTiles runs before the tile loop. Clear here so a
+        // new house animation frame survives until the client consumes it.
+        self.landscape_tile_dirty.clear();
         self.signal_tile_dirty.clear();
         self.reservation_tile_dirty.clear();
     }
@@ -592,6 +595,7 @@ mod tests {
             .insert(SignalGlobEntry::any_dir(coord));
         runtime.signal_tile_dirty.push(coord);
         runtime.reservation_tile_dirty.push(coord);
+        runtime.landscape_tile_dirty.push(coord);
 
         runtime.begin_tick_visual_delta();
 
@@ -603,5 +607,6 @@ mod tests {
         );
         assert!(runtime.signal_tile_dirty.is_empty());
         assert!(runtime.reservation_tile_dirty.is_empty());
+        assert!(runtime.landscape_tile_dirty.is_empty());
     }
 }

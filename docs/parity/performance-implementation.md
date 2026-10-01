@@ -1130,6 +1130,73 @@ y `858d0321d028825f25c96500ad75048ff998c6842c31935485b7ab8ad08b22b3`.
 Se cierra el aviso de contador exclusivo de campos. No se cierra F17/F28 ni
 el objetivo de 30 FPS; siguen pendientes remap, variación visual y cadencia.
 
+## Etapa 21 — Conservar los avisos de animación hasta el renderer (F17/F28)
+
+`AnimateAnimatedTiles` cambiaba los frames de casas y avisaba al cliente, pero
+`phase_tile_loop`, ejecutada después dentro del mismo tick, borraba esos avisos.
+La lista de paisaje ahora se limpia al comienzo del tick, junto con señales y
+reservas. Las mutaciones de animación y del tile loop llegan juntas al consumidor;
+el tick siguiente retira los avisos anteriores. No cambia el orden de fases,
+la cola ANIT, la visita LFSR, los eventos ni el consumo de RNG.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`, `openttd.cpp::StateGameLoop`
+anima antes de ejecutar `RunTileLoop`; `newgrf_animation_base.h` llama a
+`MarkTileDirtyByTile` cuando cambia el frame. `town_cmd.cpp::AnimateTile_Town`
+también marca el movimiento de ascensor; `TownDrawHouseLift` dibuja el child en
+`14, 60 - GetLiftPosition`. El tile loop no descarta esas invalidaciones.
+
+La regresión de tick completo falla con la limpieza anterior y pasa tanto
+con `step` como con `step_profiled`. Una casa NewGRF 64×64, fuera de las dos
+primeras franjas LFSR, cambia MAP7 y conserva su aviso; el aviso viejo se retira
+y el RNG permanece igual. Al detener ANIT, el tick siguiente no repite el aviso.
+La prueba aislada de fase continúa cubriendo el cambio de frame. No se declara
+por esta prueba paridad universal de animaciones NewGRF.
+
+Desde `642aa905`, 61 fases normales de la misma partida y orden importado
+conservan hash v4, eventos y todos los bytes de teselas/bloques 4×4: cero
+diferencias. El tick final mantiene `4d3524e48b6bc2e5`, eventos
+`4857641856429973`. [Estado](evidence/house-animation-deltas-state-20261001.csv).
+En 60 ticks, los avisos de paisaje pasan de 115 a 459. Los 115 originales y
+su orden se conservan; los **344 agregados** corresponden a ascensores vanilla
+Large Office, HouseID 4, en 40 coordenadas distintas. La suma de chunks 16×16
+distintos por tick pasa de 102 a 420; no equivale a remaps visibles.
+[Avisos](evidence/house-animation-deltas-notifications-20261001.csv).
+
+Las seis parejas congeladas con flota, `CLEAN=0`, centro 128,128, settle 180,
+1280×720 y escalas 0,25/0,5/1/2/4/8 conservan PNG y traza completa
+byte-idénticos: cero píxeles/bloques 4×4 distintos, mismos 54–37.998 parents.
+El gate congelado no ejecuta estas animaciones ni cierra la variación histórica
+Out4x/Out8x. [Raster](evidence/house-animation-deltas-raster-20261001.csv).
+
+Cliente normal en marcha, mismo hardware/partida/NewGRF, cámara fija en escala
+2, warmup 120, ABBA y 40 muestras por corrida, sin otras mediciones o builds:
+frame 52,697 / 52,597 → 58,774 / 58,377 ms; FPS
+18,977 / 19,012 → **17,014 / 17,130**. Remap
+9,883 / 9,950 → 13,197 / 13,029 ms; simulación
+15,705 / 15,653 → 15,799 / 15,977 ms. Mediana
+51,282 / 51,062 → 56,482 / 55,561 ms; p95
+74,136 / 74,489 → 87,509 / 87,104 ms; máximo/p99
+86,451 / 86,471 → 94,188 / 92,050 ms. Todos cubren ticks
+3.703.193–3.703.232; los 80 frames por versión exceden 33,33 ms.
+Tick/s observado: 18,963 / 18,996 → 16,981 / 17,095.
+[Muestras](evidence/house-animation-deltas-client-steady-20261001.csv).
+
+Es una corrección visual con coste medido, no una mejora de FPS. La medición
+anterior omitía invalidaciones reales. El cliente ya mueve el child del
+ascensor directamente; evitar la reconstrucción adicional del chunk requiere
+identificar el origen de cada aviso, conservar cambios posteriores del mismo
+edificio y comprobar el child después de ordenar. Las casas NewGRF continúan
+necesitando el redibujado de sus frames.
+
+Validación: 3.018 core/seis ignorados, 1.664 cliente/dos, Clippy en todos los
+targets, formato, diff y frescura de docs. SHA256 cliente anterior/posterior:
+`74560f9bca194437fb3295ecef4bddfc172dd576f9108186ecd796a52a77b9d3` y
+`d3055e6a745f0b3390655ad96f2c9be7c54d04e8351fb304960eb96032430d8d`;
+`sav_profile`: `858d0321d028825f25c96500ad75048ff998c6842c31935485b7ab8ad08b22b3`
+y `195d1bee53ea6358daff9f15cf224116477bb5a1de5c42ecee22bfae3fd020aa`.
+Se cierra la pérdida de avisos de casas dentro del tick. F17/F28, remap,
+cadencia y 30 FPS siguen abiertos.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV
@@ -1139,7 +1206,8 @@ el objetivo de 30 FPS; siguen pendientes remap, variación visual y cadencia.
 - F07–F08, F17–F18: medir tick residual, compositor y cámara con raster en seis zooms;
   aislar la variación Out4x/Out8x entre ejecuciones del mismo cliente con flota.
   Revisar el límite de un tick por frame y conservar la velocidad de juego.
-  F17/F28: preservar avisos de animación de casas al entrar al tile loop.
+  F17/F28: consumir los avisos de ascensor sin reconstruir chunks, conservando
+  animaciones NewGRF y cambios posteriores del edificio.
 - F12, F14–F16: perfilar carga, ocupación y rutas; retirar copias PBS innecesarias.
 - Resolución de depósitos: identidad/tipo, propiedad y alcanzabilidad frente
   al original; invalidación completa de los índices persistentes.

@@ -53,6 +53,13 @@ posterior a `fc63adef` está en
 La descripción siguiente conserva el
 diagnóstico del baseline `89947557`. El objetivo completo sigue abierto.
 
+La etapa 21 conserva invalidaciones de animación que se perdían antes del
+renderer. Su última ventana sostenida mide 17,014 / 17,130 FPS, frente a
+18,977 / 19,012 del baseline que omitía esos avisos. La corrección conserva
+estado, eventos, RNG y teselas en 61 fases; el trabajo adicional aparece en
+remap. El ahorro siguiente debe mantener los frames y aprovechar el ascensor
+dinámico del cliente. Evidencia y alcance en el registro de implementación.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

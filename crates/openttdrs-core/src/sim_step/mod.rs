@@ -782,7 +782,6 @@ fn trigger_industry_construction_stage_changed(
 }
 
 fn phase_tile_loop(state: &mut GameState, t: u64) {
-    state.runtime.landscape_tile_dirty.clear();
     state.runtime.tile_loop_visited =
         crate::map::collect_tile_loop_visits(&state.map, t, &mut state.cur_tileloop_tile);
 
@@ -1601,11 +1600,12 @@ mod tests {
         );
     }
 
-    #[test]
-    fn newgrf_house_animation_phase_marks_changed_frame_dirty() {
+    fn newgrf_house_animation_fixture() -> (GameState, TileCoord) {
         let coord = TileCoord::new(2, 2);
         let house_id = crate::house_spec::NEW_HOUSE_OFFSET;
-        let mut state = GameState::new(8, 8);
+        // The minimum native map avoids repeated masked visits of a small
+        // synthetic map. This house is outside the first two LFSR stripes.
+        let mut state = GameState::new(64, 64);
         let Ok(()) = state.map.set_completed_house(coord, house_id, 0) else {
             panic!("NewGRF house inside map");
         };
@@ -1642,6 +1642,13 @@ mod tests {
                 newgrf_runtime: None,
             });
 
+        (state, coord)
+    }
+
+    #[test]
+    fn newgrf_house_animation_phase_marks_changed_frame_dirty() {
+        let (mut state, coord) = newgrf_house_animation_fixture();
+
         phase_tile_animation(&mut state, 0);
 
         let Some(animated_house) = state.map.get(coord) else {
@@ -1649,6 +1656,54 @@ mod tests {
         };
         assert_eq!(animated_house.m7, 1);
         assert!(state.runtime.landscape_tile_dirty.contains(&coord));
+    }
+
+    #[test]
+    fn whole_tick_preserves_house_animation_redraws_until_the_next_tick() {
+        for profiled in [false, true] {
+            let (mut state, coord) = newgrf_house_animation_fixture();
+            let previous_tick_coord = TileCoord::new(7, 7);
+            state.runtime.landscape_tile_dirty.push(previous_tick_coord);
+            let before_random = state.random;
+
+            if profiled {
+                let _ = step_profiled(&mut state);
+            } else {
+                step(&mut state);
+            }
+
+            assert_eq!(state.map.get(coord).unwrap().m7, 1);
+            assert!(
+                !state
+                    .runtime
+                    .tile_loop_visited
+                    .iter()
+                    .any(|(at, _)| *at == coord),
+                "the house redraw must come from animation, not the later tile loop",
+            );
+            assert!(
+                state.runtime.landscape_tile_dirty.contains(&coord),
+                "profiled={profiled}: retain the changed animation frame for the renderer",
+            );
+            assert!(
+                !state
+                    .runtime
+                    .landscape_tile_dirty
+                    .contains(&previous_tick_coord)
+            );
+            assert_eq!(state.random, before_random);
+
+            state.active_house_animations.clear();
+            if profiled {
+                let _ = step_profiled(&mut state);
+            } else {
+                step(&mut state);
+            }
+            assert!(
+                !state.runtime.landscape_tile_dirty.contains(&coord),
+                "a previous tick's redraw must not repeat after animation stops",
+            );
+        }
     }
 
     #[test]
@@ -1778,6 +1833,7 @@ mod tests {
 
         // Fences are now stable. The next counter step changes map bytes,
         // but native TileLoop_Clear does not request a redraw for it.
+        state.runtime.begin_tick_visual_delta();
         phase_tile_loop(&mut state, 0);
         let updated = state.map.get(coord).expect("field after counter step");
         assert_eq!(crate::map::tree_tile_loop::clear_counter(updated.m5), 2);
@@ -1787,6 +1843,7 @@ mod tests {
         let mut mature = updated;
         mature.m5 = crate::map::tree_tile_loop::with_clear_counter(mature.m5, 7);
         state.map.set_tile(coord, mature).expect("mature field");
+        state.runtime.begin_tick_visual_delta();
         phase_tile_loop(&mut state, 0);
         assert_eq!(state.map.get(coord).expect("new crop stage").m3 & 0x0F, 1);
         assert_eq!(state.random, before_random);

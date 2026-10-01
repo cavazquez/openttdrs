@@ -1,0 +1,13 @@
+scale,stage,sample,png_sha256,canonical_png_equal,sort_raw_equal,parents_semantic_equal,proxies_semantic_equal
+.5,before,1,60da415eca73a715a5fdd4eb380dad119d1765398913f092e28932f151ab7252,True,False,True,True
+.5,after,1,60da415eca73a715a5fdd4eb380dad119d1765398913f092e28932f151ab7252,True,True,True,True
+.5,before,2,60da415eca73a715a5fdd4eb380dad119d1765398913f092e28932f151ab7252,True,True,True,True
+.5,after,2,60da415eca73a715a5fdd4eb380dad119d1765398913f092e28932f151ab7252,True,True,True,True
+.5,before,3,60da415eca73a715a5fdd4eb380dad119d1765398913f092e28932f151ab7252,True,True,True,True
+.5,after,3,60da415eca73a715a5fdd4eb380dad119d1765398913f092e28932f151ab7252,True,True,True,True
+4,before,1,44f895414981ffc9db661669aba8f69cab0a0c1effb61526ea9bbf54691d4707,True,False,True,True
+4,after,1,44f895414981ffc9db661669aba8f69cab0a0c1effb61526ea9bbf54691d4707,True,False,True,True
+4,before,2,44f895414981ffc9db661669aba8f69cab0a0c1effb61526ea9bbf54691d4707,True,False,True,True
+4,after,2,44f895414981ffc9db661669aba8f69cab0a0c1effb61526ea9bbf54691d4707,True,False,True,True
+4,before,3,44f895414981ffc9db661669aba8f69cab0a0c1effb61526ea9bbf54691d4707,True,False,True,True
+4,after,3,44f895414981ffc9db661669aba8f69cab0a0c1effb61526ea9bbf54691d4707,True,False,True,True

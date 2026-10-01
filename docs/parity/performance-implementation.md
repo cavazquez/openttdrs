@@ -1779,3 +1779,130 @@ targets de ambos, formato, diff y frescura de docs. Sólo cierra la reutilizaci�
 para estos callers de render. Consultas de Action2 y otros callers legacy,
 F17/F31 completos, cadencia, variación histórica del renderer y 30 FPS siguen
 abiertos. El ahorro reduce el frame a unos 44 ms; todavía supera 33,33 ms.
+
+## Etapa 28 — Compartir geometría dentro de un contexto de estación (F04/F17/F31)
+
+Cada construcción Action2 de una tesela tiene un `StationGeometryLookup`
+efímero sobre las referencias inmutables de mapa y estaciones. Guarda la
+referencia elegida por `station_at_tile`, incluido el resultado inexistente,
+sólo durante esa llamada. El contexto base, las cuatro variantes de andén,
+parent, badges y vecinos comparten las consultas; al terminar se descarta el
+memo. Las APIs públicas, filtros de eje/rol, orden de desempate, parámetros,
+valores de variables y evaluación de callbacks conservan su contrato anterior.
+No retiene un contexto ni sus resultados entre ticks y no cambia el RNG.
+
+El contador de misses sólo existe en tests. Una regresión ejerce 735
+consultas repetidas sobre cinco topologías con cobertura directa y resultados
+negativos: cada una resuelve 49 tiles únicos una sola vez. La otra construcción
+real de las cuatro variables de andén resuelve sólo ocho tiles, mantiene sus
+valores packed y vuelve a utilizar esos ocho ante otra evaluación inmutable.
+Después de descartar el memo, demolición y traslado del ancla cambian el
+contexto como corresponde; los bits aleatorios nuevos son observables.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`,
+[`StationScopeResolver::GetVariable`](https://github.com/OpenTTD/OpenTTD/blob/14ec60f248547d4d062a1160f0fc26d742319888/src/newgrf_station.cpp#L307)
+guarda sus variables de andén por resolver;
+[`FindRailStationEnd`](https://github.com/OpenTTD/OpenTTD/blob/14ec60f248547d4d062a1160f0fc26d742319888/src/newgrf_station.cpp#L158)
+usa MAP2, spec por tile y eje. Aquí sólo se reutiliza la propiedad legacy ya
+calculada. La variable 0x47 del port todavía tiene el mismo filtro que 0x46,
+porque el modelo conserva una spec lógica; se mantiene esa limitación y no se
+presenta esta optimización como paridad nativa de identidad o spec por tile.
+
+
+Sonda completa de la etapa 28:
+[`profile_station_action2.rs`](../../scripts/profile_station_action2.rs)
+construye contextos para los 1.807 tiles Station de Kale: versiones GRF 7/8,
+con y sin mundo, 7.228 contextos por muestra. Desestructura los 24 campos
+sin `..`, ordena las trece tablas y compara el contenido completo fuera del
+reloj; incluye parámetros, parent, registros, cargo, capacidades, RNG y
+resultados. Importación, hidratación, validación, canonicalización y destrucción
+quedan fuera del intervalo. ABBA, cinco muestras por run: media
+**6.945,8068 / 6.985,9254 → 1.284,5442 / 1.273,4757 ms**, aproximadamente
+5,4 veces más rápido en esta sonda. Las veinte muestras conservan checksum
+`9150983015706041655`; las 7.228 líneas completas anteriores/posteriores son
+byte-idénticas, SHA256
+`cc5f3b5f8ca623d27d341d4ebe753c26465c9c9250e7c2d2c4cc0755e61b6faf`.
+Este resultado aislado no equivale a acelerar un frame ni certifica otros
+NewGRF. [20 muestras](evidence/station-action2-memo-context-20261001.csv).
+
+Núcleo normal, NewGRF activo, ABBA: 24 ticks
+**22,3931 / 22,5590 → 22,5901 / 22,3480 ms**; 120 ticks
+**14,1804 / 14,2396 → 14,3299 / 14,3551 ms**. La ventana larga empeora
+ligeramente; no se acredita una mejora global del tick. Las 61 fases normales
+mantienen hash v4, eventos, bytes raw, bloques 4×4, contadores y listas
+ordenadas de avisos frente al artefacto posterior inmutable de la etapa 27.
+Tick final 3703134, hash `4d3524e48b6bc2e5`, eventos `4857641856429973`.
+[Core](evidence/station-action2-memo-core-20261001.csv),
+[estado](evidence/station-action2-memo-state-20261001.csv).
+
+Cliente en GPU real, sin perf ni compilación concurrentes, 1280×720, escala 2,
+ABBA y 40 muestras por run. Cámara fija, warmup 120: frame
+**44,1289 / 44,0606 → 43,9773 / 44,1791 ms**, FPS
+**22,661 / 22,696 → 22,739 / 22,635**; remap
+**2,5887 / 2,6540 → 2,5772 / 2,5855 ms**, simulación
+**14,1842 / 14,2145 → 14,0785 / 14,1136 ms**. p95
+**57,4776 / 58,6366 → 58,0820 / 58,3119**, máximos/p99
+**60,6950 / 61,2234 → 58,6952 / 59,5101**. TPS
+**22,652 / 22,686 → 22,737 / 22,627**. Los cuatro runs cubren ticks
+3703193–3703232; exceden 33,33 ms 78/80 frames anteriores y 79/80 posteriores.
+Los FPS permanecen esencialmente iguales.
+[160 muestras](evidence/station-action2-memo-client-steady-20261001.csv).
+
+Pan, warmup 30: frame
+**49,5371 / 49,8196 → 48,9556 / 49,7172 ms**, FPS
+**20,187 / 20,072 → 20,427 / 20,114**; remap
+**2,8801 / 2,9264 → 2,8868 / 2,9979 ms**. p95
+**61,9962 / 63,8913 → 60,7752 / 61,9070**, máximos/p99
+**132,1221 / 130,4160 → 128,6777 / 130,2264**. TPS
+**21,088 / 20,941 → 21,317 / 20,985**. El primer run posterior cubre ticks
+3703104–3703143; los otros tres, 3703103–3703142. Todos los 80 frames por versión
+exceden el presupuesto. El primer intervalo incluye el zoom del frame 30;
+los timers de fase y de intervalo corresponden a frames distintos.
+[160 muestras](evidence/station-action2-memo-pan-20261001.csv).
+
+Raster congelado, centro 128,128, settle 180, CLEAN=0 y escalas .25/.5/1/2/4/8:
+cinco parejas iniciales son PNG exactos. En In2x (.5), el binario anterior
+produce inicialmente **204 píxeles / 45 bloques 4×4 distintos** respecto del
+posterior canónico, bbox (2,0)–(741,363), con alpha 255. Se conserva ese fallo,
+SHA256 anterior
+`4e1118f0448939a1ff06af6b151142402a5880541664707ffef680e10be85d54`;
+no se amplía la tolerancia ni se atribuye una causa que todavía no se conoce.
+[Seis parejas iniciales](evidence/station-action2-memo-raster-20261001.csv).
+
+Se repiten In2x y Out4x tres veces por binario: **las doce capturas nuevas**
+coinciden exactamente con sus PNG canónicos, incluidos los seis In2x.
+El mismo binario anterior presenta así la variación inicial y luego resultados
+exactos; no se reproduce una regresión propia del cambio, pero la variación
+del renderer queda abierta. Las trazas raw difieren en algunas capturas.
+Se verifican los 18 streams completos (seis anteriores iniciales y doce
+repetidos) contra el posterior inicial correspondiente: son exactos tras una
+renumeración biyectiva y consistente de entidades. Sólo cambian
+`parents.entity`, `local_proxies.original_parent` y `source_child`; se conservan
+orden, índices, profundidades, alias, referencias y todos los demás campos.
+Esta igualdad del stream de sort no certifica las otras capas raster ni
+resuelve los 204 píxeles iniciales.
+[Repeticiones](evidence/station-action2-memo-raster-repeats-20261001.csv),
+[identidad completa de trazas](evidence/station-action2-memo-trace-identity-20261001.csv).
+
+Artefactos en `target/performance/station-action2-memo-20261001`.
+Cliente anterior/posterior SHA256
+`479772feda3342ee6fd09dcce0664a683d1a5c72e5c5c1f05598b59acab8e7fc` /
+`1ab8dfc2fcf27d3a94d1def6ab60dba9ef2c035e2b33894d4f20cdd9559bb259`;
+`sav_profile`
+`a6c1faf2ded7de2544e251ccab40a7e1a25f6228d654782822aae55f62ddc1c9` /
+`77dfedc8b88eb0e5588361146368fe73383a32e0154baf8a9b8a48bdd5541516`;
+traza `b084788ca88aaee7ab8133bbd6e00de9659a3071dbc0b06ce5ce84130b836278` /
+`b8d76f2c9738ab7f09d1cfd6df9d9c2603f4bfc8b4e68816f6f42e9f175c2917`.
+Las dos sondas se compilan con `rustc -O -D warnings` contra las `.rlib`
+exactas copiadas desde Cargo JSON; biblioteca posterior
+`ba1255b40f492ab8bd43d39b966b8f0b7ae7593e06ccc2386049848677de016f`.
+Release del perfil 25,80 s y cliente tras cambio core 77 s; no es una mejora
+controlada de compilación. Las 183 trazas de fase idénticas quedan en hardlinks
+readonly verificados y conservan sus bytes; se recuperan 477.010.859 bytes.
+
+Validación: 3.031 core/seis ignorados, 1.667 cliente/dos; Clippy de todos los
+targets de ambos, formato, diff y frescura de docs. Sólo cierra las consultas
+repetidas dentro de esta construcción inmutable. F04/F17/F31 completos,
+identidad/spec nativas, variación In2x/Out4x/Out8x, cadencia y 30 FPS siguen
+abiertos. La mejora aislada no reduce de forma apreciable el frame de la
+partida medida: todavía ronda 44 ms.

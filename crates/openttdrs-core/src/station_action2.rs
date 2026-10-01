@@ -21,7 +21,41 @@ use crate::station::{
 use crate::station_class::{StationSpecDef, station_spec_def};
 use crate::town::Town;
 use crate::world_gen::Climate;
+use std::cell::RefCell;
 use std::collections::BTreeSet;
+
+/// Ownership queries shared only within one immutable Action2 construction.
+/// Both successful and missing lookups expire when this context is dropped.
+struct StationGeometryLookup<'a> {
+    map: &'a Map,
+    stations: &'a [Station],
+    resolved: RefCell<ahash::AHashMap<TileCoord, Option<&'a Station>>>,
+    #[cfg(test)]
+    misses: std::cell::Cell<usize>,
+}
+
+impl<'a> StationGeometryLookup<'a> {
+    fn new(map: &'a Map, stations: &'a [Station]) -> Self {
+        Self {
+            map,
+            stations,
+            resolved: RefCell::default(),
+            #[cfg(test)]
+            misses: std::cell::Cell::new(0),
+        }
+    }
+
+    fn at(&self, coord: TileCoord) -> Option<&'a Station> {
+        if let Some(station) = self.resolved.borrow().get(&coord) {
+            return *station;
+        }
+        #[cfg(test)]
+        self.misses.set(self.misses.get() + 1);
+        let station = station_at_tile(self.map, self.stations, coord);
+        self.resolved.borrow_mut().insert(coord, station);
+        station
+    }
+}
 
 /// Contexto Action2 para dibujar / resolver sprites de una tesela de estación.
 ///
@@ -61,9 +95,9 @@ pub fn action2_eval_ctx_for_station_tile_with_grf(
     type_tables: Option<&GrfTypeTranslationTables>,
     grf_version: u8,
 ) -> Action2EvalCtx {
+    let lookup = StationGeometryLookup::new(map, stations);
     action2_eval_ctx_for_station_tile_impl(
-        map,
-        stations,
+        &lookup,
         coord,
         owner_colour,
         climate,
@@ -104,9 +138,9 @@ pub fn action2_eval_ctx_for_station_tile_with_world(
     grf_version: u8,
     world: StationAction2WorldContext<'_>,
 ) -> Action2EvalCtx {
+    let lookup = StationGeometryLookup::new(map, stations);
     action2_eval_ctx_for_station_tile_impl(
-        map,
-        stations,
+        &lookup,
         coord,
         owner_colour,
         climate,
@@ -135,26 +169,17 @@ pub fn action2_eval_ctx_for_station_tile_with_catalog(
     type_tables: Option<&GrfTypeTranslationTables>,
     grf_version: u8,
 ) -> Action2EvalCtx {
-    let mut ctx = action2_eval_ctx_for_station_tile_with_grf(
+    action2_eval_ctx_for_station_tile_with_catalog_impl(
         map,
         stations,
+        station_catalog,
         coord,
         owner_colour,
         climate,
         type_tables,
         grf_version,
-    );
-    populate_station_badge_vars(&mut ctx, map, stations, station_catalog, coord);
-    populate_station_neighbour_vars(
-        &mut ctx,
-        map,
-        stations,
-        station_catalog,
-        coord,
-        climate,
-        grf_version,
-    );
-    ctx
+        None,
+    )
 }
 
 /// Variante catalogue-aware con cobertura viva de cargos/industrias.
@@ -171,9 +196,34 @@ pub fn action2_eval_ctx_for_station_tile_with_catalog_and_world(
     grf_version: u8,
     world: StationAction2WorldContext<'_>,
 ) -> Action2EvalCtx {
-    let mut ctx = action2_eval_ctx_for_station_tile_with_world(
+    action2_eval_ctx_for_station_tile_with_catalog_impl(
         map,
         stations,
+        station_catalog,
+        coord,
+        owner_colour,
+        climate,
+        type_tables,
+        grf_version,
+        Some(world),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn action2_eval_ctx_for_station_tile_with_catalog_impl(
+    map: &Map,
+    stations: &[Station],
+    station_catalog: &[StationSpecDef],
+    coord: TileCoord,
+    owner_colour: u8,
+    climate: Climate,
+    type_tables: Option<&GrfTypeTranslationTables>,
+    grf_version: u8,
+    world: Option<StationAction2WorldContext<'_>>,
+) -> Action2EvalCtx {
+    let lookup = StationGeometryLookup::new(map, stations);
+    let mut ctx = action2_eval_ctx_for_station_tile_impl(
+        &lookup,
         coord,
         owner_colour,
         climate,
@@ -181,12 +231,13 @@ pub fn action2_eval_ctx_for_station_tile_with_catalog_and_world(
         grf_version,
         world,
     );
-    populate_station_parent_scope(&mut ctx, map, stations, station_catalog, coord, world.towns);
-    populate_station_badge_vars(&mut ctx, map, stations, station_catalog, coord);
+    if let Some(world) = world {
+        populate_station_parent_scope(&mut ctx, &lookup, station_catalog, coord, world.towns);
+    }
+    populate_station_badge_vars(&mut ctx, &lookup, station_catalog, coord);
     populate_station_neighbour_vars(
         &mut ctx,
-        map,
-        stations,
+        &lookup,
         station_catalog,
         coord,
         climate,
@@ -201,13 +252,12 @@ pub fn action2_eval_ctx_for_station_tile_with_catalog_and_world(
 /// determinista por distancia Manhattan/ID como fallback.
 fn populate_station_parent_scope(
     ctx: &mut Action2EvalCtx,
-    map: &Map,
-    stations: &[Station],
+    lookup: &StationGeometryLookup<'_>,
     station_catalog: &[StationSpecDef],
     coord: TileCoord,
     towns: &[Town],
 ) {
-    let Some(station) = station_at_tile(map, stations, coord) else {
+    let Some(station) = lookup.at(coord) else {
         return;
     };
     let Some(spec) = station_spec_def(station_catalog, station.station_spec) else {
@@ -232,12 +282,11 @@ fn populate_station_parent_scope(
 /// conservar el sentinel evita confundir un badge inexistente con uno ausente.
 fn populate_station_badge_vars(
     ctx: &mut Action2EvalCtx,
-    map: &Map,
-    stations: &[Station],
+    lookup: &StationGeometryLookup<'_>,
     station_catalog: &[StationSpecDef],
     coord: TileCoord,
 ) {
-    let Some(station) = station_at_tile(map, stations, coord) else {
+    let Some(station) = lookup.at(coord) else {
         return;
     };
     let Some(spec) = station_spec_def(station_catalog, station.station_spec) else {
@@ -318,45 +367,40 @@ pub(crate) fn populate_station_purchase_scope_vars(
     populate_station_badge_vars_for_spec(ctx, spec);
 }
 
-struct StationNeighbourScope<'a> {
-    map: &'a Map,
-    stations: &'a [Station],
-    station_catalog: &'a [StationSpecDef],
+struct StationNeighbourScope<'scope, 'a> {
+    lookup: &'scope StationGeometryLookup<'a>,
+    station_catalog: &'scope [StationSpecDef],
     source: &'a Station,
-    current_spec: &'a StationSpecDef,
+    current_spec: &'scope StationSpecDef,
     coord: TileCoord,
     climate: Climate,
     grf_version: u8,
 }
 
-impl StationNeighbourScope<'_> {
+impl StationNeighbourScope<'_, '_> {
     fn populate(&self, ctx: &mut Action2EvalCtx) {
         for (variable, parameter) in requested_station_neighbour_vars(self.current_spec) {
-            let nearby = nearby_station_tile(self.map, self.coord, parameter);
+            let nearby = nearby_station_tile(self.lookup.map, self.coord, parameter);
             let value = match variable {
-                0x66 => {
-                    nearby_station_animation_frame(self.map, self.stations, self.source, nearby)
-                }
+                0x66 => nearby_station_animation_frame(self.lookup, self.source, nearby),
                 0x67 => nearby_station_land_info(
-                    self.map,
+                    self.lookup.map,
                     self.coord,
                     nearby,
                     self.climate,
                     self.grf_version,
                 ),
                 0x68 => nearby_station_info(
-                    self.map,
-                    self.stations,
+                    self.lookup,
                     self.station_catalog,
                     self.source,
                     self.current_spec,
                     self.coord,
                     nearby,
                 ),
-                0x6A => nearby_station_grfid(self.map, self.stations, self.station_catalog, nearby),
+                0x6A => nearby_station_grfid(self.lookup, self.station_catalog, nearby),
                 0x6B => nearby_station_local_id(
-                    self.map,
-                    self.stations,
+                    self.lookup,
                     self.station_catalog,
                     self.current_spec,
                     nearby,
@@ -370,14 +414,13 @@ impl StationNeighbourScope<'_> {
 
 fn populate_station_neighbour_vars(
     ctx: &mut Action2EvalCtx,
-    map: &Map,
-    stations: &[Station],
+    lookup: &StationGeometryLookup<'_>,
     station_catalog: &[StationSpecDef],
     coord: TileCoord,
     climate: Climate,
     grf_version: u8,
 ) {
-    let Some(source) = station_at_tile(map, stations, coord) else {
+    let Some(source) = lookup.at(coord) else {
         return;
     };
     let Some(current_spec) = station_spec_def(station_catalog, source.station_spec) else {
@@ -387,8 +430,7 @@ fn populate_station_neighbour_vars(
         return;
     }
     StationNeighbourScope {
-        map,
-        stations,
+        lookup,
         station_catalog,
         source,
         current_spec,
@@ -439,14 +481,15 @@ fn nearby_station_tile(map: &Map, base: TileCoord, parameter: u8) -> TileCoord {
     )
 }
 
-fn is_rail_station_tile(map: &Map, stations: &[Station], coord: TileCoord) -> bool {
+fn is_rail_station_tile(lookup: &StationGeometryLookup<'_>, coord: TileCoord) -> bool {
+    let map = lookup.map;
     map.get(coord).is_some_and(|tile| {
         tile.kind == TileKind::Station
             && matches!(
                 station_type_from_m6(tile.m6),
                 0 | STATION_TYPE_RAIL_WAYPOINT
             )
-            && station_at_tile(map, stations, coord).is_some_and(|station| {
+            && lookup.at(coord).is_some_and(|station| {
                 matches!(
                     station.stop_kind,
                     crate::station::StopKind::RailStation | crate::station::StopKind::RailWaypoint
@@ -456,15 +499,15 @@ fn is_rail_station_tile(map: &Map, stations: &[Station], coord: TileCoord) -> bo
 }
 
 fn nearby_station_animation_frame(
-    map: &Map,
-    stations: &[Station],
+    lookup: &StationGeometryLookup<'_>,
     source: &Station,
     nearby: TileCoord,
 ) -> u32 {
-    if !is_rail_station_tile(map, stations, nearby) {
+    let map = lookup.map;
+    if !is_rail_station_tile(lookup, nearby) {
         return u32::MAX;
     }
-    let Some(candidate) = station_at_tile(map, stations, nearby) else {
+    let Some(candidate) = lookup.at(nearby) else {
         return u32::MAX;
     };
     if candidate.pos != source.pos {
@@ -582,18 +625,18 @@ fn station_land_tile_type(tile: Tile) -> u8 {
 }
 
 fn nearby_station_info(
-    map: &Map,
-    stations: &[Station],
+    lookup: &StationGeometryLookup<'_>,
     station_catalog: &[StationSpecDef],
     source: &Station,
     current_spec: &StationSpecDef,
     source_coord: TileCoord,
     nearby: TileCoord,
 ) -> u32 {
-    if !is_rail_station_tile(map, stations, nearby) {
+    let map = lookup.map;
+    if !is_rail_station_tile(lookup, nearby) {
         return u32::MAX;
     }
-    let Some(candidate) = station_at_tile(map, stations, nearby) else {
+    let Some(candidate) = lookup.at(nearby) else {
         return u32::MAX;
     };
     let Some(tile) = map.get(nearby) else {
@@ -625,31 +668,31 @@ fn nearby_station_info(
 }
 
 fn nearby_station_grfid(
-    map: &Map,
-    stations: &[Station],
+    lookup: &StationGeometryLookup<'_>,
     station_catalog: &[StationSpecDef],
     nearby: TileCoord,
 ) -> u32 {
-    if !is_rail_station_tile(map, stations, nearby) {
+    if !is_rail_station_tile(lookup, nearby) {
         return u32::MAX;
     }
-    station_at_tile(map, stations, nearby)
+    lookup
+        .at(nearby)
         .and_then(|station| station_spec_def(station_catalog, station.station_spec))
         .filter(|spec| spec.from_newgrf)
         .map_or(0, |spec| spec.newgrf_grfid)
 }
 
 fn nearby_station_local_id(
-    map: &Map,
-    stations: &[Station],
+    lookup: &StationGeometryLookup<'_>,
     station_catalog: &[StationSpecDef],
     current_spec: &StationSpecDef,
     nearby: TileCoord,
 ) -> u32 {
-    if !is_rail_station_tile(map, stations, nearby) {
+    if !is_rail_station_tile(lookup, nearby) {
         return u32::MAX;
     }
-    station_at_tile(map, stations, nearby)
+    lookup
+        .at(nearby)
         .and_then(|station| station_spec_def(station_catalog, station.station_spec))
         .filter(|spec| spec.from_newgrf)
         .filter(|spec| spec.newgrf_grfid == current_spec.newgrf_grfid)
@@ -734,8 +777,7 @@ fn populate_station_general_vars(ctx: &mut Action2EvalCtx, station: &Station) {
 
 #[allow(clippy::too_many_arguments)]
 fn action2_eval_ctx_for_station_tile_impl(
-    map: &Map,
-    stations: &[Station],
+    lookup: &StationGeometryLookup<'_>,
     coord: TileCoord,
     owner_colour: u8,
     climate: Climate,
@@ -743,8 +785,9 @@ fn action2_eval_ctx_for_station_tile_impl(
     grf_version: u8,
     world: Option<StationAction2WorldContext<'_>>,
 ) -> Action2EvalCtx {
+    let map = lookup.map;
     let mut ctx = Action2EvalCtx::default();
-    let Some(st) = station_at_tile(map, stations, coord) else {
+    let Some(st) = lookup.at(coord) else {
         return ctx;
     };
     populate_station_general_vars(&mut ctx, st);
@@ -794,22 +837,22 @@ fn action2_eval_ctx_for_station_tile_impl(
     ctx.vars.insert(0x4A, tile.map_or(0, |t| u32::from(t.m7)));
 
     ctx.vars
-        .insert(0x40, platform_info_for_tile(map, stations, coord, m5));
+        .insert(0x40, platform_info_for_tile(lookup, coord, m5));
     if matches!(station_type, 0 | STATION_TYPE_RAIL_WAYPOINT) {
         ctx.vars.insert(
             0x46,
-            platform_info_for_tile_variant(map, stations, coord, m5, true, false),
+            platform_info_for_tile_variant(lookup, coord, m5, true, false),
         );
         // `Station` conserva un único StationSpecId para toda la huella; por
         // eso el filtro de tipo de 0x47 es hoy idéntico al de 0x46. La
         // diferencia reaparecerá cuando el importador preserve specs por tile.
         ctx.vars.insert(
             0x47,
-            platform_info_for_tile_variant(map, stations, coord, m5, true, false),
+            platform_info_for_tile_variant(lookup, coord, m5, true, false),
         );
         ctx.vars.insert(
             0x49,
-            platform_info_for_tile_variant(map, stations, coord, m5, false, true),
+            platform_info_for_tile_variant(lookup, coord, m5, false, true),
         );
     }
 
@@ -1126,14 +1169,14 @@ fn same_station(a: &Station, b: &Station) -> bool {
 }
 
 fn find_rail_station_end(
-    map: &Map,
-    stations: &[Station],
+    lookup: &StationGeometryLookup<'_>,
     start: TileCoord,
     dx: i32,
     dy: i32,
     check_axis: bool,
 ) -> TileCoord {
-    let Some(st) = station_at_tile(map, stations, start) else {
+    let map = lookup.map;
+    let Some(st) = lookup.at(start) else {
         return start;
     };
     let axis_y = map.get(start).is_some_and(|tile| tile.m5 & 1 != 0);
@@ -1143,7 +1186,7 @@ fn find_rail_station_end(
         if !is_rail_platform_tile(map, next) {
             break;
         }
-        let Some(other) = station_at_tile(map, stations, next) else {
+        let Some(other) = lookup.at(next) else {
             break;
         };
         if !same_station(st, other) {
@@ -1237,18 +1280,18 @@ fn pack_platform_info_centered(
     retval
 }
 
-fn platform_info_for_tile(map: &Map, stations: &[Station], coord: TileCoord, m5: u8) -> u32 {
-    platform_info_for_tile_variant(map, stations, coord, m5, false, false)
+fn platform_info_for_tile(lookup: &StationGeometryLookup<'_>, coord: TileCoord, m5: u8) -> u32 {
+    platform_info_for_tile_variant(lookup, coord, m5, false, false)
 }
 
 fn platform_info_for_tile_variant(
-    map: &Map,
-    stations: &[Station],
+    lookup: &StationGeometryLookup<'_>,
     coord: TileCoord,
     m5: u8,
     centered: bool,
     check_axis: bool,
 ) -> u32 {
+    let map = lookup.map;
     if !is_rail_platform_tile(map, coord) {
         // Waypoints / no-rail: layout 1×1.
         return if centered {
@@ -1257,7 +1300,7 @@ fn platform_info_for_tile_variant(
             pack_platform_info(m5 & 0x3F, 1, 1, 0, 0)
         };
     }
-    let end = |dx: i32, dy: i32| find_rail_station_end(map, stations, coord, dx, dy, check_axis);
+    let end = |dx: i32, dy: i32| find_rail_station_end(lookup, coord, dx, dy, check_axis);
     let sx = end(-1, 0).x;
     let sy = end(0, -1).y;
     let ex = end(1, 0).x + 1;
@@ -1286,6 +1329,106 @@ fn platform_info_for_tile_variant(
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ownership_memo_keeps_exact_positive_and_negative_results_once_per_tile() {
+        for mask in [0_u16, 7, 42, 256, 511] {
+            let mut map = Map::new_flat(5, 5, 0);
+            for bit in 0..9 {
+                if mask & (1 << bit) != 0 {
+                    map.set_kind(TileCoord::new(1 + bit % 3, 1 + bit / 3), TileKind::Station)
+                        .unwrap();
+                }
+            }
+            let mut direct = Station::new_with_kind(TileCoord::new(4, 4), StopKind::Dock);
+            direct.joined_tiles.push(TileCoord::new(2, 2));
+            let stations = vec![
+                Station::new_with_kind(TileCoord::new(1, 1), StopKind::RailStation),
+                Station::new_with_kind(TileCoord::new(3, 3), StopKind::RailWaypoint),
+                direct,
+            ];
+            let lookup = StationGeometryLookup::new(&map, &stations);
+            for y in -1..6 {
+                for x in -1..6 {
+                    let coord = TileCoord::new(x, y);
+                    let expected = station_at_tile(&map, &stations, coord);
+                    for _ in 0..3 {
+                        assert!(match (lookup.at(coord), expected) {
+                            (None, None) => true,
+                            (Some(actual), Some(expected)) => std::ptr::eq(actual, expected),
+                            _ => false,
+                        });
+                    }
+                }
+            }
+            assert_eq!(lookup.misses.get(), 49);
+            assert_eq!(lookup.resolved.borrow().len(), 49);
+            assert!(lookup.resolved.borrow().values().any(Option::is_none));
+        }
+    }
+
+    #[test]
+    fn platform_variables_share_geometry_and_next_context_reads_demolition_and_relocation() {
+        let mut map = Map::new_flat(12, 3, 0);
+        for x in 2..10 {
+            map.set_tile(TileCoord::new(x, 1), rail_station_tile(0))
+                .unwrap();
+        }
+        let mut stations = vec![Station::new_with_kind(
+            TileCoord::new(2, 1),
+            StopKind::RailStation,
+        )];
+        let coord = TileCoord::new(5, 1);
+        {
+            let lookup = StationGeometryLookup::new(&map, &stations);
+            let ctx = action2_eval_ctx_for_station_tile_impl(
+                &lookup,
+                coord,
+                0,
+                Climate::Temperate,
+                None,
+                8,
+                None,
+            );
+            assert_eq!(ctx.vars.get(&0x40), Some(&(3 | 4 << 4 | 8 << 16 | 1 << 20)));
+            assert_eq!(ctx.vars.get(&0x46), Some(&(15 | 8 << 16 | 1 << 20)));
+            assert_eq!(ctx.vars.get(&0x47), ctx.vars.get(&0x46));
+            assert_eq!(ctx.vars.get(&0x49), ctx.vars.get(&0x40));
+            assert_eq!(
+                lookup.misses.get(),
+                8,
+                "four platform variables resolve only eight unique tiles"
+            );
+            let _ = action2_eval_ctx_for_station_tile_impl(
+                &lookup,
+                coord,
+                4,
+                Climate::SubArctic,
+                None,
+                7,
+                None,
+            );
+            assert_eq!(
+                lookup.misses.get(),
+                8,
+                "a repeat on the immutable inputs reuses ownership"
+            );
+        }
+        map.set_kind(TileCoord::new(4, 1), TileKind::Grass).unwrap();
+        let ctx =
+            action2_eval_ctx_for_station_tile(&map, &stations, coord, 0, Climate::Temperate, None);
+        assert!(
+            ctx.vars.is_empty(),
+            "disconnected platform is unresolved in the next context"
+        );
+        stations[0].pos = coord;
+        stations[0].newgrf_random_bits = 901;
+        let ctx =
+            action2_eval_ctx_for_station_tile(&map, &stations, coord, 0, Climate::Temperate, None);
+        assert_eq!(ctx.random_bits, 901);
+        assert_eq!(ctx.vars.get(&0x40), Some(&(4 << 4 | 5 << 16 | 1 << 20)));
+    }
+
     use crate::airport_class::AirportSpecId;
     use crate::cargo_packet::CargoPacket;
     use crate::company::CompanyId;

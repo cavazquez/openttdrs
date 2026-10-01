@@ -92,6 +92,15 @@ importados; la sonda aislada es unas 24 veces más rápida. Remap sostenido
 el núcleo no muestra una mejora uniforme. Action2, cadencia y 30 FPS siguen
 abiertos: los 80 frames sostenidos posteriores todavía exceden 33,33 ms.
 
+La etapa 28 comparte consultas de geometría dentro de cada construcción
+Action2: los 7.228 contextos completos son idénticos y la sonda mejora unas
+5,4 veces. El núcleo largo empeora ligeramente y los FPS permanecen cerca
+de 22,6; no se acredita una ganancia global. Las 61 fases conservan el estado.
+La primera captura anterior de In2x difiere 204 píxeles; se conserva ese fallo,
+aunque doce repeticiones In2x/Out4x dan PNG exactos y las 18 trazas completas
+coinciden tras renumerar consistentemente los IDs de entidades. Variación del
+renderer, identidad nativa, cadencia y 30 FPS siguen abiertos.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

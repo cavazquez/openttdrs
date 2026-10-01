@@ -152,6 +152,35 @@ las rutas de carretera/agua aunque no altere su conectividad. La aplicación de
 comandos todavía descarta las rutas individuales ante cambios de mapa. Reducir
 estas invalidaciones y cachear segmentos ferroviarios mantiene F15 abierto.
 
+## Etapa 4 — Referencias a catálogos durante la carga (sub-issue F12)
+
+Se retiraron copias de `EngineDef` en cantidad de carga, capacidad por unidad,
+refresco de capacidad, selección/aplicación de refit y la copia de
+`IndustrySpecDef` en entrega a industrias. Los callbacks reciben referencias
+al mismo catálogo y siguen escribiendo sobre el vehículo/industria en el mismo
+orden. La consulta de refit conserva la copia de vehículo necesaria para que
+los registros persistentes de una prueba no modifiquen el vehículo real.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`, `economy.cpp::GetLoadAmount` consulta
+`const Engine *`; `newgrf_engine.cpp::GetVehicleProperty/GetEngineProperty`
+evalúan callbacks sin copiar la definición de motor. No se cambian resultados,
+clamping ni fallbacks de estos callbacks.
+
+Los ocho runs release sobre Kale_TitleGame.sav con NewGRF no muestran una
+ganancia global clara. Cuatro ticks: total 522,30 / 517,88 → 513,92 / 519,20 ms;
+24 ticks: 268,80 / 265,41 → 282,82 / 265,60 ms. Carga sigue cerca de 100 ms.
+Esta reducción de copias no explica el cuello principal de la fixture. Todos
+los runs, incluido el pico de 282,82 ms, están en
+[catalog-borrows-20260930.csv](evidence/catalog-borrows-20260930.csv).
+El baseline es `8f688650` (SHA256 `d24653ec45b08724401d34d00adae4112ae95d6822fc28f234ddf7380c91c9dc`)
+y el candidato `15ee18b001d076d44795d2ca99f980f22284a7d1cfe60df8c61155fd592febc6`.
+
+Validación: 2.998 core/seis ignorados, 1.659 cliente/dos; Clippy de ambos en
+todos los targets, formato, diff y frescura de docs. Las regresiones existentes
+de capacidad dinámica CB36, cantidad de carga, refit, capacidad nativa por
+unidad y entrega a industrias conservan su resultado. F12 sigue abierto para
+perfilar terminales, paquetes y agregados; F13 para builders repetidos.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV

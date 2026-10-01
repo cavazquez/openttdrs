@@ -111,7 +111,7 @@ pub(crate) fn unit_capacity_for_vehicle(
             .native_cargo_capacity
             .unwrap_or(crate::vehicle::VEHICLE_CAPACITY);
     };
-    let Some(engine) = engine_for_id(engine_catalog, engine_id).cloned() else {
+    let Some(engine) = engine_for_id(engine_catalog, engine_id) else {
         // Un EngineID custom no cargado no permite reconstruir su propiedad
         // nativa. Usar el `cargo_cap` persistido evita publicar/consumir la
         // capacidad agregada como si perteneciera a la locomotora; si el save
@@ -124,12 +124,12 @@ pub(crate) fn unit_capacity_for_vehicle(
         return u32::from(vehicle.refit_capacity);
     }
     if let Some(capacity) =
-        crate::newgrf_callback::resolve_vehicle_current_refit_capacity(&engine, vehicle)
+        crate::newgrf_callback::resolve_vehicle_current_refit_capacity(engine, vehicle)
     {
         return capacity;
     }
     if let Some(capacity) =
-        crate::newgrf_callback::resolve_vehicle_capacity_property_callback(&engine, vehicle)
+        crate::newgrf_callback::resolve_vehicle_capacity_property_callback(engine, vehicle)
     {
         let cargo = vehicle
             .cargo_type

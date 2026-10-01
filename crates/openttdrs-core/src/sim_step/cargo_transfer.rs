@@ -235,9 +235,8 @@ fn vehicle_load_unload_speed(state: &mut GameState, vehicle_idx: usize, cargo: C
     };
     let configured_engine = vehicle
         .engine_id
-        .and_then(|engine_id| crate::engine::engine_in_catalog(&state.engine_catalog, engine_id))
-        .cloned();
-    let callback_amount = configured_engine.as_ref().and_then(|engine| {
+        .and_then(|engine_id| crate::engine::engine_in_catalog(&state.engine_catalog, engine_id));
+    let callback_amount = configured_engine.and_then(|engine| {
         crate::newgrf_callback::resolve_vehicle_load_amount_callback(engine, vehicle)
     });
     let configured = callback_amount.or_else(|| configured_engine.map(|engine| engine.load_amount));
@@ -307,8 +306,7 @@ pub(super) fn refresh_runtime_vehicle_capacities(state: &mut GameState) {
         let Some(engine_id) = state.vehicles[index].engine_id else {
             continue;
         };
-        let Some(engine) =
-            crate::engine::engine_in_catalog(&state.engine_catalog, engine_id).cloned()
+        let Some(engine) = crate::engine::engine_in_catalog(&state.engine_catalog, engine_id)
         else {
             continue;
         };
@@ -324,7 +322,7 @@ pub(super) fn refresh_runtime_vehicle_capacities(state: &mut GameState) {
         if state.vehicles[index].kind == VehicleKind::Aircraft {
             state.vehicles[index].aircraft_mail_capacity =
                 crate::newgrf_callback::resolve_aircraft_mail_capacity(
-                    &engine,
+                    engine,
                     &mut state.vehicles[index],
                     cargo,
                     &state.cargo_spec_catalog,
@@ -335,11 +333,11 @@ pub(super) fn refresh_runtime_vehicle_capacities(state: &mut GameState) {
             continue;
         }
         let refit_capacity = crate::newgrf_callback::resolve_vehicle_current_refit_capacity(
-            &engine,
+            engine,
             &mut state.vehicles[index],
         );
         let property_capacity = crate::newgrf_callback::resolve_vehicle_capacity_property_callback(
-            &engine,
+            engine,
             &mut state.vehicles[index],
         );
         if refit_capacity.is_none() && property_capacity.is_none() {
@@ -451,9 +449,8 @@ fn deliver_goods_to_industries(
                     .industry_spec_catalog
                     .iter()
                     .find(|def| def.id == type_id)
-                    .cloned()
             });
-        if newgrf_def.as_ref().and_then(|def| {
+        if newgrf_def.and_then(|def| {
             crate::newgrf_callback::resolve_industry_refuse_cargo_callback_with_catalog(
                 def,
                 &mut state.industries[industry_idx],
@@ -1931,12 +1928,10 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
         let engine = state.vehicles[idx]
             .engine_id
             .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
-            .cloned()
             .or_else(|| {
                 state.vehicles[idx]
                     .engine_id
                     .and_then(crate::engine::engine_by_id)
-                    .cloned()
             });
         let Some(engine) = engine else {
             // Vehículos de escenarios sin motor catalogado no tienen callback
@@ -1947,7 +1942,7 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
         let subtype = state.vehicles[idx].cargo_subtype;
         let (cost, auto_allowed) = crate::economy::vehicle_refit_cost_with_callbacks(
             &state.global_economy,
-            &engine,
+            engine,
             &mut state.vehicles[idx],
             target,
             subtype,
@@ -1969,12 +1964,11 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
     for (idx, target, _cost) in refits {
         let engine = state.vehicles[idx]
             .engine_id
-            .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
-            .cloned();
+            .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id));
         state.vehicles[idx].cargo_type = Some(target);
         state.vehicles[idx].aircraft_mail_capacity =
             if state.vehicles[idx].kind == VehicleKind::Aircraft {
-                engine.as_ref().and_then(|engine| {
+                engine.and_then(|engine| {
                     crate::newgrf_callback::resolve_aircraft_mail_capacity(
                         engine,
                         &mut state.vehicles[idx],
@@ -1988,13 +1982,13 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
         state.vehicles[idx].clamp_aircraft_mail_cargo();
         if let Some(engine) = engine {
             let callback_capacity = crate::newgrf_callback::resolve_vehicle_refit_capacity_callback(
-                &engine,
+                engine,
                 &mut state.vehicles[idx],
                 target,
             );
             let property_capacity =
                 crate::newgrf_callback::resolve_vehicle_capacity_property_callback(
-                    &engine,
+                    engine,
                     &mut state.vehicles[idx],
                 )
                 .map(|capacity| {
@@ -2139,22 +2133,16 @@ fn station_refit_capacity_for_target(
     let Some(engine) = vehicle
         .engine_id
         .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
-        .cloned()
-        .or_else(|| {
-            vehicle
-                .engine_id
-                .and_then(crate::engine::engine_by_id)
-                .cloned()
-        })
+        .or_else(|| vehicle.engine_id.and_then(crate::engine::engine_by_id))
     else {
         return vehicle.capacity;
     };
     let mut probe = vehicle.clone();
     probe.cargo_type = Some(cargo);
     let callback_capacity =
-        crate::newgrf_callback::resolve_vehicle_refit_capacity_callback(&engine, &mut probe, cargo);
+        crate::newgrf_callback::resolve_vehicle_refit_capacity_callback(engine, &mut probe, cargo);
     let property_capacity =
-        crate::newgrf_callback::resolve_vehicle_capacity_property_callback(&engine, &mut probe)
+        crate::newgrf_callback::resolve_vehicle_capacity_property_callback(engine, &mut probe)
             .map(|capacity| {
                 crate::cargo_spec::apply_cargo_capacity_multiplier(
                     capacity,

@@ -1559,3 +1559,111 @@ Validación: 3.024 core/seis ignorados, 1.666 cliente/dos; Clippy en todos los
 targets de ambos, formato, diff y frescura de docs. Sólo cierra este sub-issue
 de recorridos repetidos de tráfico; F07, paridad ferroviaria completa,
 cadencia, variación histórica del renderer y 30 FPS permanecen abiertos.
+
+## Etapa 26 — Hash de visitados en huellas de estación (F17/F31)
+
+`station_footprint_tiles` usa ahora `AHashSet`, ya presente en el núcleo, para
+comprobar las coordenadas visitadas. No itera ese conjunto: el vector de
+salida sigue el mismo BFS, dirección, guardia de 64 y expansión del último
+nodo. No añade una caché ni cambia la regla legacy de estaciones adyacentes.
+Dos regresiones conservan la secuencia completa en 2.066 escenarios: las 512
+topologías 3×3 con cuatro anclas, límite de expansión, anclas fuera del mapa,
+tipos no Station, ediciones posteriores y mapa clonado. La expectativa de
+orden explícita usa `map/slope.rs::diag_dir_offset`: oeste, sur, este, norte.
+Oracle funcional: el recorrido anterior con `std::HashSet` de `b023f1fb`.
+
+El original OpenTTD 15.3 `14ec60f2` resuelve el identificador de estación en
+[`station_map.h::GetStationIndex`](https://github.com/OpenTTD/OpenTTD/blob/14ec60f248547d4d062a1160f0fc26d742319888/src/station_map.h#L28)
+mediante MAP2. El BFS del port es un fallback legacy; acelerar su conjunto
+no lo convierte en esa consulta nativa ni cierra la geometría ferroviaria.
+La caché de terminales existente mantiene un rebuild y un barrido completo
+en los 120 ticks de esta fixture. Las consultas que siguen usando el recorrido
+legacy merecen reutilización independiente, con su mismo contrato.
+
+Perfil del cliente `b023f1fb`, GPU real, activado por FIFO de perf después de
+120 frames de calentamiento y de que se publicaran 60 muestras. Evento
+`cpu-clock:u`, 199 Hz, `dwarf,8192`; 3.867 muestras, intervalo de muestras
+19425,264211–19439,841908 s. El controlador recibe `ack\n\0`; el primer intento
+rechazaba ese NUL y fue descartado, conservando sus artefactos. Las cifras de
+frame de esta captura son diagnósticas bajo perf, no una comparación ABBA.
+Los símbolos leaf incluyen vidrio 4,50 %, huellas 1,14 %, sort y operaciones
+ECS. Sólo 71 muestras tienen algún frame decodificado y 27 más de uno:
+**no se usa este perfil para atribución acumulada a callers**, ni se atribuye
+a un subsistema cada monomorfización de hash que aparece en la tabla.
+[42 filas self ≥0,5 %](evidence/client-residual-self-20261001.csv),
+[360 frames diagnósticos](evidence/client-residual-profiled-frames-20261001.csv),
+[alcance, hashes e intervalo](evidence/client-residual-scope-20261001.json).
+
+La sonda [`profile_station_footprints.rs`](../../scripts/profile_station_footprints.rs)
+recorre las 78 anclas rail/waypoint importadas, 1.254 teselas por pasada,
+128 pasadas y 9.984 consultas por muestra. Cinco muestras por run, ABBA;
+importación, hidratación y salida fuera del reloj. El checksum de longitudes,
+coordenadas y orden permanece `12612797840475784741` en las veinte muestras.
+Media por run **9,2999 / 9,3205 → 5,1104 / 5,1569 ms**. Es un coste aislado,
+no una estimación de ahorro por tick.
+[Datos](evidence/station-footprint-hash-probe-20261001.csv).
+
+Núcleo normal, mismas partida/NewGRF y listas importadas, ABBA sin otras
+cargas: 24 ticks **24,5503 / 24,5601 → 22,4886 / 23,2078 ms**; 120 ticks
+**15,1610 / 15,1570 → 14,1356 / 14,2266 ms**. Las 61 fases normales mantienen
+hash v4, eventos, todas las teselas raw, bloques 4×4, contadores visuales y
+listas ordenadas de avisos generales/de ascensor. Se reutiliza la traza
+posterior inmutable de la etapa 25 como oracle anterior; no se ordenan listas
+compartidas antes de avanzar. Tick final 3703134, hash `4d3524e48b6bc2e5`,
+eventos `4857641856429973`.
+[Core](evidence/station-footprint-hash-core-20261001.csv),
+[estado](evidence/station-footprint-hash-state-20261001.csv).
+
+Cliente sin perf ni compilación concurrentes, GPU real, 1280×720, escala 2,
+ABBA, 40 muestras por run. Cámara fija, warmup 120: frame
+**51,8772 / 51,4945 → 46,9528 / 47,5605 ms**, FPS por duración media
+**19,276 / 19,420 → 21,298 / 21,026**; remap
+**9,9803 / 9,8932 → 5,7612 / 5,8041 ms** y simulación
+**14,5180 / 14,6803 → 14,1245 / 14,2843 ms**. Medianas
+**49,5511 / 50,5736 → 46,2374 / 47,2536**, p95
+**74,9694 / 73,1600 → 63,4774 / 64,9008**, máximos/p99
+**85,4398 / 83,9247 → 69,6296 / 70,3332**. TPS
+**19,128 / 19,422 → 21,294 / 21,035**. El primer run anterior cubre ticks
+3703194–3703233; los otros tres, 3703193–3703232. Exceden 33,33 ms 79/80
+frames de cada versión; las excepciones aisladas no acreditan 30 FPS sostenidos.
+[160 muestras](evidence/station-footprint-hash-client-steady-20261001.csv).
+
+Pan, warmup 30, otra ventana ABBA: frame
+**57,9298 / 58,9172 → 53,3477 / 53,4758 ms**, FPS
+**17,262 / 16,973 → 18,745 / 18,700**; remap
+**11,1499 / 11,4369 → 6,6861 / 6,7169 ms**. Medianas
+**55,2001 / 54,9613 → 49,6675 / 49,8933**, p95
+**82,7533 / 87,5052 → 73,6594 / 73,7580**, máximos/p99
+**139,1268 / 146,6285 → 137,6965 / 136,5556**. TPS
+**17,906 / 17,647 → 19,537 / 19,476**. El primer run anterior cubre ticks
+3703104–3703143; los demás, 3703103–3703142. Todos los 80 frames por versión
+exceden el presupuesto. El primer intervalo incluye el cambio de zoom del
+frame 30; los timers de fase y de intervalo pertenecen a frames distintos.
+[160 muestras](evidence/station-footprint-hash-pan-20261001.csv).
+
+Las seis parejas congeladas conservan PNG y traza completa de sort
+byte-idénticos, cero píxeles/bloques 4×4 distintos, escalas .25/.5/1/2/4/8,
+centro 128,128, settle 180 y CLEAN=0. Conservan de 54 a 37.998 parents.
+El gate no acredita todos los frames animados ni los FPS activos de cada zoom.
+[Raster](evidence/station-footprint-hash-raster-20261001.csv).
+
+Artefactos en `target/performance/station-footprint-hash-20261001`.
+Cliente anterior/posterior SHA256
+`a759a41d2d03e16c2a2c27ad6c95f0793072b56ab8a4cb7a908ee28d2135ce25` /
+`b8c09204241281915a0d13872af6c740fc8b017e73019f68895eeb37ca5cab5d`;
+`sav_profile`
+`4b026773977296a92096b9bd8f977492b7139b11258ebfd59dcf14f0e75caf31` /
+`075c0ff9acdfc6ba7cbe6e732ec43abf2ae90b13bb4f10c0262c35e0aa3ae838`;
+traza `4b78cd3bfae415dadeb0b9982baab1bcfdfcb3d7446dc6225b5941c0068f66a6` /
+`f805baba1d90dfc2eaffe3e45613539a7fe756082bca4226db2298ee31b52913`.
+Sondas compiladas contra las `.rlib` exactas/copiadas del reporte Cargo JSON;
+`rustc -O -D warnings` y formato standalone pasan. Release del perfil 24,19 s,
+cliente tras cambio core 77 s; no es una mejora controlada de compilación.
+Tras comparar bytes, los dumps idénticos de fases 24–26 comparten hardlinks
+readonly: se conservan todos los contenidos y se recuperan 1.431.032.577 bytes.
+No se enlazan archivos de trabajo de Cargo como oracles inmutables.
+
+Validación: 3.026 core/seis ignorados, 1.666 cliente/dos; Clippy en todos los
+targets de ambos, formato, diff y frescura de docs. Sólo cierra este coste de
+visitados; reutilización de consultas legacy, F17/F31 completos, cadencia,
+variación histórica del renderer y 30 FPS permanecen abiertos.

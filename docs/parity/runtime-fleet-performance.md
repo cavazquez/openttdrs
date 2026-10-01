@@ -76,6 +76,13 @@ fija pasa de 18,761 / 18,809 a 19,500 / 19,550 FPS y el pan de 16,542 / 16,588
 a 16,958 / 16,723. El total core de 24 ticks empeora y el de 120 mejora; ambas
 ventanas quedan registradas. Los 250 escenarios diferenciales, 61 fases y
 seis zooms conservan el port anterior. Cadencia y presupuesto siguen abiertos.
+La etapa 26 acelera el conjunto de visitados del recorrido legacy de estaciones,
+con 2.066 escenarios que conservan su secuencia. El remap sostenido baja de
+unos 9,9 a 5,8 ms; cámara fija 19,276 / 19,420 → 21,298 / 21,026 FPS y pan
+17,262 / 16,973 → 18,745 / 18,700. Otras 61 fases y seis zooms son exactos.
+El nuevo perfil de CPU excluye el calentamiento, pero no permite atribución
+acumulada fiable de callers; se conserva como diagnóstico. La cadencia y
+los 30 FPS siguen abiertos.
 
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y

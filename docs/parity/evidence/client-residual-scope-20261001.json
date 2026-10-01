@@ -1,0 +1,33 @@
+{
+  "last_flushed_frame": 60,
+  "last_flushed_tick": 3703252,
+  "seconds_before_enable": 13.528175297997223,
+  "enable_ack_hex": "61636b0a00",
+  "binary_sha256": "a759a41d2d03e16c2a2c27ad6c95f0793072b56ab8a4cb7a908ee28d2135ce25",
+  "capture_frames": 360,
+  "total_seconds": 29.45408868099912,
+  "last_frame": 360,
+  "last_tick": 3703552,
+  "base_commit": "b023f1fb5c1d2436075b3ef6fe06b69289ebac1b",
+  "fixture_sha256": "584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69",
+  "event": "cpu-clock:u",
+  "frequency_hz": 199,
+  "call_graph": "dwarf,8192",
+  "warmup_frames": 120,
+  "start_after_flushed_sample": 60,
+  "first_sample_seconds": 19425.264211,
+  "last_sample_seconds": 19439.841908,
+  "samples": 3867,
+  "samples_with_any_decoded_frame": 71,
+  "samples_with_multiple_decoded_frames": 27,
+  "frame_metrics_are_profiled_diagnostic_only": true,
+  "inclusive_attribution_valid": false,
+  "discarded_attempt": "Initial controller rejected the trailing NUL in perf ack; artifacts retained outside accepted interval.",
+  "artifacts": {
+    "steady.perf": "dc079a86b17673446ef1ad8cdd7fe51791f1c3505fc9ae7ed7c44d0b9f37a439",
+    "frames.csv": "2579686ea877574a4119e610d87d5bdbbd22c3f29791862cc75613b59638fc99",
+    "self.txt": "0060b128fa9353f7310770aa9a1b95c4e2d3ecde73069ad87603db7fa23c43e5",
+    "header.txt": "5f5b8149004045eab7dec21c17f87eadea8781c3d454b68d360284230fe98e7f",
+    "stacks.txt": "5562026bece436f3c410f1cdc91da0b7b9d39c5a094bb905587dd2964df16773"
+  }
+}

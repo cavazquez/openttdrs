@@ -22,7 +22,7 @@ fn is_rail_track_kind(kind: TileKind) -> bool {
 pub fn station_footprint_tiles(map: &Map, anchor: TileCoord) -> Vec<TileCoord> {
     const MAX_FOOTPRINT: usize = 64;
     let mut tiles = vec![anchor];
-    let mut seen = std::collections::HashSet::from([anchor]);
+    let mut seen = ahash::AHashSet::from_iter([anchor]);
     let mut i = 0;
     while i < tiles.len() && tiles.len() < MAX_FOOTPRINT {
         let c = tiles[i];
@@ -794,3 +794,7 @@ pub fn vehicle_at_road_stop(map: &Map, vehicle: &crate::Vehicle) -> bool {
     }
     false
 }
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests;

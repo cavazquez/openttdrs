@@ -1032,6 +1032,104 @@ posterior `cbab113c3cdb22ae912bf9227091d8df99493e29f5d1d745628e82f7f8e5a19f`.
 Se cierra el barrido de cargos para stocks iguales. El redibujado, el tráfico
 ferroviario, F07/F12 y los 30 FPS siguen pendientes.
 
+## Etapa 20 — Redibujar campos sólo al cambiar su imagen (F17/F28)
+
+El despacho regular de `CLEAR_FIELDS` marcaba dirty ante cualquier cambio de
+tesela. OpenTTD 15.3 `14ec60f2`, `clear_cmd.cpp::TileLoop_Clear`, primero
+actualiza cercas y retorna tras incrementar el contador si aún es menor que
+siete; sólo marca el cambio de cultivo al completar el ciclo.
+`UpdateFences` marca por separado sus cambios. `DrawTile_Clear` usa cultivo,
+pendiente y cercas, sin leer los tres bits altos de MAP5 del contador.
+El renderer del port consulta esos mismos datos para campos.
+
+El booleano de aviso compara todas las propiedades de la tesela después de
+normalizar únicamente esos bits en una copia local. El mapa sigue recibiendo
+todas las mutaciones originales; no cambian cultivo, industria, reclamación
+de huérfanos, visitas LFSR ni RNG. La cola de generación continúa llamando al
+mismo `tile_loop_clear_field`, sin esta decisión de redibujado. No se aplica
+el filtro a casas NewGRF: su processing timer sí marca dirty en el nativo.
+
+Las pruebas cubren los nueve cultivos y ocho contadores (72 combinaciones),
+las cuatro cercas con un contador intermedio, reclamación de tipos 7/8 y
+nieve. La prueba del despacho regular verifica cercas → contador sin aviso
+→ cambio de cultivo con aviso y RNG constante.
+
+Desde `dab9bfb9`, 61 fases inicial/60 ticks normales, misma partida/NewGRF y
+orden importado: estado canónico v4, eventos y teselas/bloques 4×4 coinciden
+exactamente. El tick final conserva `4d3524e48b6bc2e5` y los eventos
+`4857641856429973`. [Estado](evidence/field-counter-dirty-state-20261001.csv).
+Los avisos de paisaje bajan de **734 a 115**; los 619 retirados corresponden
+todos a cambios exclusivos del contador. No se agrega ni retira otro aviso,
+y se conserva la secuencia de los restantes. La suma de chunks 16×16
+distintos por tick baja de 582 a 102 (no son chunks visibles ni llamadas al
+remap); máximos de avisos 22 → 5. La sonda
+[`trace_sav_visual_deltas.rs`](../../scripts/trace_sav_visual_deltas.rs) exporta
+coordenadas ordenadas y bytes completos para repetir este análisis. No mide
+rendimiento. [Deltas](evidence/field-counter-dirty-notifications-20261001.csv).
+
+Núcleo normal, ABBA, sin compilaciones, GPU ni `perf` concurrentes: 24 ticks,
+23,776 / 24,076 → 24,597 / 24,316 ms; 120 ticks,
+15,831 / 15,856 → 16,092 / 16,215 ms. No se acredita una mejora del núcleo;
+el ahorro buscado está en el consumidor visual de los avisos. Estas ventanas
+incluyen el primer cálculo de rutas. [Fases](evidence/field-counter-dirty-core-20261001.csv).
+
+Cliente normal, mismo hardware y partida/NewGRF, 1280×720, escala 2, audio
+desactivado, ABBA con 40 muestras por corrida y sin otras cargas de medición:
+
+- Cámara fija, warmup 30: remap 9,785 / 10,161 → 9,517 / 9,173 ms;
+  frame 57,592 / 59,615 → 55,483 / 54,854 ms; FPS
+  17,364 / 16,774 → 18,024 / 18,230. p95
+  74,216 / 87,550 → 72,916 / 72,489 ms; máximo/p99
+  146,838 / 157,728 → 146,546 / 139,875 ms. Ticks
+  3.703.104–3.703.143 en el primer run anterior y segundo posterior;
+  3.703.103–3.703.142 en los otros dos. Frames sobre presupuesto: 80/80
+  anteriores y 79/80 posteriores. [Muestras](evidence/field-counter-dirty-client-20261001.csv).
+- Cámara en movimiento, warmup 30: remap
+  12,596 / 12,577 → 11,531 / 11,455 ms; frame
+  64,452 / 64,144 → 60,585 / 60,175 ms; FPS
+  15,515 / 15,590 → 16,506 / 16,618. p95
+  94,322 / 93,608 → 90,105 / 88,823 ms; máximo/p99
+  156,499 / 155,149 → 147,298 / 147,856 ms. Todos cubren ticks
+  3.703.103–3.703.142; 80/80 frames por versión exceden 33,33 ms.
+  [Pan](evidence/field-counter-dirty-pan-20261001.csv).
+- Cámara fija, warmup 120: remap
+  10,923 / 10,765 → 9,946 / 10,017 ms; frame
+  55,631 / 56,137 → 52,638 / 52,580 ms; FPS
+  17,975 / 17,814 → 18,998 / 19,019. p95
+  81,629 / 82,432 → 74,090 / 76,849 ms; máximo/p99
+  92,651 / 90,161 → 84,376 / 84,367 ms. Ticks
+  3.703.193–3.703.232 salvo el segundo run anterior,
+  3.703.194–3.703.233; 80/80 frames por versión exceden el presupuesto.
+  [Sostenido](evidence/field-counter-dirty-client-steady-20261001.csv).
+
+Se mantiene la salvedad del cambio de zoom con warmup 30; no se mezclan
+ventanas ni se suman fases para reconstruir el frame.
+
+En el gate congelado de seis zooms, cinco parejas iniciales conservan PNG y
+traza completa byte-idénticos. Out4x cambia 319 píxeles / 119 bloques 4×4
+en la primera captura del **mismo baseline** que antes producía el PNG
+canónico. Sus parents y proxies normalizados coinciden con el candidato;
+la traza raw difiere en IDs y veinte índices de entrada. Se conserva esa
+captura. [Gate inicial](evidence/field-counter-dirty-raster-20261001.csv).
+Las dos repeticiones de cada versión en Out4x/Out8x, en orden ABBA, conservan
+PNG y traza completa byte-idénticos respecto del candidato inicial: cero
+píxeles/bloques distintos. Out4x vuelve a producir con el baseline el mismo
+SHA256 canónico de la etapa 19; el ejecutable baseline es byte-idéntico en
+ambas etapas. La captura inicial distinta evidencia una variación preexistente
+en este zoom, además de la histórica Out8x. No se atribuye al cambio ni se
+elimina del registro. [Controles](evidence/field-counter-dirty-raster-repeat-20261001.csv).
+El contador no se ejecuta con ticks congelados, por lo que estas capturas
+tampoco acreditan cada frame activo; la variación del renderer sigue abierta.
+
+Validación: 3.017 core/seis ignorados, 1.664 cliente/dos, Clippy en todos los
+targets, formato, diff y frescura de docs. SHA256 cliente anterior/posterior:
+`d809e1117637e0bb8b3e409baee99a4e01d24a0f047f0d0a4f249505dedd57f2` y
+`74560f9bca194437fb3295ecef4bddfc172dd576f9108186ecd796a52a77b9d3`;
+`sav_profile`: `cbab113c3cdb22ae912bf9227091d8df99493e29f5d1d745628e82f7f8e5a19f`
+y `858d0321d028825f25c96500ad75048ff998c6842c31935485b7ab8ad08b22b3`.
+Se cierra el aviso de contador exclusivo de campos. No se cierra F17/F28 ni
+el objetivo de 30 FPS; siguen pendientes remap, variación visual y cadencia.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV
@@ -1039,7 +1137,9 @@ ferroviario, F07/F12 y los 30 FPS siguen pendientes.
 - F04, F09–F11, F13: resolver NewGRF a demanda y corregir variables relativas.
 - F05–F06: snapshots tipados de red y hash sin árbol JSON completo.
 - F07–F08, F17–F18: medir tick residual, compositor y cámara con raster en seis zooms;
-  aislar la variación Out8x entre ejecuciones del mismo cliente con flota.
+  aislar la variación Out4x/Out8x entre ejecuciones del mismo cliente con flota.
+  Revisar el límite de un tick por frame y conservar la velocidad de juego.
+  F17/F28: preservar avisos de animación de casas al entrar al tile loop.
 - F12, F14–F16: perfilar carga, ocupación y rutas; retirar copias PBS innecesarias.
 - Resolución de depósitos: identidad/tipo, propiedad y alcanzabilidad frente
   al original; invalidación completa de los índices persistentes.

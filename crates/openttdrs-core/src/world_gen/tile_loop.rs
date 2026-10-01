@@ -1199,6 +1199,8 @@ fn tile_loop_road(state: &mut GameState, coord: TileCoord, tile: Tile) {
 /// simulación regular mantiene su propio despacho LFSR. Validar el nibble
 /// crudo además del tipo semántico evita tratar como campos a una tesela que
 /// el cargador represente como `Grass` por compatibilidad.
+/// Devuelve si cambió la imagen: avanzar sólo el contador no marca dirty,
+/// igual que el retorno temprano de `TileLoop_Clear` después de `UpdateFences`.
 pub(crate) fn advance_clear_field_tile_loop_from_visit(
     state: &mut GameState,
     coord: TileCoord,
@@ -1215,7 +1217,15 @@ pub(crate) fn advance_clear_field_tile_loop_from_visit(
     }
 
     tile_loop_clear_field(state, coord, tile);
-    state.map.get(coord).is_some_and(|updated| updated != tile)
+    state.map.get(coord).is_some_and(|mut updated| {
+        // DrawTile_Clear reads the crop stage and fences, not this timer.
+        // Keep every map mutation; only suppress counter-only redraws.
+        updated.m5 = crate::map::tree_tile_loop::with_clear_counter(
+            updated.m5,
+            crate::map::tree_tile_loop::clear_counter(tile.m5),
+        );
+        updated != tile
+    })
 }
 
 fn tile_loop_clear_field(state: &mut GameState, coord: TileCoord, tile: Tile) {
@@ -1475,6 +1485,108 @@ mod tests {
         tile_loop_road(&mut state, road, current);
         assert_eq!((state.map.get(road).unwrap().m6 >> 3) & 0x07, 3);
         assert_eq!(state.map.get(road).unwrap().m6 & 0x07, 3);
+    }
+
+    fn field_tile_loop_state(field_type: u8, counter: u8) -> (GameState, TileCoord) {
+        let mut state = GameState::new(3, 3);
+        let field = TileCoord::new(1, 1);
+        for y in 0..3 {
+            for x in 0..3 {
+                let coord = TileCoord::new(x, y);
+                let mut tile = state.map.get(coord).unwrap();
+                tile.m5 =
+                    crate::world_gen::clear_ground_m5(crate::world_gen::CLEAR_GROUND_FIELDS, 3)
+                        | (counter << 5);
+                tile.m3 = field_type;
+                tile.m2 = 7;
+                state.map.set_tile(coord, tile).unwrap();
+            }
+        }
+        state.industries.push(
+            crate::industry::Industry::new(field, crate::industry::IndustryKind::Forest)
+                .with_instance_id(7),
+        );
+        (state, field)
+    }
+
+    #[test]
+    fn clear_field_redraws_crop_stages_but_not_internal_counter_steps() {
+        // Native TileLoop_Clear returns before MarkTileDirtyByTile for
+        // counters 0..6. DrawTile_Clear reads the crop stage and fences.
+        for field_type in 0..=8 {
+            for counter in 0..=7 {
+                let (mut state, field) = field_tile_loop_state(field_type, counter);
+                let before = state.map.get(field).unwrap();
+                let before_random = state.random;
+                let mut expected = before;
+                if counter < 7 {
+                    expected.m5 = (before.m5 & 0x1F) | ((counter + 1) << 5);
+                } else {
+                    expected.m5 &= 0x1F;
+                    expected.m3 = if field_type < 8 { field_type + 1 } else { 0 };
+                }
+                assert_eq!(
+                    advance_clear_field_tile_loop_from_visit(&mut state, field),
+                    counter == 7,
+                    "field {field_type}, counter {counter}",
+                );
+                assert_eq!(state.map.get(field).unwrap(), expected);
+                assert_eq!(state.random, before_random);
+            }
+        }
+    }
+
+    #[test]
+    fn clear_field_redraws_each_new_fence_even_without_crop_change() {
+        for direction in 0_u8..4 {
+            let (mut state, field) = field_tile_loop_state(3, 2);
+            let (dx, dy) = crate::map::diag_dir_offset(direction);
+            let neighbour = TileCoord::new(field.x + dx, field.y + dy);
+            let mut grass = state.map.get(neighbour).unwrap();
+            grass.m5 = crate::world_gen::clear_ground_m5(crate::world_gen::CLEAR_GROUND_GRASS, 3);
+            state.map.set_tile(neighbour, grass).unwrap();
+
+            assert!(advance_clear_field_tile_loop_from_visit(&mut state, field));
+            let updated = state.map.get(field).unwrap();
+            assert_eq!(crate::map::tree_tile_loop::clear_counter(updated.m5), 3);
+            assert_eq!(updated.m3 & 0x0F, 3);
+            for candidate in 0_u8..4 {
+                assert_eq!(
+                    field_fence(updated, candidate),
+                    if candidate == direction { 3 } else { 0 }
+                );
+            }
+            assert_eq!(state.map.get(neighbour).unwrap(), grass);
+            assert!(!advance_clear_field_tile_loop_from_visit(&mut state, field));
+            assert_eq!(
+                crate::map::tree_tile_loop::clear_counter(state.map.get(field).unwrap().m5),
+                4
+            );
+        }
+    }
+
+    #[test]
+    fn clear_field_redraws_orphan_reclamation_and_leaves_snow_unchanged() {
+        for field_type in [7, 8] {
+            let (mut state, field) = field_tile_loop_state(field_type, 7);
+            state.industries.clear();
+            assert!(advance_clear_field_tile_loop_from_visit(&mut state, field));
+            let reclaimed = state.map.get(field).unwrap();
+            assert_eq!(reclaimed.m5, crate::world_gen::clear_ground_m5(0, 2));
+            assert_eq!(
+                (reclaimed.m2, reclaimed.m2_hi, reclaimed.m3, reclaimed.m3hi),
+                (0, 0, 0, 0)
+            );
+        }
+
+        let (mut state, field) = field_tile_loop_state(7, 7);
+        let mut snowy = state.map.get(field).unwrap();
+        snowy.m3 |= 0x10;
+        state.map.set_tile(field, snowy).unwrap();
+        let before_random = state.random;
+        assert!(!advance_clear_field_tile_loop_from_visit(&mut state, field));
+        assert_eq!(state.map.get(field).unwrap(), snowy);
+        assert_eq!(state.random, before_random);
     }
 
     #[test]

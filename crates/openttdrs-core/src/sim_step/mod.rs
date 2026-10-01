@@ -1775,6 +1775,22 @@ mod tests {
         assert_eq!(crate::map::tree_tile_loop::clear_counter(updated.m5), 1);
         assert_eq!(state.random, before_random);
         assert!(state.runtime.landscape_tile_dirty.contains(&coord));
+
+        // Fences are now stable. The next counter step changes map bytes,
+        // but native TileLoop_Clear does not request a redraw for it.
+        phase_tile_loop(&mut state, 0);
+        let updated = state.map.get(coord).expect("field after counter step");
+        assert_eq!(crate::map::tree_tile_loop::clear_counter(updated.m5), 2);
+        assert_eq!(state.random, before_random);
+        assert!(!state.runtime.landscape_tile_dirty.contains(&coord));
+
+        let mut mature = updated;
+        mature.m5 = crate::map::tree_tile_loop::with_clear_counter(mature.m5, 7);
+        state.map.set_tile(coord, mature).expect("mature field");
+        phase_tile_loop(&mut state, 0);
+        assert_eq!(state.map.get(coord).expect("new crop stage").m3 & 0x0F, 1);
+        assert_eq!(state.random, before_random);
+        assert!(state.runtime.landscape_tile_dirty.contains(&coord));
     }
 
     #[test]

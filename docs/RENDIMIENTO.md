@@ -614,6 +614,26 @@ Los 60 ticks normales conservan estado, eventos y todas las teselas/bloques
 El coste de remap continúa alrededor de 10–11 ms fijo y 12,6 ms en movimiento;
 el objetivo de 30 FPS permanece abierto.
 
+### Cliente en marcha tras evitar redibujados del contador de campos (2026-10-01)
+
+Sobre `dab9bfb9`, el campo conserva todos sus bytes y visitas, pero sólo
+solicita redibujado al cambiar cultivo o cercas, como `TileLoop_Clear` nativo.
+En 60 ticks normales elimina 619 avisos exclusivos del contador: 734 → 115,
+sin cambiar el resto, su orden, estado, RNG ni teselas/bloques 4×4.
+
+Cliente normal ABBA, misma partida/NewGRF y escala 2: warmup 30,
+57,59 / 59,61 → 55,48 / 54,85 ms; pan,
+64,45 / 64,14 → 60,59 / 60,18 ms. Warmup 120,
+55,63 / 56,14 → 52,64 / 52,58 ms,
+17,975 / 17,814 → 18,998 / 19,019 FPS. El ahorro de remap sostenido es
+alrededor de 0,8–1 ms; el núcleo no muestra una mejora en su comparación.
+El presupuesto de 30 FPS sigue abierto.
+
+La primera captura Out4x del baseline exhibe su propia variación; se
+conservan el gate inicial, controles, secuencias de avisos, límites de las
+capturas congeladas y todos los percentiles en
+[la etapa 20](parity/performance-implementation.md#etapa-20--redibujar-campos-sólo-al-cambiar-su-imagen-f17f28).
+
 ### Render congelado, seis zooms y movimiento de cámara
 
 Para comparar ambas versiones se usó el driver de mapshot: centro `128,128`,

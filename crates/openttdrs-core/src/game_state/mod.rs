@@ -1,4 +1,5 @@
 mod canonical_hash;
+mod cargo_routing;
 mod runtime;
 
 pub use runtime::{
@@ -794,13 +795,23 @@ pub struct GameState {
     #[serde(default)]
     pub using_wallclock_units: bool,
 
-    // ───── Campos efímeros (NO persistidos) ─────
-    /// Datos de runtime que no se guardan en el save JSON.
-    #[serde(skip)]
+    /// `CargoDist` saves published flows and pending job inputs. Other runtime
+    /// fields (catalogues, indices, caches and worker scratch) are transient.
+    #[serde(
+        default,
+        rename = "cargo_routing",
+        skip_serializing_if = "routing_is_uninitialized"
+    )]
     pub runtime: SimulationRuntime,
     /// Colas de construcción IA (una obra activa por rival); no se persisten.
     #[serde(skip, default)]
     pub ai_build_queues: Vec<crate::ai::AiBuildQueue>,
+}
+
+fn routing_is_uninitialized(runtime: &SimulationRuntime) -> bool {
+    !runtime.cargo_routing_initialized
+        && runtime.station_flows.by_station.is_empty()
+        && runtime.pending_linkgraph_jobs.is_empty()
 }
 
 const fn default_true() -> bool {
@@ -1260,7 +1271,15 @@ impl GameState {
         if self.cur_tileloop_tile == 0 {
             self.cur_tileloop_tile = crate::map::tile_loop::default_cur_tileloop_tile();
         }
-        self.runtime = SimulationRuntime::new();
+        let routing_initialized = self.runtime.cargo_routing_initialized;
+        let station_flows = std::mem::take(&mut self.runtime.station_flows);
+        let pending_linkgraph_jobs = std::mem::take(&mut self.runtime.pending_linkgraph_jobs);
+        self.runtime = SimulationRuntime {
+            station_flows,
+            pending_linkgraph_jobs,
+            cargo_routing_initialized: routing_initialized,
+            ..SimulationRuntime::new()
+        };
         // `sim_tick` no se persiste, pero las fases de carga/órdenes del
         // próximo tick pueden usarlo antes de que la fase de movimiento lo
         // vuelva a actualizar. Restaurarlo al tick del snapshot mantiene la
@@ -1269,7 +1288,9 @@ impl GameState {
         for vehicle in &mut self.vehicles {
             vehicle.sim_tick = snapshot_tick;
         }
-        self.rebuild_station_flows();
+        if !routing_initialized {
+            self.rebuild_station_flows();
+        }
         self.sanitize_all_vehicle_orders();
         self.sync_scaled_max_loan();
     }
@@ -1378,6 +1399,8 @@ impl GameState {
             self.runtime.station_flows = StationFlows::default();
             return;
         }
+
+        self.runtime.cargo_routing_initialized = true;
 
         let (map_w, map_h) = self.map.dimensions();
         let jobs = build_jobs_from_cargo_dist(

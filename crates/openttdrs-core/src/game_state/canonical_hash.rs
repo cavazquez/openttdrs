@@ -1,6 +1,6 @@
 //! Hash canónico del estado persistido (#108).
 //!
-//! Serializa `GameState` vía `serde` (excluye `runtime`), ordena claves de
+//! Serializa `GameState` vía `serde` (excluye el runtime efímero), ordena claves de
 //! objetos JSON (incluye `HashMap`/`HashSet` convertidos a mapa) y aplica
 //! FNV-1a 64 con dominio versionado. No usa el texto de `save_json`.
 
@@ -43,7 +43,7 @@ impl Fnv1a64 {
 }
 
 impl GameState {
-    /// Fingerprint estable del estado **persistido** (excluye `runtime`).
+    /// Fingerprint estable del estado **persistido** (excluye el runtime efímero).
     ///
     /// Mismo seed/comandos/ticks ⇒ mismo hash. Útil para desync (#21) y
     /// equivalencia de refactors. El dominio `openttdrs-gs-v1` versiona el

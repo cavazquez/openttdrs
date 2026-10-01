@@ -21,7 +21,7 @@ pub const INVALID_NODE: NodeId = u16::MAX;
 pub const INVALID_STATION: u32 = u32::MAX;
 pub const DAY_TICKS: u32 = 74;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum DistributionType {
     Asymmetric,
     Symmetric,
@@ -29,7 +29,7 @@ pub enum DistributionType {
     Manual,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LinkGraphSettings {
     pub accuracy: u32,
     pub demand_size: u32,
@@ -56,7 +56,7 @@ impl Default for LinkGraphSettings {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BaseNode {
     pub station: u32,
     pub x: u32,
@@ -74,7 +74,7 @@ impl BaseNode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BaseEdge {
     pub dest: u16,
     pub capacity: u32,

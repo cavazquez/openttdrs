@@ -210,6 +210,7 @@ fn on_tick_link_graph(state: &mut GameState) {
     // OpenTTD: offset==0 → SpawnNext; offset==interval/2 → JoinNext. El
     // segundo sólo integra el primer job cuya fecha de join ya venció.
     if offset == 0 {
+        state.runtime.cargo_routing_initialized = true;
         let cargo_dist = state.cargo_dist;
         if !cargo_dist.has_automatic_distribution() {
             state.runtime.pending_linkgraph_jobs.clear();
@@ -483,6 +484,70 @@ mod tests {
         state.cargo_dist.distribution = GameDistribution::Asymmetric;
         state.economy_timer.date_fract = LINKGRAPH_SPAWN_JOIN_TICK;
         state
+    }
+
+    #[test]
+    fn linkgraph_json_preserves_unpublished_job_and_join_frontier() {
+        let mut continuous = linkgraph_test_state();
+        continuous.cargo_dist.per_cargo = Some(crate::flow_stat::CargoDistPerCargoSettings {
+            recalc_interval_seconds: 8,
+            recalc_time_seconds: 9,
+            distribution_default: GameDistribution::Asymmetric,
+            ..Default::default()
+        });
+        on_tick_link_graph(&mut continuous);
+        let random = continuous.random;
+        let snapshot = continuous.save_json().unwrap();
+        assert!(!snapshot.contains("undelivered_supply"));
+        assert!(!snapshot.contains("path_arena"));
+        let mut restored = GameState::load_json(&snapshot).unwrap();
+        assert_eq!(restored.runtime.station_flow_rebuilds, 0);
+        assert_eq!(restored.random, random);
+        assert!(restored.runtime.station_flows.by_station.is_empty());
+        assert_eq!(restored.runtime.pending_linkgraph_jobs.len(), 1);
+        assert_eq!(restored.canonical_hash(), continuous.canonical_hash());
+
+        // The live graph changes while the saved job retains its spawn input.
+        for state in [&mut continuous, &mut restored] {
+            state.link_graph.record_trip(
+                TileCoord::new(1, 1),
+                TileCoord::new(5, 5),
+                CargoType::Coal,
+                90,
+                100,
+                20,
+            );
+            state.economy_timer.date = 6;
+            state.economy_timer.date_fract = LINKGRAPH_SPAWN_JOIN_TICK;
+            on_tick_link_graph(state);
+        }
+        assert_eq!(
+            restored.runtime.station_flows,
+            continuous.runtime.station_flows
+        );
+        assert_eq!(restored.random, continuous.random);
+        assert_eq!(restored.canonical_hash(), continuous.canonical_hash());
+    }
+
+    #[test]
+    fn linkgraph_json_keeps_published_share_order_without_rerouting() {
+        let mut state = linkgraph_test_state();
+        let station = TileCoord::new(1, 1);
+        let origin = TileCoord::new(0, 0);
+        let table = state
+            .runtime
+            .station_flows
+            .by_station
+            .entry(station)
+            .or_default();
+        table.add_flow(CargoType::Coal, origin, TileCoord::new(6, 6), 3);
+        table.add_flow(CargoType::Coal, origin, TileCoord::new(2, 2), 7);
+        let json = state.save_json().unwrap();
+        let restored = GameState::load_json(&json).unwrap();
+        assert_eq!(restored.runtime.station_flow_rebuilds, 0);
+        assert_eq!(restored.runtime.station_flows, state.runtime.station_flows);
+        assert_eq!(restored.random, state.random);
+        assert_eq!(restored.save_json().unwrap(), json);
     }
 
     #[test]

@@ -5,7 +5,10 @@
 #   rinde notablemente peor. Se compilan una sola vez y quedan cacheadas.
 #   Sin debuginfo en dependencias (debug=false) para reducir la memoria que
 #   consume lld al enlazar (histórico OOM/bus-error con inputs muy grandes).
-# - El código propio usa opt-level=1: compilación incremental rápida.
+# - El código propio usa opt-level=1 y sólo tablas de líneas en debuginfo:
+#   conserva backtraces con archivo/línea y reduce emisión, enlazado y tamaño.
+#   Para inspeccionar variables en un debugger:
+#   cargo build --config profile.dev.debug=2
 #
 # Rust 1.98 + rust-lld puede producir símbolos ocultos sin resolver al enlazar
 # el binario de pruebas completo de Bevy (aunque `cargo check` pase). CI ya
@@ -21,9 +24,12 @@ rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 
 [alias]
 client = "run -p openttdrs-client --features dynamic_linking"
+check-client = "check -p openttdrs-client --bin openttdrs-client"
+check-core = "check -p openttdrs-core --lib"
 
 [profile.dev]
 opt-level = 1
+debug = "line-tables-only"
 
 [profile.dev.package."*"]
 opt-level = 3

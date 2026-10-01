@@ -60,20 +60,18 @@ pub(crate) struct LegacySavAfterload {
 /// Job de `CargoDist` que `OpenTTD` ya inició pero todavía no integró en los
 /// `FlowStat` de las estaciones.
 ///
-/// El grafo y los ajustes se copian al hacer spawn. El contenido queda en el
-/// runtime (no en JSON/SAV) y se aplica cuando la marca de `join_date` llega a
-/// la siguiente oportunidad de `JoinNext`.
-#[derive(Debug, Clone)]
+/// El grafo, ajustes y fecha se persisten; el scratch del solver se reconstruye.
+/// Sólo se publica al llegar a la oportunidad nativa de `JoinNext`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PendingLinkGraphJob {
     pub join_date: u32,
     pub jobs: Vec<(crate::cargo::CargoType, crate::cargodist::parity::Job)>,
 }
 
-/// Campos efímeros de la simulación (no persistidos; reconstruidos tras carga).
+/// Indices/caches efímeros y frontera persistente de `CargoDist`.
 ///
-/// Todos los campos aquí tienen `#[serde(skip)]` implícito por no estar en
-/// `GameState` serializado. Estos datos no aparecen en el save JSON y deben
-/// reconstruirse/limpiarse tras cargar un save.
+/// El serializer sólo guarda `station_flows` y las entradas de jobs pendientes.
+/// Los demás campos se reconstruyen/limpian después de cargar un save.
 #[derive(Debug, Clone)]
 pub struct SimulationRuntime {
     /// Strings genéricos Action4 del stack activo (no se persisten).
@@ -252,7 +250,7 @@ pub struct SimulationRuntime {
     /// Espejo de `rail_type_props[].max_speed` para callers existentes.
     pub rail_type_max_speed: [u16; 4],
 
-    /// `FlowStat` reconstruidos desde `link_graph` (no persistidos).
+    /// Últimos `FlowStat` publicados; persisten hasta el próximo join.
     pub station_flows: crate::flow_stat::StationFlows,
 
     /// Reconstrucciones completas de `station_flows` desde que se creó este runtime.
@@ -267,6 +265,9 @@ pub struct SimulationRuntime {
     /// Jobs de link graph en vuelo; reemplaza el scheduler thread de `OpenTTD`
     /// por una cola determinista entre los ticks de spawn y join.
     pub pending_linkgraph_jobs: Vec<PendingLinkGraphJob>,
+
+    /// A loaded/spawned routing frontier may be empty without needing a solver.
+    pub(crate) cargo_routing_initialized: bool,
 
     /// Grabador opcional: cada `apply_command` exitoso se encola (plan IA progresiva).
     pub command_recorder: Option<VecDeque<Command>>,
@@ -371,6 +372,7 @@ impl SimulationRuntime {
             station_flow_rebuilds: 0,
             station_flow_cache: crate::linkgraph_parity::StationFlowCache::default(),
             pending_linkgraph_jobs: Vec::new(),
+            cargo_routing_initialized: false,
             command_recorder: None,
             newgrf_diagnostics: Vec::new(),
             last_vehicle_start_stop_diagnostic: None,

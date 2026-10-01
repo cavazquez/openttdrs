@@ -890,6 +890,57 @@ Se cierra la repetición de estos builders dentro de una tanda incremental.
 Siguen pendientes su cálculo a demanda, el coste de rematerialización, F17
 y el objetivo de 30 FPS.
 
+## Etapa 18 — Descartar la eliminación de máscaras ocultas (F08/F17)
+
+Se ensayó no materializar `SpriteMesh` auxiliares para fuentes con
+`Visibility::Hidden`, eliminando su vínculo y reconstruyéndolo al mostrarse.
+La hipótesis era reducir entidades que no aportaban fragmentos. La prueba
+ECS verificó ocultar/mostrar y cambios de clasificación mientras estaban
+ocultas, y pasaron 3.012 tests core/seis ignorados, 1.665 cliente/dos,
+Clippy y formato. Esa cobertura de componentes no garantiza el mismo raster.
+
+El gate de seis zooms conserva PNG y traza completa en In4x, In2x, Normal y
+Out2x, pero falla en Out4x: **730 píxeles / 239 bloques 4×4 distintos**;
+en Out8x: **362 píxeles / 207 bloques**. Las trazas completas de las seis
+parejas son byte-idénticas, incluidos los parents y proxies lógicos. Por
+tanto el sorter no basta para aceptar un cambio de entidades auxiliares.
+[Gate inicial](evidence/hidden-masks-raster-20261001.csv).
+
+Se añadieron dos repeticiones de cada binario en ambos zooms, en orden ABBA.
+Las tres capturas nuevas de Out4x tienen exactamente el mismo SHA256 y la
+diferencia de 730 píxeles; las tres anteriores coinciden. Las tres capturas
+nuevas de Out8x también coinciden entre sí. Una de las dos repeticiones del
+cliente anterior vuelve a mostrar su variación histórica de 130 píxeles /
+81 bloques y cambia su traza; se conserva, sin atribuirla al experimento.
+La regresión reproducible de Out4x es suficiente para rechazarlo.
+[Repeticiones](evidence/hidden-masks-raster-repeat-20261001.csv).
+No se ha aislado todavía qué desempate del renderer auxiliar causa el cambio.
+
+Medición normal sobre `ace33f52`, misma partida/NewGRF, hardware, audio
+desactivado, 1280×720, escala 2, cuatro corridas ABBA por escenario, 40 frames
+cada una, sin compilación ni `perf` concurrentes. Cámara fija, warmup 30:
+62,514 / 62,270 → 61,798 / 61,943 ms; vidrio
+2,912 / 2,923 → 2,901 / 2,915 ms. Se evitan unas 920 máscaras de 46.135.
+[Muestras](evidence/hidden-masks-client-20261001.csv).
+Cámara en movimiento, warmup 30: 68,035 / 68,037 → 67,757 / 66,642 ms;
+se evitan unas 883 máscaras. El segundo run nuevo comienza un tick después.
+[Pan](evidence/hidden-masks-pan-20261001.csv).
+Cámara fija, warmup 120: 59,116 / 59,465 → 59,376 / 59,019 ms,
+16,916 / 16,817 → 16,842 / 16,944 FPS; vidrio
+3,281 / 3,394 → 3,356 / 3,332 ms. Los cuatro runs cubren ticks
+3.703.193–3.703.232 y se evitan unas 966 máscaras de 46.565.
+No hay una mejora sostenida clara. Los 80 frames de cada versión y escenario
+siguen sobre 33,33 ms. [Ventana sostenida](evidence/hidden-masks-client-steady-20261001.csv).
+Se mantiene la salvedad del intervalo de cambio de zoom con warmup 30.
+
+El experimento se retiró: el código del compositor se restauró desde la
+copia propia, comprobada byte a byte contra `ace33f52`, y el ejecutable normal
+se repuso desde el baseline inmutable. Se conservan datos y ambos binarios
+diagnósticos. SHA256 baseline/candidato rechazado:
+`e4ea3e72f545188546769e8f9ff522879c90fb8eaf4641055e4d1352aa57c77e` y
+`1890f8c047c6a8a98a27b312b4cea4a2b2a6479766231412cf40ed065083c3af`.
+Esta etapa sólo publica evidencia; no cierra F08, F17 ni los 30 FPS.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV

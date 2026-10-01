@@ -580,6 +580,18 @@ conteos fuera del viewport y después de demoler, percentiles de los tres
 escenarios, ticks, SHA256 y límites en
 [la etapa 17](parity/performance-implementation.md#etapa-17--compartir-conteos-globales-entre-chunks-del-remap-f04f17).
 
+### Experimento retirado: máscaras de fuentes ocultas (2026-10-01)
+
+Eliminar las máscaras auxiliares de sprites ocultos evitó alrededor de
+920–966 entidades en cámara fija, pero no dio una mejora sostenida clara:
+warmup 120, 16,916 / 16,817 → 16,842 / 16,944 FPS. El gate raster falló
+en Out4x con 730 píxeles / 239 bloques 4×4 distintos, reproducidos en las
+dos repeticiones adicionales del candidato, aunque la traza lógica coincide.
+Se restauraron el compositor y el ejecutable normal de la etapa 17. Los
+datos iniciales, controles Out4x/Out8x, límites de las pruebas ECS y hashes
+se conservan en [la etapa 18](parity/performance-implementation.md#etapa-18--descartar-la-eliminación-de-máscaras-ocultas-f08f17).
+Esta hipótesis rechazada no se cuenta como una optimización publicada.
+
 ### Render congelado, seis zooms y movimiento de cámara
 
 Para comparar ambas versiones se usó el driver de mapshot: centro `128,128`,

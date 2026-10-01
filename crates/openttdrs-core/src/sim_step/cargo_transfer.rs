@@ -1,6 +1,51 @@
 use crate::vehicle::{OrderUnloadType, VehicleKind, VehicleRandomTrigger};
 use crate::{CargoType, GameState, TileCoord, TileKind, economy, station, town};
 
+enum UnloadPhase {
+    Selection,
+    Acceptance,
+    Staging,
+    Packets,
+    Commit,
+    Finish,
+    Reinsert,
+    StationEvents,
+}
+
+#[derive(Default)]
+struct UnloadProfile {
+    phase_ns: [std::cell::Cell<u64>; 8],
+}
+
+struct UnloadSpan<'a> {
+    started: std::time::Instant,
+    elapsed: &'a std::cell::Cell<u64>,
+}
+
+impl Drop for UnloadSpan<'_> {
+    fn drop(&mut self) {
+        self.elapsed.set(
+            self.elapsed
+                .get()
+                .saturating_add(super::nanos(self.started)),
+        );
+    }
+}
+
+impl UnloadProfile {
+    // The const false variant never reads the clock in authoritative ticks.
+    fn span<const PROFILE: bool>(&self, phase: UnloadPhase) -> Option<UnloadSpan<'_>> {
+        PROFILE.then(|| UnloadSpan {
+            started: std::time::Instant::now(),
+            elapsed: &self.phase_ns[phase as usize],
+        })
+    }
+
+    fn finish(self) -> [u64; 8] {
+        self.phase_ns.map(std::cell::Cell::into_inner)
+    }
+}
+
 /// Tick callers already own the topology; standalone tests retain the fallback.
 fn indexed_consist_head_id(state: &GameState, id: u32) -> Option<u32> {
     state
@@ -963,19 +1008,39 @@ fn try_unload_aircraft_mail_packets(
     true
 }
 
-#[allow(clippy::too_many_lines)]
 pub(super) fn unload_vehicles(
+    state: &mut GameState,
+    tick: u64,
+    loaded_this_tick: &[bool],
+    unloaded_this_tick: &mut [bool],
+) {
+    let _ = unload_vehicles_impl::<false>(state, tick, loaded_this_tick, unloaded_this_tick);
+}
+
+pub(super) fn unload_vehicles_profiled(
+    state: &mut GameState,
+    tick: u64,
+    loaded_this_tick: &[bool],
+    unloaded_this_tick: &mut [bool],
+) -> [u64; 8] {
+    unload_vehicles_impl::<true>(state, tick, loaded_this_tick, unloaded_this_tick)
+}
+
+#[allow(clippy::too_many_lines)]
+fn unload_vehicles_impl<const PROFILE: bool>(
     state: &mut GameState,
     _tick: u64,
     loaded_this_tick: &[bool],
     unloaded_this_tick: &mut [bool],
-) {
+) -> [u64; 8] {
+    let profile = UnloadProfile::default();
     let mut delivered_industries = Vec::new();
     for (i, loaded_flag) in loaded_this_tick
         .iter()
         .enumerate()
         .take(state.vehicles.len())
     {
+        let selection_span = profile.span::<PROFILE>(UnloadPhase::Selection);
         let order_vehicle_idx = vehicle_order_index(state, i);
         if *loaded_flag {
             continue;
@@ -1034,6 +1099,8 @@ pub(super) fn unload_vehicles(
         // incluso si la descarga termina siendo rechazada por aceptación,
         // orden o capacidad. Es el historial que consume NewGRF 0x8A.
         state.stations[station_idx].mark_vehicle_of_type(state.vehicles[i].kind);
+        drop(selection_span);
+        let staging_span = profile.span::<PROFILE>(UnloadPhase::Staging);
         // CargoDist / P2.19: `PrepareUnload` + `Stage` (TRANSFER/DELIVER/KEEP).
         let unload_type = state.vehicles[order_vehicle_idx]
             .orders
@@ -1054,6 +1121,8 @@ pub(super) fn unload_vehicles(
             station_pos,
             Some(cargo_pct),
         );
+        drop(staging_span);
+        let acceptance_span = profile.span::<PROFILE>(UnloadPhase::Acceptance);
         let accepted = crate::station::station_accepts_cargo_with_newgrf_and_cargo_catalog(
             &state.map,
             &mut state.industries,
@@ -1065,6 +1134,8 @@ pub(super) fn unload_vehicles(
             cargo_type,
             &state.cargo_spec_catalog,
         );
+        drop(acceptance_span);
+        let staging_span = profile.span::<PROFILE>(UnloadPhase::Staging);
         let will_unload = crate::cargo_packet::prepare_unload(
             &mut state.vehicles[i].cargo_packets,
             accepted,
@@ -1124,6 +1195,8 @@ pub(super) fn unload_vehicles(
         let mut reinsert_mask = Vec::with_capacity(taken.len());
         let mut delivered_units = 0_u32;
         let mut physically_delivered_units = 0_u32;
+        drop(staging_span);
+        let packets_span = profile.span::<PROFILE>(UnloadPhase::Packets);
         for packet in &mut taken {
             // P3.16: pago por tramos recorridos (`GetDistance`), no Manhattan origen→destino.
             let distance = packet.get_distance(station_pos);
@@ -1282,6 +1355,8 @@ pub(super) fn unload_vehicles(
             }
             reinsert_mask.push(reinsert_packet);
         }
+        drop(packets_span);
+        let _commit_span = profile.span::<PROFILE>(UnloadPhase::Commit);
 
         if delivered_units > 0 {
             // `GoodsEntry::State` conserva el flag histórico de la acción
@@ -1317,8 +1392,11 @@ pub(super) fn unload_vehicles(
             }
         }
         if !reinserted.is_empty() {
+            let reinsert_span = profile.span::<PROFILE>(UnloadPhase::Reinsert);
             state.stations[station_idx].push_waiting_packets(reinserted);
+            drop(reinsert_span);
             for cargo in reinserted_cargos {
+                let _events_span = profile.span::<PROFILE>(UnloadPhase::StationEvents);
                 trigger_station_cargo_animation(
                     state,
                     station_pos,
@@ -1327,7 +1405,9 @@ pub(super) fn unload_vehicles(
                 );
             }
         }
+        let events_span = profile.span::<PROFILE>(UnloadPhase::StationEvents);
         trigger_station_vehicle_load_animation(state, station_pos, vpos);
+        drop(events_span);
         state.stations[station_idx].income = state.stations[station_idx]
             .income
             .saturating_add(positive_money(payment));
@@ -1424,6 +1504,7 @@ pub(super) fn unload_vehicles(
         }
     }
 
+    let finish_span = profile.span::<PROFILE>(UnloadPhase::Finish);
     finish_consist_unloading(state, unloaded_this_tick);
 
     for industry_idx in delivered_industries {
@@ -1439,6 +1520,8 @@ pub(super) fn unload_vehicles(
     // Native unload records usage/capacity; it keeps the last published flows
     // until LinkGraphSchedule::JoinNext. Never run Demand/MCF in this phase.
     purge_finished_runtime_payments(state);
+    drop(finish_span);
+    profile.finish()
 }
 
 #[allow(clippy::too_many_lines)]
@@ -4617,6 +4700,84 @@ mod tests {
         state.vehicles[0].cargo_unloading = false;
         purge_finished_runtime_payments(&mut state);
         assert!(state.cargo_payments.is_empty());
+    }
+
+    #[test]
+    fn unload_profiling_preserves_packets_callbacks_rng_and_events() {
+        let (mut input, pos) =
+            state_with_newgrf_rail_station(crate::STATION_ANIMATION_TRIGGER_NEW_CARGO);
+        let source = TileCoord::new(0, 1);
+        input.cargo_dist.distribution = crate::flow_stat::DistributionType::Asymmetric;
+        for id in [21, 7] {
+            let mut train = crate::Vehicle::new(id, VehicleKind::Train, pos, pos);
+            train.cargo_packets.push(
+                crate::CargoPacket::new(CargoType::Coal, 2, source).with_first_station(source),
+            );
+            train.sync_cargo_from_packets();
+            train.last_pickup_station = Some(source);
+            if id == 7 {
+                train.next_unit = Some(21);
+            } else {
+                train.prev_unit = Some(7);
+            }
+            input.vehicles.push(train);
+        }
+        input
+            .vehicles
+            .push(crate::Vehicle::new(88, VehicleKind::Bus, source, source));
+        let airport = TileCoord::new(3, 3);
+        input.map.set_kind(airport, TileKind::Airport).unwrap();
+        input.stations.push(crate::Station::new_with_kind(
+            airport,
+            crate::StopKind::Airport,
+        ));
+        let mut aircraft = crate::Vehicle::new(99, VehicleKind::Aircraft, airport, airport);
+        aircraft.aircraft_mail_capacity = Some(10);
+        aircraft.aircraft_mail_cargo = Some(2);
+        aircraft
+            .aircraft_mail_packets
+            .push(crate::CargoPacket::new(CargoType::Mail, 2, source).with_first_station(source));
+        input.vehicles.push(aircraft);
+        input.runtime.fleet_index.rebuild(&input.vehicles);
+
+        for already_loaded in [false, true] {
+            let mut expected = input.clone();
+            let mut actual = input.clone();
+            let loaded = vec![already_loaded; input.vehicles.len()];
+            let mut expected_unloaded = vec![false; loaded.len()];
+            let mut actual_unloaded = expected_unloaded.clone();
+            let unmeasured =
+                unload_vehicles_impl::<false>(&mut expected, 1, &loaded, &mut expected_unloaded);
+            let _ = unload_vehicles_profiled(&mut actual, 1, &loaded, &mut actual_unloaded);
+            assert_eq!(unmeasured, [0; 8]);
+            assert_eq!(actual_unloaded, expected_unloaded);
+            assert_eq!(
+                serde_json::to_vec(&actual).unwrap(),
+                serde_json::to_vec(&expected).unwrap()
+            );
+            assert_eq!(
+                actual.runtime.pending_sim_events.iter().collect::<Vec<_>>(),
+                expected
+                    .runtime
+                    .pending_sim_events
+                    .iter()
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(
+                actual.runtime.pending_income_popups,
+                expected.runtime.pending_income_popups
+            );
+            assert_eq!(
+                actual.runtime.pending_industry_deliveries,
+                expected.runtime.pending_industry_deliveries
+            );
+            assert_eq!(
+                actual.runtime.industry_tile_dirty,
+                expected.runtime.industry_tile_dirty
+            );
+            assert_eq!(actual_unloaded[0], !already_loaded);
+            assert_eq!(actual_unloaded[3], !already_loaded);
+        }
     }
 
     #[test]

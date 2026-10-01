@@ -47,7 +47,10 @@ completa de CargoDist ni la garantía de 30 FPS.
 Actualización de implementación: las etapas JSON y workers de CargoDist se
 registran en [performance-implementation.md](performance-implementation.md).
 Ya se retiró el solver de descarga/mes y se inició en spawn, con pausa de ticks
-y render activo si vence sin terminar. La descripción siguiente conserva el
+y render activo si vence sin terminar. La medición del cliente en marcha
+posterior a `fc63adef` está en
+[RENDIMIENTO.md](../RENDIMIENTO.md#cliente-en-marcha-tras-workers-e-índices-2026-10-01).
+La descripción siguiente conserva el
 diagnóstico del baseline `89947557`. El objetivo completo sigue abierto.
 
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra

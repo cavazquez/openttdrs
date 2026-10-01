@@ -301,6 +301,47 @@ Validación: 3.003 core/seis ignorados, 1.659 cliente/dos; Clippy en todos los
 targets de ambos, formato, diff y frescura de docs. F12/F13 permanecen abiertos;
 descarga sigue siendo la mayor fase residual en esta fixture.
 
+## Etapa 8 — Desglose de descarga y nueva captura del cliente (F12/F31)
+
+`step_profiled`, `sav_profile` y `sim_profile` distinguen selección de terminal,
+aceptación, staging, entrega por paquete, commit y cierre de formaciones.
+Dentro de commit separan reinserción/agregados y eventos de estación. Estos
+dos últimos son subconjuntos de commit: no se suman otra vez al total.
+El tick normal usa la variante constante sin relojes; los tiempos no entran
+en JSON/hash ni deciden el orden de simulación. La salida informa además los
+specs con triggers de carga y las teselas animadas activas.
+
+Regresión: ejecución instrumentada frente a normal en formación con slots
+desordenados, descarga/reencolado NewGRF CB140, bodega de mail de aeronave,
+vehículo fuera de terminal y early-return por carga previa. Se comparan el
+estado persistido completo, flags de descarga, popups, eventos, industria
+pendiente y tiles dirty; los contadores normales quedan en cero.
+
+Dos runs release por ventana con Kale_TitleGame.sav/NewGRF. En cuatro ticks,
+descarga 308,52 / 310,38 ms y eventos de estación 300,84 / 302,90 ms. En 24,
+descarga 71,82 / 71,87 ms y eventos de estación 68,69 / 68,81 ms;
+reinserción/agregados 0,025 / 0,024 ms. Estos eventos explican alrededor del
+96 % de la descarga residual. La aceptación queda alrededor de 0,7 ms y la
+entrega por paquete también. No se atribuye ese coste a escanear stocks.
+Datos: [unload-subphases-20261001.csv](evidence/unload-subphases-20261001.csv),
+ejecutable SHA256 `c34b669d09925edf2064c0e29429049e1ca8ff74caee80d403277bd918d37b8f`.
+
+La fixture tiene un spec ferroviario, cero triggers de carga habilitados y
+cero tiles animados activos. El port prepara geometría/contextos de CB140
+antes de comprobar esa máscara. El original `14ec60f2`,
+`newgrf_station.cpp::TriggerStationAnimation`, líneas 903–938, descarta primero
+los triggers deshabilitados mediante `cached_anim_triggers`. Ésta es la
+siguiente divergencia acotada; la optimización debe conservar la limpieza de
+tiles inválidos que el port realiza aunque el callback no se ejecute.
+
+La comparación nueva de GPU/ventana en marcha entre `89947557` y `fc63adef`
+está en [RENDIMIENTO.md](../RENDIMIENTO.md#cliente-en-marcha-tras-workers-e-índices-2026-10-01).
+No se atribuye esa mejora a esta instrumentación.
+
+Validación: 3.004 core/seis ignorados, 1.659 cliente/dos; Clippy en todos los
+targets de ambos, formato, diff y frescura de docs. F12/F31 y el presupuesto
+de 30 FPS siguen abiertos.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV

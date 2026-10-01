@@ -341,6 +341,37 @@ Sin `OPENTTDRS_PERF_OUT` no se instalan sistemas de captura. Estas mediciones
 no necesitan permisos de kernel para `perf`. Un CSV sin muestras tras un
 timeout no es una medición de FPS.
 
+### Cliente en marcha tras workers e índices (2026-10-01)
+
+Comparación de `89947557` con `fc63adef`, misma fixture/NewGRF, hardware,
+ventana y cámara en escala 2. Dos runs por versión en orden
+antes/después/después/antes, 30 frames de calentamiento y diez muestras por
+run, sin compilaciones concurrentes ni `perf record`. Datos por frame:
+[client-fleet-active-20261001.csv](parity/evidence/client-fleet-active-20261001.csv).
+
+- Baseline: frame medio 924,76 / 1.006,58 ms; 1,08 / 0,99 FPS.
+- Candidato: frame medio 220,21 / 221,60 ms; 4,54 / 4,51 FPS.
+  Máximos 749,40 / 739,66 ms. Los 20 frames del candidato excedieron 33,33 ms.
+- Mediana de frame: baseline 966,93 / 974,99 ms; candidato
+  118,29 / 121,81 ms. Con diez muestras por run, p95/p99 por rango más cercano
+  coinciden con el máximo: baseline 1.678,57 / 1.599,94 ms y candidato
+  749,40 / 739,66 ms. Tick/s observado entre primera y última muestra:
+  baseline 1,19 / 1,00; candidato 4,51 / 4,49.
+- Simulación del candidato: 134,98 / 133,85 ms por frame; efectos
+  33,13 / 35,43 ms y vidrio 6,45 / 6,46 ms. Son timers de subfases, no una
+  descomposición aditiva del frame ni tiempos de GPU.
+
+La ventana es corta y los ticks medidos van de 3.703.103/104 a
+3.703.112/113; no acredita una partida larga ni todos los zooms. Se conservaron
+las muestras con picos. Los cambios mejoran la flota en marcha, pero el
+objetivo de 30 FPS sigue abierto. La implementación y el perfil aislado por
+etapas se registran en
+[performance-implementation.md](parity/performance-implementation.md).
+
+SHA256 de los ejecutables: baseline
+`987aefdf5cf5e3c17839710213c039cea0c91eb073315f1c189d184122c49522`,
+candidato `5bdf1260a83b767fd14a32d05d505caf6867b5aaf819da725ee2376decf9639e`.
+
 ### Render congelado, seis zooms y movimiento de cámara
 
 Para comparar ambas versiones se usó el driver de mapshot: centro `128,128`,

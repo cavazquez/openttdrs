@@ -66,6 +66,22 @@ pub struct TickPhaseTimings {
     pub cargo_aging_ns: u64,
     /// Descarga de vehículos en estación.
     pub cargo_unload_ns: u64,
+    /// Órdenes, elegibilidad y terminal; incluye la bodega de mail de aeronaves.
+    pub cargo_unload_selection_ns: u64,
+    /// Consulta viva de aceptación/catchment y sus callbacks.
+    pub cargo_unload_acceptance_ns: u64,
+    /// Preparación, clasificación y extracción de paquetes.
+    pub cargo_unload_staging_ns: u64,
+    /// Entrega, transferencias, subsidios y cálculo por paquete.
+    pub cargo_unload_packets_ns: u64,
+    /// Reencolado, eventos, pagos y cierre de cada unidad descargada.
+    pub cargo_unload_commit_ns: u64,
+    /// Subconjunto de commit: reinserción de paquetes y agregados de estación.
+    pub cargo_unload_reinsert_ns: u64,
+    /// Subconjunto de commit: triggers de estación/airport/roadstop y sonidos.
+    pub cargo_unload_station_events_ns: u64,
+    /// Cierre de formaciones y pagos después del recorrido de vehículos.
+    pub cargo_unload_finish_ns: u64,
     /// Carga de vehículos desde industrias o estaciones.
     pub cargo_load_ns: u64,
     /// Total de las cinco subfases anteriores.
@@ -85,6 +101,17 @@ pub struct TickPhaseTimings {
 }
 
 impl TickPhaseTimings {
+    fn record_cargo_unload(&mut self, unload: [u64; 8]) {
+        self.cargo_unload_selection_ns = unload[0];
+        self.cargo_unload_acceptance_ns = unload[1];
+        self.cargo_unload_staging_ns = unload[2];
+        self.cargo_unload_packets_ns = unload[3];
+        self.cargo_unload_commit_ns = unload[4];
+        self.cargo_unload_finish_ns = unload[5];
+        self.cargo_unload_reinsert_ns = unload[6];
+        self.cargo_unload_station_events_ns = unload[7];
+    }
+
     /// Suma las fases en nanosegundos (sin overhead de instrumentación entre fases).
     #[must_use]
     pub const fn phases_sum_ns(self) -> u64 {
@@ -124,6 +151,14 @@ impl TickPhaseTimings {
         self.cargo_economy_day_ns += other.cargo_economy_day_ns;
         self.cargo_aging_ns += other.cargo_aging_ns;
         self.cargo_unload_ns += other.cargo_unload_ns;
+        self.cargo_unload_selection_ns += other.cargo_unload_selection_ns;
+        self.cargo_unload_acceptance_ns += other.cargo_unload_acceptance_ns;
+        self.cargo_unload_staging_ns += other.cargo_unload_staging_ns;
+        self.cargo_unload_packets_ns += other.cargo_unload_packets_ns;
+        self.cargo_unload_commit_ns += other.cargo_unload_commit_ns;
+        self.cargo_unload_reinsert_ns += other.cargo_unload_reinsert_ns;
+        self.cargo_unload_station_events_ns += other.cargo_unload_station_events_ns;
+        self.cargo_unload_finish_ns += other.cargo_unload_finish_ns;
         self.cargo_load_ns += other.cargo_load_ns;
         self.cargo_transfer_ns += other.cargo_transfer_ns;
         self.movement_ns += other.movement_ns;
@@ -168,6 +203,14 @@ impl TickPhaseTimings {
             cargo_economy_day_ns: self.cargo_economy_day_ns / n,
             cargo_aging_ns: self.cargo_aging_ns / n,
             cargo_unload_ns: self.cargo_unload_ns / n,
+            cargo_unload_selection_ns: self.cargo_unload_selection_ns / n,
+            cargo_unload_acceptance_ns: self.cargo_unload_acceptance_ns / n,
+            cargo_unload_staging_ns: self.cargo_unload_staging_ns / n,
+            cargo_unload_packets_ns: self.cargo_unload_packets_ns / n,
+            cargo_unload_commit_ns: self.cargo_unload_commit_ns / n,
+            cargo_unload_reinsert_ns: self.cargo_unload_reinsert_ns / n,
+            cargo_unload_station_events_ns: self.cargo_unload_station_events_ns / n,
+            cargo_unload_finish_ns: self.cargo_unload_finish_ns / n,
             cargo_load_ns: self.cargo_load_ns / n,
             cargo_transfer_ns: self.cargo_transfer_ns / n,
             movement_ns: self.movement_ns / n,
@@ -296,7 +339,13 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     economy::age_vehicle_cargo(state);
     timings.cargo_aging_ns = nanos(cargo_phase);
     let cargo_phase = Instant::now();
-    cargo_transfer::unload_vehicles(state, t, &loaded_this_tick, &mut unloaded_this_tick);
+    let unload = cargo_transfer::unload_vehicles_profiled(
+        state,
+        t,
+        &loaded_this_tick,
+        &mut unloaded_this_tick,
+    );
+    timings.record_cargo_unload(unload);
     timings.cargo_unload_ns = nanos(cargo_phase);
     let cargo_phase = Instant::now();
     cargo_transfer::load_vehicles(state, &mut loaded_this_tick, &unloaded_this_tick);

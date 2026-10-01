@@ -311,6 +311,21 @@ fn print_tick_timings(label: &str, timings: TickPhaseTimings) {
     );
     print_phase("  cargo_aging", timings.cargo_aging_ns, timings.total_ns);
     print_phase("  cargo_unload", timings.cargo_unload_ns, timings.total_ns);
+    for (name, ns) in [
+        ("    unload_selection", timings.cargo_unload_selection_ns),
+        ("    unload_acceptance", timings.cargo_unload_acceptance_ns),
+        ("    unload_staging", timings.cargo_unload_staging_ns),
+        ("    unload_packets", timings.cargo_unload_packets_ns),
+        ("    unload_commit", timings.cargo_unload_commit_ns),
+        ("      unload_reinsert", timings.cargo_unload_reinsert_ns),
+        (
+            "      unload_station_events",
+            timings.cargo_unload_station_events_ns,
+        ),
+        ("    unload_finish", timings.cargo_unload_finish_ns),
+    ] {
+        print_phase(name, ns, timings.total_ns);
+    }
     print_phase("  cargo_load", timings.cargo_load_ns, timings.total_ns);
     print_phase("movement", timings.movement_ns, timings.total_ns);
     print_phase("  vehicle_move", timings.vehicle_move_ns, timings.total_ns);
@@ -405,6 +420,27 @@ fn run(args: &Args) -> Result<(), String> {
             .saturating_sub(fleet.route_pending_moving),
     );
     println!("estaciones: {}", state.stations.len());
+    let animation_mask = openttdrs_core::StationAnimationTrigger::NewCargo.mask()
+        | openttdrs_core::StationAnimationTrigger::VehicleLoads.mask();
+    println!(
+        "animación rail: {} specs; {} con triggers de carga, {} estaciones con esos triggers; {} tiles activos",
+        state.station_spec_catalog.len(),
+        state
+            .station_spec_catalog
+            .iter()
+            .filter(|def| def.animation_triggers & animation_mask != 0)
+            .count(),
+        state
+            .stations
+            .iter()
+            .filter(|station| state
+                .station_spec_catalog
+                .iter()
+                .any(|def| def.id == station.station_spec
+                    && def.animation_triggers & animation_mask != 0))
+            .count(),
+        state.newgrf_animated_station_tiles.len(),
+    );
     println!(
         "índice de terminales: {} rebuilds, {} barridos completos",
         state.runtime.terminal_spatial_index.rebuilds(),

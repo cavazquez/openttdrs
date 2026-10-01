@@ -83,6 +83,14 @@ unos 9,9 a 5,8 ms; cámara fija 19,276 / 19,420 → 21,298 / 21,026 FPS y pan
 El nuevo perfil de CPU excluye el calentamiento, pero no permite atribución
 acumulada fiable de callers; se conserva como diagnóstico. La cadencia y
 los 30 FPS siguen abiertos.
+La etapa 27 reutiliza esas huellas vigentes en la clasificación y selección
+gráfica de estaciones; mapa o ancla nuevos usan el recorrido vivo. Conserva
+29.039 consultas diferenciales y las referencias de los 1.807 tiles Station
+importados; la sonda aislada es unas 24 veces más rápida. Remap sostenido
+5,8 → 2,5 ms, cámara fija 21,089 / 21,291 → 22,762 / 22,452 FPS y pan
+18,539 / 18,183 → 20,043 / 20,086. Otras 61 fases y seis zooms son exactos;
+el núcleo no muestra una mejora uniforme. Action2, cadencia y 30 FPS siguen
+abiertos: los 80 frames sostenidos posteriores todavía exceden 33,33 ms.
 
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y

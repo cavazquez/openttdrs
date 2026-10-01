@@ -50,6 +50,28 @@ pub fn station_at_tile<'a>(
     stations: &'a [Station],
     tile: TileCoord,
 ) -> Option<&'a Station> {
+    station_at_tile_impl(map, stations, tile, None)
+}
+
+/// Same legacy ownership and tie order as [`station_at_tile`], reusing current
+/// connected footprints. Stale maps and missing anchors use the live traversal;
+/// station metadata and list order are always read from `stations`.
+#[must_use]
+pub fn station_at_tile_indexed<'a>(
+    map: &Map,
+    stations: &'a [Station],
+    tile: TileCoord,
+    index: &crate::TerminalSpatialIndex,
+) -> Option<&'a Station> {
+    station_at_tile_impl(map, stations, tile, Some(index))
+}
+
+fn station_at_tile_impl<'a>(
+    map: &Map,
+    stations: &'a [Station],
+    tile: TileCoord,
+    index: Option<&crate::TerminalSpatialIndex>,
+) -> Option<&'a Station> {
     if let Some(s) = stations.iter().find(|s| s.covers_tile(tile)) {
         return Some(s);
     }
@@ -60,7 +82,12 @@ pub fn station_at_tile<'a>(
         .iter()
         .filter(|s| {
             matches!(s.stop_kind, StopKind::RailStation | StopKind::RailWaypoint)
-                && station_footprint_tiles(map, s.pos).contains(&tile)
+                && index
+                    .and_then(|index| index.station_footprint(map, s.pos))
+                    .map_or_else(
+                        || station_footprint_tiles(map, s.pos).contains(&tile),
+                        |footprint| footprint.contains(&tile),
+                    )
         })
         .min_by_key(|s| manhattan(s.pos, tile))
 }

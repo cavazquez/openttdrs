@@ -1667,3 +1667,115 @@ Validación: 3.026 core/seis ignorados, 1.666 cliente/dos; Clippy en todos los
 targets de ambos, formato, diff y frescura de docs. Sólo cierra este coste de
 visitados; reutilización de consultas legacy, F17/F31 completos, cadencia,
 variación histórica del renderer y 30 FPS permanecen abiertos.
+
+## Etapa 27 — Reutilizar huellas vigentes al dibujar estaciones (F17/F31)
+
+`station_at_tile_indexed` conserva el contrato de `station_at_tile`: primero
+ancla/joined/aeropuerto en orden del vector vivo; después candidatos rail o
+waypoint por huella conectada y distancia Manhattan, con el mismo desempate.
+Sólo toma prestadas las huellas legacy de `TerminalSpatialIndex` cuando la
+época/revisión terminal corresponde al mapa actual. Un ancla nueva o un índice
+viejo ejecutan inmediatamente el recorrido anterior. No usa `at()` como
+propietario: ese índice incluye MAP2 nativo y no equivale al fallback legacy.
+Las estaciones y sus roles se leen de la lista actual, incluso si se reordenó.
+
+El cliente conserva una copia propia del índice dentro de la caché de sprites
+de estación, sin copiarlo por tile ni por tick. Cada tanda de chunks comprueba
+el vínculo con el mapa; copia el índice de simulación sólo si está vigente y
+la copia anterior dejó de corresponder al mapa. Una carga, demolición o cambio
+de MAP2 invalida ese vínculo. Si simulación todavía no lo actualizó, el render
+usa el recorrido vivo. La clasificación, selección de spec, cimientos y layout
+usan esta consulta; los contextos Action2 internos siguen siendo una mejora
+pendiente. No se retiene una estación ni el resultado gráfico entre ticks.
+
+Tres regresiones comparan las referencias exactas elegidas con la función
+anterior independiente de `56f252fe`: 25.088 consultas sobre las 512 topologías
+3×3, 495 con listas/roles/anclas cambiados y 3.456 con huellas limitadas,
+demolición, MAP2 editado, mapa clonado y reemplazado; 29.039 en total. Incluyen
+prioridad de cobertura directa, empate por orden, IDs/anclas duplicados y ancla
+no cacheada. Otra regresión del cliente cubre índice vacío, copia retenida,
+invalidez previa al refresco, nueva época y limpieza de recursos. Esta prueba
+conserva el port anterior; no certifica la propiedad nativa ni la importación
+SAV. El original obtiene el propietario de MAP2, como registra la etapa 26.
+
+La sonda [`profile_station_tile_lookup.rs`](../../scripts/profile_station_tile_lookup.rs)
+consulta los 1.807 tiles Station de Kale con las 245 estaciones importadas,
+cuatro pasadas y 7.228 consultas por muestra. Compara también la referencia
+exacta de cada estación antes del reloj. Dos runs legacy/indexed en ABBA,
+cinco muestras por run, misma biblioteca posterior: media por run
+**205,8552 / 206,2285 → 8,5987 / 8,6425 ms**, checksum
+`7373120780294979429` en las veinte muestras. Construir el índice una vez
+cuesta 0,1992–0,2207 ms; copiarlo, 0,0297–0,0309 ms de media sobre veinte
+copias por proceso. La importación, hidratación, validación, construcción,
+copia y salida quedan fuera de los samples. Es una sonda de consultas, no
+una predicción directa del FPS.
+[Datos](evidence/station-render-footprints-lookup-20261001.csv).
+
+Núcleo normal, NewGRF activo, ABBA: 24 ticks
+**22,7034 / 24,0315 → 22,8531 / 22,8020 ms**; 120 ticks
+**14,4202 / 14,3921 → 14,4582 / 14,1466 ms**. No hay una mejora uniforme del
+núcleo; el nuevo caller de caché es del cliente. Las 61 fases normales
+conservan hash v4, eventos, teselas raw, bloques 4×4, contadores y listas
+ordenadas de avisos. Se toma como oracle la traza posterior inmutable de la
+etapa 26; las listas importadas siguen su orden original. Tick final 3703134,
+hash `4d3524e48b6bc2e5`, eventos `4857641856429973`.
+[Core](evidence/station-render-footprints-core-20261001.csv),
+[estado](evidence/station-render-footprints-state-20261001.csv).
+
+Cliente sin perf/compilación concurrentes, GPU real, 1280×720, escala 2, ABBA,
+40 muestras por run. Cámara fija, warmup 120: frame
+**47,4186 / 46,9689 → 43,9334 / 44,5389 ms**, FPS
+**21,089 / 21,291 → 22,762 / 22,452**; remap
+**5,7630 / 5,7871 → 2,5245 / 2,5372 ms** y simulación
+**14,1166 / 13,9399 → 14,1079 / 14,3681 ms**. Medianas
+**47,1591 / 46,3669 → 42,8751 / 44,2462**, p95
+**63,6427 / 64,3315 → 58,4180 / 57,5051**, máximos/p99
+**70,7034 / 71,4308 → 59,6653 / 59,8982**. TPS
+**21,095 / 21,287 → 22,761 / 22,446**. Todos los runs cubren ticks
+3703193–3703232; exceden 33,33 ms 79/80 frames anteriores y 80/80 posteriores.
+[160 muestras](evidence/station-render-footprints-client-steady-20261001.csv).
+
+Pan, warmup 30, otra ventana ABBA: frame
+**53,9393 / 54,9979 → 49,8936 / 49,7865 ms**, FPS
+**18,539 / 18,183 → 20,043 / 20,086**; remap
+**6,7467 / 6,6994 → 2,9705 / 2,9454 ms**. Medianas
+**50,1284 / 52,3085 → 46,7959 / 46,7170**, p95
+**74,4675 / 74,2855 → 62,5472 / 63,1213**, máximos/p99
+**137,7050 / 136,8933 → 131,7458 / 131,3966**. TPS
+**19,308 / 18,904 → 20,923 / 20,967**. Los cuatro runs cubren ticks
+3703103–3703142 y los 80 frames por versión exceden el presupuesto. El primer
+intervalo incluye el zoom del frame 30. Los timers de fase y de intervalo
+corresponden a frames distintos; no se suman como presupuesto exacto.
+[160 muestras](evidence/station-render-footprints-pan-20261001.csv).
+
+Las seis parejas congeladas conservan PNG y traza completa de sort
+byte-idénticos, cero píxeles/bloques 4×4 distintos, escalas .25/.5/1/2/4/8,
+centro 128,128, settle 180 y CLEAN=0. Conservan de 54 a 37.998 parents.
+La captura pausada permite fallback si el índice todavía no está vinculado;
+la sonda de la partida real verifica las referencias elegidas por el índice
+vigente en los 1.807 tiles. Este gate no acredita todos los frames animados
+ni los FPS activos de cada zoom.
+[Raster](evidence/station-render-footprints-raster-20261001.csv).
+
+Artefactos en `target/performance/station-render-footprints-20261001`.
+Cliente anterior/posterior SHA256
+`b8c09204241281915a0d13872af6c740fc8b017e73019f68895eeb37ca5cab5d` /
+`479772feda3342ee6fd09dcce0664a683d1a5c72e5c5c1f05598b59acab8e7fc`;
+`sav_profile`
+`075c0ff9acdfc6ba7cbe6e732ec43abf2ae90b13bb4f10c0262c35e0aa3ae838` /
+`a6c1faf2ded7de2544e251ccab40a7e1a25f6228d654782822aae55f62ddc1c9`;
+traza `f805baba1d90dfc2eaffe3e45613539a7fe756082bca4226db2298ee31b52913` /
+`b084788ca88aaee7ab8133bbd6e00de9659a3071dbc0b06ce5ce84130b836278`.
+Sonda `321e302cf88a371648d607b34c99608f9a021e326138a24d769258c91f4f7dec`
+compilada con `rustc -O -D warnings` contra la biblioteca posterior copiada
+del artefacto exacto de Cargo JSON,
+`a45f548ceec685e32b3520cd67a20f727594dff23510fc4d87323bde2ee74eb9`.
+Release del perfil 24,44 s, cliente tras cambio core 77 s; no es una mejora
+controlada de compilación. Las 183 trazas de fase idénticas se conservan en
+hardlinks readonly verificados; se recuperan 477.010.859 bytes.
+
+Validación: 3.029 core/seis ignorados, 1.667 cliente/dos; Clippy en todos los
+targets de ambos, formato, diff y frescura de docs. Sólo cierra la reutilización
+para estos callers de render. Consultas de Action2 y otros callers legacy,
+F17/F31 completos, cadencia, variación histórica del renderer y 30 FPS siguen
+abiertos. El ahorro reduce el frame a unos 44 ms; todavía supera 33,33 ms.

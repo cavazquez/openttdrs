@@ -254,10 +254,21 @@ impl TerminalSpatialIndex {
     /// `station_footprint_tiles`. A topology change requires the live fallback
     /// until the next index refresh; never return geometry from another map.
     pub(crate) fn station_footprint(&self, map: &Map, anchor: TileCoord) -> Option<&[TileCoord]> {
+        if !self.is_bound_to_map(map) {
+            return None;
+        }
+        self.station_footprints.get(&anchor).map(Vec::as_slice)
+    }
+
+    /// Whether cached connected footprints belong to this map topology.
+    ///
+    /// This does not validate station slots: callers must read the current
+    /// station list, or use [`Self::ensure_current`] before consulting [`Self::at`].
+    #[must_use]
+    pub fn is_bound_to_map(&self, map: &Map) -> bool {
         self.topology
             .as_ref()
-            .filter(|topology| topology.map_version == map.terminal_topology_version())?;
-        self.station_footprints.get(&anchor).map(Vec::as_slice)
+            .is_some_and(|topology| topology.map_version == map.terminal_topology_version())
     }
 
     #[must_use]

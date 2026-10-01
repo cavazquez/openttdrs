@@ -23,11 +23,34 @@ use crate::sprites::CompanyColour;
 pub(crate) struct NewGrfStationSpriteCache {
     handles: HashMap<(u16, u16, u8, u32, u8, u16), Handle<Image>>,
     twocc_maps: Vec<Option<openttdrs_core::DecodedSprite>>,
+    lookup_index: Option<openttdrs_core::TerminalSpatialIndex>,
 }
 
 impl NewGrfStationSpriteCache {
     pub(crate) fn clear(&mut self) {
         self.handles.clear();
+        self.lookup_index = None;
+    }
+
+    /// Keep an owned footprint view across immutable render batches. Only map
+    /// topology matters here; logical ownership still reads the live stations.
+    pub(crate) fn refresh_lookup_index(
+        &mut self,
+        map: &Map,
+        index: &openttdrs_core::TerminalSpatialIndex,
+    ) {
+        if self
+            .lookup_index
+            .as_ref()
+            .is_some_and(|cached| cached.is_bound_to_map(map))
+        {
+            return;
+        }
+        self.lookup_index = index.is_bound_to_map(map).then(|| index.clone());
+    }
+
+    pub(crate) fn lookup_index(&self) -> Option<&openttdrs_core::TerminalSpatialIndex> {
+        self.lookup_index.as_ref()
     }
 
     /// Instala la tabla Action5 `0x0A` vigente para los TileLayout de
@@ -215,8 +238,12 @@ pub(crate) fn newgrf_station_def_for_tile<'a>(
     map: &Map,
     stations: &[Station],
     coord: TileCoord,
+    index: Option<&openttdrs_core::TerminalSpatialIndex>,
 ) -> Option<&'a StationSpecDef> {
-    let st = openttdrs_core::station_at_tile(map, stations, coord)?;
+    let st = index.map_or_else(
+        || openttdrs_core::station_at_tile(map, stations, coord),
+        |index| openttdrs_core::station_at_tile_indexed(map, stations, coord, index),
+    )?;
     if st.station_spec == StationSpecId::DEFAULT_RAIL {
         return None;
     }
@@ -237,6 +264,68 @@ mod tests {
     use openttdrs_core::newgrf_actions::build_action0_station_payload;
     use openttdrs_core::newgrf_sprites::build_grf_v2_station_with_preview_sprite;
     use openttdrs_core::prelude::GameState;
+
+    #[test]
+    fn footprint_mirror_reuses_current_map_and_rejects_stale_or_reloaded_maps() {
+        let mut map = Map::new_flat(5, 3, 0);
+        let anchor = TileCoord::new(1, 1);
+        let next = TileCoord::new(2, 1);
+        for coord in [anchor, next] {
+            map.set_kind(coord, TileKind::Station).expect("fixture");
+        }
+        let mut station = Station::new(anchor);
+        station.stop_kind = openttdrs_core::StopKind::RailStation;
+        let stations = vec![station];
+        let mut source = openttdrs_core::TerminalSpatialIndex::default();
+        let mut cache = NewGrfStationSpriteCache::default();
+        cache.refresh_lookup_index(&map, &source);
+        assert!(cache.lookup_index().is_none());
+        source.ensure_current(&map, &stations);
+        cache.refresh_lookup_index(&map, &source);
+        let lookup = cache.lookup_index().expect("current mirror");
+        assert!(lookup.is_bound_to_map(&map));
+        assert!(openttdrs_core::station_at_tile_indexed(&map, &stations, next, lookup).is_some());
+        cache.refresh_lookup_index(&map, &openttdrs_core::TerminalSpatialIndex::default());
+        assert!(
+            cache
+                .lookup_index()
+                .expect("retained")
+                .is_bound_to_map(&map)
+        );
+        map.set_kind(next, TileKind::Grass).expect("demolition");
+        assert!(
+            openttdrs_core::station_at_tile_indexed(
+                &map,
+                &stations,
+                next,
+                cache.lookup_index().expect("stale mirror")
+            )
+            .is_none()
+        );
+        cache.refresh_lookup_index(&map, &source);
+        assert!(cache.lookup_index().is_none());
+        source.ensure_current(&map, &stations);
+        cache.refresh_lookup_index(&map, &source);
+        assert!(
+            cache
+                .lookup_index()
+                .expect("refreshed")
+                .is_bound_to_map(&map)
+        );
+        let reload = map.clone();
+        cache.refresh_lookup_index(&reload, &source);
+        assert!(cache.lookup_index().is_none());
+        source.ensure_current(&reload, &stations);
+        cache.refresh_lookup_index(&reload, &source);
+        assert!(
+            cache
+                .lookup_index()
+                .expect("new map")
+                .is_bound_to_map(&reload)
+        );
+        cache.clear();
+        assert!(cache.lookup_index().is_none());
+    }
 
     fn two_cc_layout_fixture() -> (
         openttdrs_core::DecodedSprite,

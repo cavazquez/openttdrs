@@ -148,6 +148,7 @@ pub(super) fn spawn_map_tiles_in_bounds(
     }
 
     let map = &sim.state.map;
+    station_sprites.refresh_lookup_index(map, &sim.state.runtime.terminal_spatial_index);
     let climate = sim.state.climate;
     let world_seed = sim.state.world_seed;
     let local_counts;

@@ -1715,7 +1715,14 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
-    let stop_kind = station_at_tile(map, stations, ctx.coord).map(|s| s.stop_kind);
+    let stop_kind = station_sprites
+        .as_deref()
+        .and_then(NewGrfStationSpriteCache::lookup_index)
+        .map_or_else(
+            || station_at_tile(map, stations, ctx.coord),
+            |index| openttdrs_core::station_at_tile_indexed(map, stations, ctx.coord, index),
+        )
+        .map(|station| station.stop_kind);
     let m6 = ctx.tile.map_or(0, |t| t.m6);
     let m5 = ctx.tile.map_or(0, |t| t.m5);
     let class = station_tile_class(m6, stop_kind);
@@ -1767,6 +1774,9 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 climate,
                 newgrf_stack,
                 world,
+                station_sprites
+                    .as_deref()
+                    .and_then(NewGrfStationSpriteCache::lookup_index),
             );
             let custom_station_foundation =
                 station_custom_foundation
@@ -1819,6 +1829,9 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 climate,
                 newgrf_stack,
                 world,
+                station_sprites
+                    .as_deref()
+                    .and_then(NewGrfStationSpriteCache::lookup_index),
             );
             let mut used_newgrf_layout_ground = false;
             if let Some((def, layout, runtime_fp, _view_idx)) = station_layout.as_ref()
@@ -1929,8 +1942,15 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 class,
                 StationTileClass::Rail | StationTileClass::RailWaypoint
             ) && !buildings_hidden()
-                && let Some(def) =
-                    newgrf_station_def_for_tile(station_catalog, map, stations, ctx.coord)
+                && let Some(def) = newgrf_station_def_for_tile(
+                    station_catalog,
+                    map,
+                    stations,
+                    ctx.coord,
+                    station_sprites
+                        .as_deref()
+                        .and_then(NewGrfStationSpriteCache::lookup_index),
+                )
                 && let (Some(cache), Some(images)) = (station_sprites.as_mut(), images.as_mut())
             {
                 let colour_u8 = owner_colour.map(CompanyColour::as_u8).unwrap_or(0);
@@ -3426,8 +3446,9 @@ fn station_action2_for_tile<'a>(
     climate: Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
     world: Option<openttdrs_core::RoadStopWorldContext<'_>>,
+    index: Option<&openttdrs_core::TerminalSpatialIndex>,
 ) -> Option<(&'a StationSpecDef, openttdrs_core::Action2EvalCtx)> {
-    let def = newgrf_station_def_for_tile(station_catalog, map, stations, ctx.coord)?;
+    let def = newgrf_station_def_for_tile(station_catalog, map, stations, ctx.coord, index)?;
     let colour_u8 = owner_colour.map(CompanyColour::as_u8).unwrap_or(0);
     let mut action2 = world.map_or_else(
         || {
@@ -3483,6 +3504,7 @@ fn resolve_station_custom_foundation_for_tile<'a>(
     climate: Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
     world: Option<openttdrs_core::RoadStopWorldContext<'_>>,
+    index: Option<&openttdrs_core::TerminalSpatialIndex>,
 ) -> Option<(&'a StationSpecDef, usize, openttdrs_core::Action2EvalCtx)> {
     if ctx.info.tileh == 0 {
         return None;
@@ -3496,6 +3518,7 @@ fn resolve_station_custom_foundation_for_tile<'a>(
         climate,
         newgrf_stack,
         world,
+        index,
     )?;
     if !def.has_custom_foundations() {
         return None;
@@ -3637,6 +3660,7 @@ fn resolve_station_layout_for_tile<'a>(
     climate: Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
     world: Option<openttdrs_core::RoadStopWorldContext<'_>>,
+    index: Option<&openttdrs_core::TerminalSpatialIndex>,
 ) -> Option<(
     &'a StationSpecDef,
     openttdrs_core::newgrf_sprites::ResolvedTileLayout,
@@ -3652,6 +3676,7 @@ fn resolve_station_layout_for_tile<'a>(
         climate,
         newgrf_stack,
         world,
+        index,
     )?;
     let mut callback_ctx = action2.clone();
     let view_idx = station_newgrf_view_index_for_tile(def, m5, &mut callback_ctx);

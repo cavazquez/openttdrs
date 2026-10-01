@@ -2,6 +2,7 @@ mod cargo_rating;
 mod coverage;
 mod destination;
 mod geometry;
+pub(crate) use geometry::vehicle_physically_at_station_with_footprint;
 mod goods_entry;
 mod model;
 mod move_goods;

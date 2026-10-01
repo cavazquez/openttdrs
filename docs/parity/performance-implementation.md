@@ -218,6 +218,50 @@ Validación: 2.999 core/seis ignorados, 1.659 cliente/dos; Clippy de ambos en
 todos los targets, formato, diff y frescura de docs. Se cierra este callsite
 acotado de F13; los demás builders y subfases de carga siguen en revisión.
 
+## Etapa 6 — Huellas derivadas al consultar una estación (sub-issue F12)
+
+El índice de terminales conserva la huella conectada que antes se reconstruía
+para cada consulta ferroviaria de carga/descarga. Se reutiliza únicamente si
+la identidad/revisión del mapa sigue vigente. Ante un cambio durante el tick
+se vuelve a la consulta viva hasta refrescar el índice. Cambiar entre Station
+y Airport invalida también cuando MAP2 conserva el mismo ID: la pertenencia
+al flood-fill ha cambiado. Consultar una tesela que no es plataforma descarta
+el caso antes de construir una huella.
+
+Se conserva la geometría legacy del port, su orden y su límite de recorrido.
+Esta etapa no amplía la paridad de propiedad de estaciones adyacentes ni
+cambia el límite de 64 tiles. OpenTTD 15.3 `14ec60f2`, `train_cmd.cpp`,
+`TrainEnterStation` y consultas `GetStationIndex/Station::Get`, confirma que
+el servicio usa la identidad de la estación; el índice nativo del port por
+MAP2 sigue separado del fallback legacy que aquí se cachea.
+
+Regresiones: consulta cacheada frente a viva en plataformas/adyacencias y fuera
+de estación; mismo ID con cambio de tipo de tesela, mapa clonado, recorrido
+conectado mayor que el límite y bytes del mapa intactos al preparar la caché.
+
+El perfil CPU previo capturó 798 muestras sin pérdidas, evento `cpu-clock:u`
+a 99 Hz, DWARF con stack de 65.528 bytes. Incluye carga de SAV/NewGRF, workers y
+24 ticks, no sólo la descarga. Muestra asignaciones y operaciones sobre sets de
+TileCoord, pero los callgraphs están incompletos y hay símbolos genéricos que
+LLVM puede compartir. No se atribuye todo ese porcentaje al flood-fill ni a
+terraformación. La ganancia de esta etapa se decide por tiempos de fases.
+
+Ocho runs release con la misma fixture/NewGRF, orden antes/después/después/antes
+por ventana y sin compilaciones concurrentes. Cuatro ticks: total
+449,10 / 463,29 → 451,51 / 438,11 ms; carga
+38,87 / 39,18 → 32,10 / 31,92 ms. En 24 ticks: total
+201,39 / 198,55 → 184,56 / 186,70 ms (aproximadamente 7 % menos), carga
+31,17 / 30,40 → 22,63 / 22,79 ms y descarga
+83,34 / 82,37 → 75,75 / 77,45 ms. La ventana inicial tiene más variación y
+continúa dominada por descarga. Datos:
+[footprint-cache-20261001.csv](evidence/footprint-cache-20261001.csv).
+Baseline `2ac6ab07` (SHA256 `a859f5f15fd62facfd8a8d2d4ad8d392af9ec7caf211b2063ee6ac8af96ac495`),
+candidato `bb1f331679eb6c07d4378f853ec3213f4d9b91efd087e03a532d64b557d6fd53`.
+
+Validación: 3.001 core/seis ignorados, 1.659 cliente/dos; Clippy en todos los
+targets de ambos, formato, diff y frescura de docs. Se cierra la reutilización
+de estas huellas; el resto de F12 y el objetivo de FPS siguen abiertos.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV

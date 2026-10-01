@@ -477,7 +477,9 @@ impl Map {
         if navigation_tile_changed(previous, tile) {
             self.navigation_revision = self.navigation_revision.wrapping_add(1);
         }
-        if terminal_tile_station_id(previous) != terminal_tile_station_id(tile) {
+        if terminal_tile_station_id(previous) != terminal_tile_station_id(tile)
+            || (previous.kind == TileKind::Station) != (tile.kind == TileKind::Station)
+        {
             self.bump_terminal_topology_revision();
         }
     }

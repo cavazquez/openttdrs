@@ -146,6 +146,7 @@ impl TerminalIndexTopology {
 #[derive(Debug, Clone, Default)]
 pub struct TerminalSpatialIndex {
     by_tile: AHashMap<TileCoord, Vec<usize>>,
+    station_footprints: AHashMap<TileCoord, Vec<TileCoord>>,
     rebuilds: u64,
     full_map_scans: u64,
     topology: Option<TerminalIndexTopology>,
@@ -158,8 +159,12 @@ impl TerminalSpatialIndex {
     /// queda disponible como fallback explícito para diagnósticos y fixtures.
     pub fn rebuild(&mut self, map: &Map, stations: &[Station]) {
         self.by_tile.clear();
+        self.station_footprints.clear();
         let mut imported_station_slots = AHashMap::new();
         for (slot, station) in stations.iter().enumerate() {
+            self.station_footprints
+                .entry(station.pos)
+                .or_insert_with(|| crate::station::station_footprint_tiles(map, station.pos));
             self.insert(station.pos, slot);
             for &tile in station.airport_tiles.iter().chain(&station.joined_tiles) {
                 self.insert(tile, slot);
@@ -226,6 +231,16 @@ impl TerminalSpatialIndex {
         self.by_tile.get(&tile).map_or(&[], Vec::as_slice)
     }
 
+    /// Legacy connected footprint, with exactly the same traversal/limit as
+    /// `station_footprint_tiles`. A topology change requires the live fallback
+    /// until the next index refresh; never return geometry from another map.
+    pub(crate) fn station_footprint(&self, map: &Map, anchor: TileCoord) -> Option<&[TileCoord]> {
+        self.topology
+            .as_ref()
+            .filter(|topology| topology.map_version == map.terminal_topology_version())?;
+        self.station_footprints.get(&anchor).map(Vec::as_slice)
+    }
+
     #[must_use]
     pub const fn rebuilds(&self) -> u64 {
         self.rebuilds
@@ -257,6 +272,71 @@ mod tests {
         let mut station = Station::new(pos);
         station.ottd_station_id = Some(u32::from(station_id));
         station
+    }
+
+    #[test]
+    fn cached_footprint_keeps_legacy_geometry_and_rejects_changed_topology() {
+        let mut map = Map::new_flat(6, 3, 0);
+        let anchor = TileCoord::new(1, 1);
+        let next = TileCoord::new(2, 1);
+        let mut station = imported_station(&mut map, anchor, 42);
+        station.stop_kind = crate::station::StopKind::RailStation;
+        let _ = imported_station(&mut map, next, 42);
+        let _ = imported_station(&mut map, TileCoord::new(3, 1), 99);
+        let stations = vec![station];
+        let before = serde_json::to_vec(&map).expect("map");
+        let mut index = TerminalSpatialIndex::default();
+        index.ensure_current(&map, &stations);
+        assert_eq!(serde_json::to_vec(&map).expect("map"), before);
+        let expected = crate::station::station_footprint_tiles(&map, anchor);
+        assert_eq!(
+            index.station_footprint(&map, anchor),
+            Some(expected.as_slice())
+        );
+        for pos in [anchor, next, TileCoord::new(3, 1), TileCoord::new(5, 1)] {
+            let vehicle = Vehicle::new(90, VehicleKind::Train, pos, anchor);
+            assert_eq!(
+                crate::station::vehicle_physically_at_station_with_footprint(
+                    &map,
+                    &vehicle,
+                    &stations[0],
+                    index.station_footprint(&map, anchor),
+                ),
+                crate::station::vehicle_physically_at_station(&map, &vehicle, &stations[0])
+            );
+        }
+        // MAP2 still names the same station, but Airport is not part of the
+        // legacy Station flood-fill: its geometry must expire immediately.
+        map.set_kind(next, TileKind::Airport).expect("kind");
+        assert!(index.station_footprint(&map, anchor).is_none());
+        index.ensure_current(&map, &stations);
+        let changed = crate::station::station_footprint_tiles(&map, anchor);
+        assert_eq!(changed, vec![anchor]);
+        assert_eq!(
+            index.station_footprint(&map, anchor),
+            Some(changed.as_slice())
+        );
+        assert_eq!(index.rebuilds(), 2);
+        // Another map, even with identical persisted bytes, needs a new binding.
+        assert!(index.station_footprint(&map.clone(), anchor).is_none());
+    }
+
+    #[test]
+    fn cached_footprint_preserves_the_existing_bounded_traversal() {
+        let mut map = Map::new_flat(100, 3, 0);
+        let anchor = TileCoord::new(1, 1);
+        let station = imported_station(&mut map, anchor, 42);
+        for x in 2..99 {
+            let _ = imported_station(&mut map, TileCoord::new(x, 1), 42);
+        }
+        let expected = crate::station::station_footprint_tiles(&map, anchor);
+        assert_eq!(expected.len(), 64);
+        let mut index = TerminalSpatialIndex::default();
+        index.ensure_current(&map, &[station]);
+        assert_eq!(
+            index.station_footprint(&map, anchor),
+            Some(expected.as_slice())
+        );
     }
 
     #[test]

@@ -3068,6 +3068,22 @@ fn station_matches_current_order(vehicle: &crate::Vehicle, station_pos: TileCoor
     )
 }
 
+fn vehicle_at_cached_station(
+    state: &GameState,
+    vehicle: &crate::Vehicle,
+    station: &crate::Station,
+) -> bool {
+    let footprint = (vehicle.kind == VehicleKind::Train)
+        .then(|| {
+            state
+                .runtime
+                .terminal_spatial_index
+                .station_footprint(&state.map, station.pos)
+        })
+        .flatten();
+    station::vehicle_physically_at_station_with_footprint(&state.map, vehicle, station, footprint)
+}
+
 fn station_index_at_vehicle(state: &GameState, vehicle: &crate::Vehicle) -> Option<usize> {
     if let Some(indexed) = state
         .runtime
@@ -3076,9 +3092,10 @@ fn station_index_at_vehicle(state: &GameState, vehicle: &crate::Vehicle) -> Opti
         .iter()
         .copied()
         .filter(|&idx| {
-            state.stations.get(idx).is_some_and(|station| {
-                station::vehicle_physically_at_station(&state.map, vehicle, station)
-            })
+            state
+                .stations
+                .get(idx)
+                .is_some_and(|station| vehicle_at_cached_station(state, vehicle, station))
         })
         .min_by_key(|&idx| {
             let station = &state.stations[idx];
@@ -3105,7 +3122,7 @@ fn station_index_at_vehicle(state: &GameState, vehicle: &crate::Vehicle) -> Opti
         .stations
         .iter()
         .enumerate()
-        .filter(|(_, station)| station::vehicle_physically_at_station(&state.map, vehicle, station))
+        .filter(|(_, station)| vehicle_at_cached_station(state, vehicle, station))
         .min_by_key(|(_, station)| {
             (station.pos.x - vehicle.pos.x).abs() + (station.pos.y - vehicle.pos.y).abs()
         })

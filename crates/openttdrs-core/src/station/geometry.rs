@@ -688,6 +688,16 @@ pub fn vehicle_physically_at_station(
     vehicle: &crate::Vehicle,
     station: &Station,
 ) -> bool {
+    vehicle_physically_at_station_with_footprint(map, vehicle, station, None)
+}
+
+#[must_use]
+pub(crate) fn vehicle_physically_at_station_with_footprint(
+    map: &Map,
+    vehicle: &crate::Vehicle,
+    station: &Station,
+    cached_footprint: Option<&[TileCoord]>,
+) -> bool {
     if !station.can_service_vehicle(vehicle.kind) {
         return false;
     }
@@ -714,8 +724,13 @@ pub fn vehicle_physically_at_station(
     match vehicle.kind {
         VehicleKind::Truck | VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => false,
         VehicleKind::Train => {
-            station_footprint_tiles(map, station.pos).contains(&vpos)
-                && train_on_rail_platform(map, vpos)
+            if !train_on_rail_platform(map, vpos) {
+                return false;
+            }
+            cached_footprint.map_or_else(
+                || station_footprint_tiles(map, station.pos).contains(&vpos),
+                |tiles| tiles.contains(&vpos),
+            )
         }
         VehicleKind::Ship => {
             if station.stop_kind == StopKind::Buoy {

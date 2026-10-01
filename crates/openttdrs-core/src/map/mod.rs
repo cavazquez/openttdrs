@@ -256,6 +256,18 @@ impl Clone for Map {
 }
 
 fn navigation_tile_changed(previous: Tile, next: Tile) -> bool {
+    // PBS on station/waypoint rail changes live rail costs, not road/water
+    // topology. Rail caches still observe every mutation_revision change.
+    if previous.kind == TileKind::Station
+        && crate::station::is_rail_station_type(crate::station::station_type_from_m6(previous.m6))
+        && previous.m6 ^ next.m6 == crate::station::STATION_TILE_RESERVATION
+    {
+        let mut without_reservation_change = next;
+        without_reservation_change.m6 = previous.m6;
+        if previous == without_reservation_change {
+            return false;
+        }
+    }
     let relevant = |kind| {
         matches!(
             kind,
@@ -1393,6 +1405,88 @@ mod ottdmap_binary_tests {
 #[cfg(test)]
 mod map_set_tile_tests {
     use super::*;
+
+    #[test]
+    fn station_reservation_changes_preserve_navigation_only_for_rail_types() {
+        let coord = TileCoord::new(0, 0);
+        for m6 in 0..=u8::MAX {
+            let mut map = Map::new_flat(1, 1, 0);
+            let mut tile = map.get(coord).expect("tile");
+            tile.kind = TileKind::Station;
+            tile.m6 = m6;
+            tile.m2 = 23;
+            map.set_tile(coord, tile).expect("station");
+            let navigation = map.navigation_topology_version();
+            let terminal = map.terminal_topology_version();
+            let mutation = map.mutation_revision();
+            tile.m6 ^= crate::station::STATION_TILE_RESERVATION;
+            map.set_tile(coord, tile).expect("reservation");
+            let rail_type = matches!((m6 >> 3) & 0x0F, 0 | 7);
+            assert_eq!(
+                map.navigation_topology_version(),
+                (navigation.0, navigation.1 + u64::from(!rail_type)),
+                "m6={m6:02x}"
+            );
+            assert_eq!(map.mutation_revision(), mutation + 1);
+            assert_eq!(map.terminal_topology_version(), terminal);
+            assert_eq!(map.get(coord), Some(tile), "reservation bytes retained");
+        }
+    }
+
+    #[test]
+    fn station_reservation_exemption_keeps_other_navigation_dependencies() {
+        type TileChange = (&'static str, fn(&mut Tile));
+        let changes: [TileChange; 12] = [
+            ("height", |t| t.height += 1),
+            ("demolition", |t| t.kind = TileKind::Grass),
+            ("mapt", |t| t.mapt ^= 1),
+            ("axis/gfx", |t| t.m5 ^= 1),
+            ("owner", |t| t.m1 ^= 1),
+            ("other m6 bit", |t| t.m6 ^= 1),
+            ("m8", |t| t.m8 ^= 1),
+            ("blocked/catenary", |t| t.m3 ^= 1),
+            ("station id low", |t| t.m2 ^= 1),
+            ("station id high", |t| t.m2_hi ^= 1),
+            ("animation", |t| t.m7 ^= 1),
+            ("spec", |t| t.m3hi ^= 1),
+        ];
+        let coord = TileCoord::new(0, 0);
+        for station_type in 0..16 {
+            for (field, change) in changes {
+                let mut map = Map::new_flat(1, 1, 0);
+                let mut tile = map.get(coord).expect("tile");
+                tile.kind = TileKind::Station;
+                tile.m6 = station_type << 3;
+                map.set_tile(coord, tile).expect("station");
+                let navigation = map.navigation_topology_version();
+                tile.m6 ^= crate::station::STATION_TILE_RESERVATION;
+                change(&mut tile);
+                map.set_tile(coord, tile).expect("changed tile");
+                assert_eq!(
+                    map.navigation_topology_version(),
+                    (navigation.0, navigation.1 + 1),
+                    "type={station_type}, field={field}"
+                );
+            }
+        }
+        // A change of subtype must also invalidate even if PBS changes with it.
+        for from in [0_u8, 7] {
+            for to in 0..16 {
+                if from == to {
+                    continue;
+                }
+                let mut map = Map::new_flat(1, 1, 0);
+                let mut tile = map.get(coord).expect("tile");
+                tile.kind = TileKind::Station;
+                tile.m6 = from << 3;
+                map.set_tile(coord, tile).expect("station");
+                let navigation = map.navigation_topology_version();
+                tile.m6 = (to << 3) | crate::station::STATION_TILE_RESERVATION;
+                map.set_tile(coord, tile).expect("changed subtype");
+                assert_eq!(map.navigation_topology_version().1, navigation.1 + 1);
+            }
+        }
+    }
 
     #[test]
     fn mutation_revision_tracks_real_tile_changes() {

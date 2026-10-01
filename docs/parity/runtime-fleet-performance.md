@@ -101,6 +101,15 @@ aunque doce repeticiones In2x/Out4x dan PNG exactos y las 18 trazas completas
 coinciden tras renumerar consistentemente los IDs de entidades. Variación del
 renderer, identidad nativa, cadencia y 30 FPS siguen abiertos.
 
+La etapa 29 conserva las rutas viales/navales al modificar sólo la reserva PBS
+de una estación o waypoint rail. Mantiene la invalidación ferroviaria dentro
+del tick: 478 mutaciones y 192 comparaciones cached/live, sin cambios de estado
+en las 61 fases. En 120 ticks baja 83 → 59 invalidaciones y evita 17 búsquedas;
+el núcleo mejora modestamente, pero el cliente sigue en 22,7–22,8 FPS. In2x
+reproduce el PNG alternativo de la etapa 28 en el otro binario y Out2x varía un
+píxel; doce repeticiones son exactas. Los fallos se conservan y la variación
+raster, F15 completo, cadencia y 30 FPS siguen abiertos.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

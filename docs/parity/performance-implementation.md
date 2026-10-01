@@ -1906,3 +1906,120 @@ repetidas dentro de esta construcción inmutable. F04/F17/F31 completos,
 identidad/spec nativas, variación In2x/Out4x/Out8x, cadencia y 30 FPS siguen
 abiertos. La mejora aislada no reduce de forma apreciable el frame de la
 partida medida: todavía ronda 44 ms.
+
+
+## Etapa 29 — Reservas ferroviarias sin expulsar rutas viales/navales (F15)
+
+La revisión efímera de navegación excluye únicamente una modificación aislada
+del bit PBS de `m6` en una tesela Station de tipo Rail (0) o RailWaypoint (7).
+La igualdad completa de la tesela con ese único cambio deshecho obliga a que
+tipo, propietario, MAP2, eje/gfx, altura y todos los otros campos sean iguales.
+El byte original se conserva; `mutation_revision` sigue avanzando y la caché
+ferroviaria sigue venciendo ante esa mutación dentro del mismo tick, además
+de vencer al cambiar de tick. Road/Tram/Water pueden conservar sus resultados,
+positivos o negativos; no se aumenta capacidad ni se cambia búsqueda o coste.
+
+El oracle de fuente OpenTTD 15.3 `14ec60f2`,
+[`HasStationRail`](https://github.com/OpenTTD/OpenTTD/blob/14ec60f248547d4d062a1160f0fc26d742319888/src/station_map.h#L135)
+delimita estaciones/waypoints ferroviarios y
+[`SetRailStationReservation`](https://github.com/OpenTTD/OpenTTD/blob/14ec60f248547d4d062a1160f0fc26d742319888/src/station_map.h#L571)
+escribe sólo el bit 2 de `m6`. La
+[caché de segmentos YAPF](https://github.com/OpenTTD/OpenTTD/blob/14ec60f248547d4d062a1160f0fc26d742319888/src/pathfinder/yapf/yapf_costcache.hpp#L48)
+separa los avisos de layout rail. Esto sustenta distinguir el dominio ferroviario;
+el cambio aquí conserva el contrato previo del pathfinder del port, sin
+certificar rutas idénticas a todos los costes/búsquedas del original.
+
+Cuatro regresiones cubren los 256 valores de `m6`, 192 cambios simultáneos
+en los otros doce campos y 30 cambios de subtipo, 478 mutaciones en total.
+Verifican revisión de navegación, revisión general, vínculo terminal y bytes
+almacenados. Otras 192 comparaciones cached/live ejercen Road/Tram/Water,
+perfil naval, resultados sin camino, ocho flips por tipo, cruce de tick,
+demolición de estación y eliminación de una calle/agua. El tren conserva la
+invalidación en el mismo tick, incluido un andén reservado sobre la ruta.
+Las pruebas anteriores de túneles y clones de mapa siguen aplicándose.
+
+
+El perfil de la etapa 29 usa binarios anteriores/posteriores independientes,
+NewGRF activo y ABBA. 24 ticks: **22,3802 / 22,4731 → 22,3423 / 22,1807 ms**;
+120 ticks: **14,3521 / 14,4793 → 14,0548 / 14,1403 ms**. A 24 ticks bajan
+las invalidaciones 14 → 11, sin cambiar hits (23), misses (1.826) ni búsquedas
+(1.616). A 120 ticks bajan **83 → 59** invalidaciones, hits **42 → 59**,
+misses **2.213 → 2.196**, búsquedas **2.001 → 1.984**; no hay hits negativos.
+Se evitan 17 búsquedas en esa ventana. La mejora del núcleo es modesta y no
+acredita por sí sola 30 FPS.
+[Ocho perfiles con métricas de rutas](evidence/station-reservation-routes-core-20261001.csv).
+
+Las 61 fases normales conservan hash v4, eventos, bytes raw, bloques 4×4,
+contadores y listas ordenadas de avisos frente al posterior inmutable de la
+etapa 28. Las revisiones y estadísticas derivadas de rutas pueden diferir;
+no forman parte del estado persistido. Tick final 3703134, hash
+`4d3524e48b6bc2e5`, eventos `4857641856429973`.
+[Estado](evidence/station-reservation-routes-state-20261001.csv).
+
+GPU real, 1280×720, escala 2, sin perf ni compilación concurrentes, ABBA de
+40 muestras por run. Cámara fija, warmup 120: frame
+**43,9237 / 43,7787 → 43,8533 / 44,0570 ms**, FPS
+**22,767 / 22,842 → 22,803 / 22,698**; remap
+**2,5070 / 2,5167 → 2,5128 / 2,5284 ms**, simulación
+**14,1539 / 14,0988 → 14,0350 / 14,2231 ms**. p95
+**58,1476 / 58,0881 → 56,9925 / 56,8958**, máximos/p99
+**61,1655 / 58,7326 → 58,6812 / 58,7688**. TPS
+**22,745 / 22,852 → 22,793 / 22,694**. Todos los runs cubren ticks
+3703193–3703232; 79/80 frames por versión exceden 33,33 ms. Los resultados
+no muestran una ganancia clara de FPS.
+[160 muestras](evidence/station-reservation-routes-client-steady-20261001.csv).
+
+Pan, warmup 30: frame
+**49,4931 / 49,6340 → 49,7770 / 49,6368 ms**, FPS
+**20,205 / 20,147 → 20,090 / 20,146**; remap
+**2,9179 / 2,9239 → 2,9545 / 3,0034 ms**. p95
+**62,8669 / 63,0356 → 61,5024 / 63,2219**, máximos/p99
+**129,1138 / 134,3986 → 132,8415 / 131,6295**. TPS
+**21,074 / 21,070 → 20,988 / 21,037**. Todos los runs cubren ticks
+3703103–3703142 y 80/80 frames por versión exceden el presupuesto. El primer
+intervalo incluye el zoom del frame 30; los timers de fase y de intervalo
+pertenecen a frames distintos. Hay 46.495–46.681 sprites y otras tantas
+copias de oclusión en la ventana fija; durante pan, 45.805–57.455 por clase.
+[160 muestras](evidence/station-reservation-routes-pan-20261001.csv).
+
+Raster congelado, seis escalas .25/.5/1/2/4/8, centro 128,128, settle 180,
+CLEAN=0: cuatro parejas iniciales son PNG exactos. **In2x difiere 204 píxeles
+y 45 bloques 4×4**, esta vez en el posterior: SHA256
+`4e1118f0448939a1ff06af6b151142402a5880541664707ffef680e10be85d54` frente
+al canónico `60da415eca73a715a5fdd4eb380dad119d1765398913f092e28932f151ab7252`.
+Reproduce el mismo PNG alternativo que apareció en el anterior de la etapa 28.
+**Out2x difiere un píxel y un bloque** en el anterior, SHA256
+`55d5cf0b10fe837912a3083c152c429908358f77dd43a2250fa8ed1a0fea9e05`;
+posterior canónico
+`7e8cb274e2cbb8144245721d25bf1f6464bc4a0c6305f2c2246a681fef6d9b53`.
+Las seis trazas completas coinciden tras renumerar biyectivamente las entidades,
+sin eliminar índices, profundidades, orden ni otro campo.
+[Seis parejas iniciales](evidence/station-reservation-routes-raster-20261001.csv).
+
+Tres repeticiones por binario en In2x y Out2x dan **doce PNG canónicos exactos**
+y doce trazas completas equivalentes con ese mismo mapeo consistente de IDs.
+Se preservan los fallos iniciales y no se amplía tolerancia. La variación entre
+ejecuciones queda abierta en In2x/Out2x, además de los antecedentes Out4x/Out8x;
+no se certifican todas las capas raster a partir del stream de sort.
+[Repeticiones](evidence/station-reservation-routes-raster-repeats-20261001.csv).
+
+Artefactos en `target/performance/station-reservation-routes-20261001`.
+Cliente anterior/posterior SHA256
+`1ab8dfc2fcf27d3a94d1def6ab60dba9ef2c035e2b33894d4f20cdd9559bb259` /
+`029bd3a603b9b81da9b179ce37d2843f2ad16883afe02d3a4a891df06e7c0645`;
+`sav_profile`
+`77dfedc8b88eb0e5588361146368fe73383a32e0154baf8a9b8a48bdd5541516` /
+`89522e091f7e3226135ceaa6525a9d0b4220140f5fc316aa29abfd1c12645965`;
+traza `b8d76f2c9738ab7f09d1cfd6df9d9c2603f4bfc8b4e68816f6f42e9f175c2917` /
+`1efd36eef39da175c34f63a67b2d2f964984b089df57052384cd68f77f412107`.
+Biblioteca posterior exacta copiada de Cargo JSON
+`8e9bfada5fcb7f92d96762270768f81ddffdd9322c18e7ebf56f6bad8a970376`.
+Release del perfil 25,08 s, cliente tras cambio core 77 s; no es una mejora
+controlada de compilación. Las 183 trazas de fase idénticas se conservan en
+hardlinks readonly verificados; se recuperan 477.010.859 bytes.
+
+Validación: 3.035 core/seis ignorados, 1.667 cliente/dos; Clippy en todos los
+targets de ambos, formato, diff y frescura de docs. Sólo cierra la expulsión
+innecesaria por este bit ferroviario. F15 completo, el límite de 256 entradas,
+otras invalidaciones, reglas nativas de rutas, variación raster, cadencia y
+30 FPS siguen abiertos. Las capturas repetidas no cierran la variación inicial.

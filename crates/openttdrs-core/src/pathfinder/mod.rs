@@ -990,6 +990,164 @@ mod tests {
         assert_eq!(cache.stats().computations, 3);
     }
 
+    fn station_reservation_route_map(station_type: u8, reservation: TileCoord) -> Map {
+        let mut map = Map::new_flat(12, 6, 0);
+        for x in 0..6 {
+            let road = TileCoord::new(x, 0);
+            write_road(&mut map, road, 0x0A);
+            let mut tile = map.get(road).unwrap();
+            tile.m3 = 0x0A;
+            map.set_tile(road, tile).unwrap();
+            make_water_tile(&mut map, TileCoord::new(x, 2), WaterClass::Sea).unwrap();
+            write_rail(&mut map, TileCoord::new(x, 4), RAIL_TB_X);
+        }
+        let mut tile = map.get(reservation).unwrap();
+        tile.kind = TileKind::Station;
+        tile.m6 = station_type << 3;
+        map.set_tile(reservation, tile).unwrap();
+        map
+    }
+
+    #[test]
+    fn rail_station_pbs_preserves_road_tram_and_ship_routes_but_expires_rail() {
+        use crate::station::{STATION_TILE_RESERVATION, STATION_TYPE_RAIL_WAYPOINT};
+
+        for station_type in [0, STATION_TYPE_RAIL_WAYPOINT] {
+            let reservation = TileCoord::new(8, 4);
+            let mut map = station_reservation_route_map(station_type, reservation);
+            let queries = [
+                (PathNetwork::Road, 0, 5),
+                (PathNetwork::Road, 0, 10),
+                (PathNetwork::Tram, 0, 5),
+                (PathNetwork::Tram, 0, 10),
+                (PathNetwork::Water, 2, 5),
+                (PathNetwork::Water, 2, 10),
+            ]
+            .map(|(network, y, x)| (network, TileCoord::new(0, y), TileCoord::new(x, y)));
+            let mut cache = PathCache::default();
+            cache.begin_tick(1);
+            for (index, &(network, from, to)) in queries.iter().enumerate() {
+                let result = find_path_cached(&map, &mut cache, from, to, network, None);
+                let live = find_path_with_wormholes(&map, from, to, network, None);
+                assert_eq!(result, live);
+                assert_eq!(result.is_some(), index % 2 == 0);
+            }
+            let ship_from = TileCoord::new(0, 2);
+            let ship_to = TileCoord::new(5, 2);
+            let cost = ShipPathCost::default();
+            assert!(find_ship_path_cached(&map, &mut cache, ship_from, ship_to, cost).is_some());
+            let rail_from = TileCoord::new(0, 4);
+            let rail_to = TileCoord::new(5, 4);
+            let rail_path = find_path_cached(
+                &map,
+                &mut cache,
+                rail_from,
+                rail_to,
+                PathNetwork::Rail,
+                None,
+            );
+            assert!(rail_path.is_some());
+            let navigation = map.navigation_topology_version();
+            for flip in 1..=8 {
+                let mut tile = map.get(reservation).unwrap();
+                tile.m6 ^= STATION_TILE_RESERVATION;
+                map.set_tile(reservation, tile).unwrap();
+                assert_eq!(map.navigation_topology_version(), navigation);
+                for &(network, from, to) in &queries {
+                    let live = find_path_with_wormholes(&map, from, to, network, None);
+                    assert_eq!(
+                        find_path_cached(&map, &mut cache, from, to, network, None),
+                        live
+                    );
+                }
+                assert_eq!(
+                    find_ship_path_cached(&map, &mut cache, ship_from, ship_to, cost),
+                    find_ship_path_with_cost(&map, ship_from, ship_to, cost)
+                );
+                // Same tick: the ordinary mutation revision still drops rail.
+                assert_eq!(
+                    find_path_cached(
+                        &map,
+                        &mut cache,
+                        rail_from,
+                        rail_to,
+                        PathNetwork::Rail,
+                        None
+                    ),
+                    find_path_with_wormholes(&map, rail_from, rail_to, PathNetwork::Rail, None)
+                );
+                assert_eq!(cache.stats().computations, 8 + flip);
+                assert_eq!(cache.stats().hits, flip * 7);
+                assert_eq!(cache.stats().negative_hits, flip * 3);
+                assert_eq!(cache.stats().topology_invalidations, 0);
+            }
+            cache.begin_tick(2);
+            assert_eq!(
+                find_path_cached(
+                    &map,
+                    &mut cache,
+                    rail_from,
+                    rail_to,
+                    PathNetwork::Rail,
+                    None
+                ),
+                find_path_with_wormholes(&map, rail_from, rail_to, PathNetwork::Rail, None)
+            );
+            assert_eq!(cache.stats().computations, 17);
+
+            // Removing a street/water route or the station remains observable.
+            for removed in [TileCoord::new(2, 0), TileCoord::new(2, 2), reservation] {
+                map.set_kind(removed, TileKind::Grass).unwrap();
+                let misses = cache.stats().misses;
+                for &(network, from, to) in &queries {
+                    let live = find_path_with_wormholes(&map, from, to, network, None);
+                    assert_eq!(
+                        find_path_cached(&map, &mut cache, from, to, network, None),
+                        live
+                    );
+                }
+                assert_eq!(cache.stats().misses, misses + 6);
+                assert_eq!(
+                    find_ship_path_cached(&map, &mut cache, ship_from, ship_to, cost),
+                    find_ship_path_with_cost(&map, ship_from, ship_to, cost)
+                );
+            }
+            assert_eq!(cache.stats().topology_invalidations, 3);
+        }
+    }
+
+    #[test]
+    fn rail_cache_recomputes_reserved_station_on_the_route_within_same_tick() {
+        let mut map = Map::new_flat(6, 2, 0);
+        for x in 0..6 {
+            write_rail(&mut map, TileCoord::new(x, 0), RAIL_TB_X);
+        }
+        let middle = TileCoord::new(2, 0);
+        let mut tile = map.get(middle).unwrap();
+        tile.kind = TileKind::Station;
+        tile.m5 = 0; // rail station axis X
+        tile.m6 = 0;
+        map.set_tile(middle, tile).unwrap();
+        let from = TileCoord::new(0, 0);
+        let to = TileCoord::new(5, 0);
+        let mut cache = PathCache::default();
+        cache.begin_tick(1);
+        let original = find_path_cached(&map, &mut cache, from, to, PathNetwork::Rail, None);
+        assert!(original.as_ref().unwrap().contains(&middle));
+        let topology = map.navigation_topology_version();
+        for flip in 1..=8 {
+            let mut tile = map.get(middle).unwrap();
+            tile.m6 ^= crate::station::STATION_TILE_RESERVATION;
+            map.set_tile(middle, tile).unwrap();
+            assert_eq!(map.navigation_topology_version(), topology);
+            assert_eq!(
+                find_path_cached(&map, &mut cache, from, to, PathNetwork::Rail, None),
+                find_path_with_wormholes(&map, from, to, PathNetwork::Rail, None)
+            );
+            assert_eq!(cache.stats().computations, flip + 1);
+        }
+    }
+
     #[test]
     fn ship_cache_observes_water_removal_and_cost_profile() {
         let mut map = Map::new_flat(6, 4, 0);

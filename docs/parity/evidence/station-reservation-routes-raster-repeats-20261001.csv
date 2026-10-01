@@ -1,0 +1,13 @@
+complete_trace_equal_after_bijective_entity_renaming,scale,stage,sample,png_sha256,canonical_png_equal,sort_raw_equal,parents_semantic_equal,proxies_semantic_equal
+True,.5,before,1,60da415eca73a715a5fdd4eb380dad119d1765398913f092e28932f151ab7252,True,False,True,True
+True,.5,after,1,60da415eca73a715a5fdd4eb380dad119d1765398913f092e28932f151ab7252,True,False,True,True
+True,.5,before,2,60da415eca73a715a5fdd4eb380dad119d1765398913f092e28932f151ab7252,True,False,True,True
+True,.5,after,2,60da415eca73a715a5fdd4eb380dad119d1765398913f092e28932f151ab7252,True,False,True,True
+True,.5,before,3,60da415eca73a715a5fdd4eb380dad119d1765398913f092e28932f151ab7252,True,False,True,True
+True,.5,after,3,60da415eca73a715a5fdd4eb380dad119d1765398913f092e28932f151ab7252,True,False,True,True
+True,2,before,1,7e8cb274e2cbb8144245721d25bf1f6464bc4a0c6305f2c2246a681fef6d9b53,True,True,True,True
+True,2,after,1,7e8cb274e2cbb8144245721d25bf1f6464bc4a0c6305f2c2246a681fef6d9b53,True,True,True,True
+True,2,before,2,7e8cb274e2cbb8144245721d25bf1f6464bc4a0c6305f2c2246a681fef6d9b53,True,True,True,True
+True,2,after,2,7e8cb274e2cbb8144245721d25bf1f6464bc4a0c6305f2c2246a681fef6d9b53,True,True,True,True
+True,2,before,3,7e8cb274e2cbb8144245721d25bf1f6464bc4a0c6305f2c2246a681fef6d9b53,True,True,True,True
+True,2,after,3,7e8cb274e2cbb8144245721d25bf1f6464bc4a0c6305f2c2246a681fef6d9b53,True,True,True,True

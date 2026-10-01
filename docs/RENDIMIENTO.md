@@ -514,6 +514,37 @@ p95 106,91 / 104,85 → 96,33 / 102,62 ms; máximo/p99
 por encima de 33,33 ms.
 [Datos de pan](parity/evidence/glass-cache-pan-20261001.csv).
 
+### Cliente en marcha tras usar cambios de componentes para las máscaras (2026-10-01)
+
+Comparación de `bac966bc` con la etapa 16, misma partida/NewGRF, hardware,
+1280×720, escala 2 y audio desactivado. ABBA, 30 frames de warmup y 40 muestras
+por corrida, sin compilaciones ni `perf` concurrentes.
+[Datos por frame](parity/evidence/glass-changes-client-20261001.csv).
+
+- Vidrio: 4,537 / 4,594 → 2,968 / 3,018 ms/frame, alrededor de 34 % menos.
+- Frame medio: 65,19 / 64,78 → 63,04 / 63,94 ms; FPS por duración media:
+  15,341 / 15,437 → 15,862 / 15,640.
+- Mediana: 61,82 / 59,29 → 59,59 / 59,80 ms; p95 por rango más cercano:
+  81,95 / 94,99 → 80,63 / 91,56 ms. Máximo/p99:
+  165,32 / 155,48 → 161,70 / 161,52 ms. La mejora de las colas no es uniforme.
+- Simulación: 20,67 / 20,43 → 20,25 / 20,72 ms; efectos alrededor de 2 ms.
+  Tick/s: 15,97 / 16,01 → 16,53 / 16,28. Ticks 3.703.103–3.703.142 salvo
+  el segundo run anterior, 3.703.104–3.703.143. Todos los 80 frames de cada
+  versión exceden 33,33 ms; los timers de fases no suman el frame.
+
+Con cámara en movimiento, otras cuatro corridas ABBA:
+70,90 / 70,96 → 68,66 / 68,97 ms de frame medio, equivalentes a
+14,104 / 14,093 → 14,564 / 14,499 FPS. Vidrio 5,00 / 4,96 → 3,26 / 3,30 ms.
+p95 102,30 / 103,11 → 100,31 / 102,00 ms; máximo/p99
+164,43 / 162,35 → 158,41 / 160,52 ms. Todos los 80 frames de cada versión
+siguen sobre el presupuesto, ticks 3.703.103–3.703.142.
+[Datos de pan](parity/evidence/glass-changes-pan-20261001.csv).
+
+Las seis parejas de PNG y traza completa coinciden de nuevo, con flota.
+Regresiones de cambios de componentes, límites de la comparación, alcance
+pendiente y SHA256 en
+[la etapa 16](parity/performance-implementation.md#etapa-16--comparar-máscaras-sólo-tras-cambios-de-componentes-f08).
+
 ### Render congelado, seis zooms y movimiento de cámara
 
 Para comparar ambas versiones se usó el driver de mapshot: centro `128,128`,

@@ -73,6 +73,7 @@ struct RailGlassMaskProxy {
 struct CachedMaskProxy {
     entity: Entity,
     seen: bool,
+    is_glass: Option<bool>,
 }
 
 /// Only this system creates mask proxies. Keep their association across frames;
@@ -175,11 +176,11 @@ fn sync_rail_glass_mask_proxies(
     sources: Query<
         (
             Entity,
-            &Sprite,
-            &Anchor,
-            &Transform,
-            &Visibility,
-            Option<&MapTileChunk>,
+            Ref<Sprite>,
+            Ref<Anchor>,
+            Ref<Transform>,
+            Ref<Visibility>,
+            Option<Ref<MapTileChunk>>,
             Option<&RailGlassMaskSource>,
         ),
         (
@@ -205,6 +206,7 @@ fn sync_rail_glass_mask_proxies(
                 CachedMaskProxy {
                     entity,
                     seen: false,
+                    is_glass: None,
                 },
             );
         }
@@ -233,22 +235,36 @@ fn sync_rail_glass_mask_proxies(
             )) = proxies.get_mut(cached.entity)
         {
             cached.seen = true;
+            let is_glass = glass_source.is_some();
+            let initialize = cached.is_glass.is_none();
             // Compare the borrowed fields before cloning handles/atlas/mode.
-            // Always check actual proxy values, including marker removal; ECS
-            // change ticks alone cannot detect all of these transitions.
-            if !mask_sprite_matches_source(&proxy_sprite, source_sprite, glass_source.is_some()) {
-                *proxy_sprite = mask_sprite_from_source(source_sprite, glass_source.is_some());
+            // Proxy change ticks detect external edits. Remember classification
+            // separately: removing the glass marker does not change the Sprite.
+            if (source_sprite.is_changed()
+                || proxy_sprite.is_changed()
+                || cached.is_glass != Some(is_glass))
+                && !mask_sprite_matches_source(&proxy_sprite, &source_sprite, is_glass)
+            {
+                *proxy_sprite = mask_sprite_from_source(&source_sprite, is_glass);
             }
-            if *proxy_anchor != *source_anchor {
+            cached.is_glass = Some(is_glass);
+            if (initialize || source_anchor.is_changed() || proxy_anchor.is_changed())
+                && *proxy_anchor != *source_anchor
+            {
                 *proxy_anchor = *source_anchor;
             }
-            if *proxy_transform != *source_transform {
+            if (initialize || source_transform.is_changed() || proxy_transform.is_changed())
+                && *proxy_transform != *source_transform
+            {
                 *proxy_transform = *source_transform;
             }
-            if *proxy_visibility != *source_visibility {
+            if (initialize || source_visibility.is_changed() || proxy_visibility.is_changed())
+                && *proxy_visibility != *source_visibility
+            {
                 *proxy_visibility = *source_visibility;
             }
             if let (Some(source_chunk), Some(mut proxy_chunk)) = (source_chunk, proxy_chunk)
+                && (initialize || source_chunk.is_changed() || proxy_chunk.is_changed())
                 && *proxy_chunk != *source_chunk
             {
                 *proxy_chunk = *source_chunk;
@@ -262,7 +278,7 @@ fn sync_rail_glass_mask_proxies(
                     source: source_entity,
                 },
                 MapVisualLayer,
-                mask_sprite_from_source(source_sprite, glass_source.is_some()),
+                mask_sprite_from_source(&source_sprite, glass_source.is_some()),
                 *source_anchor,
                 *source_transform,
                 *source_visibility,
@@ -277,6 +293,7 @@ fn sync_rail_glass_mask_proxies(
             CachedMaskProxy {
                 entity: proxy_entity,
                 seen: true,
+                is_glass: Some(glass_source.is_some()),
             },
         );
     }
@@ -873,6 +890,7 @@ mod tests {
             Anchor::TOP_LEFT,
             Transform::from_xyz(999.0, 888.0, 777.0),
             Visibility::Hidden,
+            MapTileChunk { cx: 999, cy: 888 },
         ));
         app.update();
         assert_eq!(mask_states(app.world_mut()), expected);

@@ -770,6 +770,57 @@ Se cierra la reconstrucción de las dos tablas por frame y la clonación de
 máscaras iguales. F08 conserva el barrido y los pases auxiliares; F17 y el
 presupuesto de 30 FPS siguen abiertos.
 
+## Etapa 16 — Comparar máscaras sólo tras cambios de componentes (F08)
+
+Sobre la etapa 15, el query conserva los change ticks de Sprite, Anchor,
+Transform, Visibility y chunk. Cada comparación se realiza cuando cambió el
+componente fuente o el del proxy. La clasificación vidrio/opaco se recuerda
+por separado para detectar también la retirada del marker; inicializar un
+vínculo existente fuerza la comprobación completa. Los escritores actuales
+del renderer usan el acceso mutable de Bevy, sin bypass de change detection.
+No se modifican shader, targets, cámaras ni pases. El contrato nativo de
+transparencia y el oracle de fuente son los de la etapa 15.
+
+La regresión diferencial de 49 estados/64 fuentes sigue comparando todos los
+componentes frente al sincronizador anterior a ambas optimizaciones. Incluye
+marker retirado sin modificar Sprite, entidades eliminadas/recreadas y
+visibilidad/pose cambiadas. La reparación externa se amplió al chunk del
+proxy, además de sprite, alpha, anchor, pose y visibilidad. Un frame estable
+no marca cambios de extracción. Estas pruebas cubren los cambios que los
+indicadores deben detectar; el gate raster se ejecutó de nuevo.
+
+Cliente normal: baseline `bac966bc`, ABBA, la misma partida/NewGRF, escala 2,
+1280×720, 30 frames de warmup y 40 muestras por corrida. Sin compilaciones ni
+`perf` concurrentes. Vidrio medio 4,537 / 4,594 → 2,968 / 3,018 ms, alrededor
+de 34 % menos. Frame medio 65,187 / 64,779 → 63,042 / 63,939 ms; FPS por
+duración media 15,341 / 15,437 → 15,862 / 15,640. p95
+81,955 / 94,994 → 80,634 / 91,564 ms; máximo/p99
+165,316 / 155,480 → 161,705 / 161,515 ms. Los 80 frames de cada versión
+siguen sobre 33,33 ms. Ticks 3.703.103–3.703.142 salvo el segundo run anterior,
+3.703.104–3.703.143. [Muestras](evidence/glass-changes-client-20261001.csv).
+
+Seis zooms con flota, centro 128,128, 180 frames de settle y `CLEAN=0`:
+las seis parejas vuelven a conservar PNG y traza completa byte-idénticos,
+cero píxeles/bloques 4×4 distintos y los mismos 54–37.998 parents.
+[Raster](evidence/glass-changes-raster-20261001.csv). No se extrapola a todas
+las ejecuciones posibles ni se cierra la variación histórica Out8x.
+
+Cámara en movimiento: otras cuatro corridas ABBA. Frame medio
+70,903 / 70,958 → 68,663 / 68,971 ms; FPS
+14,104 / 14,093 → 14,564 / 14,499. Vidrio
+5,001 / 4,957 → 3,260 / 3,303 ms. p95
+102,303 / 103,109 → 100,308 / 102,004 ms, máximo/p99
+164,431 / 162,349 → 158,410 / 160,519 ms. Todos cubren ticks
+3.703.103–3.703.142 y sus 80 frames por versión exceden el presupuesto.
+[Muestras](evidence/glass-changes-pan-20261001.csv).
+
+Validación: 3.012 core/seis ignorados, 1.663 cliente/dos, Clippy en todos los
+targets, formato, diff y frescura de docs. Binarios normales SHA256
+`334ca38dcde0e710cf988f6cdbdd0f9dd86623c2c76cd0f2faafca91581fbe27` y
+`01e20e3bf67c84098cf506f5d19851f72136885da30e38c3e3d9b82bc6620f87`.
+Se cierra la comparación de valores estables en este sincronizador; el barrido,
+la presentación restante, los pases auxiliares y los 30 FPS siguen abiertos.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV

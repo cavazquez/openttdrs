@@ -1,0 +1,82 @@
+{
+  "status": "rejected_standalone_clock_change; production_restored",
+  "base_commit": "91378bd779e137b4dc013b498d461f2988d9248b",
+  "native_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "bevy_time_version": "0.19.1",
+  "clock_scope": "actual TimePlugin/SimulationPlugin with ManualDuration; no renderer, UI input or network peer",
+  "red": {
+    "render_frames_per_second": 30,
+    "observed_ticks": 30,
+    "expected_ticks": 37,
+    "stall_speed": 0.25,
+    "observed_stall_ticks": 0,
+    "expected_stall_ticks": 5
+  },
+  "candidate_passed": {
+    "native_ticks_over_one_second_at_frames": [
+      100,
+      60,
+      30,
+      20,
+      10
+    ],
+    "ticks": 37,
+    "speed_and_ticks": [
+      [
+        0.25,
+        9
+      ],
+      [
+        0.5,
+        18
+      ],
+      [
+        1,
+        37
+      ],
+      [
+        2,
+        74
+      ],
+      [
+        4,
+        148
+      ],
+      [
+        8,
+        296
+      ]
+    ],
+    "long_stall_ticks_at_all_speeds": 5,
+    "pause_resume": true,
+    "state_hash_and_rng_against_same_count_core_steps": true
+  },
+  "effect_counterexample": {
+    "scope": "actual renderer emitter; constant diesel vehicle, artificial tick assignments, no physics steps",
+    "vehicle_id": 7,
+    "speed": 2,
+    "engine_visual_effect": 40,
+    "separate_rendered_ticks": [
+      1,
+      2
+    ],
+    "separate_rng_draws": 2,
+    "batched_rendered_ticks": [
+      2
+    ],
+    "batched_rng_draws": 1,
+    "same_rng_end_state": false,
+    "callback_required": false
+  },
+  "validation": {
+    "experimental_clock_tests_passed": 4,
+    "effect_counterexample_tests_passed": 1,
+    "experimental_client_clippy": "passed",
+    "restored_client_clippy": "passed",
+    "restored_client_tests_passed": 1666,
+    "restored_client_tests_ignored": 2,
+    "gpu_or_fps_measured": false
+  },
+  "patch_sha256": "c9b2fc779c83793e037b433c74f6bd2361a7fb466fa7aba15d0ad5ce02f25b9d",
+  "patch": "diff --git a/crates/openttdrs-client/src/render/train_smoke.rs b/crates/openttdrs-client/src/render/train_smoke.rs\nindex 8c770acf..5440d52b 100644\n--- a/crates/openttdrs-client/src/render/train_smoke.rs\n+++ b/crates/openttdrs-client/src/render/train_smoke.rs\n@@ -1209,6 +1209,72 @@ mod tests {\n     use crate::render::effect_vehicle::effect_overlay_pos;\n     use crate::render::{ViewportSortableChildDepthWindows, sort_viewport_sortable_parents};\n \n+    #[test]\n+    #[allow(clippy::unwrap_used)]\n+    fn render_effect_rng_skips_intermediate_ticks_in_a_catchup_frame() {\n+        use crate::render::AtlasSprite;\n+        use bevy::ecs::system::RunSystemOnce;\n+\n+        fn evaluate(rendered_ticks: &[u64]) -> openttdrs_core::linkgraph_parity::Randomizer {\n+            let mut vehicle = running_train(ENGINE_TRAIN_KIRBY);\n+            vehicle.cur_speed = 2;\n+            vehicle.cached_max_speed = 100;\n+            let mut engine = vehicle.effective_engine().clone();\n+            engine.visual_effect = 0x28; // Standard diesel, no NewGRF callbacks.\n+            let mut state = GameState::from_map(Map::new_flat(4, 4, 0));\n+            state.engine_catalog = vec![engine];\n+            state.vehicles.push(vehicle);\n+            let mut world = World::new();\n+            world.insert_resource(SimWorld {\n+                state,\n+                loaded_file: false,\n+                ottdmap_extras: None,\n+            });\n+            world.insert_resource(EffectVehicleFrames {\n+                steam: vec![AtlasSprite {\n+                    image: Handle::default(),\n+                    atlas: TextureAtlas {\n+                        layout: Handle::default(),\n+                        index: 0,\n+                    },\n+                    size: Vec2::splat(16.0),\n+                }],\n+                diesel: Vec::new(),\n+                electric_spark: Vec::new(),\n+                explosion_large: Vec::new(),\n+                breakdown: Vec::new(),\n+            });\n+            world.insert_resource(SimHudControls {\n+                sound_vehicle: false,\n+                ..default()\n+            });\n+            world.init_resource::<ClientPreferences>();\n+            world.init_resource::<SimClock>();\n+            world.init_resource::<TrainSmokeSpawnClock>();\n+            world.init_resource::<TrainSmokeSortSequence>();\n+            world.init_resource::<Messages<PlayWorldSfx>>();\n+            for &tick in rendered_ticks {\n+                world.resource_mut::<SimWorld>().state.tick = GameTick::new(tick);\n+                world.run_system_once(spawn_train_smoke).unwrap();\n+            }\n+            world.resource::<SimWorld>().state.random\n+        }\n+\n+        let initial = GameState::from_map(Map::new_flat(4, 4, 0)).random;\n+        let mut one_draw = initial;\n+        let _ = one_draw.next();\n+        let mut two_draws = one_draw;\n+        let _ = two_draws.next();\n+        let separate_frames = evaluate(&[1, 2]);\n+        let catchup_frame = evaluate(&[2]);\n+        assert_eq!(separate_frames, two_draws);\n+        assert_eq!(catchup_frame, one_draw);\n+        assert_ne!(\n+            catchup_frame, separate_frames,\n+            \"the standalone clock change cannot preserve effect RNG yet\"\n+        );\n+    }\n+\n     fn running_train(engine_id: u16) -> Vehicle {\n         let pos = TileCoord::new(1, 1);\n         let mut vehicle = Vehicle::new(7, VehicleKind::Train, pos, TileCoord::new(2, 1));\ndiff --git a/crates/openttdrs-client/src/simulation.rs b/crates/openttdrs-client/src/simulation.rs\nindex 520839d0..2c21d725 100644\n--- a/crates/openttdrs-client/src/simulation.rs\n+++ b/crates/openttdrs-client/src/simulation.rs\n@@ -19,6 +19,14 @@ use crate::ui::SimHudControls;\n /// OpenTTD: `1000 / MILLISECONDS_PER_TICK` (~37 Hz, `timer_game_tick.h`).\n pub(crate) const SIM_TICK_HZ: f64 = SIM_TICKS_PER_SECOND;\n \n+/// Bound catch-up work after a stall; never replay an unbounded clock debt.\n+const MAX_SIM_TICKS_PER_FRAME: u32 = 5;\n+\n+fn sim_frame_time_budget(speed: f32) -> Duration {\n+    // Bevy clamps real time before multiplying by relative speed.\n+    Duration::from_secs_f64(f64::from(MAX_SIM_TICKS_PER_FRAME) / (SIM_TICK_HZ * f64::from(speed)))\n+}\n+\n /// Fracción del tick de simulación actual (0..1) para interpolar el render entre pasos.\n #[derive(Resource, Default)]\n pub(crate) struct SimClock {\n@@ -88,8 +96,7 @@ fn init_sim_fixed_timestep(\n     mut virtual_time: ResMut<Time<Virtual>>,\n ) {\n     fixed.set_timestep_hz(SIM_TICK_HZ);\n-    // Como máximo un tick de sim por frame render: evita saltos de varias teselas tras lag.\n-    virtual_time.set_max_delta(Duration::from_secs_f64(1.0 / SIM_TICK_HZ));\n+    virtual_time.set_max_delta(sim_frame_time_budget(1.0));\n }\n \n fn pause_virtual_time(mut virtual_time: ResMut<Time<Virtual>>) {\n@@ -102,7 +109,9 @@ fn unpause_virtual_time(mut virtual_time: ResMut<Time<Virtual>>) {\n \n /// Velocidad de la simulación vía `Time<Virtual>` (antes del bucle FixedUpdate).\n fn sync_sim_time_controls(hud: Res<SimHudControls>, mut virtual_time: ResMut<Time<Virtual>>) {\n-    virtual_time.set_relative_speed(hud.sim_speed.max(0.1));\n+    let speed = hud.sim_speed.max(0.1);\n+    virtual_time.set_relative_speed(speed);\n+    virtual_time.set_max_delta(sim_frame_time_budget(speed));\n }\n \n /// Un paso de simulación por tick fijo (~37 Hz, paridad OpenTTD).\n@@ -212,9 +221,10 @@ pub(crate) fn sync_tick_alpha(\n #[cfg(test)]\n #[allow(clippy::unwrap_used)]\n mod tests {\n+    use std::time::Duration;\n+\n     use super::{\n-        SIM_TICK_HZ, SimClock, VisualCaptureFreeze, flag_map_tile_dirty_remap,\n-        init_sim_fixed_timestep, simulation_step_allowed, step_sim, sync_sim_time_controls,\n+        SIM_TICK_HZ, SimClock, VisualCaptureFreeze, flag_map_tile_dirty_remap, step_sim,\n         sync_tick_alpha,\n     };\n     use bevy::ecs::system::RunSystemOnce;\n@@ -279,22 +289,13 @@ mod tests {\n         app.add_plugins((MinimalPlugins, StatesPlugin));\n         app.init_state::<ClientScreen>();\n         app.add_sub_state::<SimRunState>();\n-        app.init_resource::<SimClock>();\n         app.insert_resource(SimWorld::default());\n         app.insert_resource(VehicleIndex::default());\n         app.insert_resource(ClientPreferences::default());\n         app.insert_resource(SimHudControls::default());\n         app.insert_resource(VisualCaptureFreeze::default());\n-        app.add_systems(Startup, init_sim_fixed_timestep);\n-        app.add_systems(OnEnter(SimRunState::Paused), super::pause_virtual_time);\n-        app.add_systems(OnEnter(SimRunState::Running), super::unpause_virtual_time);\n-        app.add_systems(PreUpdate, sync_sim_time_controls);\n-        app.add_systems(\n-            FixedUpdate,\n-            step_sim\n-                .run_if(in_state(SimRunState::Running))\n-                .run_if(simulation_step_allowed),\n-        );\n+        app.init_resource::<RemapMapVisualsPending>();\n+        app.add_plugins(super::SimulationPlugin);\n         app.add_systems(Update, sync_tick_alpha);\n         app.world_mut()\n             .resource_mut::<NextState<ClientScreen>>()\n@@ -303,16 +304,151 @@ mod tests {\n     }\n \n     fn advance_app_time(app: &mut App, millis: u64) {\n-        let delta = std::time::Duration::from_millis(millis);\n-        let mut virtual_time = *app.world().resource::<Time<Virtual>>();\n-        virtual_time.advance_by(delta);\n-        app.world_mut().insert_resource(virtual_time);\n-        let mut time = *app.world().resource::<Time<()>>();\n-        time.advance_by(delta);\n-        app.world_mut().insert_resource(time);\n+        advance_wall_time(app, Duration::from_millis(millis));\n+    }\n+\n+    fn advance_wall_time(app: &mut App, delta: Duration) {\n+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(delta));\n         app.update();\n     }\n \n+    fn wall_clock_test_app(speed: f32) -> App {\n+        let mut app = sim_test_app();\n+        app.world_mut().resource_mut::<SimHudControls>().sim_speed = speed;\n+        // TimePlugin's first update initializes its real clock. Advance no\n+        // time while Startup and the InGame state transition run.\n+        advance_wall_time(&mut app, Duration::ZERO);\n+        app\n+    }\n+\n+    #[test]\n+    fn wall_clock_cadence_preserves_native_ticks_with_slow_render_frames() {\n+        #[derive(Resource, Default)]\n+        struct DrawFrames(u32);\n+\n+        for (frames, delta) in [\n+            (100, Duration::from_millis(10)),\n+            (60, Duration::from_nanos(16_666_667)),\n+            (30, Duration::from_nanos(33_333_334)),\n+            (20, Duration::from_millis(50)),\n+            (10, Duration::from_millis(100)),\n+        ] {\n+            let mut app = wall_clock_test_app(1.0);\n+            app.init_resource::<DrawFrames>();\n+            app.add_systems(Update, |mut count: ResMut<DrawFrames>| count.0 += 1);\n+            let mut expected = app.world().resource::<SimWorld>().state.clone();\n+            let initial_tick = expected.tick.get();\n+            for _ in 0..37 {\n+                expected.step();\n+            }\n+            for _ in 0..frames {\n+                advance_wall_time(&mut app, delta);\n+                let alpha = app.world().resource::<SimClock>().tick_alpha;\n+                assert!(\n+                    (0.0..1.0).contains(&alpha),\n+                    \"frames={frames}, alpha={alpha}\"\n+                );\n+            }\n+\n+            let state = &app.world().resource::<SimWorld>().state;\n+            assert_eq!(state.tick.get() - initial_tick, 37, \"frames={frames}\");\n+            assert_eq!(state.canonical_hash(), expected.canonical_hash());\n+            assert_eq!(state.random, expected.random);\n+            assert_eq!(app.world().resource::<DrawFrames>().0, frames);\n+        }\n+    }\n+\n+    #[test]\n+    fn wall_clock_speed_scales_native_ticks_when_within_frame_budget() {\n+        for (speed, ticks) in [\n+            (0.25, 9),\n+            (0.5, 18),\n+            (1.0, 37),\n+            (2.0, 74),\n+            (4.0, 148),\n+            (8.0, 296),\n+        ] {\n+            let mut app = wall_clock_test_app(speed);\n+            let mut expected = app.world().resource::<SimWorld>().state.clone();\n+            let initial_tick = expected.tick.get();\n+            for _ in 0..ticks {\n+                expected.step();\n+            }\n+            for _ in 0..100 {\n+                advance_app_time(&mut app, 10);\n+            }\n+            let state = &app.world().resource::<SimWorld>().state;\n+            assert_eq!(state.tick.get() - initial_tick, ticks, \"speed={speed}\");\n+            assert_eq!(state.canonical_hash(), expected.canonical_hash());\n+            assert_eq!(state.random, expected.random);\n+        }\n+    }\n+\n+    #[test]\n+    fn wall_clock_long_stalls_have_bounded_catchup_at_every_speed() {\n+        for speed in [0.25, 0.5, 1.0, 2.0, 4.0, 8.0] {\n+            let mut app = wall_clock_test_app(speed);\n+            // Keep a fractional tick before the stall, so the bound includes\n+            // the fixed loop's previous remainder rather than an empty clock.\n+            advance_wall_time(&mut app, Duration::from_secs_f64(0.023 / f64::from(speed)));\n+            let before_tick = app.world().resource::<SimWorld>().state.tick.get();\n+            let before_alpha = app.world().resource::<SimClock>().tick_alpha;\n+\n+            advance_app_time(&mut app, 10_000);\n+\n+            assert_eq!(\n+                app.world().resource::<SimWorld>().state.tick.get() - before_tick,\n+                5,\n+                \"speed={speed}\"\n+            );\n+            let after_alpha = app.world().resource::<SimClock>().tick_alpha;\n+            assert!(\n+                (after_alpha - before_alpha).abs() < 0.000_01,\n+                \"speed={speed}\"\n+            );\n+            // No stale ten-second debt survives into the next frame.\n+            advance_wall_time(&mut app, Duration::ZERO);\n+            assert_eq!(\n+                app.world().resource::<SimWorld>().state.tick.get() - before_tick,\n+                5,\n+                \"speed={speed}\"\n+            );\n+        }\n+    }\n+\n+    #[test]\n+    fn wall_clock_pause_resume_does_not_replay_paused_time() {\n+        let mut app = wall_clock_test_app(1.0);\n+        let initial_tick = app.world().resource::<SimWorld>().state.tick.get();\n+        advance_app_time(&mut app, 18);\n+        app.world_mut()\n+            .resource_mut::<NextState<SimRunState>>()\n+            .set(SimRunState::Paused);\n+        advance_wall_time(&mut app, Duration::ZERO);\n+        for _ in 0..10 {\n+            advance_app_time(&mut app, 1_000);\n+            assert_eq!(\n+                app.world().resource::<SimWorld>().state.tick.get(),\n+                initial_tick\n+            );\n+            assert_eq!(app.world().resource::<SimClock>().tick_alpha, 0.0);\n+        }\n+        app.world_mut()\n+            .resource_mut::<NextState<SimRunState>>()\n+            .set(SimRunState::Running);\n+        advance_wall_time(&mut app, Duration::ZERO);\n+        assert_eq!(\n+            app.world().resource::<SimWorld>().state.tick.get(),\n+            initial_tick\n+        );\n+        advance_app_time(&mut app, 9);\n+        assert_eq!(\n+            app.world().resource::<SimWorld>().state.tick.get(),\n+            initial_tick + 1\n+        );\n+        assert_eq!(app.world().resource::<SimClock>().tick_alpha, 0.0);\n+    }\n+\n     #[test]\n     fn init_sim_fixed_timestep_sets_openttd_tick_rate() {\n         let mut app = sim_test_app();\n"
+}

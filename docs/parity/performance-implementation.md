@@ -1299,6 +1299,61 @@ y `ca4d25c8af82dbe3802ea852fa782bc3ab8cb150803ee6162db5674d90f6e62a`.
 Se cierra la reconstrucción de chunks por movimiento exclusivo de ascensores
 vanilla. F17/F28, la cadencia F07 y el objetivo de 30 FPS siguen abiertos.
 
+## Etapa 23 — Medir la cadencia y rechazar el cambio de reloj aislado (F07)
+
+El `max_delta` actual limita el tiempo real a 27 ms antes de escalarlo por
+velocidad. Con `TimePlugin` y `SimulationPlugin` reales, `ManualDuration` y
+30 frames de 33,333334 ms, la prueba obtiene **30 ticks en un segundo**,
+frente a los 37 que corresponden al intervalo nativo. Una prueba que avanzaba
+recursos `Time` manualmente antes de `app.update` no servía para medirlo:
+`TimePlugin` vuelve a actualizarlos en `First`. El experimento usa la estrategia
+manual del plugin y una inicialización de duración cero.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`,
+`video_driver.cpp::GameLoop/GameThread/Tick` mantiene relojes distintos para
+juego y dibujo; `video_driver.hpp::GetGameInterval` usa 27 ms a velocidad
+normal y `ALLOWED_DRIFT = 5` limita atraso acumulado. El prototipo permite
+recuperar hasta cinco ticks por frame y divide el límite real por la velocidad,
+pues Bevy 0.19.1 aplica `max_delta` antes de `relative_speed`. Esa cota es una
+política propuesta para el cliente, no una reproducción exacta del scheduler
+nativo ni una optimización del coste de `GameState::step`.
+
+Cuatro pruebas pasan con el prototipo: 37 ticks en un segundo con
+100/60/30/20/10 frames; velocidades 0,25/0,5/1/2/4/8 con
+9/18/37/74/148/296 ticks; pausa/reanudación sin deuda de tiempo pausado;
+y recuperación de cinco ticks tras diez segundos de bloqueo, con remanente
+fraccional previo y sin deuda en el frame siguiente. Los escenarios de tiempo
+normal y velocidad conservan hash/RNG frente al mismo número de pasos core.
+Update sigue ejecutándose una vez por frame e interpolación queda en [0,1).
+Son pruebas de schedules sin compositor, entrada de UI ni peer de red.
+
+Una comprobación adicional del emisor real de humo revela por qué el cambio
+aislado aún no es publicable. Un vehículo diesel fijo, incluso sin callbacks
+NewGRF, consume **dos valores de RNG** al evaluar ticks 1 y 2 por separado,
+y **uno** si el render sólo recibe el tick 2. El fixture asigna los ticks sin
+ejecutar física; identifica el acoplamiento del emisor, no acredita una partida
+nativa completa. `spawn_train_smoke` se ejecuta en Update y omite ticks
+intermedios. OpenTTD llama `ShowVisualEffect` desde el controlador de vehículo
+y `Chance16` consume el RNG de juego. En el port, CB10/CB160 también pueden
+escribir los registros del vehículo. El problema ya existe al agrupar ticks con velocidad
+acelerada y se extendería a velocidad normal al retirar la cota de un tick.
+
+Se conserva el [experimento completo](evidence/tick-cadence-standalone-experiment-20261001.json),
+incluido el patch reproducible sobre `91378bd7`, resultados y alcance. No se
+aplicó al producto. El siguiente diseño debe ejecutar las decisiones por cada
+tick autoritativo, retener eventos visuales entre frames y conservar comandos,
+RNG/registros, sincronización y frontera de snapshots de red. Cambiar sólo el
+reloj o mover el emisor al FixedUpdate local no cubre los `AdvanceTicks` que el
+cliente de red aplica desde Update.
+
+El prototipo pasa Clippy; tras retirarlo, ambos archivos de producción vuelven
+exactamente a `91378bd7`. Se repiten las 1.666 pruebas del cliente/dos ignoradas,
+Clippy de todos sus targets, formato, diff y frescura de docs. El core no cambia
+y conserva las validaciones de la etapa 22. No se midieron FPS/GPU del prototipo
+ni se modifica la última cifra aceptada de 18,831 / 18,864 FPS. F07 y la cadencia
+completa continúan abiertos; esta etapa cierra sólo el diagnóstico reproducible
+del límite y su dependencia de efectos autoritativos.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV
@@ -1308,6 +1363,8 @@ vanilla. F17/F28, la cadencia F07 y el objetivo de 30 FPS siguen abiertos.
 - F07–F08, F17–F18: medir tick residual, compositor y cámara con raster en seis zooms;
   aislar la variación Out4x/Out8x entre ejecuciones del mismo cliente con flota.
   Revisar el límite de un tick por frame y conservar la velocidad de juego.
+  Ejecutar decisiones/RNG de efectos de vehículo por tick autoritativo antes
+  de agrupar pasos, con eventos retenidos y publicación coherente para red.
   F17/F28: conservar animaciones NewGRF y cambios del edificio al reducir
   reconstrucciones adicionales de chunks.
 - F12, F14–F16: perfilar carga, ocupación y rutas; retirar copias PBS innecesarias.

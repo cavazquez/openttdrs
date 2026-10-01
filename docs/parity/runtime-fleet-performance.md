@@ -62,6 +62,10 @@ congelados coinciden exactamente. La variante inicial que fallaba sólo en
 Out4x fue rechazada. Evidencia y límites en el registro de implementación.
 El límite actual de un tick por frame todavía ralentiza la partida al caer
 los FPS; cadencia y 30 FPS siguen abiertos.
+La etapa 23 reproduce 30 ticks con 30 frames en un segundo. El reloj aislado
+propuesto corrige el conteo, pero fue retirado: el emisor de humo consume RNG
+de juego desde el render y omite ticks agrupados, incluso sin NewGRF. La
+corrección de cadencia debe integrar esas decisiones y los pasos de red.
 
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y

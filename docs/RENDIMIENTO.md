@@ -399,6 +399,32 @@ baseline, SHA256 de binarios y pruebas de callbacks/RNG se registran en
 [la etapa 11](parity/performance-implementation.md#etapa-11--contexto-visual-reducido-cuando-no-puede-ejecutarse-un-callback-f04).
 El presupuesto de 30 FPS y el ritmo nativo de simulación siguen abiertos.
 
+### Cliente en marcha tras indexar los intentos PBS (2026-10-01)
+
+Comparación de `aa2e68ee` con la etapa 12, misma partida/NewGRF, hardware,
+1280×720, escala 2, cámara fija y audio desactivado. ABBA, 30 frames de
+warmup y 40 muestras por run, sin compilaciones ni `perf` concurrentes.
+[Datos por frame](parity/evidence/pbs-attempt-client-20261001.csv).
+
+- Frame medio: 160,73 / 160,87 → 78,86 / 79,01 ms; FPS por duración media:
+  6,22 / 6,22 → 12,68 / 12,66.
+- Mediana: 91,28 / 90,79 → 75,76 / 74,82 ms. p95 por rango más cercano:
+  344,56 / 353,36 → 96,95 / 96,79 ms. p99 coincide con el máximo en estas
+  40 muestras: 698,25 / 699,66 → 175,38 / 177,96 ms.
+- Simulación: 114,23 / 114,37 → 32,76 / 32,77 ms; efectos:
+  2,12 / 2,12 → 2,07 / 2,06 ms; vidrio: 6,63 / 6,46 → 6,46 / 6,40 ms.
+  Las fases medidas no suman el frame.
+- Los cuatro runs avanzan de tick 3.703.103 a 3.703.142. Tick/s observado
+  entre primera y última muestra: 6,24 / 6,23 → 13,09 / 13,08.
+  Los 80 frames de cada versión exceden 33,33 ms.
+
+El movimiento del core pasa de unos 53 a 4 ms en la ventana independiente de
+120 ticks; la comparación de 60 ticks normales conserva estado, eventos y
+teselas. Las pruebas, binarios y medición CPU están en
+[la etapa 12](parity/performance-implementation.md#etapa-12--ocupación-calculada-una-vez-por-intento-pbs-f14f15).
+Queda coste tanto en la simulación como en el cliente. Esta ventana todavía
+no alcanza 30 FPS ni certifica el ritmo nativo o los demás zooms en marcha.
+
 ### Render congelado, seis zooms y movimiento de cámara
 
 Para comparar ambas versiones se usó el driver de mapshot: centro `128,128`,

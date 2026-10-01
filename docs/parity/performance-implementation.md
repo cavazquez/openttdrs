@@ -491,6 +491,77 @@ Validación: 3.006 core/seis ignorados y 1.661 cliente/dos; Clippy de todos
 los targets de ambos, formato, diff y frescura de docs. Se cierra el descarte
 visual cuando no puede ejecutarse callback. F04 y los 30 FPS siguen abiertos.
 
+## Etapa 12 — Ocupación calculada una vez por intento PBS (F14/F15)
+
+`TryPathReserve` prepara un índice de la flota y su ocupación una vez por
+intento efectivo de reserva. La búsqueda y las comprobaciones de plataformas
+consultan esa misma instantánea de posiciones. Se reconstruye en el siguiente
+intento, incluidas las llamadas posteriores a una inversión o movimiento;
+no se conserva ocupación de otro tick. Los IDs duplicados usan la variante
+anterior. Los retornos tempranos y los segmentos sin PBS evitan construirlo.
+Reservas previas, conflictos por track, bit tentativo del depósito, rollback,
+flags stuck y orden de mutaciones conservan sus reglas.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`,
+`vehicle.cpp::VehiclesOnTile::Iterator`, líneas 495–521, consulta el hash
+espacial y filtra la tesela real; `train.cpp` utiliza `VehiclesOnTile` al
+comprobar reservas. El port ya tenía `TrainOccupancyIndex` para otras fases
+PBS, pero este intento reconstruía cadenas completas dentro de cada consulta.
+No se acredita aquí la paridad nativa de todas las búsquedas PBS.
+
+Una captura `cpu-clock:u`, 499 Hz, con frame pointers en core produjo
+6.554 muestras y cero perdidas. Al filtrar por el ancestro de movimiento,
+2.941 de 3.181 muestras contienen `TryPathReserve` y 2.906 contienen consultas
+de huella de formación. Son porcentajes inclusivos que se solapan;
+la carga/importación queda fuera de ese denominador.
+[Desglose](evidence/pbs-attempt-perf-20261001.csv).
+La captura diagnóstica no se mezcla con los tiempos release normales.
+
+Regresiones diferenciales: 32 combinaciones de bloqueo, historial de formación,
+vagones, plataforma, reserva ajena, ID duplicado, backoff y mark-stuck; otras
+32 después de mover la cabeza que bloqueaba. Más 28 intentos desde depósito
+con bit tentativo/previo, entrada bloqueada, rollback, tren detenido y path
+vacío. Los 92 intentos comparan resultado, teselas y vehículos serializados;
+los escenarios iniciales también comprueban RNG. Incluyen reservas positivas
+de plataformas y salidas de depósito, además de los bloqueos.
+
+Release normal, misma Kale_TitleGame.sav/NewGRF, ocho runs en orden
+antes/después/después/antes por ventana, sin otras mediciones ni builds.
+En 24 ticks: total 88,58 / 87,62 → 41,31 / 40,56 ms;
+movimiento 51,57 / 51,25 → 3,44 / 3,42 ms. En 120 ticks:
+total 81,40 / 80,40 → 31,86 / 32,27 ms (aproximadamente 60 % menos),
+movimiento 52,69 / 52,67 → 4,09 / 4,14 ms. No se comparan ventanas de
+longitud diferente como si fueran una mejora.
+[Tiempos](evidence/pbs-attempt-timings-20261001.csv).
+Baseline `aa2e68ee`, SHA256
+`ea37c5395f7a659943c32e0ad47b6db7e7b3f316564fcf2987722dd43b991ccb`;
+candidato `51e3764532b7e4e5d7804ca1b1c3e02101ba39b37080ae396808d3b9de1c59c8`.
+
+El estado inicial y 60 ticks normales coinciden sin ordenar las listas en la
+sonda: hash canónico v4, eventos/popups/sonidos, todas las teselas y bloques
+4×4; cero diferencias en 61 fases.
+[Comparación](evidence/pbs-attempt-state-20261001.csv).
+Cada sonda se enlaza con el artefacto `--lib` identificado por Cargo JSON de
+su versión; se corrigió una primera sonda que había tomado un rlib antiguo
+y difería ya antes del primer tick. SHA256 de las sondas correctas:
+`374ece09f30486f007fb7bd67a2de2054d5d30a92f68d832ca08c5ed9ebd7fc3`
+y `fd844ec5ceeb481a09a5eba179bbd9488b99889f4a16600abccbe10cef13c229`.
+
+Cliente en marcha, ABBA de 40 muestras tras 30 de warmup: simulación
+114,23 / 114,37 → 32,76 / 32,77 ms por frame;
+FPS 6,22 / 6,22 → 12,68 / 12,66. Los 80 frames nuevos siguen sobre 33,33 ms.
+Método y colas en
+[RENDIMIENTO.md](../RENDIMIENTO.md#cliente-en-marcha-tras-indexar-los-intentos-pbs-2026-10-01),
+[muestras](evidence/pbs-attempt-client-20261001.csv).
+SHA256 de clientes: `1cf2e9b444835498c2ca3815632ddf88e59f78876ff35bd1e2d548ffbb465b8f`
+y `6872cdb9f8bd35675ba5294959b56450d531d668f9692ade1ab5cd43602f36b3`.
+
+Validación: 3.008 core/seis ignorados y 1.661 cliente/dos; Clippy en todos
+los targets, formato, diff y frescura de docs. Se cierra la reconstrucción
+por consulta dentro de este intento. F14/F15 y los 30 FPS siguen abiertos;
+las sincronizaciones de órdenes y las comprobaciones de aeronaves son los
+siguientes costes de simulación medidos.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV

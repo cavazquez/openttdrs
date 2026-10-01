@@ -1,0 +1,9 @@
+name,scope,inclusive_samples,denominator_samples,percent
+movement,main,3181,5699,55.8168
+TryPathReserve,movement,2941,3181,92.4552
+platform occupancy,movement,1933,3181,60.7671
+path tile occupancy,movement,1007,3181,31.6567
+consist footprint,movement,2906,3181,91.3549
+fleet rebuild,movement,2413,3181,75.8566
+fleet index chain,movement,1988,3181,62.4961
+nearest depot,movement,0,3181,0.0

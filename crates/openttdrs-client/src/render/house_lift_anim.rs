@@ -58,13 +58,13 @@ fn animate_house_lift(sim: Res<SimWorld>, mut q: Query<(&HouseLiftAnim, &mut Tra
             .get(anim.coord)
             .map(openttdrs_core::lift_position)
             .unwrap_or(0);
-        let next = Vec3::new(
-            anim.base.x,
-            anim.base.y + house_lift_y_offset(position),
-            anim.base.z,
-        );
-        if transform.translation != next {
-            transform.translation = next;
+        let next_y = anim.base.y + house_lift_y_offset(position);
+        // The child sorter owns Z. Keeping its assigned depth also avoids
+        // marking an unchanged lift as modified between sort passes.
+        // Preserve the previous X projection, including after capture rounding.
+        if transform.translation.x != anim.base.x || transform.translation.y != next_y {
+            transform.translation.x = anim.base.x;
+            transform.translation.y = next_y;
         }
     }
 }
@@ -111,5 +111,53 @@ mod tests {
         assert!(bad.length() > ISO_HW * 2.0);
         assert_eq!(HOUSE_LIFT_SCREEN_X, 14.0);
         assert_eq!(HOUSE_LIFT_SCREEN_Y, 60.0);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn retained_lift_tracks_all_positions_without_resetting_sorted_depth() {
+        use bevy::ecs::system::RunSystemOnce;
+
+        let mut world = World::new();
+        let mut sim = SimWorld::default();
+        let coord = openttdrs_core::TileCoord::new(2, 2);
+        sim.state.map.set_completed_house(coord, 4, 0).unwrap();
+        world.insert_resource(sim);
+        let base = Vec3::new(14.0, -60.0, 0.55);
+        // The sorter owns this depth, independently of the spawn-time base.
+        let sorted_depth = 1.000_55;
+        let entity = world
+            .spawn((
+                HouseLiftAnim { base, coord },
+                // Capture rounding can move X after spawn. The next update
+                // must restore the same screen offset as the previous animator.
+                Transform::from_xyz(base.x + 4.0, base.y, sorted_depth),
+            ))
+            .id();
+        for position in 0..=openttdrs_core::map::LIFT_MAX_POSITION {
+            let mut sim = world.resource_mut::<SimWorld>();
+            let tile = openttdrs_core::map::house_lift::with_lift_position(
+                sim.state.map.get(coord).unwrap(),
+                position,
+            );
+            sim.state.map.set_tile(coord, tile).unwrap();
+            world.run_system_once(animate_house_lift).unwrap();
+
+            let transform = world.get::<Transform>(entity).unwrap();
+            // OpenTTD child screen Y is 60-position; Bevy's Y is inverted.
+            assert_eq!(transform.translation.x, 14.0);
+            assert_eq!(transform.translation.y, -f32::from(60 - position));
+            assert_eq!(transform.translation.z, sorted_depth);
+        }
+        world.clear_trackers();
+        world.run_system_once(animate_house_lift).unwrap();
+        let changed = world
+            .query_filtered::<Entity, Changed<Transform>>()
+            .iter(&world)
+            .count();
+        assert_eq!(
+            changed, 0,
+            "an unchanged lift must not invalidate its transform"
+        );
     }
 }

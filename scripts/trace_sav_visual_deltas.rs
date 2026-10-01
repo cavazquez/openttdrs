@@ -3,6 +3,7 @@
 //! Writes dirty-PHASE.csv with the notified coordinates and identifies raw
 //! CLEAR_FIELDS changes limited to the internal MAP5 counter. Chunk counts
 //! use the client's 16×16 geometry; they are not viewport remap counts.
+//! lift-dirty-PHASE.csv retains vanilla lift notices consumed by direct sprites.
 //! Hashing and full tile dumps make this a parity tool, not a timing benchmark.
 //!
 //! Compile against each core build and run with SAVE.sav TICKS OUTPUT_DIR.
@@ -37,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         state.shared_order_lists.sort_by_key(|list| list.id);
     }
     println!(
-        "phase,tick,canonical_hash_v4,event_hash_rust_1_98,landscape_dirty_count,landscape_dirty_chunks,counter_only_field_changes"
+        "phase,tick,canonical_hash_v4,event_hash_rust_1_98,landscape_dirty_count,landscape_dirty_chunks,counter_only_field_changes,house_lift_dirty_count"
     );
     let mut previous_tiles = state.map.tiles().to_vec();
     for phase in 0..=ticks {
@@ -96,14 +97,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )?;
             chunks.insert((coord.x.div_euclid(16), coord.y.div_euclid(16)));
         }
+        let mut lift_file = std::io::BufWriter::new(std::fs::File::create(
+            out.join(format!("lift-dirty-{phase}.csv")),
+        )?);
+        writeln!(lift_file, "x,y")?;
+        for coord in &state.runtime.house_lift_animation_dirty {
+            writeln!(lift_file, "{},{}", coord.x, coord.y)?;
+        }
         println!(
-            "{phase},{},{:016x},{:016x},{},{},{}",
+            "{phase},{},{:016x},{:016x},{},{},{},{}",
             state.tick.get(),
             state.canonical_hash(),
             event_hasher.finish(),
             state.runtime.landscape_tile_dirty.len(),
             chunks.len(),
             counter_only.len(),
+            state.runtime.house_lift_animation_dirty.len(),
         );
         previous_tiles = state.map.tiles().to_vec();
     }

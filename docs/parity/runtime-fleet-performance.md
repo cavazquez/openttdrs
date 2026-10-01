@@ -53,12 +53,15 @@ posterior a `fc63adef` está en
 La descripción siguiente conserva el
 diagnóstico del baseline `89947557`. El objetivo completo sigue abierto.
 
-La etapa 21 conserva invalidaciones de animación que se perdían antes del
-renderer. Su última ventana sostenida mide 17,014 / 17,130 FPS, frente a
-18,977 / 19,012 del baseline que omitía esos avisos. La corrección conserva
-estado, eventos, RNG y teselas en 61 fases; el trabajo adicional aparece en
-remap. El ahorro siguiente debe mantener los frames y aprovechar el ascensor
-dinámico del cliente. Evidencia y alcance en el registro de implementación.
+La etapa 22 mantiene las invalidaciones recuperadas en la etapa 21 y actualiza
+el ascensor vanilla mediante su child, sin reconstruir el chunk por ese único
+movimiento. La ventana sostenida pasa de 17,165 / 16,985 a 18,831 / 18,864 FPS;
+con cámara en movimiento, de 15,289 / 14,982 a 16,600 / 16,673. Los 459 avisos
+se conservan, 61 fases mantienen estado/eventos/teselas y los seis zooms
+congelados coinciden exactamente. La variante inicial que fallaba sólo en
+Out4x fue rechazada. Evidencia y límites en el registro de implementación.
+El límite actual de un tick por frame todavía ralentiza la partida al caer
+los FPS; cadencia y 30 FPS siguen abiertos.
 
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y

@@ -131,6 +131,9 @@ fn flag_map_tile_dirty_remap(
     let mh_i = mh as i32;
     let mut tiles: Vec<(i32, i32)> = Vec::new();
 
+    // animate_house_lift projects vanilla lift positions every Update. Its
+    // distinct animation deltas need no chunk rebuild; later changes to the
+    // same house still arrive through landscape notices or construction events.
     for coord in sim
         .state
         .runtime
@@ -442,5 +445,56 @@ mod tests {
                 .labels_dirty_requested(),
             "Una reserva invisible tampoco altera etiquetas"
         );
+    }
+
+    #[test]
+    fn lift_animation_does_not_hide_other_redraws_at_the_same_coordinate() {
+        let coord = TileCoord::new(4, 4);
+        for cause in 0..8 {
+            let mut app = App::new();
+            let mut sim = SimWorld::default();
+            sim.state.runtime.clear_transient();
+            sim.state.runtime.house_lift_animation_dirty.push(coord);
+            match cause {
+                0 => {} // Only the retained lift moved.
+                1 => sim.state.runtime.landscape_tile_dirty.push(coord),
+                2 => sim.state.runtime.industry_tile_dirty.push(coord),
+                3 => sim.state.runtime.signal_tile_dirty.push(coord),
+                4 => sim.state.runtime.reservation_tile_dirty.push(coord),
+                5 => sim
+                    .state
+                    .runtime
+                    .pending_sim_events
+                    .push(SimEvent::Construction {
+                        kind: ConstructionKind::Road,
+                        at: coord,
+                    }),
+                6 => sim
+                    .state
+                    .runtime
+                    .pending_sim_events
+                    .push(SimEvent::Demolition { at: coord }),
+                7 => sim
+                    .state
+                    .runtime
+                    .landscape_tile_dirty
+                    .push(TileCoord::new(5, 4)),
+                _ => unreachable!(),
+            }
+            app.insert_resource(sim);
+            app.insert_resource(ClientPreferences {
+                show_pbs_reservations: true,
+                ..ClientPreferences::default()
+            });
+            app.init_resource::<RemapMapVisualsPending>();
+
+            app.world_mut()
+                .run_system_once(flag_map_tile_dirty_remap)
+                .unwrap();
+
+            let pending = app.world().resource::<RemapMapVisualsPending>();
+            assert_eq!(pending.is_pending(), cause != 0, "cause={cause}");
+            assert_eq!(pending.labels_dirty_requested(), matches!(cause, 5 | 6));
+        }
     }
 }

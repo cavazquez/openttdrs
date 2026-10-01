@@ -501,10 +501,20 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         state.climate,
         &mut house_animation_sounds,
     );
-    state
-        .runtime
-        .landscape_tile_dirty
-        .extend(house_animation_dirty);
+    for coord in house_animation_dirty {
+        // Vanilla lifts only move a retained child sprite. Classify at the
+        // animation phase, before a later house mutation can change its type.
+        // Other notices for this coordinate still enter the landscape list.
+        if state
+            .map
+            .get(coord)
+            .is_some_and(crate::map::house_tile_has_lift)
+        {
+            state.runtime.house_lift_animation_dirty.push(coord);
+        } else {
+            state.runtime.landscape_tile_dirty.push(coord);
+        }
+    }
     for sound in house_animation_sounds {
         let _ = crate::play_newgrf_tile_sound(state, sound.grfid, sound.local_id, sound.at);
     }
@@ -1703,6 +1713,50 @@ mod tests {
                 !state.runtime.landscape_tile_dirty.contains(&coord),
                 "a previous tick's redraw must not repeat after animation stops",
             );
+        }
+    }
+
+    #[test]
+    fn vanilla_lift_motion_keeps_a_distinct_delta_from_newgrf_house_frames() {
+        for profiled in [false, true] {
+            let (mut state, newgrf_coord) = newgrf_house_animation_fixture();
+            let lift_coord = TileCoord::new(3, 2);
+            state.map.set_completed_house(lift_coord, 4, 0).unwrap();
+            let lift = crate::map::house_lift::with_lift_destination(
+                state.map.get(lift_coord).unwrap(),
+                6,
+            );
+            state.map.set_tile(lift_coord, lift).unwrap();
+            assert!(crate::map::house_lift::activate_house_lift_animation(
+                &mut state.map,
+                &mut state.active_house_animations,
+                lift_coord,
+            ));
+            let before_random = state.random;
+
+            if profiled {
+                let _ = step_profiled(&mut state);
+            } else {
+                step(&mut state);
+            }
+
+            assert_eq!(crate::lift_position(state.map.get(lift_coord).unwrap()), 1);
+            assert_eq!(state.runtime.house_lift_animation_dirty, [lift_coord]);
+            assert!(state.runtime.landscape_tile_dirty.contains(&newgrf_coord));
+            assert!(!state.runtime.landscape_tile_dirty.contains(&lift_coord));
+            assert_eq!(state.random, before_random);
+
+            // The next tick is outside the vanilla four-tick cadence. Its
+            // direct delta expires while the NewGRF frame still needs remap.
+            if profiled {
+                let _ = step_profiled(&mut state);
+            } else {
+                step(&mut state);
+            }
+            assert_eq!(crate::lift_position(state.map.get(lift_coord).unwrap()), 1);
+            assert!(state.runtime.house_lift_animation_dirty.is_empty());
+            assert!(state.runtime.landscape_tile_dirty.contains(&newgrf_coord));
+            assert_eq!(state.random, before_random);
         }
     }
 

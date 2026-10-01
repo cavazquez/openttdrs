@@ -1197,6 +1197,108 @@ y `195d1bee53ea6358daff9f15cf224116477bb5a1de5c42ecee22bfae3fd020aa`.
 Se cierra la pérdida de avisos de casas dentro del tick. F17/F28, remap,
 cadencia y 30 FPS siguen abiertos.
 
+## Etapa 22 — Actualizar el ascensor sin reconstruir su chunk (F17/F28)
+
+Se conservan todos los avisos recuperados en la etapa 21. La fase de animación
+separa el movimiento del ascensor vanilla en `house_lift_animation_dirty`,
+consumido por el child que el cliente ya conserva. La clasificación ocurre
+antes de otras mutaciones de la casa; un aviso posterior de paisaje, industria,
+señal, reserva, construcción o demolición sigue solicitando remap, incluso en
+la misma coordenada. Los frames de casas NewGRF mantienen el camino general.
+Ambas listas vencen al comienzo del tick siguiente y al limpiar el runtime.
+No cambia el esquema persistido, los bytes de mapa, la cola ANIT ni el RNG.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`,
+`town_cmd.cpp::TownDrawHouseLift`, child en `14, 60 - GetLiftPosition`;
+`AnimateTile_Town` cambia la posición con cadencia de cuatro ticks. El cliente
+proyecta las 37 posiciones en la misma entidad. El animador conserva X/Y como
+antes y deja Z en manos del ordenador de children; evita escribir `Transform`
+si X/Y ya coinciden. Antes restablecía también el Z de creación en cada frame,
+lo que invalidaba el child aunque no se hubiese movido.
+
+La regresión del core falla antes de separar los avisos y pasa con `step` y
+`step_profiled`; comprueba el aviso NewGRF, el del ascensor, su vencimiento y RNG.
+La prueba ECS cubre las 37 posiciones, X desplazado por redondeo de captura,
+Z ya ordenado, identidad de entidad y cero escrituras en un update sin cambios.
+Ocho casos de remap verifican que el aviso directo no oculte otros cambios.
+
+Desde `68541211`, 61 fases normales, misma partida/NewGRF y orden importado:
+hash v4, eventos y teselas/bloques 4×4 idénticos. Tick final
+3.703.134, hash `4d3524e48b6bc2e5`, eventos `4857641856429973`.
+[Estado](evidence/lift-direct-deltas-state-20261001.csv).
+Los **459 avisos siguen siendo 459**: 115 generales y 344 directos, sin
+agregados ni descartados. Se conserva el orden relativo de cada lista.
+La suma de chunks 16×16 generales distintos por tick baja de 420 a 102;
+no equivale a chunks visibles ni a llamadas de remap.
+[Avisos](evidence/lift-direct-deltas-notifications-20261001.csv).
+
+Núcleo normal, ABBA, sin otras cargas de medición: 24 ticks,
+24,310 / 23,785 → 23,841 / 23,907 ms; 120 ticks,
+15,699 / 15,767 → 15,888 / 15,824 ms. No se acredita una mejora del core;
+el ahorro está en el consumidor visual. [Fases](evidence/lift-direct-deltas-core-20261001.csv).
+
+Cliente normal, mismo hardware/partida/NewGRF, 1280×720, escala 2, sin audio,
+ABBA, 40 muestras por corrida y sin builds o mediciones concurrentes:
+
+- Cámara fija, warmup 120: frame 58,260 / 58,877 → 53,104 / 53,011 ms;
+  FPS **17,165 / 16,985 → 18,831 / 18,864**. Remap
+  13,111 / 13,219 → 9,984 / 9,941 ms; simulación
+  15,676 / 15,989 → 15,983 / 15,896 ms. Mediana
+  55,287 / 56,093 → 51,682 / 52,173 ms; p95
+  87,641 / 86,612 → 77,222 / 74,731 ms; máximo/p99
+  93,183 / 96,395 → 85,415 / 85,888 ms. Todos cubren ticks
+  3.703.193–3.703.232; tick/s observado
+  17,133 / 16,936 → 18,842 / 18,863.
+  [Muestras](evidence/lift-direct-deltas-client-steady-20261001.csv).
+- Cámara en movimiento, warmup 30: frame
+  65,407 / 66,746 → 60,240 / 59,977 ms; FPS
+  **15,289 / 14,982 → 16,600 / 16,673**. Remap
+  14,434 / 14,642 → 11,392 / 11,367 ms; simulación
+  16,326 / 16,458 → 16,384 / 16,270 ms. Mediana
+  64,055 / 62,339 → 55,459 / 55,844 ms; p95
+  92,164 / 102,212 → 89,295 / 89,243 ms; máximo/p99
+  145,015 / 153,852 → 147,757 / 148,974 ms. El primer run anterior
+  cubre ticks 3.703.104–3.703.143 y los otros tres 3.703.103–3.703.142;
+  tick/s observado 15,782 / 15,501 → 17,243 / 17,332.
+  [Pan](evidence/lift-direct-deltas-pan-20261001.csv).
+
+Los 80 frames por versión y escenario exceden 33,33 ms. Se mantiene la
+salvedad del intervalo de cambio de zoom con warmup 30; no se mezclan ventanas
+ni se suman fases para reconstruir el frame. Todavía no se alcanza 30 FPS.
+
+Las seis parejas congeladas con flota, `CLEAN=0`, centro 128,128, settle 180,
+1280×720 y escalas 0,25/0,5/1/2/4/8 conservan PNG y traza completa
+byte-idénticos: cero píxeles/bloques 4×4 distintos, mismos 54–37.998 parents.
+[Raster aceptado](evidence/lift-direct-deltas-raster-20261001.csv).
+No certifican lectura SAV nativa ni todos los frames activos. La comparación
+de estado es entre versiones del port; la fuente nativa aporta la regla del
+ascensor. La variación histórica Out4x/Out8x del renderer continúa abierta.
+
+Se rechazó una primera variante que retenía X y sólo cambiaba Y. En Out4x
+difería en **88 píxeles / 37 bloques 4×4**, con parents/proxies normalizados
+idénticos; los otros cinco zooms coincidían. Dos repeticiones ABBA por versión
+reprodujeron la diferencia en todas las capturas del candidato y ninguna del
+baseline; Out8x coincidió en todas. El redondeo de captura de sprites añadidos
+puede desplazar X; el animador anterior restablecía X en el siguiente update.
+La prueba ECS se amplió para cubrirlo y el cambio final conserva esa proyección.
+Se guardan el [gate rechazado](evidence/lift-direct-deltas-y-only-raster-20261001.csv),
+los [controles](evidence/lift-direct-deltas-y-only-raster-repeat-20261001.csv)
+y sus muestras [fijas](evidence/lift-direct-deltas-y-only-client-steady-20261001.csv)
+y de [pan](evidence/lift-direct-deltas-y-only-pan-20261001.csv) como evidencia del
+experimento; no son las cifras del cambio aceptado.
+
+Validación: 3.019 core/seis ignorados, 1.666 cliente/dos, Clippy en todos los
+targets, formato, diff y frescura de docs. Una corrida de tests del cliente
+falló por cuota de `/tmp` al copiar el ejecutable en la prueba de assets;
+se repitió completa con `TMPDIR` en el directorio de evidencia del workspace,
+sin modificar ni omitir esa prueba, y pasó. SHA256 cliente anterior/posterior:
+`d3055e6a745f0b3390655ad96f2c9be7c54d04e8351fb304960eb96032430d8d` y
+`b93231297b4a5611b3c5d3ee41cfebb7a7c53bbc5d28016545dab6a4f2988f58`;
+`sav_profile`: `195d1bee53ea6358daff9f15cf224116477bb5a1de5c42ecee22bfae3fd020aa`
+y `ca4d25c8af82dbe3802ea852fa782bc3ab8cb150803ee6162db5674d90f6e62a`.
+Se cierra la reconstrucción de chunks por movimiento exclusivo de ascensores
+vanilla. F17/F28, la cadencia F07 y el objetivo de 30 FPS siguen abiertos.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV
@@ -1206,8 +1308,8 @@ cadencia y 30 FPS siguen abiertos.
 - F07–F08, F17–F18: medir tick residual, compositor y cámara con raster en seis zooms;
   aislar la variación Out4x/Out8x entre ejecuciones del mismo cliente con flota.
   Revisar el límite de un tick por frame y conservar la velocidad de juego.
-  F17/F28: consumir los avisos de ascensor sin reconstruir chunks, conservando
-  animaciones NewGRF y cambios posteriores del edificio.
+  F17/F28: conservar animaciones NewGRF y cambios del edificio al reducir
+  reconstrucciones adicionales de chunks.
 - F12, F14–F16: perfilar carga, ocupación y rutas; retirar copias PBS innecesarias.
 - Resolución de depósitos: identidad/tipo, propiedad y alcanzabilidad frente
   al original; invalidación completa de los índices persistentes.

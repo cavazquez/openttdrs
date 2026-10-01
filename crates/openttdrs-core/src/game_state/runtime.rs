@@ -194,6 +194,10 @@ pub struct SimulationRuntime {
     /// Teselas de paisaje (nieve estacional, etc.) mutadas este tick → remap cliente.
     pub landscape_tile_dirty: Vec<TileCoord>,
 
+    /// Vanilla lift movement already projected by the client's retained child.
+    /// Other changes to the same house still use `landscape_tile_dirty`.
+    pub house_lift_animation_dirty: Vec<TileCoord>,
+
     /// Teselas visitadas por `RunTileLoop` este tick (una pasada LFSR; no persistido).
     pub tile_loop_visited: Vec<(TileCoord, Tile)>,
 
@@ -399,6 +403,7 @@ impl SimulationRuntime {
             pending_industry_deliveries: Vec::new(),
             cargo_monitor: crate::cargo_monitor::CargoMonitor::default(),
             landscape_tile_dirty: Vec::new(),
+            house_lift_animation_dirty: Vec::new(),
             tile_loop_visited: Vec::new(),
             signal_tile_dirty: Vec::new(),
             signal_globset: HashSet::new(),
@@ -465,6 +470,7 @@ impl SimulationRuntime {
         // AnimateAnimatedTiles runs before the tile loop. Clear here so a
         // new house animation frame survives until the client consumes it.
         self.landscape_tile_dirty.clear();
+        self.house_lift_animation_dirty.clear();
         self.signal_tile_dirty.clear();
         self.reservation_tile_dirty.clear();
     }
@@ -478,6 +484,7 @@ impl SimulationRuntime {
         self.industry_scheduler_trace_samples.clear();
         self.pending_industry_deliveries.clear();
         self.landscape_tile_dirty.clear();
+        self.house_lift_animation_dirty.clear();
         self.tile_loop_visited.clear();
         self.signal_tile_dirty.clear();
         self.signal_globset.clear();
@@ -596,6 +603,7 @@ mod tests {
         runtime.signal_tile_dirty.push(coord);
         runtime.reservation_tile_dirty.push(coord);
         runtime.landscape_tile_dirty.push(coord);
+        runtime.house_lift_animation_dirty.push(coord);
 
         runtime.begin_tick_visual_delta();
 
@@ -608,5 +616,6 @@ mod tests {
         assert!(runtime.signal_tile_dirty.is_empty());
         assert!(runtime.reservation_tile_dirty.is_empty());
         assert!(runtime.landscape_tile_dirty.is_empty());
+        assert!(runtime.house_lift_animation_dirty.is_empty());
     }
 }

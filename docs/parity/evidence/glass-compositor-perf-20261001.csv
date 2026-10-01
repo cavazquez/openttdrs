@@ -1,0 +1,9 @@
+scope,symbol_group,samples,denominator,percent,start_seconds,end_seconds,source_commit,diagnostic_client_sha256
+all sampled threads; inclusive,glass compositor,111,1110,10.0,6062.000732,6066.500732,f384eaaf3d497f2db9bdc54f7e02a10ec3f3bf69,7783feb95fc604d20e2f2ea31d62d5e4bf4838958b652864ad5c8a6806ead42f
+glass inclusive samples; leaf,glass function closure,76,111,68.4685,6062.000732,6066.500732,f384eaaf3d497f2db9bdc54f7e02a10ec3f3bf69,7783feb95fc604d20e2f2ea31d62d5e4bf4838958b652864ad5c8a6806ead42f
+glass inclusive samples; leaf,source to proxy map insert,15,111,13.5135,6062.000732,6066.500732,f384eaaf3d497f2db9bdc54f7e02a10ec3f3bf69,7783feb95fc604d20e2f2ea31d62d5e4bf4838958b652864ad5c8a6806ead42f
+glass inclusive samples; leaf,<core::hash::sip::Hasher<core::hash::sip::Sip13Rounds> as core::hash::Hasher>::write,6,111,5.4054,6062.000732,6066.500732,f384eaaf3d497f2db9bdc54f7e02a10ec3f3bf69,7783feb95fc604d20e2f2ea31d62d5e4bf4838958b652864ad5c8a6806ead42f
+glass inclusive samples; leaf,RandomState entity hash,5,111,4.5045,6062.000732,6066.500732,f384eaaf3d497f2db9bdc54f7e02a10ec3f3bf69,7783feb95fc604d20e2f2ea31d62d5e4bf4838958b652864ad5c8a6806ead42f
+glass inclusive samples; leaf,Color equality,5,111,4.5045,6062.000732,6066.500732,f384eaaf3d497f2db9bdc54f7e02a10ec3f3bf69,7783feb95fc604d20e2f2ea31d62d5e4bf4838958b652864ad5c8a6806ead42f
+glass inclusive samples; leaf,live source map insert,3,111,2.7027,6062.000732,6066.500732,f384eaaf3d497f2db9bdc54f7e02a10ec3f3bf69,7783feb95fc604d20e2f2ea31d62d5e4bf4838958b652864ad5c8a6806ead42f
+glass inclusive samples; leaf,SpriteImageMode equality,1,111,0.9009,6062.000732,6066.500732,f384eaaf3d497f2db9bdc54f7e02a10ec3f3bf69,7783feb95fc604d20e2f2ea31d62d5e4bf4838958b652864ad5c8a6806ead42f

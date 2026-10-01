@@ -696,6 +696,80 @@ los targets, formato, diff y frescura de docs. Se cierra el trabajo de fase
 aérea sobre los otros tipos en flotas con IDs únicos. F07 y los 30 FPS siguen
 abiertos; la presentación domina el tiempo restante del frame medido.
 
+## Etapa 15 — Conservar los vínculos de máscaras de vidrio (F08)
+
+La fase de vidrio conserva un índice local source→proxy con las generaciones
+de entidad de Bevy. Deja de construir dos `HashMap` por frame; comprueba la
+existencia del proxy, lo recrea tras un remap y retira entradas cuyo source ya
+no participa en el query. Compara los campos prestados antes de clonar el
+sprite de máscara. Sigue verificando geometría, visibilidad y clasificación
+vidrio/opaco incluso cuando el sprite fuente no tiene cambios registrados.
+El índice no forma parte del estado persistente ni de la simulación.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`, `8bpp_simple.cpp::Draw`: el modo
+transparente aplica el remap al píxel de destino donde el sprite tiene
+cobertura. Los targets, shader, LUT, muestreo de atlas, profundidad y pases
+auxiliares del port conservan ese contrato existente. Esta etapa reduce la
+sincronización de proxies; no reemplaza el blitter ni acredita paridad visual
+global con el original.
+
+Diagnóstico anterior al cambio: `perf record` de nuestro cliente, evento
+`cpu-clock:u`, 199 Hz. DWARF produjo 3.688 muestras sin pérdidas pero sólo 162
+líneas de frames decodificadas; no permite atribuir ancestros de forma completa.
+Se compiló únicamente el cliente con frame pointers, debuginfo 1 y unwind
+tables, sin cambiar la configuración del proyecto ni reconstruir dependencias.
+El perfil FP tiene 3.686 muestras sin pérdidas y 7.952 líneas de frames. En la
+ventana 6062,000732–6066,500732 s, 111 de 1.110 muestras de todos los threads
+incluyen el compositor. Dentro de esas 111, 76 terminan en su closure y 29 en
+inserciones/hash de entidades. Core/dependencias no tienen frame pointers:
+los ancestros de otras fases siguen incompletos y sus ceros no indican ausencia
+de trabajo. [Conteos y denominadores](evidence/glass-compositor-perf-20261001.csv).
+El binario diagnóstico SHA256 es
+`7783feb95fc604d20e2f2ea31d62d5e4bf4838958b652864ad5c8a6806ead42f`;
+sus tiempos con `perf` no se usan como comparación normal de FPS.
+
+Regresiones: dos sistemas ECS independientes comparan 49 estados de 64
+fuentes, con cambios de imagen/atlas/modo, geometría, visibilidad, marker de
+vidrio, chunk, pertenencia estática/dinámica y borrado/recreación de fuente o
+proxy. Se comparan todos los componentes de máscara y su vínculo lógico, con
+una máscara por fuente y sin huérfanos. Otra prueba cubre inicialización con
+un proxy existente, reparación de una edición externa sin cambio del source
+y ausencia de writes de extracción en un frame sin cambios.
+
+Cliente normal: baseline `f384eaaf`, ABBA de cuatro corridas, la misma partida,
+NewGRF, 1280×720, escala 2, audio desactivado, 30 frames de warmup y 40 muestras
+por corrida, sin `perf` ni compilaciones concurrentes. Vidrio medio:
+6,524 / 6,581 → 4,580 / 4,583 ms, aproximadamente 30 % menos. Frame medio:
+66,869 / 67,357 → 65,886 / 63,981 ms; FPS por duración media:
+14,955 / 14,846 → 15,178 / 15,630. Los p95 conservan variación:
+84,037 / 85,142 → 95,538 / 81,664 ms. Los 80 frames de cada versión siguen
+superando 33,33 ms. [Muestras](evidence/glass-cache-client-20261001.csv).
+
+Raster: seis zooms, centro 128,128, 180 frames de settle y `CLEAN=0`, con flota.
+Las seis parejas tienen PNG SHA256 idéntico, cero píxeles/bloques 4×4 distintos
+y trazas completas del sorter byte-idénticas. Se conservan también los conteos
+de parents (54 a 37.998) y la comparación semántica.
+[Resultados](evidence/glass-cache-raster-20261001.csv).
+No se cierra la variación Out8x observada en etapas anteriores: estas seis
+parejas no certifican todas las repeticiones posibles.
+
+Cámara en movimiento: otras cuatro corridas ABBA de 40 frames con la misma
+simulación activa. Frame medio 73,153 / 73,194 → 70,103 / 70,739 ms; FPS:
+13,670 / 13,662 → 14,265 / 14,137. Vidrio 6,915 / 6,994 → 4,973 / 5,020 ms.
+p95 106,912 / 104,848 → 96,325 / 102,620 ms, pero máximo/p99
+159,488 / 161,614 → 157,690 / 166,074 ms. Los 80 frames de cada versión
+exceden el presupuesto. Ticks 3.703.103–3.703.142 salvo el primer run nuevo,
+3.703.104–3.703.143. [Muestras](evidence/glass-cache-pan-20261001.csv).
+
+Validación: 3.012 core/seis ignorados y 1.663 cliente/dos, Clippy de ambos en
+todos los targets, formato, diff y frescura de docs. Binarios normales antes/
+después SHA256
+`b1f7707905fd79ff868be682cad2223c10cc0c8170df70ae591d51bdf821104b` y
+`334ca38dcde0e710cf988f6cdbdd0f9dd86623c2c76cd0f2faafca91581fbe27`.
+Se cierra la reconstrucción de las dos tablas por frame y la clonación de
+máscaras iguales. F08 conserva el barrido y los pases auxiliares; F17 y el
+presupuesto de 30 FPS siguen abiertos.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV

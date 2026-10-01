@@ -6,13 +6,12 @@
 //! el pass pueda conservar el mapa debajo y aplicar la misma transformación
 //! dependiente del destino.
 
-use std::collections::HashMap;
-
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::{RenderTarget, visibility::RenderLayers};
 use bevy::core_pipeline::{
     Core2dSystems, FullscreenShader, schedule::Core2d as Core2dSchedule, tonemapping::tonemapping,
 };
+use bevy::ecs::entity::EntityHashMap;
 use bevy::prelude::*;
 use bevy::render::camera::ExtractedCamera;
 use bevy::render::extract_component::{ExtractComponent, ExtractComponentPlugin};
@@ -69,6 +68,19 @@ pub(crate) struct RailGlassMaskSource;
 #[derive(Component, Clone, Copy)]
 struct RailGlassMaskProxy {
     source: Entity,
+}
+
+struct CachedMaskProxy {
+    entity: Entity,
+    seen: bool,
+}
+
+/// Only this system creates mask proxies. Keep their association across frames;
+/// entity generations and a live query check also cover chunk remaps/despawns.
+#[derive(Default)]
+struct RailGlassMaskProxyCache {
+    initialized: bool,
+    by_source: EntityHashMap<CachedMaskProxy>,
 }
 
 /// Handles compartidos entre el mundo principal y el render world.
@@ -135,6 +147,23 @@ fn mask_sprite_from_source(source: &Sprite, is_glass: bool) -> SpriteMesh {
     }
 }
 
+fn mask_sprite_matches_source(mask: &SpriteMesh, source: &Sprite, is_glass: bool) -> bool {
+    mask.image == source.image
+        && mask.texture_atlas == source.texture_atlas
+        && mask.color
+            == if is_glass {
+                Color::srgb(1.0, 0.0, 0.0)
+            } else {
+                Color::srgb(0.0, 0.0, 0.0)
+            }
+        && mask.flip_x == source.flip_x
+        && mask.flip_y == source.flip_y
+        && mask.custom_size == source.custom_size
+        && mask.rect == source.rect
+        && mask.image_mode == source.image_mode
+        && mask.alpha_mode == SpriteAlphaMode::Mask(0.5)
+}
+
 /// Duplica los sprites de mapa en una cámara auxiliar con depth test.
 ///
 /// El resultado de este pase no se usa como cobertura: sólo indica si el
@@ -142,6 +171,7 @@ fn mask_sprite_from_source(source: &Sprite, is_glass: bool) -> SpriteMesh {
 /// la cámara original `Sprite`, que conserva exactamente el muestreo del atlas.
 fn sync_rail_glass_mask_proxies(
     mut commands: Commands,
+    mut cache: Local<RailGlassMaskProxyCache>,
     sources: Query<
         (
             Entity,
@@ -168,12 +198,19 @@ fn sync_rail_glass_mask_proxies(
     )>,
 ) {
     let _measurement = crate::performance::measure(crate::performance::Phase::Glass);
-    let mut proxies_by_source = HashMap::with_capacity(proxies.iter().len());
-    for (proxy_entity, proxy, _sprite, _anchor, _transform, _visibility, _chunk) in &mut proxies {
-        proxies_by_source.insert(proxy.source, proxy_entity);
+    if !cache.initialized {
+        for (entity, proxy, ..) in &mut proxies {
+            cache.by_source.insert(
+                proxy.source,
+                CachedMaskProxy {
+                    entity,
+                    seen: false,
+                },
+            );
+        }
+        cache.initialized = true;
     }
 
-    let mut live_sources = HashMap::with_capacity(sources.iter().len());
     for (
         source_entity,
         source_sprite,
@@ -184,11 +221,8 @@ fn sync_rail_glass_mask_proxies(
         glass_source,
     ) in &sources
     {
-        live_sources.insert(source_entity, ());
-        let mask_sprite = mask_sprite_from_source(source_sprite, glass_source.is_some());
-
-        if let Some(&proxy_entity) = proxies_by_source.get(&source_entity) {
-            let Ok((
+        if let Some(cached) = cache.by_source.get_mut(&source_entity)
+            && let Ok((
                 _,
                 _,
                 mut proxy_sprite,
@@ -196,12 +230,14 @@ fn sync_rail_glass_mask_proxies(
                 mut proxy_transform,
                 mut proxy_visibility,
                 proxy_chunk,
-            )) = proxies.get_mut(proxy_entity)
-            else {
-                continue;
-            };
-            if *proxy_sprite != mask_sprite {
-                *proxy_sprite = mask_sprite;
+            )) = proxies.get_mut(cached.entity)
+        {
+            cached.seen = true;
+            // Compare the borrowed fields before cloning handles/atlas/mode.
+            // Always check actual proxy values, including marker removal; ECS
+            // change ticks alone cannot detect all of these transitions.
+            if !mask_sprite_matches_source(&proxy_sprite, source_sprite, glass_source.is_some()) {
+                *proxy_sprite = mask_sprite_from_source(source_sprite, glass_source.is_some());
             }
             if *proxy_anchor != *source_anchor {
                 *proxy_anchor = *source_anchor;
@@ -226,7 +262,7 @@ fn sync_rail_glass_mask_proxies(
                     source: source_entity,
                 },
                 MapVisualLayer,
-                mask_sprite,
+                mask_sprite_from_source(source_sprite, glass_source.is_some()),
                 *source_anchor,
                 *source_transform,
                 *source_visibility,
@@ -236,13 +272,23 @@ fn sync_rail_glass_mask_proxies(
         if let Some(source_chunk) = source_chunk {
             commands.entity(proxy_entity).insert(*source_chunk);
         }
+        cache.by_source.insert(
+            source_entity,
+            CachedMaskProxy {
+                entity: proxy_entity,
+                seen: true,
+            },
+        );
     }
 
-    for (source_entity, proxy_entity) in proxies_by_source {
-        if !live_sources.contains_key(&source_entity) {
-            commands.entity(proxy_entity).despawn();
+    cache.by_source.retain(|_, cached| {
+        let live = cached.seen;
+        cached.seen = false;
+        if !live && proxies.contains(cached.entity) {
+            commands.entity(cached.entity).despawn();
         }
-    }
+        live
+    });
 }
 
 fn setup_rail_glass_targets(
@@ -587,4 +633,370 @@ fn apply_rail_glass_post_process(
     render_pass.set_pipeline(render_pipeline);
     render_pass.set_bind_group(0, bind_group, &[]);
     render_pass.draw(0..3, 0..1);
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use std::collections::{BTreeMap, HashMap};
+
+    use super::*;
+
+    #[derive(Component)]
+    struct SourceId(u32);
+
+    #[derive(Debug, PartialEq)]
+    struct MaskState {
+        sprite: SpriteMesh,
+        anchor: Anchor,
+        transform: Transform,
+        visibility: Visibility,
+        chunk: Option<MapTileChunk>,
+        layers: RenderLayers,
+    }
+
+    fn spawn_source(world: &mut World, id: u32, image: &Handle<Image>) {
+        let mut source = world.spawn((
+            SourceId(id),
+            MapVisualLayer,
+            Sprite::from_image(image.clone()),
+            Anchor::CENTER,
+            Transform::from_xyz(id as f32, 7.0, 3.0),
+            Visibility::Inherited,
+        ));
+        if id.is_multiple_of(2) {
+            source.insert(MapTileChunk { cx: id / 2, cy: 3 });
+        }
+        if id.is_multiple_of(3) {
+            source.insert(RailGlassMaskSource);
+        }
+        if id.is_multiple_of(4) {
+            source.insert(MapDynamicVisual);
+        }
+    }
+
+    fn mutate_sources(world: &mut World, phase: u32, images: &[Handle<Image>; 2]) {
+        let sources: Vec<_> = world
+            .query::<(Entity, &SourceId)>()
+            .iter(world)
+            .map(|(entity, id)| (entity, id.0))
+            .collect();
+        for (entity, id) in sources {
+            match phase % 16 {
+                0 => {
+                    let mut sprite = world.get_mut::<Sprite>(entity).unwrap();
+                    sprite.flip_x = !sprite.flip_x;
+                    sprite.flip_y = id.is_multiple_of(2);
+                    sprite.color = Color::srgba(0.2, 0.3, 0.4, 0.5);
+                }
+                1 => {
+                    let mut sprite = world.get_mut::<Sprite>(entity).unwrap();
+                    sprite.custom_size = Some(Vec2::new(10.0 + id as f32, 13.0));
+                    sprite.rect = Some(Rect::new(1.0, 2.0, 8.0, 9.0));
+                }
+                2 => {
+                    world.entity_mut(entity).insert((
+                        Anchor(Vec2::new(0.3, -0.2)),
+                        Transform::from_xyz(id as f32 + phase as f32, 11.0, -2.0),
+                    ));
+                }
+                3 => {
+                    if world.get::<RailGlassMaskSource>(entity).is_some() {
+                        world.entity_mut(entity).remove::<RailGlassMaskSource>();
+                    } else {
+                        world.entity_mut(entity).insert(RailGlassMaskSource);
+                    }
+                }
+                4 => {
+                    world.entity_mut(entity).insert(if id.is_multiple_of(2) {
+                        Visibility::Hidden
+                    } else {
+                        Visibility::Visible
+                    });
+                }
+                5 => {
+                    world.entity_mut(entity).remove::<MapTileChunk>();
+                }
+                6 => {
+                    world
+                        .entity_mut(entity)
+                        .insert(MapTileChunk { cx: phase, cy: id });
+                }
+                7 => {
+                    let mut sprite = world.get_mut::<Sprite>(entity).unwrap();
+                    sprite.image = images[1].clone();
+                    sprite.texture_atlas = Some(TextureAtlas {
+                        layout: Handle::default(),
+                        index: id as usize,
+                    });
+                }
+                8 => {
+                    world.get_mut::<Sprite>(entity).unwrap().image_mode = SpriteImageMode::Tiled {
+                        tile_x: true,
+                        tile_y: id.is_multiple_of(2),
+                        stretch_value: 1.5,
+                    };
+                }
+                9 => {
+                    world.entity_mut(entity).remove::<MapVisualLayer>();
+                }
+                10 => {
+                    world.entity_mut(entity).insert(MapVisualLayer);
+                }
+                11 => {
+                    let proxy = world
+                        .query::<(Entity, &RailGlassMaskProxy)>()
+                        .iter(world)
+                        .find(|(_, proxy)| proxy.source == entity)
+                        .map(|(proxy_entity, _)| proxy_entity);
+                    if let Some(proxy) = proxy {
+                        world.despawn(proxy);
+                    }
+                }
+                12 => {
+                    world.entity_mut(entity).remove::<Sprite>();
+                }
+                13 => {
+                    world
+                        .entity_mut(entity)
+                        .insert(Sprite::from_image(images[0].clone()));
+                }
+                14 => {
+                    world.despawn(entity);
+                    spawn_source(world, id, &images[0]);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn mask_states(world: &mut World) -> BTreeMap<u32, MaskState> {
+        let mut query = world.query::<(
+            &RailGlassMaskProxy,
+            &SpriteMesh,
+            &Anchor,
+            &Transform,
+            &Visibility,
+            Option<&MapTileChunk>,
+            &RenderLayers,
+        )>();
+        let mut result = BTreeMap::new();
+        for (proxy, sprite, anchor, transform, visibility, chunk, layers) in query.iter(world) {
+            let id = world
+                .get::<SourceId>(proxy.source)
+                .expect("no mask may outlive its source")
+                .0;
+            assert!(
+                result
+                    .insert(
+                        id,
+                        MaskState {
+                            sprite: sprite.clone(),
+                            anchor: *anchor,
+                            transform: *transform,
+                            visibility: *visibility,
+                            chunk: chunk.copied(),
+                            layers: layers.clone(),
+                        }
+                    )
+                    .is_none(),
+                "one mask per source"
+            );
+        }
+        result
+    }
+
+    #[test]
+    fn persistent_masks_match_legacy_across_source_and_proxy_lifecycles() {
+        let mut assets = Assets::<Image>::default();
+        let images = [assets.add(Image::default()), assets.add(Image::default())];
+        let mut legacy = App::new();
+        legacy.add_systems(Update, sync_legacy);
+        let mut cached = App::new();
+        cached.add_systems(Update, sync_rail_glass_mask_proxies);
+        for app in [&mut legacy, &mut cached] {
+            for id in 0..64 {
+                spawn_source(app.world_mut(), id, &images[0]);
+            }
+            app.update();
+        }
+        assert_eq!(
+            mask_states(legacy.world_mut()),
+            mask_states(cached.world_mut())
+        );
+        for phase in 0..48 {
+            for app in [&mut legacy, &mut cached] {
+                mutate_sources(app.world_mut(), phase, &images);
+                app.update();
+            }
+            assert_eq!(
+                mask_states(legacy.world_mut()),
+                mask_states(cached.world_mut()),
+                "phase {phase}"
+            );
+        }
+        assert_eq!(mask_states(cached.world_mut()).len(), 64);
+    }
+
+    #[test]
+    fn cached_masks_repair_external_edits_without_source_changes() {
+        let mut app = App::new();
+        app.add_systems(Update, sync_rail_glass_mask_proxies);
+        spawn_source(app.world_mut(), 0, &Handle::default());
+        let source = app
+            .world_mut()
+            .query_filtered::<Entity, With<SourceId>>()
+            .single(app.world())
+            .unwrap();
+        // Seed an existing mask to cover initialization as well as recovery.
+        app.world_mut().spawn((
+            RailGlassMaskProxy { source },
+            MapVisualLayer,
+            SpriteMesh::default(),
+            MapTileChunk { cx: 0, cy: 3 },
+            RenderLayers::layer(RAIL_GLASS_OCCLUSION_RENDER_LAYER),
+        ));
+        app.update();
+        let expected = mask_states(app.world_mut());
+        let proxy = app
+            .world_mut()
+            .query_filtered::<Entity, With<RailGlassMaskProxy>>()
+            .single(app.world())
+            .unwrap();
+        {
+            let mut mask = app.world_mut().get_mut::<SpriteMesh>(proxy).unwrap();
+            mask.color = Color::WHITE;
+            mask.alpha_mode = SpriteAlphaMode::Blend;
+            mask.flip_x = true;
+        }
+        app.world_mut().entity_mut(proxy).insert((
+            Anchor::TOP_LEFT,
+            Transform::from_xyz(999.0, 888.0, 777.0),
+            Visibility::Hidden,
+        ));
+        app.update();
+        assert_eq!(mask_states(app.world_mut()), expected);
+        // An unchanged frame must not mark the mesh/pose changed for extraction.
+        app.update();
+        let count = app
+            .world_mut()
+            .query_filtered::<Entity, (
+                With<RailGlassMaskProxy>,
+                Or<(
+                    Changed<SpriteMesh>,
+                    Changed<Anchor>,
+                    Changed<Transform>,
+                    Changed<Visibility>,
+                )>,
+            )>()
+            .iter(app.world())
+            .count();
+        assert_eq!(count, 0);
+    }
+
+    fn sync_legacy(
+        mut commands: Commands,
+        sources: Query<
+            (
+                Entity,
+                &Sprite,
+                &Anchor,
+                &Transform,
+                &Visibility,
+                Option<&MapTileChunk>,
+                Option<&RailGlassMaskSource>,
+            ),
+            (
+                Or<(With<MapVisualLayer>, With<MapDynamicVisual>)>,
+                Without<RailGlassMaskProxy>,
+            ),
+        >,
+        mut proxies: Query<(
+            Entity,
+            &RailGlassMaskProxy,
+            &mut SpriteMesh,
+            &mut Anchor,
+            &mut Transform,
+            &mut Visibility,
+            Option<&mut MapTileChunk>,
+        )>,
+    ) {
+        let _measurement = crate::performance::measure(crate::performance::Phase::Glass);
+        let mut proxies_by_source = HashMap::with_capacity(proxies.iter().len());
+        for (proxy_entity, proxy, _sprite, _anchor, _transform, _visibility, _chunk) in &mut proxies
+        {
+            proxies_by_source.insert(proxy.source, proxy_entity);
+        }
+
+        let mut live_sources = HashMap::with_capacity(sources.iter().len());
+        for (
+            source_entity,
+            source_sprite,
+            source_anchor,
+            source_transform,
+            source_visibility,
+            source_chunk,
+            glass_source,
+        ) in &sources
+        {
+            live_sources.insert(source_entity, ());
+            let mask_sprite = mask_sprite_from_source(source_sprite, glass_source.is_some());
+
+            if let Some(&proxy_entity) = proxies_by_source.get(&source_entity) {
+                let Ok((
+                    _,
+                    _,
+                    mut proxy_sprite,
+                    mut proxy_anchor,
+                    mut proxy_transform,
+                    mut proxy_visibility,
+                    proxy_chunk,
+                )) = proxies.get_mut(proxy_entity)
+                else {
+                    continue;
+                };
+                if *proxy_sprite != mask_sprite {
+                    *proxy_sprite = mask_sprite;
+                }
+                if *proxy_anchor != *source_anchor {
+                    *proxy_anchor = *source_anchor;
+                }
+                if *proxy_transform != *source_transform {
+                    *proxy_transform = *source_transform;
+                }
+                if *proxy_visibility != *source_visibility {
+                    *proxy_visibility = *source_visibility;
+                }
+                if let (Some(source_chunk), Some(mut proxy_chunk)) = (source_chunk, proxy_chunk)
+                    && *proxy_chunk != *source_chunk
+                {
+                    *proxy_chunk = *source_chunk;
+                }
+                continue;
+            }
+
+            let proxy_entity = commands
+                .spawn((
+                    RailGlassMaskProxy {
+                        source: source_entity,
+                    },
+                    MapVisualLayer,
+                    mask_sprite,
+                    *source_anchor,
+                    *source_transform,
+                    *source_visibility,
+                    RenderLayers::layer(RAIL_GLASS_OCCLUSION_RENDER_LAYER),
+                ))
+                .id();
+            if let Some(source_chunk) = source_chunk {
+                commands.entity(proxy_entity).insert(*source_chunk);
+            }
+        }
+
+        for (source_entity, proxy_entity) in proxies_by_source {
+            if !live_sources.contains_key(&source_entity) {
+                commands.entity(proxy_entity).despawn();
+            }
+        }
+    }
 }

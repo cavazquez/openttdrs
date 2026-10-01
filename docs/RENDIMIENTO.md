@@ -481,6 +481,39 @@ de unidades aéreas y SHA256 en
 El cliente todavía no alcanza 30 FPS. La siguiente medición debe atribuir
 el trabajo de presentación residual y conservar las colas del frame.
 
+### Cliente en marcha tras conservar los proxies de vidrio (2026-10-01)
+
+Comparación de `f384eaaf` con la etapa 15, misma partida/NewGRF, hardware,
+1280×720, escala 2, cámara fija y audio desactivado. ABBA, 30 frames de warmup
+y 40 muestras por run, sin compilaciones ni `perf` concurrentes.
+[Datos por frame](parity/evidence/glass-cache-client-20261001.csv).
+
+- Vidrio: 6,524 / 6,581 → 4,580 / 4,583 ms/frame, aproximadamente 30 % menos.
+- Frame medio: 66,87 / 67,36 → 65,89 / 63,98 ms. FPS por duración media:
+  14,955 / 14,846 → 15,178 / 15,630.
+- Mediana: 63,57 / 64,34 → 61,86 / 58,89 ms. p95 por rango más cercano:
+  84,04 / 85,14 → 95,54 / 81,66 ms. Máximo/p99 de estas 40 muestras:
+  165,12 / 164,20 → 164,74 / 153,05 ms. No se atribuye una mejora uniforme
+  de las colas del frame.
+- Simulación: 20,75 / 20,71 → 20,45 / 20,46 ms; efectos alrededor de 2 ms.
+  Tick/s observado: 15,54 / 15,42 → 15,79 / 16,21. El segundo run nuevo
+  cubre ticks 3.703.104–3.703.143; los demás, 3.703.103–3.703.142.
+  Los 80 frames de cada versión exceden 33,33 ms; las fases no suman el frame.
+
+Las seis parejas raster y sus trazas completas son idénticas, con flota;
+esto no cierra la variación histórica Out8x. Diagnóstico de `perf`, regresiones
+de ciclo de vida y SHA256 en
+[la etapa 15](parity/performance-implementation.md#etapa-15--conservar-los-vínculos-de-máscaras-de-vidrio-f08).
+El barrido de fuentes y el trabajo de presentación residual siguen pendientes.
+
+Con cámara en movimiento, otras cuatro corridas ABBA de 40 frames:
+73,15 / 73,19 → 70,10 / 70,74 ms de frame medio, equivalentes a
+13,670 / 13,662 → 14,265 / 14,137 FPS. Vidrio 6,92 / 6,99 → 4,97 / 5,02 ms.
+p95 106,91 / 104,85 → 96,33 / 102,62 ms; máximo/p99
+159,49 / 161,61 → 157,69 / 166,07 ms. Los 80 frames de cada versión siguen
+por encima de 33,33 ms.
+[Datos de pan](parity/evidence/glass-cache-pan-20261001.csv).
+
 ### Render congelado, seis zooms y movimiento de cámara
 
 Para comparar ambas versiones se usó el driver de mapshot: centro `128,128`,

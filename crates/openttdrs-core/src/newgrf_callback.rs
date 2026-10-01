@@ -685,41 +685,49 @@ pub fn engine_for_vehicle_catalog<'a>(
         })
 }
 
-fn engine_for_vehicle_catalog_owned(catalog: &[EngineDef], vehicle: &Vehicle) -> Option<EngineDef> {
-    vehicle
-        .engine_id
-        .and_then(|id| {
-            catalog
-                .iter()
-                .find(|candidate| candidate.id == id)
-                .cloned()
-                .or_else(|| crate::engine::engine_by_id(id).cloned())
-        })
-        .or_else(|| Some(engine_for_vehicle_catalog(catalog, vehicle).clone()))
+fn vehicle_trigger_slot(
+    vehicles: &[Vehicle],
+    fleet: Option<&crate::FleetIndex>,
+    id: u32,
+) -> Option<usize> {
+    fleet.map_or_else(
+        || vehicles.iter().position(|vehicle| vehicle.id == id),
+        |index| index.lookup_slot(vehicles, id),
+    )
 }
 
-fn vehicle_previous_id(vehicles: &[Vehicle], id: u32) -> Option<u32> {
-    vehicles
-        .iter()
-        .find(|vehicle| vehicle.id == id)
+fn vehicle_previous_id(
+    vehicles: &[Vehicle],
+    fleet: Option<&crate::FleetIndex>,
+    id: u32,
+) -> Option<u32> {
+    vehicle_trigger_slot(vehicles, fleet, id)
+        .and_then(|slot| vehicles.get(slot))
         .and_then(|vehicle| vehicle.prev_unit)
 }
 
-fn vehicle_next_id(vehicles: &[Vehicle], id: u32) -> Option<u32> {
-    vehicles
-        .iter()
-        .find(|vehicle| vehicle.id == id)
+fn vehicle_next_id(
+    vehicles: &[Vehicle],
+    fleet: Option<&crate::FleetIndex>,
+    id: u32,
+) -> Option<u32> {
+    vehicle_trigger_slot(vehicles, fleet, id)
+        .and_then(|slot| vehicles.get(slot))
         .and_then(|vehicle| vehicle.next_unit)
 }
 
-fn vehicle_chain_head_id(vehicles: &[Vehicle], id: u32) -> Option<u32> {
+fn vehicle_chain_head_id(
+    vehicles: &[Vehicle],
+    fleet: Option<&crate::FleetIndex>,
+    id: u32,
+) -> Option<u32> {
     let mut current = id;
     let mut seen = HashSet::new();
     while seen.insert(current) {
-        let Some(previous) = vehicle_previous_id(vehicles, current) else {
+        let Some(previous) = vehicle_previous_id(vehicles, fleet, current) else {
             return Some(current);
         };
-        if vehicles.iter().all(|vehicle| vehicle.id != previous) {
+        if vehicle_trigger_slot(vehicles, fleet, previous).is_none() {
             return Some(current);
         }
         current = previous;
@@ -730,6 +738,7 @@ fn vehicle_chain_head_id(vehicles: &[Vehicle], id: u32) -> Option<u32> {
 #[allow(clippy::too_many_arguments)]
 fn trigger_vehicle_randomisation_chain_step(
     vehicles: &mut [Vehicle],
+    fleet: Option<&crate::FleetIndex>,
     catalog: &[EngineDef],
     id: u32,
     trigger: VehicleRandomTrigger,
@@ -742,15 +751,12 @@ fn trigger_vehicle_randomisation_chain_step(
     if !seen.insert(id) {
         return (false, base_random);
     }
-    let Some(index) = vehicles.iter().position(|vehicle| vehicle.id == id) else {
+    let Some(index) = vehicle_trigger_slot(vehicles, fleet, id) else {
         return (false, base_random);
     };
-    let engine = engine_for_vehicle_catalog_owned(catalog, &vehicles[index]);
-    let Some(engine) = engine else {
-        return (false, base_random);
-    };
+    let engine = engine_for_vehicle_catalog(catalog, &vehicles[index]);
     let (mut changed, random) = trigger_vehicle_randomisation_with_base(
-        &engine,
+        engine,
         &mut vehicles[index],
         trigger,
         world_seed,
@@ -758,10 +764,10 @@ fn trigger_vehicle_randomisation_chain_step(
         base_random,
         first,
     );
-    let next = vehicle_next_id(vehicles, id);
+    let next = vehicle_next_id(vehicles, fleet, id);
     match trigger {
         VehicleRandomTrigger::NewCargo => {
-            if let Some(head) = vehicle_chain_head_id(vehicles, id) {
+            if let Some(head) = vehicle_chain_head_id(vehicles, fleet, id) {
                 // `NewCargo` first applies to the unit that picked up the
                 // cargo and then raises `AnyNewCargo` from the front of the
                 // consist.  The nested walk needs its own cycle guard: when
@@ -771,6 +777,7 @@ fn trigger_vehicle_randomisation_chain_step(
                 let mut any_new_cargo_seen = HashSet::new();
                 let (next_changed, _) = trigger_vehicle_randomisation_chain_step(
                     vehicles,
+                    fleet,
                     catalog,
                     head,
                     VehicleRandomTrigger::AnyNewCargo,
@@ -786,7 +793,7 @@ fn trigger_vehicle_randomisation_chain_step(
         VehicleRandomTrigger::Depot => {
             if let Some(next) = next {
                 let (next_changed, _) = trigger_vehicle_randomisation_chain_step(
-                    vehicles, catalog, next, trigger, world_seed, tick, 0, true, seen,
+                    vehicles, fleet, catalog, next, trigger, world_seed, tick, 0, true, seen,
                 );
                 changed |= next_changed;
             }
@@ -794,7 +801,7 @@ fn trigger_vehicle_randomisation_chain_step(
         VehicleRandomTrigger::Empty | VehicleRandomTrigger::AnyNewCargo => {
             if let Some(next) = next {
                 let (next_changed, _) = trigger_vehicle_randomisation_chain_step(
-                    vehicles, catalog, next, trigger, world_seed, tick, random, false, seen,
+                    vehicles, fleet, catalog, next, trigger, world_seed, tick, random, false, seen,
                 );
                 changed |= next_changed;
             }
@@ -820,6 +827,34 @@ pub fn trigger_vehicle_randomisation_chain(
     let mut seen = HashSet::new();
     trigger_vehicle_randomisation_chain_step(
         vehicles,
+        None,
+        engine_catalog,
+        vehicle_id,
+        trigger,
+        world_seed,
+        tick,
+        0,
+        true,
+        &mut seen,
+    )
+    .0
+}
+
+/// Tick variant using a current fleet index while preserving trigger order,
+/// cycle guards and the first unit's random word.
+pub fn trigger_vehicle_randomisation_chain_indexed(
+    vehicles: &mut [Vehicle],
+    fleet: &crate::FleetIndex,
+    vehicle_id: u32,
+    engine_catalog: &[EngineDef],
+    trigger: VehicleRandomTrigger,
+    world_seed: u64,
+    tick: u64,
+) -> bool {
+    let mut seen = HashSet::new();
+    trigger_vehicle_randomisation_chain_step(
+        vehicles,
+        Some(fleet),
         engine_catalog,
         vehicle_id,
         trigger,
@@ -5936,6 +5971,106 @@ mod tests {
         );
         // A reseed of bit 8 must not erase an unrelated bit in the word.
         assert_eq!(vehicle.newgrf_random_bits & 0x8000, 0x8000);
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn indexed_vehicle_random_triggers_preserve_words_guards_and_nested_order() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|engine| engine.kind == VehicleKind::Train && engine.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x4348_4149;
+        engine.newgrf_local_id = 0;
+        let triggers = [
+            VehicleRandomTrigger::NewCargo,
+            VehicleRandomTrigger::AnyNewCargo,
+            VehicleRandomTrigger::Empty,
+            VehicleRandomTrigger::Depot,
+            VehicleRandomTrigger::Callback32,
+        ];
+        let mut graphics = TrainSpriteGraphics::default();
+        graphics.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        graphics.action2_random.insert(
+            2,
+            Action2RandomEntry {
+                typ: 0x80,
+                consist_count: 0,
+                triggers: triggers
+                    .iter()
+                    .fold(0, |mask, trigger| mask | trigger.mask()),
+                randbit: 8,
+                sets: vec![0x8000, 0x8001],
+            },
+        );
+        engine.newgrf_runtime = Some(Box::new(graphics));
+        let base: Vec<_> = [44, 999, 17]
+            .into_iter()
+            .enumerate()
+            .map(|(slot, id)| {
+                let pos = TileCoord::new(2, 3);
+                let mut vehicle = Vehicle::new(id, VehicleKind::Train, pos, pos);
+                vehicle.engine_id = Some(engine.id);
+                vehicle.newgrf_random_bits = 0x8000 | u16::try_from(slot).unwrap();
+                vehicle.newgrf_persistent_regs.insert(0x30, id);
+                vehicle
+            })
+            .collect();
+        for shape in 0..4 {
+            let mut input = base.clone();
+            input[1].next_unit = Some(17);
+            input[2].prev_unit = Some(999);
+            input[2].next_unit = Some(44);
+            input[0].prev_unit = Some(17);
+            match shape {
+                1 => input[1].prev_unit = Some(123_456),
+                2 => {
+                    input[1].prev_unit = Some(44);
+                    input[0].next_unit = Some(999);
+                }
+                3 => input.push(input[2].clone()),
+                _ => {}
+            }
+            let mut index = crate::FleetIndex::default();
+            index.rebuild(&input);
+            for trigger in triggers {
+                let start = if trigger == VehicleRandomTrigger::NewCargo {
+                    17
+                } else {
+                    999
+                };
+                let mut expected = input.clone();
+                let mut actual = input.clone();
+                let expected_changed = trigger_vehicle_randomisation_chain(
+                    &mut expected,
+                    start,
+                    std::slice::from_ref(&engine),
+                    trigger,
+                    99,
+                    7,
+                );
+                let changed = trigger_vehicle_randomisation_chain_indexed(
+                    &mut actual,
+                    &index,
+                    start,
+                    std::slice::from_ref(&engine),
+                    trigger,
+                    99,
+                    7,
+                );
+                assert_eq!(changed, expected_changed);
+                assert_eq!(
+                    serde_json::to_vec(&actual).unwrap(),
+                    serde_json::to_vec(&expected).unwrap(),
+                    "shape {shape}, trigger {trigger:?}"
+                );
+            }
+            assert_eq!(index.rebuilds(), 1);
+        }
     }
 
     #[test]

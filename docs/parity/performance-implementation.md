@@ -262,6 +262,45 @@ Validación: 3.001 core/seis ignorados, 1.659 cliente/dos; Clippy en todos los
 targets de ambos, formato, diff y frescura de docs. Se cierra la reutilización
 de estas huellas; el resto de F12 y el objetivo de FPS siguen abiertos.
 
+## Etapa 7 — Enlaces de vehículos en órdenes y eventos NewGRF (F12/F13)
+
+El recorrido hacia la cabeza de una orden, el cierre de carga/descarga de una
+formación y la propagación de eventos aleatorios NewGRF usan ahora el índice
+vigente de vehículos. Se conserva el recorrido por enlaces, su orden y las
+guardas de ciclos/límite de visitas. Las consultas aisladas, slots reordenados
+e IDs duplicados mantienen la búsqueda legacy del primer vehículo coincidente.
+El índice detecta duplicados al reconstruirse; esa marca y los slots son
+efímeros. Los eventos también consultan el motor por referencia, sin copiar
+su runtime NewGRF.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`,
+`newgrf_engine.cpp::DoTriggerVehicleRandomisation`, líneas 1260–1324:
+propagación mediante `First()/Next()`, palabra base compartida en Empty y
+AnyNewCargo, evento NewCargo seguido por AnyNewCargo desde la cabeza,
+randomización independiente por unidad en Depot y ausencia de recursión en
+Callback32. Esta etapa conserva la implementación del port de esos eventos;
+no amplía por sí sola la paridad del resolver o de su RNG.
+
+Regresiones: lookup del primer ID, índice ausente/reordenado/duplicado y bytes
+completos de todos los vehículos frente al wrapper de eventos, para cinco
+triggers en cadenas desordenadas, enlaces faltantes, ciclos e IDs duplicados.
+Se conserva el número de reconstrucciones del índice.
+
+Ocho runs release de Kale_TitleGame.sav con NewGRF, orden
+antes/después/después/antes, sin compilaciones concurrentes. Cuatro ticks:
+total 435,10 / 437,81 → 431,54 / 440,32 ms, sin ganancia global clara;
+carga 31,92 / 31,98 → 26,43 / 27,72 ms. En 24 ticks:
+total 186,19 / 184,75 → 177,25 / 176,47 ms (aproximadamente 5 % menos),
+carga 23,27 / 22,98 → 17,74 / 17,58 ms y descarga
+76,48 / 76,08 → 72,67 / 71,13 ms. Datos:
+[chain-lookups-20261001.csv](evidence/chain-lookups-20261001.csv).
+Baseline `0b442152` (SHA256 `bb1f331679eb6c07d4378f853ec3213f4d9b91efd087e03a532d64b557d6fd53`),
+candidato `6050236782d36d6cf3f03cbafb510cee32d4b64c807d0102908c7579bbaa0330`.
+
+Validación: 3.003 core/seis ignorados, 1.659 cliente/dos; Clippy en todos los
+targets de ambos, formato, diff y frescura de docs. F12/F13 permanecen abiertos;
+descarga sigue siendo la mayor fase residual en esta fixture.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV

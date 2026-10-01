@@ -274,7 +274,7 @@ pub fn consist_changed_indexed(
     context: ConsistChangeContext<'_>,
 ) {
     let ids = fleet.consist(head_id);
-    if ids.is_empty() {
+    if ids.is_empty() || fleet.has_duplicate_ids() {
         consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits(
             vehicles,
             head_id,
@@ -291,8 +291,7 @@ pub fn consist_changed_indexed(
 
 fn consist_slot(vehicles: &[Vehicle], fleet: Option<&crate::FleetIndex>, id: u32) -> Option<usize> {
     fleet
-        .and_then(|index| index.slot(id))
-        .filter(|&slot| vehicles.get(slot).is_some_and(|vehicle| vehicle.id == id))
+        .and_then(|index| index.lookup_slot(vehicles, id))
         .or_else(|| vehicles.iter().position(|vehicle| vehicle.id == id))
 }
 

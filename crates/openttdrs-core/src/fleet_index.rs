@@ -19,6 +19,7 @@ pub struct FleetIndex {
     heads: AHashMap<u32, u32>,
     consists: AHashMap<u32, Vec<u32>>,
     rebuilds: u64,
+    has_duplicate_ids: bool,
 }
 
 impl FleetIndex {
@@ -26,10 +27,11 @@ impl FleetIndex {
         self.slots.clear();
         self.heads.clear();
         self.consists.clear();
+        self.has_duplicate_ids = false;
         self.slots.reserve(vehicles.len());
         self.heads.reserve(vehicles.len());
         for (slot, vehicle) in vehicles.iter().enumerate() {
-            self.slots.insert(vehicle.id, slot);
+            self.has_duplicate_ids |= self.slots.insert(vehicle.id, slot).is_some();
         }
 
         let mut visited = AHashSet::with_capacity(vehicles.len());
@@ -67,6 +69,23 @@ impl FleetIndex {
     #[must_use]
     pub fn slot(&self, vehicle_id: u32) -> Option<usize> {
         self.slots.get(&vehicle_id).copied()
+    }
+
+    /// Same first-match semantics as a legacy linear lookup. A current index
+    /// handles unique IDs in O(1); previews, moved slots and duplicate IDs use
+    /// the live fallback. Rebuild after changing the Vec generation.
+    pub(crate) fn lookup_slot(&self, vehicles: &[Vehicle], id: u32) -> Option<usize> {
+        if !self.has_duplicate_ids
+            && let Some(slot) = self.slot(id)
+            && vehicles.get(slot).is_some_and(|vehicle| vehicle.id == id)
+        {
+            return Some(slot);
+        }
+        vehicles.iter().position(|vehicle| vehicle.id == id)
+    }
+
+    pub(crate) const fn has_duplicate_ids(&self) -> bool {
+        self.has_duplicate_ids
     }
 
     #[must_use]
@@ -337,6 +356,27 @@ mod tests {
             index.station_footprint(&map, anchor),
             Some(expected.as_slice())
         );
+    }
+
+    #[test]
+    fn legacy_slot_lookup_handles_reordering_missing_and_duplicate_ids() {
+        let pos = TileCoord::new(1, 1);
+        let mut vehicles = vec![
+            Vehicle::new(90, VehicleKind::Train, pos, pos),
+            Vehicle::new(7, VehicleKind::Train, pos, pos),
+        ];
+        let mut index = FleetIndex::default();
+        index.rebuild(&vehicles);
+        assert_eq!(index.lookup_slot(&vehicles, 7), Some(1));
+        assert_eq!(index.lookup_slot(&vehicles, 999), None);
+        vehicles.swap(0, 1);
+        assert_eq!(index.lookup_slot(&vehicles, 7), Some(0));
+        assert_eq!(FleetIndex::default().lookup_slot(&vehicles, 90), Some(1));
+        vehicles.push(vehicles[0].clone());
+        index.rebuild(&vehicles);
+        assert!(index.has_duplicate_ids());
+        assert_eq!(index.slot(7), Some(2));
+        assert_eq!(index.lookup_slot(&vehicles, 7), Some(0));
     }
 
     #[test]

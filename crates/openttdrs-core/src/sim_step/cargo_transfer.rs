@@ -180,8 +180,9 @@ fn trigger_vehicle_randomisation_event(
 ) {
     let world_seed = state.world_seed;
     let tick = state.tick.get();
-    let _ = crate::newgrf_callback::trigger_vehicle_randomisation_chain(
+    let _ = crate::newgrf_callback::trigger_vehicle_randomisation_chain_indexed(
         &mut state.vehicles,
+        &state.runtime.fleet_index,
         vehicle_id,
         &state.engine_catalog,
         trigger,
@@ -1674,9 +1675,9 @@ fn vehicle_order_index(state: &GameState, vehicle_idx: usize) -> usize {
     let mut visited = 0_usize;
     while let Some(previous_id) = state.vehicles[current].prev_unit {
         let Some(previous_idx) = state
-            .vehicles
-            .iter()
-            .position(|vehicle| vehicle.id == previous_id)
+            .runtime
+            .fleet_index
+            .lookup_slot(&state.vehicles, previous_id)
         else {
             break;
         };
@@ -1734,9 +1735,9 @@ fn finish_consist_loading(state: &mut GameState, loaded_this_tick: &[bool]) {
             units.push(idx);
             current = state.vehicles[idx].next_unit.and_then(|next_id| {
                 state
-                    .vehicles
-                    .iter()
-                    .position(|vehicle| vehicle.id == next_id)
+                    .runtime
+                    .fleet_index
+                    .lookup_slot(&state.vehicles, next_id)
             });
             visited = visited.saturating_add(1);
             if visited >= 256 {
@@ -1793,9 +1794,9 @@ fn finish_consist_unloading(state: &mut GameState, unloaded_this_tick: &[bool]) 
             units.push(idx);
             current = state.vehicles[idx].next_unit.and_then(|next_id| {
                 state
-                    .vehicles
-                    .iter()
-                    .position(|vehicle| vehicle.id == next_id)
+                    .runtime
+                    .fleet_index
+                    .lookup_slot(&state.vehicles, next_id)
             });
             visited = visited.saturating_add(1);
             if visited >= 256 {

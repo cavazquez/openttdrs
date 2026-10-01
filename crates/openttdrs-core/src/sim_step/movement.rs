@@ -9,8 +9,9 @@ use crate::vehicle::{AircraftPhase, VehicleKind, VehicleRandomTrigger};
 fn trigger_vehicle_depot_randomisation(state: &mut GameState, vehicle_id: u32) {
     let world_seed = state.world_seed;
     let tick = state.tick.get();
-    let _ = crate::newgrf_callback::trigger_vehicle_randomisation_chain(
+    let _ = crate::newgrf_callback::trigger_vehicle_randomisation_chain_indexed(
         &mut state.vehicles,
+        &state.runtime.fleet_index,
         vehicle_id,
         &state.engine_catalog,
         VehicleRandomTrigger::Depot,

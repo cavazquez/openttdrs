@@ -100,6 +100,58 @@ frescura de docs. Persisten F03 (componentes, supply e identidad nativos),
 SAV tras mutaciones y la cancelación del trabajo pendiente al descartar un
 mundo. Los workers son puros y no pueden publicar sobre un mundo reemplazado.
 
+## Etapa 3 — Caché de rutas e invalidación (sub-issue F15)
+
+Las búsquedas de carretera, tranvía y agua se conservan entre ticks, incluidas
+las búsquedas sin ruta. El mapa identifica cambios de infraestructura y altura
+con una revisión efímera distinta de las reservas/señales ferroviarias. Un
+mundo nuevo o un clon divergente tiene otra identidad; cambiar enlaces de
+túneles invalida también las entradas que los usan. Los costes navales y el
+conjunto de direcciones de origen forman parte de la clave. Ninguna restricción
+y una máscara vacía son casos diferentes.
+
+El lote paralelo anterior evitaba la caché cuando había 32 solicitudes. Ahora
+consulta primero las entradas persistidas y resuelve sólo las solicitudes
+distintas que faltan. Publica por orden de flota, independientemente del orden
+de finalización. La caché sigue acotada a 256 entradas y expulsa la más antigua,
+sin vaciar todas las entradas al alcanzar el límite. `sav_profile` informa
+hits, negativos, misses, búsquedas distintas e invalidaciones.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`,
+`src/pathfinder/yapf/yapf_costcache.hpp`, `stGetGlobalCache` y
+`PfNodeCacheFetch`: invalidación por layout y separación del coste que no puede
+usar la caché global. Las rutas ferroviarias completas del port conservan la
+caducidad por tick y observan cambios del mapa dentro del tick; implementar una
+caché nativa de segmentos de tren sigue pendiente.
+
+Regresiones: carretera eliminada/restaurada, resultado negativo reutilizado,
+cambios irrelevantes de paisaje y reservas, clones de mapa divergentes con
+igual revisión, enlaces de túneles cambiados sin cambiar tiles, agua eliminada,
+costes/direcciones navales y 40 camiones con una búsqueda y publicación estable.
+La comparación cacheada/sin caché cubre los cambios de conectividad. Los
+contadores y revisiones no cambian la representación persistida del mapa.
+
+Medición release de Kale_TitleGame.sav con NewGRF, sin compilaciones concurrentes,
+orden antes/después/después/antes en cada ventana. En los primeros cuatro ticks,
+rutas: 66,88 / 67,25 → 62,61 / 61,88 ms. El tick completo quedó en
+528,15 / 523,41 → 526,64 / 522,16 ms: no se atribuye una mejora global clara.
+En 24 ticks, el total fue 268,10 / 265,62 → 269,25 / 268,99 ms, también sin
+ganancia global. La flota consulta sobre todo orígenes/destinos distintos y
+ya conserva caminos individuales: 23 hits, 1.826 misses, 1.616 búsquedas
+distintas y 14 invalidaciones en 24 ticks. No es una búsqueda completa por
+vehículo en cada tick. Los datos por fase están en
+[route-cache-20260930.csv](evidence/route-cache-20260930.csv).
+Se compara `f50cf50d` (ejecutable SHA256 `be6e16c0088288f23db02a8d1cf20e08716913b26b817bafeceb14ba160028c4`)
+con esta etapa (`d24653ec45b08724401d34d00adae4112ae95d6822fc28f234ddf7380c91c9dc`).
+
+Validación: 2.998 tests core aprobados/seis ignorados, 1.659 cliente/dos;
+Clippy de core/cliente en todos los targets, formato, diff y frescura de docs.
+
+La invalidación es conservadora: un cambio de bytes de estación puede invalidar
+las rutas de carretera/agua aunque no altere su conectividad. La aplicación de
+comandos todavía descarta las rutas individuales ante cambios de mapa. Reducir
+estas invalidaciones y cachear segmentos ferroviarios mantiene F15 abierto.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV

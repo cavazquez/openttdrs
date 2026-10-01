@@ -19,7 +19,8 @@ pub use crate::map::diag_dir_offset;
 pub use build_corridor::{
     find_rail_build_path, find_road_build_path, tile_allows_rail_build, tile_allows_road_build,
 };
-pub use cache::PathCache;
+pub(crate) use cache::{CachedRoute, RouteRequest};
+pub use cache::{PathCache, PathCacheStats};
 pub use network::{
     PathNetwork, TunnelWormholes, path_network_for_vehicle, tile_is_path_traversable,
 };
@@ -218,8 +219,8 @@ pub fn find_rail_path_for_engine_with_catalog(
     yapf::find_rail_path_yapf_for_type(map, from, to, wormholes, required)
 }
 
-/// Variante con caché por tick de simulación (los wormholes son constantes
-/// por mapa, así que no forman parte de la clave de caché).
+/// Reuses road/water searches until their infrastructure or wormholes change.
+/// Rail entries also expire each tick to observe live routing costs.
 #[must_use]
 pub fn find_path_cached(
     map: &Map,
@@ -229,12 +230,27 @@ pub fn find_path_cached(
     network: PathNetwork,
     wormholes: Option<&TunnelWormholes>,
 ) -> Option<Vec<TileCoord>> {
-    if let Some(path) = cache.get(from, to, network) {
-        return Some(path.clone());
+    if matches!(
+        network,
+        PathNetwork::Road | PathNetwork::Tram | PathNetwork::Rail
+    ) {
+        cache.prepare(map, wormholes);
+    } else {
+        cache.prepare_map(map);
     }
-    let path = find_path_with_wormholes(map, from, to, network, wormholes)?;
-    cache.insert(from, to, network, path.clone());
-    Some(path)
+    let request = RouteRequest {
+        from,
+        to,
+        network,
+        ship_cost: None,
+        origin_trackdir_mask: None,
+    };
+    if let CachedRoute::Hit(path) = cache.lookup(request) {
+        return path;
+    }
+    let path = find_path_with_wormholes(map, from, to, network, wormholes);
+    cache.insert_result(request, path.clone());
+    path
 }
 
 /// Variante con caché de [`find_ship_path_with_cost`]. La clave incluye las
@@ -248,12 +264,20 @@ pub fn find_ship_path_cached(
     to: TileCoord,
     cost: ShipPathCost,
 ) -> Option<Vec<TileCoord>> {
-    if let Some(path) = cache.get_ship(from, to, cost) {
-        return Some(path.clone());
+    cache.prepare_map(map);
+    let request = RouteRequest {
+        from,
+        to,
+        network: PathNetwork::Water,
+        ship_cost: Some(cost),
+        origin_trackdir_mask: None,
+    };
+    if let CachedRoute::Hit(path) = cache.lookup(request) {
+        return path;
     }
-    let path = find_ship_path_with_cost(map, from, to, cost)?;
-    cache.insert_ship(from, to, cost, path.clone());
-    Some(path)
+    let path = find_ship_path_with_cost(map, from, to, cost);
+    cache.insert_result(request, path.clone());
+    path
 }
 
 /// Variante cacheada que separa también la orientación física de origen.
@@ -279,12 +303,20 @@ pub fn find_ship_path_cached_with_trackdirs(
     cost: ShipPathCost,
     origin_trackdir_mask: u16,
 ) -> Option<Vec<TileCoord>> {
-    if let Some(path) = cache.get_ship_with_trackdirs(from, to, cost, origin_trackdir_mask) {
-        return Some(path.clone());
+    cache.prepare_map(map);
+    let request = RouteRequest {
+        from,
+        to,
+        network: PathNetwork::Water,
+        ship_cost: Some(cost),
+        origin_trackdir_mask: Some(origin_trackdir_mask),
+    };
+    if let CachedRoute::Hit(path) = cache.lookup(request) {
+        return path;
     }
-    let path = find_ship_path_with_cost_and_trackdirs(map, from, to, cost, origin_trackdir_mask)?;
-    cache.insert_ship_with_trackdirs(from, to, cost, origin_trackdir_mask, path.clone());
-    Some(path)
+    let path = find_ship_path_with_cost_and_trackdirs(map, from, to, cost, origin_trackdir_mask);
+    cache.insert_result(request, path.clone());
+    path
 }
 
 #[cfg(test)]
@@ -765,7 +797,7 @@ mod tests {
     }
 
     #[test]
-    fn path_cache_reuses_result_within_tick() {
+    fn road_cache_survives_ticks_but_invalidates_removed_infrastructure() {
         let mut m = Map::new_flat(8, 8, 0);
         write_road(&mut m, TileCoord::new(0, 0), 0x0A);
         write_road(&mut m, TileCoord::new(1, 0), 0x0A);
@@ -796,8 +828,231 @@ mod tests {
                     TileCoord::new(1, 0),
                     PathNetwork::Road
                 )
-                .is_none()
+                .is_some()
         );
+        assert_eq!(cache.stats().hits, 1);
+        let from = TileCoord::new(0, 0);
+        let to = TileCoord::new(1, 0);
+        assert_eq!(
+            find_path_cached(&m, &mut cache, from, to, PathNetwork::Road, None),
+            a
+        );
+        assert_eq!(cache.stats().hits, 2);
+
+        // Landscaping and live rail reservations do not change this road.
+        m.set_m1(TileCoord::new(4, 4), 9).unwrap();
+        m.set_kind(TileCoord::new(5, 5), TileKind::Rail).unwrap();
+        m.set_m2_u16(TileCoord::new(5, 5), 0x0400).unwrap();
+        assert_eq!(
+            find_path_cached(&m, &mut cache, from, to, PathNetwork::Road, None),
+            a
+        );
+        assert_eq!(cache.stats().hits, 3);
+
+        // A removed intermediate street must not return a stale cached path.
+        write_road(&mut m, TileCoord::new(2, 0), 0x0A);
+        write_road(&mut m, TileCoord::new(3, 0), 0x0A);
+        let end = TileCoord::new(3, 0);
+        let path = find_path_cached(&m, &mut cache, from, end, PathNetwork::Road, None);
+        assert!(path.is_some());
+        m.set_kind(to, TileKind::Grass).unwrap();
+        assert_eq!(
+            find_path_cached(&m, &mut cache, from, end, PathNetwork::Road, None),
+            find_path_with_wormholes(&m, from, end, PathNetwork::Road, None)
+        );
+        assert!(find_path_cached(&m, &mut cache, from, end, PathNetwork::Road, None).is_none());
+        assert_eq!(cache.stats().negative_hits, 1);
+        write_road(&mut m, to, 0x0A);
+        assert_eq!(
+            find_path_cached(&m, &mut cache, from, end, PathNetwork::Road, None),
+            path
+        );
+    }
+
+    #[test]
+    fn divergent_map_clones_cannot_share_routes_at_equal_revision_numbers() {
+        let mut original = Map::new_flat(5, 5, 0);
+        for x in 0..=3 {
+            write_road(&mut original, TileCoord::new(x, 0), 0x0A);
+        }
+        let mut removed = original.clone();
+        let mut intact = original.clone();
+        removed
+            .set_kind(TileCoord::new(1, 0), TileKind::Grass)
+            .unwrap();
+        intact.set_height(TileCoord::new(4, 4), 1).unwrap();
+        assert_eq!(
+            removed.navigation_topology_version().1,
+            intact.navigation_topology_version().1
+        );
+        let mut cache = PathCache::default();
+        let from = TileCoord::new(0, 0);
+        let to = TileCoord::new(3, 0);
+        assert!(
+            find_path_cached(&removed, &mut cache, from, to, PathNetwork::Road, None).is_none()
+        );
+        assert_eq!(
+            find_path_cached(&intact, &mut cache, from, to, PathNetwork::Road, None),
+            find_path_with_wormholes(&intact, from, to, PathNetwork::Road, None)
+        );
+        assert!(cache.get(from, to, PathNetwork::Road).is_some());
+    }
+
+    #[test]
+    fn road_cache_observes_changed_tunnel_links_without_tile_changes() {
+        let mut map = Map::new_flat(8, 1, 0);
+        for x in [0, 4, 6] {
+            map.set_kind(TileCoord::new(x, 0), TileKind::RoadTunnel)
+                .unwrap();
+        }
+        let links = |end| {
+            TunnelWormholes::from_jgr_records(
+                &map,
+                &[JgrTunnelRecord {
+                    tile_n: 0,
+                    tile_s: end,
+                    height: 1,
+                    is_chunnel: false,
+                    style_n: None,
+                    style_s: None,
+                }],
+            )
+        };
+        let from = TileCoord::new(0, 0);
+        let to = TileCoord::new(4, 0);
+        let original = links(4);
+        let changed = links(6);
+        let mut cache = PathCache::default();
+        assert!(
+            find_path_cached(
+                &map,
+                &mut cache,
+                from,
+                to,
+                PathNetwork::Road,
+                Some(&original)
+            )
+            .is_some()
+        );
+        assert_eq!(
+            find_path_cached(
+                &map,
+                &mut cache,
+                from,
+                to,
+                PathNetwork::Road,
+                Some(&changed)
+            ),
+            find_path_with_wormholes(&map, from, to, PathNetwork::Road, Some(&changed))
+        );
+        assert!(cache.get(from, to, PathNetwork::Road).is_none());
+        assert!(
+            find_path_cached(
+                &map,
+                &mut cache,
+                from,
+                to,
+                PathNetwork::Road,
+                Some(&original)
+            )
+            .is_some()
+        );
+    }
+
+    #[test]
+    fn rail_cache_expires_for_live_map_changes_and_at_tick_boundary() {
+        let mut map = Map::new_flat(5, 2, 0);
+        for x in 0..5 {
+            write_rail(&mut map, TileCoord::new(x, 0), RAIL_TB_X);
+        }
+        let from = TileCoord::new(0, 0);
+        let to = TileCoord::new(4, 0);
+        let mut cache = PathCache::default();
+        cache.begin_tick(1);
+        let path = find_path_cached(&map, &mut cache, from, to, PathNetwork::Rail, None);
+        assert!(path.is_some());
+        assert_eq!(
+            find_path_cached(&map, &mut cache, from, to, PathNetwork::Rail, None),
+            path
+        );
+        assert_eq!(cache.stats().computations, 1);
+        map.set_m2_u16(TileCoord::new(2, 0), 0x0400).unwrap();
+        assert_eq!(
+            find_path_cached(&map, &mut cache, from, to, PathNetwork::Rail, None),
+            find_path_with_wormholes(&map, from, to, PathNetwork::Rail, None)
+        );
+        assert_eq!(cache.stats().computations, 2);
+        cache.begin_tick(2);
+        assert_eq!(
+            find_path_cached(&map, &mut cache, from, to, PathNetwork::Rail, None),
+            find_path_with_wormholes(&map, from, to, PathNetwork::Rail, None)
+        );
+        assert_eq!(cache.stats().computations, 3);
+    }
+
+    #[test]
+    fn ship_cache_observes_water_removal_and_cost_profile() {
+        let mut map = Map::new_flat(6, 4, 0);
+        for y in 1..=2 {
+            for x in 0..=5 {
+                make_water_tile(&mut map, TileCoord::new(x, y), WaterClass::Sea).unwrap();
+            }
+        }
+        let from = TileCoord::new(0, 1);
+        let to = TileCoord::new(5, 1);
+        let cost = ShipPathCost::default();
+        let mut cache = PathCache::default();
+        let path = find_ship_path_cached(&map, &mut cache, from, to, cost);
+        cache.begin_tick(2);
+        assert_eq!(
+            find_ship_path_cached(&map, &mut cache, from, to, cost),
+            path
+        );
+        assert_eq!(cache.stats().hits, 1);
+        let removed = path.as_ref().unwrap()[2];
+        map.set_kind(removed, TileKind::Grass).unwrap();
+        let changed = find_ship_path_cached(&map, &mut cache, from, to, cost);
+        assert_eq!(changed, find_ship_path_with_cost(&map, from, to, cost));
+        assert_ne!(changed, path);
+        let new_cost = ShipPathCost {
+            curve45_penalty: cost.curve45_penalty + 71,
+            ..cost
+        };
+        let misses = cache.stats().misses;
+        assert_eq!(
+            find_ship_path_cached(&map, &mut cache, from, to, new_cost),
+            find_ship_path_with_cost(&map, from, to, new_cost)
+        );
+        assert_eq!(cache.stats().misses, misses + 1);
+    }
+
+    #[test]
+    fn ship_zero_origin_mask_is_distinct_from_unconstrained_search() {
+        let mut map = Map::new_flat(6, 4, 0);
+        for y in 0..4 {
+            for x in 0..6 {
+                make_water_tile(&mut map, TileCoord::new(x, y), WaterClass::Sea).unwrap();
+            }
+        }
+        let from = TileCoord::new(0, 1);
+        let to = TileCoord::new(5, 1);
+        let cost = ShipPathCost::default();
+        let mut cache = PathCache::default();
+        let unconstrained = find_ship_path_cached(&map, &mut cache, from, to, cost);
+        assert!(unconstrained.is_some());
+        assert!(find_ship_path_with_cost_and_trackdirs(&map, from, to, cost, 0).is_none());
+        assert!(
+            find_ship_path_cached_with_trackdirs(&map, &mut cache, from, to, cost, 0).is_none()
+        );
+        assert_eq!(
+            find_ship_path_cached(&map, &mut cache, from, to, cost),
+            unconstrained
+        );
+        assert!(
+            find_ship_path_cached_with_trackdirs(&map, &mut cache, from, to, cost, 0).is_none()
+        );
+        assert_eq!(cache.stats().computations, 2);
+        assert_eq!(cache.stats().negative_hits, 1);
     }
 
     #[test]

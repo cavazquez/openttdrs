@@ -270,6 +270,7 @@ impl Map {
             terminal_topology_epoch: next_terminal_topology_epoch(),
             terminal_topology_revision: 0,
             mutation_revision: 0,
+            navigation_revision: 0,
         })
     }
 

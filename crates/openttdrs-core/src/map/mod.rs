@@ -201,7 +201,7 @@ pub use water_flood::{
 };
 
 /// Mapa rectangular denso en memoria.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 pub struct Map {
     width: u32,
     height: u32,
@@ -234,6 +234,47 @@ pub struct Map {
     /// mapa, como los contadores de infraestructura de la UI.
     #[serde(skip)]
     mutation_revision: u64,
+    /// Road/water topology, separate from changing rail signals/reservations.
+    #[serde(skip)]
+    navigation_revision: u64,
+}
+
+impl Clone for Map {
+    fn clone(&self) -> Self {
+        Self {
+            width: self.width,
+            height: self.height,
+            tiles: self.tiles.clone(),
+            legacy_zero_water_height_repair: self.legacy_zero_water_height_repair,
+            imported_object_types: self.imported_object_types.clone(),
+            terminal_topology_epoch: next_terminal_topology_epoch(),
+            terminal_topology_revision: self.terminal_topology_revision,
+            mutation_revision: self.mutation_revision,
+            navigation_revision: self.navigation_revision,
+        }
+    }
+}
+
+fn navigation_tile_changed(previous: Tile, next: Tile) -> bool {
+    let relevant = |kind| {
+        matches!(
+            kind,
+            TileKind::Road
+                | TileKind::Water
+                | TileKind::RoadDepot
+                | TileKind::ShipDepot
+                | TileKind::Airport
+                | TileKind::Station
+                | TileKind::RoadTunnel
+                | TileKind::RoadBridge
+                | TileKind::RailTunnel
+                | TileKind::RailBridge
+                | TileKind::Unknown(_)
+        )
+    };
+    // Height changes may affect nearby coasts, locks and tunnel portals.
+    previous.height != next.height
+        || (previous != next && (relevant(previous.kind) || relevant(next.kind)))
 }
 
 static NEXT_TERMINAL_TOPOLOGY_EPOCH: std::sync::atomic::AtomicU64 =
@@ -292,6 +333,7 @@ impl<'de> serde::Deserialize<'de> for Map {
             terminal_topology_epoch: next_terminal_topology_epoch(),
             terminal_topology_revision: 0,
             mutation_revision: 0,
+            navigation_revision: 0,
         })
     }
 }
@@ -331,6 +373,7 @@ impl Map {
             terminal_topology_epoch: next_terminal_topology_epoch(),
             terminal_topology_revision: 0,
             mutation_revision: 0,
+            navigation_revision: 0,
         }
     }
 
@@ -347,6 +390,10 @@ impl Map {
             self.terminal_topology_epoch,
             self.terminal_topology_revision,
         )
+    }
+
+    pub(crate) const fn navigation_topology_version(&self) -> (u64, u64) {
+        (self.terminal_topology_epoch, self.navigation_revision)
     }
 
     /// Indica si el renderer debe reparar el antiguo export `.ottdmap` que
@@ -427,6 +474,9 @@ impl Map {
         if previous != tile {
             self.mutation_revision = self.mutation_revision.wrapping_add(1);
         }
+        if navigation_tile_changed(previous, tile) {
+            self.navigation_revision = self.navigation_revision.wrapping_add(1);
+        }
         if terminal_tile_station_id(previous) != terminal_tile_station_id(tile) {
             self.bump_terminal_topology_revision();
         }
@@ -447,10 +497,9 @@ impl Map {
 
     pub fn set_height(&mut self, c: TileCoord, height: u8) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
-        if self.tiles[i].height != height {
-            self.tiles[i].height = height;
-            self.mutation_revision = self.mutation_revision.wrapping_add(1);
-        }
+        let mut tile = self.tiles[i];
+        tile.height = height;
+        self.replace_tile_at(i, tile);
         Ok(())
     }
 
@@ -464,20 +513,18 @@ impl Map {
 
     pub fn set_mapt_m5(&mut self, c: TileCoord, mapt: u8, m5: u8) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
-        if self.tiles[i].mapt != mapt || self.tiles[i].m5 != m5 {
-            self.tiles[i].mapt = mapt;
-            self.tiles[i].m5 = m5;
-            self.mutation_revision = self.mutation_revision.wrapping_add(1);
-        }
+        let mut tile = self.tiles[i];
+        tile.mapt = mapt;
+        tile.m5 = m5;
+        self.replace_tile_at(i, tile);
         Ok(())
     }
 
     pub fn set_m1(&mut self, c: TileCoord, m1: u8) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
-        if self.tiles[i].m1 != m1 {
-            self.tiles[i].m1 = m1;
-            self.mutation_revision = self.mutation_revision.wrapping_add(1);
-        }
+        let mut tile = self.tiles[i];
+        tile.m1 = m1;
+        self.replace_tile_at(i, tile);
         Ok(())
     }
 
@@ -507,10 +554,9 @@ impl Map {
 
     pub fn set_m3(&mut self, c: TileCoord, m3: u8) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
-        if self.tiles[i].m3 != m3 {
-            self.tiles[i].m3 = m3;
-            self.mutation_revision = self.mutation_revision.wrapping_add(1);
-        }
+        let mut tile = self.tiles[i];
+        tile.m3 = m3;
+        self.replace_tile_at(i, tile);
         Ok(())
     }
 

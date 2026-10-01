@@ -1,8 +1,43 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
-use crate::map::TileCoord;
+use crate::map::{Map, TileCoord};
 
-use super::{PathNetwork, water::ShipPathCost};
+use super::{PathNetwork, TunnelWormholes, water::ShipPathCost};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct RouteRequest {
+    pub from: TileCoord,
+    pub to: TileCoord,
+    pub network: PathNetwork,
+    pub ship_cost: Option<ShipPathCost>,
+    pub origin_trackdir_mask: Option<u16>,
+}
+
+impl RouteRequest {
+    fn key(self) -> PathCacheKey {
+        cache_key(
+            self.from,
+            self.to,
+            self.network,
+            self.ship_cost,
+            self.origin_trackdir_mask,
+        )
+    }
+}
+
+pub(crate) enum CachedRoute {
+    Miss,
+    Hit(Option<Vec<TileCoord>>),
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct PathCacheStats {
+    pub hits: u64,
+    pub misses: u64,
+    pub negative_hits: u64,
+    pub topology_invalidations: u64,
+    pub computations: u64,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct PathCacheKey {
@@ -17,14 +52,22 @@ struct PathCacheKey {
     max_speed: u16,
     curve45_penalty: u32,
     curve90_penalty: u32,
+    origin_trackdir_present: u8,
     origin_trackdir_mask: u16,
 }
 
-/// Caché de rutas por tick (no se serializa; se invalida al avanzar la simulación).
+/// Road/water searches persist until topology changes; rail routes expire
+/// each tick because their costs include live signals and reservations.
+/// No derived cache contents or statistics are serialized.
 #[derive(Debug, Default, Clone)]
 pub struct PathCache {
     tick: u64,
-    entries: HashMap<PathCacheKey, Vec<TileCoord>>,
+    entries: HashMap<PathCacheKey, Option<Vec<TileCoord>>>,
+    insertion_order: VecDeque<PathCacheKey>,
+    topology: Option<(u64, u64)>,
+    rail_revision: u64,
+    wormholes: Option<TunnelWormholes>,
+    stats: PathCacheStats,
 }
 
 impl PathCache {
@@ -32,9 +75,77 @@ impl PathCache {
 
     pub fn begin_tick(&mut self, tick: u64) {
         if self.tick != tick {
-            self.entries.clear();
+            self.clear_rail();
             self.tick = tick;
         }
+    }
+
+    fn clear_rail(&mut self) {
+        self.entries.retain(|key, _| key.network != 1);
+        self.insertion_order.retain(|key| key.network != 1);
+    }
+
+    pub(crate) fn prepare_map(&mut self, map: &Map) {
+        let topology = map.navigation_topology_version();
+        if self.topology != Some(topology) {
+            if self.topology.is_some() {
+                self.stats.topology_invalidations += 1;
+            }
+            self.entries.clear();
+            self.insertion_order.clear();
+            self.topology = Some(topology);
+        } else if self.rail_revision != map.mutation_revision() {
+            self.clear_rail();
+        }
+        self.rail_revision = map.mutation_revision();
+    }
+
+    pub(crate) fn prepare(&mut self, map: &Map, wormholes: Option<&TunnelWormholes>) {
+        self.prepare_map(map);
+        let wormholes = wormholes.filter(|links| !links.is_empty());
+        if self.wormholes.as_ref() != wormholes {
+            if !self.entries.is_empty() {
+                self.stats.topology_invalidations += 1;
+            }
+            self.entries.retain(|key, _| matches!(key.network, 2 | 3));
+            self.insertion_order
+                .retain(|key| matches!(key.network, 2 | 3));
+            self.wormholes = wormholes.cloned();
+        }
+    }
+
+    #[must_use]
+    pub const fn stats(&self) -> PathCacheStats {
+        self.stats
+    }
+
+    pub(crate) fn lookup(&mut self, request: RouteRequest) -> CachedRoute {
+        let Some(path) = self.entries.get(&request.key()) else {
+            self.stats.misses += 1;
+            return CachedRoute::Miss;
+        };
+        self.stats.hits += 1;
+        if path.is_none() {
+            self.stats.negative_hits += 1;
+        }
+        CachedRoute::Hit(path.clone())
+    }
+
+    pub(crate) fn insert_result(&mut self, request: RouteRequest, path: Option<Vec<TileCoord>>) {
+        self.stats.computations += 1;
+        self.insert_key(request.key(), path);
+    }
+
+    fn insert_key(&mut self, key: PathCacheKey, path: Option<Vec<TileCoord>>) {
+        if !self.entries.contains_key(&key) {
+            if self.entries.len() >= Self::MAX_ENTRIES
+                && let Some(oldest) = self.insertion_order.pop_front()
+            {
+                self.entries.remove(&oldest);
+            }
+            self.insertion_order.push_back(key);
+        }
+        self.entries.insert(key, path);
     }
 
     #[must_use]
@@ -44,8 +155,8 @@ impl PathCache {
         to: TileCoord,
         network: PathNetwork,
     ) -> Option<&Vec<TileCoord>> {
-        let key = cache_key(from, to, network, None, 0);
-        self.entries.get(&key)
+        let key = cache_key(from, to, network, None, None);
+        self.entries.get(&key).and_then(Option::as_ref)
     }
 
     #[must_use]
@@ -66,7 +177,14 @@ impl PathCache {
         cost: ShipPathCost,
         origin_trackdir: Option<u8>,
     ) -> Option<&Vec<TileCoord>> {
-        self.get_ship_with_trackdirs(from, to, cost, origin_trackdir.map_or(0, trackdir_mask))
+        let key = cache_key(
+            from,
+            to,
+            PathNetwork::Water,
+            Some(cost),
+            origin_trackdir.map(trackdir_mask),
+        );
+        self.entries.get(&key).and_then(Option::as_ref)
     }
 
     #[must_use]
@@ -82,9 +200,9 @@ impl PathCache {
             to,
             PathNetwork::Water,
             Some(cost),
-            origin_trackdir_mask,
+            Some(origin_trackdir_mask),
         );
-        self.entries.get(&key)
+        self.entries.get(&key).and_then(Option::as_ref)
     }
 
     pub fn insert(
@@ -94,11 +212,7 @@ impl PathCache {
         network: PathNetwork,
         path: Vec<TileCoord>,
     ) {
-        if self.entries.len() >= Self::MAX_ENTRIES {
-            self.entries.clear();
-        }
-        self.entries
-            .insert(cache_key(from, to, network, None, 0), path);
+        self.insert_key(cache_key(from, to, network, None, None), Some(path));
     }
 
     pub fn insert_ship(
@@ -119,12 +233,15 @@ impl PathCache {
         origin_trackdir: Option<u8>,
         path: Vec<TileCoord>,
     ) {
-        self.insert_ship_with_trackdirs(
-            from,
-            to,
-            cost,
-            origin_trackdir.map_or(0, trackdir_mask),
-            path,
+        self.insert_key(
+            cache_key(
+                from,
+                to,
+                PathNetwork::Water,
+                Some(cost),
+                origin_trackdir.map(trackdir_mask),
+            ),
+            Some(path),
         );
     }
 
@@ -136,18 +253,15 @@ impl PathCache {
         origin_trackdir_mask: u16,
         path: Vec<TileCoord>,
     ) {
-        if self.entries.len() >= Self::MAX_ENTRIES {
-            self.entries.clear();
-        }
-        self.entries.insert(
+        self.insert_key(
             cache_key(
                 from,
                 to,
                 PathNetwork::Water,
                 Some(cost),
-                origin_trackdir_mask,
+                Some(origin_trackdir_mask),
             ),
-            path,
+            Some(path),
         );
     }
 }
@@ -158,7 +272,7 @@ fn cache_key(
     to: TileCoord,
     network: PathNetwork,
     ship_cost: Option<ShipPathCost>,
-    origin_trackdir_mask: u16,
+    origin_trackdir_mask: Option<u16>,
 ) -> PathCacheKey {
     let (
         ship_cost_present,
@@ -195,7 +309,8 @@ fn cache_key(
         max_speed,
         curve45_penalty,
         curve90_penalty,
-        origin_trackdir_mask,
+        origin_trackdir_present: u8::from(origin_trackdir_mask.is_some()),
+        origin_trackdir_mask: origin_trackdir_mask.unwrap_or(0),
     }
 }
 

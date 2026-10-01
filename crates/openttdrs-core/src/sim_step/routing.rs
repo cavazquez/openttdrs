@@ -49,6 +49,47 @@ struct GenericRouteJob {
     ship_origin_trackdir_mask: Option<u16>,
 }
 
+impl GenericRouteJob {
+    fn request(self) -> pathfinder::RouteRequest {
+        pathfinder::RouteRequest {
+            from: self.from,
+            to: self.to,
+            network: self.network,
+            ship_cost: self.ship_path_cost,
+            origin_trackdir_mask: self.ship_origin_trackdir_mask,
+        }
+    }
+
+    fn result(self, path: Option<Vec<TileCoord>>) -> GenericRouteResult {
+        GenericRouteResult {
+            vehicle_idx: self.vehicle_idx,
+            path,
+            ship_path_cost: self.ship_path_cost,
+            ship_origin_trackdir_mask: self.ship_origin_trackdir_mask,
+        }
+    }
+}
+
+fn compute_generic_route(
+    map: &crate::Map,
+    job: GenericRouteJob,
+    wormholes: Option<&pathfinder::TunnelWormholes>,
+) -> Option<Vec<TileCoord>> {
+    job.ship_path_cost.map_or_else(
+        || pathfinder::find_path_with_wormholes(map, job.from, job.to, job.network, wormholes),
+        |cost| {
+            job.ship_origin_trackdir_mask.map_or_else(
+                || pathfinder::find_ship_path_with_cost(map, job.from, job.to, cost),
+                |mask| {
+                    pathfinder::find_ship_path_with_cost_and_trackdirs(
+                        map, job.from, job.to, cost, mask,
+                    )
+                },
+            )
+        },
+    )
+}
+
 #[derive(Debug)]
 struct GenericRouteResult {
     vehicle_idx: usize,
@@ -65,7 +106,7 @@ struct ShipDockRouteCandidate {
 }
 
 /// Por debajo de este tamaño, el overhead de sincronización supera el ahorro
-/// y conviene mantener la caché secuencial por tick.
+/// y conviene resolver las búsquedas distintas secuencialmente.
 const PARALLEL_GENERIC_ROUTE_THRESHOLD: usize = 32;
 const SHIP_DOCKING_OCCUPANCY_PENALTY: u32 = 3 * crate::rail_pbs::YAPF_TILE_LENGTH;
 
@@ -284,95 +325,54 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
         }
     }
 
-    let nonrail_paths: Vec<GenericRouteResult> = if nonrail_jobs.len()
-        >= PARALLEL_GENERIC_ROUTE_THRESHOLD
-    {
-        nonrail_jobs
+    state.runtime.path_cache.prepare(&state.map, wh);
+    let mut nonrail_paths = Vec::with_capacity(nonrail_jobs.len());
+    let mut unique = Vec::<GenericRouteJob>::new();
+    let mut users = Vec::<Vec<usize>>::new();
+    let mut pending_by_request = HashMap::new();
+    for (slot, job) in nonrail_jobs.iter().copied().enumerate() {
+        let request = job.request();
+        if let pathfinder::CachedRoute::Hit(path) = state.runtime.path_cache.lookup(request) {
+            nonrail_paths.push(Some(job.result(path)));
+        } else {
+            nonrail_paths.push(None);
+            let pending = *pending_by_request.entry(request).or_insert_with(|| {
+                let pending = unique.len();
+                unique.push(job);
+                users.push(Vec::new());
+                pending
+            });
+            users[pending].push(slot);
+        }
+    }
+    // Only unresolved, distinct requests enter the solver. Cache hits and
+    // publication stay in fleet order, independent of worker completion order.
+    let computed: Vec<_> = if unique.len() >= PARALLEL_GENERIC_ROUTE_THRESHOLD {
+        unique
             .par_iter()
-            .map(|job| {
-                let path = job.ship_path_cost.map_or_else(
-                    || {
-                        pathfinder::find_path_with_wormholes(
-                            &state.map,
-                            job.from,
-                            job.to,
-                            job.network,
-                            wh,
-                        )
-                    },
-                    |cost| {
-                        job.ship_origin_trackdir_mask.map_or_else(
-                            || {
-                                pathfinder::find_ship_path_with_cost(
-                                    &state.map, job.from, job.to, cost,
-                                )
-                            },
-                            |trackdir_mask| {
-                                pathfinder::find_ship_path_with_cost_and_trackdirs(
-                                    &state.map,
-                                    job.from,
-                                    job.to,
-                                    cost,
-                                    trackdir_mask,
-                                )
-                            },
-                        )
-                    },
-                );
-                GenericRouteResult {
-                    vehicle_idx: job.vehicle_idx,
-                    path,
-                    ship_path_cost: job.ship_path_cost,
-                    ship_origin_trackdir_mask: job.ship_origin_trackdir_mask,
-                }
-            })
+            .map(|&job| compute_generic_route(&state.map, job, wh))
             .collect()
     } else {
-        nonrail_jobs
+        unique
             .iter()
-            .map(|job| {
-                let path = match job.ship_path_cost {
-                    Some(cost) => match job.ship_origin_trackdir_mask {
-                        Some(trackdir_mask) => pathfinder::find_ship_path_cached_with_trackdirs(
-                            &state.map,
-                            &mut state.runtime.path_cache,
-                            job.from,
-                            job.to,
-                            cost,
-                            trackdir_mask,
-                        ),
-                        None => pathfinder::find_ship_path_cached(
-                            &state.map,
-                            &mut state.runtime.path_cache,
-                            job.from,
-                            job.to,
-                            cost,
-                        ),
-                    },
-                    None => pathfinder::find_path_cached(
-                        &state.map,
-                        &mut state.runtime.path_cache,
-                        job.from,
-                        job.to,
-                        job.network,
-                        wh,
-                    ),
-                };
-                GenericRouteResult {
-                    vehicle_idx: job.vehicle_idx,
-                    path,
-                    ship_path_cost: job.ship_path_cost,
-                    ship_origin_trackdir_mask: job.ship_origin_trackdir_mask,
-                }
-            })
+            .map(|&job| compute_generic_route(&state.map, job, wh))
             .collect()
     };
+    for ((job, users), path) in unique.into_iter().zip(users).zip(computed) {
+        state
+            .runtime
+            .path_cache
+            .insert_result(job.request(), path.clone());
+        for slot in users {
+            nonrail_paths[slot] = Some(nonrail_jobs[slot].result(path.clone()));
+        }
+    }
     for GenericRouteResult {
         vehicle_idx: i,
         path,
         ship_path_cost,
         ship_origin_trackdir_mask,
-    } in nonrail_paths
+    } in nonrail_paths.into_iter().flatten()
     {
         // `UpdateOrderDest` conserva el amarre geométricamente más cercano como
         // fast path. Para estaciones con varios `DockingTile`, `YapfShip`
@@ -1081,6 +1081,49 @@ mod tests {
     use super::*;
     use crate::rail_pbs::ReservedRailStep;
     use crate::vehicle::Vehicle;
+
+    #[test]
+    fn large_route_batch_shares_searches_and_keeps_vehicle_publication_order() {
+        let mut state = GameState::new(6, 6);
+        let from = TileCoord::new(0, 0);
+        let to = TileCoord::new(4, 0);
+        for x in 0..=4 {
+            let coord = TileCoord::new(x, 0);
+            state.map.set_kind(coord, crate::TileKind::Road).unwrap();
+            state.map.set_mapt_m5(coord, 0x20, 0x0A).unwrap();
+        }
+        let expected = pathfinder::find_path_with_wormholes(
+            &state.map,
+            from,
+            to,
+            pathfinder::PathNetwork::Road,
+            None,
+        )
+        .unwrap();
+        for id in (0..40).rev() {
+            let mut vehicle = Vehicle::new(id, VehicleKind::Truck, from, to);
+            vehicle.running = true;
+            vehicle.orders = vec![crate::vehicle::VehicleOrder::tile(to)];
+            state.vehicles.push(vehicle);
+        }
+        let ids: Vec<_> = state.vehicles.iter().map(|v| v.id).collect();
+        recompute_vehicle_paths(&mut state);
+        assert_eq!(state.runtime.path_cache.stats().computations, 1);
+        assert_eq!(state.vehicles.iter().map(|v| v.id).collect::<Vec<_>>(), ids);
+        assert!(
+            state
+                .vehicles
+                .iter()
+                .all(|v| v.path.iter().copied().collect::<Vec<_>>() == expected)
+        );
+
+        // Another vehicle needs the same trip on a later tick: no new search.
+        state.vehicles[0].path.clear();
+        state.tick.advance();
+        recompute_vehicle_paths(&mut state);
+        assert_eq!(state.runtime.path_cache.stats().computations, 1);
+        assert_eq!(state.runtime.path_cache.stats().hits, 1);
+    }
 
     #[test]
     fn platform_occupancy_index_keeps_self_out_and_indexes_consists_and_reservations() {

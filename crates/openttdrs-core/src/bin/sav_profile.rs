@@ -477,6 +477,15 @@ fn run(args: &Args) -> Result<(), String> {
         visual_dirty.max_reservation,
         visual_dirty.last_reservation,
     );
+    let cache = state.runtime.path_cache.stats();
+    println!(
+        "rutas cache: {} hits ({} negativos), {} misses, {} búsquedas distintas, {} invalidaciones de topología",
+        cache.hits,
+        cache.negative_hits,
+        cache.misses,
+        cache.computations,
+        cache.topology_invalidations
+    );
     Ok(())
 }
 

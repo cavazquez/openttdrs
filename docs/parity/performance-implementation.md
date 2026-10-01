@@ -1462,3 +1462,100 @@ y 30 FPS siguen abiertos.
 
 No se declara alcanzado el presupuesto de 33,33 ms sin una nueva medición de la
 partida grande en ejecución, cámara y los seis niveles de zoom.
+
+## Etapa 25 — Cabezas ferroviarias actuales una vez por consulta (F07)
+
+El look-ahead de tráfico y el predicado de frente a frente filtran ahora las
+cabezas de tren una vez por consulta inmutable. Las búsquedas siguientes usan
+referencias en el mismo orden del vector de vehículos; no se ordenan por ID ni
+se conserva una posición entre consultas o ticks. Los guardas, los depósitos,
+las huellas y la selección del primer tren sobre una tesela permanecen iguales.
+En la fixture hay 3.293 unidades y 151 cabezas ferroviarias: el look-ahead de
+hasta 64 teselas consulta esas cabezas en lugar de filtrar repetidamente toda
+la flota. El wrapper público sigue construyendo su índice cuando se usa de
+forma aislada; la ruta del tick reutiliza el índice de formaciones existente.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`,
+[`train_cmd.cpp::CheckTrainCollision`](https://github.com/OpenTTD/OpenTTD/blob/14ec60f248547d4d062a1160f0fc26d742319888/src/train_cmd.cpp#L3205),
+usa `VehiclesOnTile` / `VehiclesNearTileXY` y referencias a unidades actuales.
+Esa consulta espacial orienta la reducción de recorridos; **no certifica la
+regla simplificada de 64 teselas del port como equivalente a la colisión
+física nativa**, que también considera compañía, coordenadas y altura.
+La equivalencia de esta etapa usa los dos predicados anteriores de `aee9238a`
+como oracle diferencial. Cinco regresiones ejecutan 250 escenarios: flota
+mixta, wagons, límites 2/64, guardas, empates por orden, IDs duplicados,
+altas/bajas/reordenamiento, movimiento, depósito, bifurcación y huella mediante
+eslabones o historial. Los dos resultados coinciden en cada escenario.
+
+Núcleo normal, misma partida/NewGRF y orden importado, ABBA sin otras cargas:
+24 ticks, movimiento de vehículos **3,3288 / 3,5040 → 2,4019 / 2,6026 ms**;
+total **23,7651 / 24,4710 → 24,6287 / 25,7748 ms**. En 120 ticks, movimiento
+**4,0874 / 4,0612 → 3,1131 / 3,1371 ms** y total
+**15,8584 / 15,7824 → 15,3016 / 15,2544 ms**. El ahorro de movimiento aparece
+en ambas ventanas; el total inicial empeora y no se oculta ni se atribuye
+una mejora global uniforme al núcleo.
+[Datos](evidence/train-traffic-view-core-20261001.csv).
+
+Las 61 fases normales conservan hash canónico v4, eventos, teselas raw y
+bloques 4×4. También coinciden los contadores y las listas ordenadas de avisos
+generales y de ascensor. El oracle anterior reutiliza el dump inmutable de la
+etapa 24 posterior, generado por el mismo binario de traza cuyo hash se indica
+abajo; no se ordenan las listas compartidas antes de avanzar.
+Tick final `3703134`, hash `4d3524e48b6bc2e5`, eventos `4857641856429973`.
+[Comparación](evidence/train-traffic-view-state-20261001.csv).
+Esto acredita conservación frente al port anterior, dentro de esta fixture;
+no acredita importación SAV o simulación nativa universales.
+
+Cliente/GPU real, 1280×720, misma flota/NewGRF, escala 2, ABBA, 40 muestras
+por run, sin compilación ni perf concurrentes. Ventana fija tras 120 frames:
+frame medio **53,3029 / 53,1672 → 51,2810 / 51,1498 ms**, FPS por duración
+media **18,761 / 18,809 → 19,500 / 19,550**; simulación
+**15,7480 / 16,0070 → 14,4643 / 14,4341 ms**. Remap permanece alrededor de
+9,8 ms. Medianas **52,4621 / 52,1645 → 50,1609 / 50,0222 ms**, p95
+**75,6472 / 76,7182 → 72,8220 / 73,6081**, máximos/p99
+**86,2844 / 87,2434 → 83,9550 / 85,2077**. TPS observados
+**18,630 / 18,817 → 19,488 / 19,544**. El primer run anterior cubre ticks
+3703194–3703233; los otros tres, 3703193–3703232. Exceden 33,33 ms 80/80
+frames anteriores y 79/80 posteriores; un frame aislado bajo el presupuesto
+no acredita 30 FPS sostenidos.
+[160 muestras](evidence/train-traffic-view-client-steady-20261001.csv).
+
+Pan con warmup 30, otra comparación ABBA de 40 muestras por run:
+frame **60,4526 / 60,2850 → 58,9708 / 59,7966 ms**, FPS
+**16,542 / 16,588 → 16,958 / 16,723**; simulación
+**16,5981 / 16,4873 → 15,2031 / 15,2946 ms**. Medianas
+**56,6379 / 55,5866 → 55,1062 / 56,6691**, p95
+**89,0991 / 89,2055 → 87,7315 / 89,4415**, máximos/p99
+**151,0657 / 150,7162 → 145,0007 / 146,3740**. TPS
+**17,203 / 17,251 → 17,617 / 17,368**. Todos los runs cubren ticks
+3703103–3703142, todos los 80 frames por versión exceden el presupuesto y
+la primera muestra incluye el cambio de zoom del frame 30. Las fases miden
+el frame actual y `frame_ms` el intervalo anterior: no se suman como un
+presupuesto exacto del mismo frame.
+[160 muestras](evidence/train-traffic-view-pan-20261001.csv).
+
+Las seis parejas congeladas conservan PNG y trazas completas de sort
+byte-idénticos, cero píxeles y cero bloques 4×4 distintos, de 54 a 37.998
+parents. Escalas ortográficas .25/.5/1/2/4/8, centro 128,128, settle 180 y
+CLEAN=0. Ese gate no acredita los FPS activos de los otros cinco zooms ni
+cada frame animado.
+[Raster](evidence/train-traffic-view-raster-20261001.csv).
+
+Artefactos inmutables en `target/performance/train-traffic-view-20261001`:
+cliente anterior/posterior SHA256
+`95ccbe237d695c6f4c5bb04ba4efb3e20445db1abb8dd605e576ac20bdfa827b` /
+`a759a41d2d03e16c2a2c27ad6c95f0793072b56ab8a4cb7a908ee28d2135ce25`;
+`sav_profile` anterior/posterior
+`593dd09d8a11cc4e7e08783ba1ead26dbaf1ce990da81a3094bd38077b15fc8d` /
+`4b026773977296a92096b9bd8f977492b7139b11258ebfd59dcf14f0e75caf31`;
+traza anterior/posterior
+`19282da1d0dbade93200d44fa942f44c774b1f8835ff6299d4d9f871d5286751` /
+`4b78cd3bfae415dadeb0b9982baab1bcfdfcb3d7446dc6225b5941c0068f66a6`.
+La sonda posterior se compiló contra la `.rlib` exacta reportada por Cargo
+JSON. Release del perfil: 24,68 s; cliente tras cambio core: 77 s. No son una
+comparación controlada de compilación ni una mejora de ese objetivo.
+
+Validación: 3.024 core/seis ignorados, 1.666 cliente/dos; Clippy en todos los
+targets de ambos, formato, diff y frescura de docs. Sólo cierra este sub-issue
+de recorridos repetidos de tráfico; F07, paridad ferroviaria completa,
+cadencia, variación histórica del renderer y 30 FPS permanecen abiertos.

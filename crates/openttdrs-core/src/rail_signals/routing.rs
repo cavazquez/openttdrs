@@ -475,20 +475,25 @@ pub fn train_blocked_by_traffic_indexed(
         v.kind == VehicleKind::Train && v.is_consist_head() && v.id != self_id
     };
 
-    if vehicles.iter().any(|v| foreign(v) && v.pos == next) {
+    // Borrow current heads once. Preserve vector order: the look-ahead uses
+    // the first head on a tile, including duplicate IDs in malformed saves.
+    // This view cannot outlive this immutable query or become stale mid-tick.
+    let foreign_heads: Vec<_> = vehicles.iter().filter(|v| foreign(v)).collect();
+
+    if foreign_heads.iter().any(|v| v.pos == next) {
         return true;
     }
 
     // Varios trenes pueden compartir la misma tesela de depósito (OpenTTD).
     if map.get_kind(vehicle.pos) != Some(crate::map::TileKind::RailDepot)
-        && vehicles.iter().any(|v| foreign(v) && v.pos == vehicle.pos)
+        && foreign_heads.iter().any(|v| v.pos == vehicle.pos)
     {
         return true;
     }
 
     // Colisión con huella multi-tesela de otro consist.
     let self_tiles = consist_occupied_tiles_indexed(vehicles, fleet, self_id);
-    for other in vehicles.iter().filter(|v| foreign(v)) {
+    for other in &foreign_heads {
         let other_tiles = consist_occupied_tiles_indexed(vehicles, fleet, other.id);
         if other_tiles.contains(&next) {
             return true;
@@ -508,7 +513,7 @@ pub fn train_blocked_by_traffic_indexed(
     let mut prev = vehicle.pos;
     let mut cur = next;
     for dist in 0..64u8 {
-        if let Some(other) = vehicles.iter().find(|v| foreign(v) && v.pos == cur) {
+        if let Some(other) = foreign_heads.iter().find(|v| v.pos == cur) {
             if !other.running {
                 return true;
             }
@@ -546,11 +551,12 @@ pub fn train_facing_head_on_traffic(map: &Map, vehicles: &[Vehicle], vehicle: &V
     let self_id = vehicle.id;
     let foreign =
         |v: &Vehicle| v.kind == VehicleKind::Train && v.is_consist_head() && v.id != self_id;
+    let foreign_heads: Vec<_> = vehicles.iter().filter(|v| foreign(v)).collect();
 
     let mut prev = vehicle.pos;
     let mut cur = next;
     for _ in 0..64 {
-        if let Some(other) = vehicles.iter().find(|v| foreign(v) && v.pos == cur) {
+        if let Some(other) = foreign_heads.iter().find(|v| v.pos == cur) {
             if let Some(other_next) = other.movement_target() {
                 return other_next == prev || other_next == vehicle.pos;
             }
@@ -599,3 +605,7 @@ fn consist_occupied_tiles_indexed(
     }
     tiles
 }
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests;

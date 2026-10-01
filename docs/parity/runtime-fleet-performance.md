@@ -70,6 +70,12 @@ La etapa 24 lee stocks por referencia: la sonda aislada mejora alrededor de
 tres veces y conserva los 64 slots, pero el tick y los FPS no muestran una
 mejora global clara. La última ventana fija mide 18,826 / 18,733 FPS; con
 movimiento, 16,620 / 16,893. Estado, avisos y seis zooms permanecen exactos.
+La etapa 25 filtra las cabezas ferroviarias una vez por consulta actual y
+conserva su orden. El movimiento baja alrededor de 1 ms por tick; la ventana
+fija pasa de 18,761 / 18,809 a 19,500 / 19,550 FPS y el pan de 16,542 / 16,588
+a 16,958 / 16,723. El total core de 24 ticks empeora y el de 120 mejora; ambas
+ventanas quedan registradas. Los 250 escenarios diferenciales, 61 fases y
+seis zooms conservan el port anterior. Cadencia y presupuesto siguen abiertos.
 
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y

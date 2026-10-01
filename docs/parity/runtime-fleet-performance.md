@@ -110,6 +110,15 @@ reproduce el PNG alternativo de la etapa 28 en el otro binario y Out2x varía un
 píxel; doce repeticiones son exactas. Los fallos se conservan y la variación
 raster, F15 completo, cadencia y 30 FPS siguen abiertos.
 
+La etapa 30 añade una captura optativa de todos los sprites, proxies, cámaras,
+layouts y bytes de imágenes, más las dos máscaras de vidrio. Siete corridas
+conservan entradas completas y PNG; seis tienen targets auxiliares exactos.
+Con el diagnóstico apagado, los seis zooms permanecen exactos. En un píxel
+variable In2x, parent y vidrio distintos colapsan al mismo valor proyectado
+en una reproducción escalar f32; aún no se confirma su orden efectivo en GPU.
+La variación inicial y el píxel verde Out2x siguen abiertos. No cambia el
+renderer de producción ni se acredita una mejora de FPS en esta etapa.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

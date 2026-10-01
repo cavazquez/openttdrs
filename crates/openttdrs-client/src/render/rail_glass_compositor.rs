@@ -38,6 +38,9 @@ use openttdrs_core::newgrf_sprites::{
 
 use crate::render::{MapDynamicVisual, MapTileChunk, MapVisualLayer};
 
+mod sprite_trace;
+pub(crate) use sprite_trace::MapSpriteTraceRequest;
+
 /// Capa reservada para la máscara del vidrio. Las entidades sin `RenderLayers`
 /// siguen perteneciendo a la capa 0, que es la cámara principal.
 pub(crate) const RAIL_GLASS_RENDER_LAYER: usize = 1;
@@ -108,6 +111,15 @@ impl Plugin for RailGlassCompositorPlugin {
                 sync_rail_glass_mask_proxies.after(crate::bevy_app::UpdateSet::RenderRefresh),
             ),
         );
+
+        if std::env::var_os("OPENTTDRS_MAP_SPRITE_TRACE_OUT").is_some() {
+            app.add_systems(
+                PostUpdate,
+                sprite_trace::export_requested_sprite_trace
+                    .after(bevy::transform::TransformSystems::Propagate)
+                    .after(bevy::camera::visibility::VisibilitySystems::MarkNewlyHiddenEntitiesInvisible),
+            );
+        }
 
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;

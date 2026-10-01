@@ -2023,3 +2023,90 @@ targets de ambos, formato, diff y frescura de docs. Sólo cierra la expulsión
 innecesaria por este bit ferroviario. F15 completo, el límite de 256 entradas,
 otras invalidaciones, reglas nativas de rutas, variación raster, cadencia y
 30 FPS siguen abiertos. Las capturas repetidas no cierran la variación inicial.
+
+## Etapa 30 — Capturar todas las entradas y máscaras del mapa (F08/F31)
+
+La variación In2x/Out2x de las etapas 28/29 permanece abierta. El stream de
+parents no describía los suelos, todos los children, el atlas vigente ni la
+oclusión de vidrio. Esta etapa añade un diagnóstico optativo de esas entradas,
+sin modificar las reglas ni el orden de dibujo de producción.
+
+Con `OPENTTDRS_MAP_SPRITE_TRACE_OUT=/ruta/entradas.json`, el driver de
+`OPENTTDRS_MAP_SHOT` pide una única exportación en su frame de captura. Se
+ejecuta después de propagar transformaciones y visibilidad. Guarda todos los
+`Sprite` y `SpriteMesh` en el orden de sus queries, los bits de matrices,
+anchors, tamaños y rectángulos, relaciones source/proxy y parent/child,
+clasificación, chunks, capas, visibilidad y cámaras. Exporta también los
+layouts completos y los bytes CPU de cada imagen, en `entradas.images/`.
+La visibilidad registrada es la unión de las vistas; no es una traza del
+orden de batches del render world ni una lectura de su buffer de profundidad.
+
+Las dos capturas auxiliares del mismo frame son `entradas.coverage.png` y
+`entradas.occlusion.png`. Sus targets son `Rgba8Unorm`: el guardador genérico
+de Bevy no los acepta. El diagnóstico guarda sus bytes RGBA directamente;
+una regresión comprueba que no introduce conversión sRGB. La primera corrida
+fallida, con JSON válido y ambas máscaras ausentes, se conserva en el registro.
+Las carpetas de bytes rechazan sobrescrituras de capturas previas.
+
+`scripts/compare_map_sprite_traces.py` compara todo el documento y los bytes
+CPU. Sólo renumera identidades temporales mediante mapas separados para cada
+mundo y tipo de asset; conserva todos los campos, órdenes, referencias y
+alias. Sus tres contrajemplos cubren renumeración válida, sources intercambiados
+y una diferencia de un bit de float. Las tres regresiones Rust cubren además
+el proxy compartido, precisión, bytes y rechazo de sobrescritura.
+
+Siete corridas con GPU real, Kale, 1280×720, centro 128,128, 180 frames y
+`CLEAN=0`: cinco In2x, dos Out2x. Todas conservan PNG principal canónico y
+entradas completas tras renumeración; todos los bytes CPU son exactos. Las
+seis corridas con máscaras completas también conservan ambas imágenes.
+In2x registra 13.623 sprites y 13.623 meshes, 272 imágenes y 29.572.756 bytes;
+Out2x, 45.209 de cada componente, 384 imágenes y 30.333.044 bytes. No hay
+imágenes de ese conjunto sin datos CPU. Las corridas diagnósticas no se usan
+como medición de FPS.
+[Capturas y hashes](evidence/glass-raster-variation-captures-20261001.csv).
+
+Con la traza desactivada, los seis zooms conservan PNG, cero píxeles y cero
+bloques 4×4 distintos, y el stream completo del sorter tras renumeración,
+frente a capturas del binario anterior fijado. Para In2x/Out2x se usan las
+repeticiones canónicas de la etapa 29; sus fallos iniciales siguen conservados.
+[Seis zooms](evidence/glass-raster-variation-disabled-20261001.csv).
+
+En el píxel In2x `(722,0)`, el parent opaco 1163 tiene profundidad
+`2,47322678565979` y su child de vidrio `2,473237991333008`. Una reproducción
+**escalar CPU en f32** de la proyección capturada da para ambos
+`0,2506432831287384`, bits `1048597585`. La máscara actual tiene rojo 248,
+el framebuffer `(65,64,65,255)` y la captura alternativa anterior
+`(98,101,98,255)`. Es un empate numérico reproducible que justifica investigar
+el pase binned con `GreaterEqual`; no confirma el orden efectivo del GPU ni
+explica todavía los otros 203 píxeles o el píxel verde Out2x `(836,245)`.
+[Datos y alcance del cálculo](evidence/glass-raster-depth-tie-20261001.csv).
+
+El original dibuja cada parent y después sus children, en orden, en
+[`ViewportDrawParentSprites`, L1716](https://github.com/OpenTTD/OpenTTD/blob/14ec60f248547d4d062a1160f0fc26d742319888/src/viewport.cpp#L1716).
+Esa regla sirve de referencia para la siguiente corrección acotada de la
+máscara. Esta etapa no acredita paridad raster nativa ni importación SAV
+completa: las nuevas repeticiones no reprodujeron el PNG alternativo.
+
+Reproducción, además de las opciones habituales de save/cámara/zoom:
+
+```bash
+OPENTTDRS_MAP_SPRITE_TRACE_OUT=/tmp/entradas-a.json \
+OPENTTDRS_MAP_SHOT=/tmp/mapa-a.png \
+cargo run -p openttdrs-client --release
+python3 scripts/compare_map_sprite_traces.py /tmp/entradas-a.json /tmp/entradas-b.json
+python3 scripts/compare_map_sprite_traces.py --self-test
+```
+
+Artefactos en `target/performance/glass-raster-variation-20261001`.
+Cliente anterior `029bd3a603b9b81da9b179ce37d2843f2ad16883afe02d3a4a891df06e7c0645`;
+primera sonda `61c7b739fb7d60714230a00346a65bfa3ca8017225198a23f5678c8dddb0ca4d`;
+sonda con guardado RGBA `a0a959b4715b41f7471ffa8131b2525aaf6067da499d0365074173600d7d1a26`.
+`sav_profile`, traza de estado y biblioteca release son hash-idénticos a la
+etapa 29; se conserva su evidencia de 61 fases, sin atribuir un nuevo replay.
+Los builds cliente de 54,25 / 53,72 s no prueban una mejora de compilación.
+
+Validación: 3.035 core/seis ignorados, 1.670 cliente/dos, tres tests Python;
+Clippy en todos los targets de ambos, formato, diff y frescura de docs.
+Sólo cierra el sub-issue de captura reproducible de estas entradas y targets.
+Variación raster, orden efectivo de la máscara, F08 completo, cadencia y
+30 FPS continúan abiertos; los FPS vigentes siguen siendo los de la etapa 29.

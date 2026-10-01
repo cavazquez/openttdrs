@@ -1808,6 +1808,9 @@ fn map_shot_capture_driver(
         commands
             .spawn(Screenshot::primary_window())
             .observe(save_to_disk(path));
+        if let Some(trace_path) = std::env::var_os("OPENTTDRS_MAP_SPRITE_TRACE_OUT") {
+            commands.insert_resource(crate::render::MapSpriteTraceRequest(trace_path.into()));
+        }
     }
     if progress.frame == shot_frame + MAP_SHOT_EXIT_GRACE_FRAMES {
         exit.write(AppExit::Success);

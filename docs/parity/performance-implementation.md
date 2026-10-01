@@ -1335,7 +1335,8 @@ ejecutar física; identifica el acoplamiento del emisor, no acredita una partida
 nativa completa. `spawn_train_smoke` se ejecuta en Update y omite ticks
 intermedios. OpenTTD llama `ShowVisualEffect` desde el controlador de vehículo
 y `Chance16` consume el RNG de juego. En el port, CB10/CB160 también pueden
-escribir los registros del vehículo. El problema ya existe al agrupar ticks con velocidad
+escribir los registros del vehículo. El problema ya existe al agrupar ticks
+con velocidad
 acelerada y se extendería a velocidad normal al retirar la cota de un tick.
 
 Se conserva el [experimento completo](evidence/tick-cadence-standalone-experiment-20261001.json),
@@ -1353,6 +1354,88 @@ y conserva las validaciones de la etapa 22. No se midieron FPS/GPU del prototipo
 ni se modifica la última cifra aceptada de 18,831 / 18,864 FPS. F07 y la cadencia
 completa continúan abiertos; esta etapa cierra sólo el diagnóstico reproducible
 del límite y su dependencia de efectos autoritativos.
+
+## Etapa 24 — Leer un slot de carga por referencia (F12)
+
+`CargoStock::get` recibe ahora `&self` y conserva su condición `const`, las
+31 variantes nombradas, los 33 slots custom y el resultado cero para índices
+custom fuera de rango. Antes recibía por valor los 256 bytes del stock. No
+cambian mutaciones, aritmética, layouts persistidos ni selección de cargo.
+Los callers del repositorio usan sintaxis de método; no se encontró un
+callsite UFCS o puntero de función que requiriese el argumento por valor.
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`,
+`newgrf_station.cpp::StationScopeResolver::GetVariable`, consulta por cargo
+con `const GoodsEntry *ge = &this->goods[cargo]`, sin copiar todos los stocks.
+La equivalencia del cambio se compara con la versión anterior del port.
+
+La sonda [`profile_cargo_stock_get.rs`](../../scripts/profile_cargo_stock_get.rs)
+usa los stocks importados de las 245 estaciones y los 64 slots, 512 pasadas,
+8.028.160 lecturas por muestra, cinco muestras por corrida y ABBA. Carga,
+hidratación y salida quedan fuera del reloj; stock y selector atraviesan
+`black_box` y el checksum se comprueba en cada muestra. Los cuatro runs
+conservan `405600256`, correspondiente a 512 pasadas de 792.188 unidades.
+Media por corrida: **17,9067 / 17,9036 → 5,8392 / 6,0713 ms**.
+La inspección del código de esta sonda muestra que el getter anterior copia
+el stock a la pila; la variante por referencia consulta el slot directamente.
+El optimizador puede eliminar copias en otros contextos: no se extrapola
+esa mejora aislada a cada caller ni al juego completo.
+[Muestras](evidence/cargo-stock-borrow-getter-20261001.csv).
+
+Núcleo normal, mismas partida/NewGRF y orden importado, ABBA sin otras cargas:
+24 ticks, 24,227 / 24,013 → 24,248 / 23,833 ms; 120 ticks,
+15,767 / 15,882 → 16,288 / 15,935 ms. **No se acredita una mejora global
+del tick**. [Fases](evidence/cargo-stock-borrow-core-20261001.csv).
+
+En 61 fases inicial/60 ticks normales se conservan hash v4, eventos,
+todos los bytes de teselas/bloques 4×4, contadores visuales y la secuencia
+de avisos generales y de ascensor: cero diferencias. Tick final 3.703.134,
+hash `4d3524e48b6bc2e5`, eventos `4857641856429973`.
+[Estado](evidence/cargo-stock-borrow-state-20261001.csv).
+
+Cliente normal, mismo hardware/partida/NewGRF, 1280×720, escala 2, sin audio,
+ABBA y 40 muestras por corrida, sin builds ni otras mediciones concurrentes:
+
+- Cámara fija, warmup 120: frame 52,647 / 52,675 → 53,119 / 53,382 ms;
+  FPS **18,994 / 18,984 → 18,826 / 18,733**. Simulación
+  15,649 / 15,765 → 16,045 / 15,830 ms; remap
+  9,929 / 9,847 → 9,786 / 9,878 ms. Mediana
+  51,613 / 51,029 → 51,914 / 52,360 ms; p95
+  74,629 / 74,653 → 76,126 / 77,364 ms; máximo/p99
+  86,527 / 86,589 → 87,212 / 86,267 ms. El segundo run posterior
+  cubre ticks 3.703.194–3.703.233 y los otros tres 3.703.193–3.703.232;
+  tick/s observado 18,984 / 18,983 → 18,820 / 18,590.
+  [Muestras](evidence/cargo-stock-borrow-client-steady-20261001.csv).
+- Cámara en movimiento, warmup 30: frame
+  60,399 / 60,049 → 60,168 / 59,196 ms; FPS
+  **16,556 / 16,653 → 16,620 / 16,893**. Simulación
+  16,401 / 16,404 → 16,572 / 16,403 ms; remap
+  11,412 / 11,419 → 11,262 / 11,190 ms. Mediana
+  56,496 / 55,980 → 56,031 / 56,896 ms; p95
+  88,153 / 89,326 → 88,175 / 86,243 ms; máximo/p99
+  149,818 / 145,445 → 147,595 / 138,929 ms. El segundo run posterior
+  cubre ticks 3.703.104–3.703.143 y los otros tres 3.703.103–3.703.142;
+  tick/s observado 17,210 / 17,283 → 17,263 / 17,498.
+  [Pan](evidence/cargo-stock-borrow-pan-20261001.csv).
+
+Los 80 frames por versión y escenario exceden 33,33 ms. Los resultados
+completos son mixtos; no acreditan una mejora de FPS. Se mantiene la salvedad
+del cambio de zoom con warmup 30, sin mezclar ventanas ni sumar fases.
+Las seis parejas congeladas con flota, centro 128,128, settle 180, `CLEAN=0`,
+1280×720 y escalas 0,25/0,5/1/2/4/8 conservan PNG y traza completa
+byte-idénticos: cero píxeles/bloques 4×4 distintos, 54–37.998 parents.
+[Raster](evidence/cargo-stock-borrow-raster-20261001.csv).
+No se certifican por ello lectura SAV nativa, todos los frames activos
+ni la resolución de la variación histórica del renderer.
+
+Validación: 3.019 core/seis ignorados, 1.666 cliente/dos, Clippy de todos los
+targets, formato, diff y frescura de docs. La sonda se formatea y compila con
+`rustc -D warnings -O` contra cada `.rlib` exacta de Cargo JSON. SHA256 cliente
+anterior/posterior: `b93231297b4a5611b3c5d3ee41cfebb7a7c53bbc5d28016545dab6a4f2988f58`
+y `95ccbe237d695c6f4c5bb04ba4efb3e20445db1abb8dd605e576ac20bdfa827b`;
+`sav_profile`: `ca4d25c8af82dbe3802ea852fa782bc3ab8cb150803ee6162db5674d90f6e62a`
+y `593dd09d8a11cc4e7e08783ba1ead26dbaf1ce990da81a3094bd38077b15fc8d`.
+Se cierra el argumento por valor del getter. F12, tráfico, remap, cadencia
+y 30 FPS siguen abiertos.
 
 ## Trabajo restante
 

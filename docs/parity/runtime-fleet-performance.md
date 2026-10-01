@@ -66,6 +66,10 @@ La etapa 23 reproduce 30 ticks con 30 frames en un segundo. El reloj aislado
 propuesto corrige el conteo, pero fue retirado: el emisor de humo consume RNG
 de juego desde el render y omite ticks agrupados, incluso sin NewGRF. La
 corrección de cadencia debe integrar esas decisiones y los pasos de red.
+La etapa 24 lee stocks por referencia: la sonda aislada mejora alrededor de
+tres veces y conserva los 64 slots, pero el tick y los FPS no muestran una
+mejora global clara. La última ventana fija mide 18,826 / 18,733 FPS; con
+movimiento, 16,620 / 16,893. Estado, avisos y seis zooms permanecen exactos.
 
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y

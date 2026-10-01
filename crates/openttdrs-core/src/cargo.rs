@@ -352,7 +352,7 @@ where
 
 impl CargoStock {
     #[must_use]
-    pub const fn get(self, cargo: CargoType) -> u32 {
+    pub const fn get(&self, cargo: CargoType) -> u32 {
         match cargo {
             CargoType::Passengers => self.passengers,
             CargoType::Coal => self.coal,

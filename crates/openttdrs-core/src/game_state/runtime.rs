@@ -66,6 +66,73 @@ pub(crate) struct LegacySavAfterload {
 pub struct PendingLinkGraphJob {
     pub join_date: u32,
     pub jobs: Vec<(crate::cargo::CargoType, crate::cargodist::parity::Job)>,
+    #[serde(skip)]
+    worker: Option<LinkGraphWorker>,
+}
+
+type LinkGraphWorker = std::sync::Arc<std::sync::OnceLock<Option<crate::flow_stat::StationFlows>>>;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum CargoRoutingPause {
+    #[default]
+    Ready,
+    AfterLoad,
+}
+
+impl PendingLinkGraphJob {
+    #[must_use]
+    pub fn new(
+        join_date: u32,
+        jobs: Vec<(crate::cargo::CargoType, crate::cargodist::parity::Job)>,
+    ) -> Self {
+        let mut pending = Self {
+            join_date,
+            jobs,
+            worker: None,
+        };
+        pending.start_worker();
+        pending
+    }
+
+    pub(crate) fn start_worker(&mut self) {
+        if self.worker.is_some() {
+            return;
+        }
+        let output = std::sync::Arc::new(std::sync::OnceLock::new());
+        self.worker = Some(std::sync::Arc::clone(&output));
+        let jobs = self
+            .jobs
+            .iter()
+            .map(|(cargo, job)| (*cargo, job.input_snapshot()))
+            .collect();
+        rayon::spawn(move || {
+            // A failed worker must still signal completion. Synchronous replay
+            // then retries on the same inputs and reports the solver panic.
+            let flows = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                crate::linkgraph_parity::station_flows_from_jobs(jobs)
+            }))
+            .ok();
+            let _ = output.set(flows);
+        });
+    }
+
+    pub(crate) fn is_ready(&self) -> bool {
+        self.worker
+            .as_ref()
+            .is_some_and(|worker| worker.get().is_some())
+    }
+
+    pub(crate) fn join(mut self) -> crate::flow_stat::StationFlows {
+        self.start_worker();
+        if let Some(flows) = self
+            .worker
+            .as_ref()
+            .and_then(|worker| worker.wait().as_ref())
+        {
+            return flows.clone();
+        }
+        crate::linkgraph_parity::station_flows_from_jobs(self.jobs)
+    }
 }
 
 /// Indices/caches efímeros y frontera persistente de `CargoDist`.
@@ -262,12 +329,14 @@ pub struct SimulationRuntime {
     /// Solver results keyed by exact per-cargo inputs; never serialized.
     pub(crate) station_flow_cache: crate::linkgraph_parity::StationFlowCache,
 
-    /// Jobs de link graph en vuelo; reemplaza el scheduler thread de `OpenTTD`
-    /// por una cola determinista entre los ticks de spawn y join.
+    /// Jobs de link graph en vuelo, publicados en orden entre spawn y join.
     pub pending_linkgraph_jobs: Vec<PendingLinkGraphJob>,
 
     /// A loaded/spawned routing frontier may be empty without needing a solver.
     pub(crate) cargo_routing_initialized: bool,
+
+    /// `AfterLoad` pause control also holds a due job outside fraction 19.
+    pub(crate) cargo_routing_pause: CargoRoutingPause,
 
     /// Grabador opcional: cada `apply_command` exitoso se encola (plan IA progresiva).
     pub command_recorder: Option<VecDeque<Command>>,
@@ -373,6 +442,7 @@ impl SimulationRuntime {
             station_flow_cache: crate::linkgraph_parity::StationFlowCache::default(),
             pending_linkgraph_jobs: Vec::new(),
             cargo_routing_initialized: false,
+            cargo_routing_pause: CargoRoutingPause::Ready,
             command_recorder: None,
             newgrf_diagnostics: Vec::new(),
             last_vehicle_start_stop_diagnostic: None,
@@ -416,9 +486,97 @@ impl SimulationRuntime {
 
 #[cfg(test)]
 mod tests {
-    use super::SimulationRuntime;
+    use super::{PendingLinkGraphJob, SimulationRuntime};
     use crate::map::{Map, TileCoord};
     use crate::rail_signals::SignalGlobEntry;
+
+    #[test]
+    fn cargo_worker_completion_is_not_a_publication_or_hash_change() {
+        let mut state = crate::GameState::new(8, 8);
+        state
+            .runtime
+            .pending_linkgraph_jobs
+            .push(PendingLinkGraphJob::new(100, Vec::new()));
+        let hash = state.canonical_hash();
+        let random = state.random;
+        let Some(worker) = state.runtime.pending_linkgraph_jobs[0].worker.as_ref() else {
+            panic!("worker starts at spawn");
+        };
+        worker.wait();
+        assert!(state.runtime.pending_linkgraph_jobs[0].is_ready());
+        assert!(state.runtime.station_flows.by_station.is_empty());
+        assert_eq!(state.random, random);
+        assert_eq!(state.canonical_hash(), hash);
+    }
+
+    #[test]
+    fn cargo_pause_control_blocks_only_due_head_at_native_fraction_19() {
+        let mut state = crate::GameState::new(8, 8);
+        let held = std::sync::Arc::new(std::sync::OnceLock::new());
+        state
+            .runtime
+            .pending_linkgraph_jobs
+            .push(PendingLinkGraphJob {
+                join_date: 2,
+                jobs: Vec::new(),
+                worker: Some(std::sync::Arc::clone(&held)),
+            });
+        // Default native interval is 8 seconds / 2 = 4 days; half is day 2.
+        state.economy_timer.date = 2;
+        state.economy_timer.date_fract = 18;
+        assert!(state.cargo_routing_ready_to_step());
+        state.economy_timer.date_fract = 19;
+        assert!(!state.cargo_routing_ready_to_step());
+        // A completed follower does not overtake the unfinished head.
+        let follower = std::sync::Arc::new(std::sync::OnceLock::new());
+        assert!(
+            follower
+                .set(Some(crate::flow_stat::StationFlows::default()))
+                .is_ok()
+        );
+        state
+            .runtime
+            .pending_linkgraph_jobs
+            .push(PendingLinkGraphJob {
+                join_date: 2,
+                jobs: Vec::new(),
+                worker: Some(follower),
+            });
+        assert!(!state.cargo_routing_ready_to_step());
+        assert!(
+            held.set(Some(crate::flow_stat::StationFlows::default()))
+                .is_ok()
+        );
+        assert!(state.cargo_routing_ready_to_step());
+        assert_eq!(state.tick.get(), 0);
+    }
+
+    #[test]
+    fn cargo_afterload_pause_waits_for_due_job_outside_join_window() {
+        let mut state = crate::GameState::new(8, 8);
+        let held = std::sync::Arc::new(std::sync::OnceLock::new());
+        state
+            .runtime
+            .pending_linkgraph_jobs
+            .push(PendingLinkGraphJob {
+                join_date: 2,
+                jobs: Vec::new(),
+                worker: Some(std::sync::Arc::clone(&held)),
+            });
+        state.economy_timer.date = 3;
+        state.economy_timer.date_fract = 7;
+        state.prepare_cargo_routing_after_load();
+        assert!(!state.cargo_routing_ready_to_step());
+        assert!(
+            held.set(Some(crate::flow_stat::StationFlows::default()))
+                .is_ok()
+        );
+        assert!(state.cargo_routing_ready_to_step());
+        assert_eq!(
+            state.runtime.cargo_routing_pause,
+            super::CargoRoutingPause::Ready
+        );
+    }
 
     #[test]
     fn tick_visual_delta_preserves_cross_tick_work_and_clears_render_deltas() {

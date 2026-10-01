@@ -111,6 +111,51 @@ pub struct Job {
 }
 
 impl Job {
+    /// Copies only immutable inputs. Native `LinkGraphJob::Init` allocates
+    /// annotations inside the worker, after the spawn tick has returned.
+    #[must_use]
+    pub(crate) fn new_input(
+        nodes: Vec<BaseNode>,
+        edges: Vec<Vec<BaseEdge>>,
+        settings: LinkGraphSettings,
+    ) -> Self {
+        Self {
+            settings,
+            nodes,
+            edges,
+            demands: Vec::new(),
+            undelivered_supply: Vec::new(),
+            edge_flow: Vec::new(),
+            paths: Vec::new(),
+            flows: Vec::new(),
+            path_arena: Vec::new(),
+            runtime: 30,
+        }
+    }
+
+    pub(crate) fn initialize_annotations(&mut self) {
+        let size = self.nodes.len();
+        if self.demands.len() == size && self.undelivered_supply.len() == size {
+            return;
+        }
+        self.demands = vec![vec![DemandAnnotation::default(); size]; size];
+        self.undelivered_supply = self.nodes.iter().map(|node| node.supply).collect();
+        self.edge_flow = self
+            .edges
+            .iter()
+            .map(|edges| vec![0; edges.len()])
+            .collect();
+        self.paths = vec![Vec::new(); size];
+        self.flows = vec![FlowStatMap::default(); size];
+    }
+
+    #[must_use]
+    pub(crate) fn input_snapshot(&self) -> Self {
+        let mut snapshot = Self::new_input(self.nodes.clone(), self.edges.clone(), self.settings);
+        snapshot.runtime = self.runtime;
+        snapshot
+    }
+
     #[must_use]
     pub fn new(
         nodes: Vec<BaseNode>,

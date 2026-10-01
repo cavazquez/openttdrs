@@ -2643,9 +2643,10 @@ fn install_sav_linkgraph_jobs(
             state
                 .runtime
                 .pending_linkgraph_jobs
-                .push(crate::game_state::PendingLinkGraphJob { join_date, jobs });
+                .push(crate::game_state::PendingLinkGraphJob::new(join_date, jobs));
         }
     }
+    state.prepare_cargo_routing_after_load();
 }
 
 fn normalize_company_yearly_expenses(values: &[i64]) -> Vec<i64> {

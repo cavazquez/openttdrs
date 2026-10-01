@@ -44,6 +44,12 @@ completa de CargoDist ni la garantía de 30 FPS.
 
 ## Cuellos de botella y siguiente etapa
 
+Actualización de implementación: las etapas JSON y workers de CargoDist se
+registran en [performance-implementation.md](performance-implementation.md).
+Ya se retiró el solver de descarga/mes y se inició en spawn, con pausa de ticks
+y render activo si vence sin terminar. La descripción siguiente conserva el
+diagnóstico del baseline `89947557`. El objetivo completo sigue abierto.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

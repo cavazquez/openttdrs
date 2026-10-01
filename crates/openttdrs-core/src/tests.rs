@@ -590,13 +590,20 @@ fn link_graph_records_station_flow_on_unload() {
 }
 
 #[test]
-fn cargodist_coalesces_multiple_unloads_into_one_flow_rebuild() {
+fn cargodist_keeps_published_flows_across_multiple_unloads() {
     let mut s = GameState::new(16, 8);
     let from = TileCoord::new(2, 0);
     let dest = TileCoord::new(10, 0);
     s.stations.push(Station::new(from));
     s.stations.push(Station::new(dest));
     s.cargo_dist.distribution = flow_stat::DistributionType::Asymmetric;
+    s.runtime
+        .station_flows
+        .by_station
+        .entry(from)
+        .or_default()
+        .add_flow(CargoType::Goods, from, dest, 12);
+    let published = s.runtime.station_flows.clone();
 
     for id in 0..8 {
         let mut truck = Vehicle::new(id, VehicleKind::Truck, dest, dest);
@@ -611,7 +618,10 @@ fn cargodist_coalesces_multiple_unloads_into_one_flow_rebuild() {
     let rebuilds_before = s.runtime.station_flow_rebuilds;
     s.step();
 
-    assert_eq!(s.runtime.station_flow_rebuilds - rebuilds_before, 1);
+    // OpenTTD UpdateLinkGraphStats records all eight trips; its schedule
+    // publishes a new solution later, rather than solving during unload.
+    assert_eq!(s.runtime.station_flow_rebuilds - rebuilds_before, 0);
+    assert_eq!(s.runtime.station_flows, published);
     assert!(s.vehicles.iter().all(|vehicle| vehicle.cargo == 5));
     let key = LinkEdgeKey {
         from,

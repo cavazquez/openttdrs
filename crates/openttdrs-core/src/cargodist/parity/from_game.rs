@@ -254,7 +254,7 @@ fn build_job_for_cargo(
         return None;
     }
 
-    Some(Job::new(nodes, edges, settings))
+    Some(Job::new_input(nodes, edges, settings))
 }
 
 #[cfg(test)]

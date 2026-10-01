@@ -146,8 +146,8 @@ pub(super) fn process_monthly_economy(state: &mut GameState) {
         );
     }
     state.link_graph.rollover_month();
-    // Flows desde totales del link graph (mapper ingenuo; sin MCF).
-    state.rebuild_station_flows();
+    // Monthly UI counters do not publish new CargoDist routes. JoinNext owns
+    // that frontier independently of the calendar month.
     // La financiación vial continúa una vez por mes durante sus seis meses.
     // Se hace antes de decrementar el contador dentro del procesamiento urbano.
     let road_seed = state.calendar.date ^ u32::try_from(state.tick.get()).unwrap_or(0);
@@ -1307,7 +1307,37 @@ mod tests {
     use crate::cargodist::parity::Randomizer;
     use crate::economy::EconomyType;
     use crate::industry::Industry;
-    use crate::{Climate, IndustrySpec};
+    use crate::{CargoType, Climate, IndustrySpec};
+
+    #[test]
+    fn monthly_link_counters_do_not_replace_published_routes() {
+        let mut state = GameState::new(8, 8);
+        let from = TileCoord::new(1, 1);
+        let to = TileCoord::new(6, 6);
+        state.cargo_dist.distribution = crate::flow_stat::DistributionType::Asymmetric;
+        state.link_graph.record_flow(from, to, CargoType::Goods, 17);
+        state
+            .runtime
+            .station_flows
+            .by_station
+            .entry(from)
+            .or_default()
+            .add_flow(CargoType::Goods, from, to, 12);
+        let published = state.runtime.station_flows.clone();
+        let rebuilds = state.runtime.station_flow_rebuilds;
+
+        process_monthly_economy(&mut state);
+
+        assert_eq!(state.runtime.station_flows, published);
+        assert_eq!(state.runtime.station_flow_rebuilds, rebuilds);
+        let edge = &state.link_graph.edges[&crate::link_graph::LinkEdgeKey {
+            from,
+            to,
+            cargo: CargoType::Goods,
+        }];
+        assert_eq!(edge.units_month, 0);
+        assert_eq!(edge.units_total, 17);
+    }
 
     fn pool_industry(instance_id: u16) -> Industry {
         Industry::with_tiles_spec(

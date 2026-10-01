@@ -36,11 +36,33 @@ pub use types::{
 };
 
 pub fn run_full_pipeline(job: &mut Job) {
+    job.initialize_annotations();
     calculate_demands(job);
     MCF1stPass::run(job);
     FlowMapper::new(false).run(job);
     MCF2ndPass::run(job);
     FlowMapper::new(true).run(job);
+}
+
+/// Pure prepare/run boundary shared by workers and synchronous replay.
+pub(crate) fn station_flows_from_jobs(jobs: Vec<(CargoType, Job)>) -> StationFlows {
+    let mut merged = StationFlows::default();
+    for (cargo, mut job) in jobs {
+        run_full_pipeline(&mut job);
+        let part = to_station_flows_helper(&job, cargo);
+        for (station, table) in part.by_station {
+            let dest = merged.by_station.entry(station).or_default();
+            for (cargo, map) in table.by_cargo {
+                let dest_map = dest.by_cargo.entry(cargo).or_default();
+                for (origin, flow) in map.by_origin {
+                    for (via, amount) in flow.shares {
+                        dest_map.add_flow(origin, via, amount);
+                    }
+                }
+            }
+        }
+    }
+    merged
 }
 
 #[must_use]

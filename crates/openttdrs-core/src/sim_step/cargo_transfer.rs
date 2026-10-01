@@ -611,7 +611,6 @@ fn try_unload_aircraft_mail_packets(
     state: &mut GameState,
     vehicle_idx: usize,
     delivered_industries: &mut Vec<usize>,
-    link_graph_dirty: &mut bool,
 ) -> bool {
     state.vehicles[vehicle_idx].ensure_aircraft_mail_packets_from_legacy();
     let Some(station_idx) = aircraft_mail_should_unload_at_station(state, vehicle_idx) else {
@@ -699,7 +698,6 @@ fn try_unload_aircraft_mail_packets(
             capacity,
             travel_time,
         );
-        *link_graph_dirty = true;
     }
 
     let mut payment = 0_i64;
@@ -971,7 +969,6 @@ pub(super) fn unload_vehicles(
     loaded_this_tick: &[bool],
     unloaded_this_tick: &mut [bool],
 ) {
-    let mut link_graph_dirty = false;
     let mut delivered_industries = Vec::new();
     for (i, loaded_flag) in loaded_this_tick
         .iter()
@@ -983,12 +980,7 @@ pub(super) fn unload_vehicles(
             continue;
         }
         let mail_unloaded = state.vehicles[i].kind == VehicleKind::Aircraft
-            && try_unload_aircraft_mail_packets(
-                state,
-                i,
-                &mut delivered_industries,
-                &mut link_graph_dirty,
-            );
+            && try_unload_aircraft_mail_packets(state, i, &mut delivered_industries);
         let mail_remaining = state.vehicles[i].kind == VehicleKind::Aircraft
             && !state.vehicles[i].aircraft_mail_packets.is_empty();
         if mail_unloaded {
@@ -1122,7 +1114,6 @@ pub(super) fn unload_vehicles(
                 capacity,
                 travel_time,
             );
-            link_graph_dirty = true;
         }
         let mut payment = 0_i64;
         let mut feeder_total = 0_i64;
@@ -1444,12 +1435,8 @@ pub(super) fn unload_vehicles(
         }
     }
 
-    // El pipeline Demand + MCF es global y costoso. Todas las descargas del tick
-    // mutan primero el link graph; después publicamos un único snapshot coherente
-    // para la fase de carga y reencaminamos paquetes una sola vez (#215).
-    if link_graph_dirty {
-        state.rebuild_station_flows();
-    }
+    // Native unload records usage/capacity; it keeps the last published flows
+    // until LinkGraphSchedule::JoinNext. Never run Demand/MCF in this phase.
     purge_finished_runtime_payments(state);
 }
 
@@ -4628,6 +4615,8 @@ mod tests {
         let (mut state, pos) =
             state_with_newgrf_rail_station(crate::STATION_ANIMATION_TRIGGER_NEW_CARGO);
         let source = TileCoord::new(0, 1);
+        state.cargo_dist.distribution = crate::flow_stat::DistributionType::Asymmetric;
+        let published = state.runtime.station_flows.clone();
         let mut train = crate::Vehicle::new(7, VehicleKind::Train, pos, pos);
         train
             .cargo_packets
@@ -4640,6 +4629,9 @@ mod tests {
         unload_vehicles(&mut state, 1, &[false], &mut unloaded);
 
         assert!(unloaded[0]);
+        // Native UpdateLinkGraphStats changes statistics, never Demand/MCF.
+        assert_eq!(state.runtime.station_flow_rebuilds, 0);
+        assert_eq!(state.runtime.station_flows, published);
         assert_eq!(state.stations[0].cargo_stock.get(CargoType::Coal), 1);
         assert_eq!(map_frame(&state, pos), 1, "NewCargo ordinal llega a CB140");
         assert!(state.newgrf_animated_station_tiles.contains(&pos));

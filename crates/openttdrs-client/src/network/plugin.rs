@@ -502,7 +502,17 @@ fn handle_event(
     }
 }
 
-fn broadcast_tick_after_step(net: Res<NetworkRuntime>, sim: Res<SimWorld>) {
+fn broadcast_tick_after_step(
+    net: Res<NetworkRuntime>,
+    sim: Res<SimWorld>,
+    cargo_ready: Res<crate::simulation::CargoRoutingReady>,
+) {
+    if !cargo_ready.0 {
+        // CargoDist may hold authoritative ticks while frames and network
+        // polling continue. Keep the host alive without advancing its peers.
+        net.broadcast_heartbeat(sim.state.tick.get());
+        return;
+    }
     match sim.state.save_json() {
         Ok(json) => net.broadcast_advance_with_snapshot(1, json),
         Err(e) => {

@@ -38,11 +38,28 @@ fn simulation_step_allowed(capture_freeze: Option<Res<VisualCaptureFreeze>>) -> 
     !capture_freeze.is_some_and(|freeze| freeze.0)
 }
 
+#[derive(Resource, Default)]
+pub(crate) struct CargoRoutingReady(pub(crate) bool);
+
+fn refresh_cargo_routing_ready(
+    mut sim: ResMut<SimWorld>,
+    net: Option<Res<NetworkRuntime>>,
+    mut ready: ResMut<CargoRoutingReady>,
+) {
+    ready.0 = net.is_some_and(|network| network.role() == NetworkRole::Client)
+        || sim.state.cargo_routing_ready_to_step();
+}
+
+fn cargo_routing_ready(ready: Res<CargoRoutingReady>) -> bool {
+    ready.0
+}
+
 pub(crate) struct SimulationPlugin;
 
 impl Plugin for SimulationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SimClock>()
+            .init_resource::<CargoRoutingReady>()
             .add_systems(Startup, init_sim_fixed_timestep)
             .add_systems(OnEnter(SimRunState::Paused), pause_virtual_time)
             .add_systems(OnEnter(SimRunState::Running), unpause_virtual_time)
@@ -52,7 +69,12 @@ impl Plugin for SimulationPlugin {
             )
             .add_systems(
                 FixedUpdate,
-                (step_sim, flag_map_tile_dirty_remap)
+                (
+                    refresh_cargo_routing_ready,
+                    (step_sim, flag_map_tile_dirty_remap)
+                        .chain()
+                        .run_if(cargo_routing_ready),
+                )
                     .chain()
                     .in_set(FixedUpdateSet::Sim)
                     .run_if(in_state(ClientScreen::InGame).and_then(in_state(SimRunState::Running)))
@@ -201,6 +223,53 @@ mod tests {
     use crate::settings::ClientPreferences;
     use crate::state::{ClientScreen, SimRunState, SimWorld};
     use crate::ui::SimHudControls;
+
+    #[test]
+    fn cargo_wait_keeps_update_running_without_repeating_tick_events() {
+        #[derive(Resource, Default)]
+        struct DrawFrames(u32);
+
+        let mut app = App::new();
+        app.insert_resource(SimWorld::default());
+        app.init_resource::<VehicleIndex>();
+        app.init_resource::<ClientPreferences>();
+        app.init_resource::<RemapMapVisualsPending>();
+        app.init_resource::<super::CargoRoutingReady>();
+        app.init_resource::<DrawFrames>();
+        app.add_systems(
+            FixedUpdate,
+            (step_sim, flag_map_tile_dirty_remap)
+                .chain()
+                .run_if(super::cargo_routing_ready),
+        );
+        app.add_systems(Update, |mut frames: ResMut<DrawFrames>| frames.0 += 1);
+        app.world_mut()
+            .resource_mut::<SimWorld>()
+            .state
+            .runtime
+            .pending_sim_events
+            .push(SimEvent::Construction {
+                kind: ConstructionKind::Rail,
+                at: TileCoord::new(4, 4),
+            });
+        let tick = app.world().resource::<SimWorld>().state.tick.get();
+        app.world_mut().run_schedule(FixedUpdate);
+        app.world_mut().run_schedule(Update);
+        assert_eq!(app.world().resource::<SimWorld>().state.tick.get(), tick);
+        assert!(
+            !app.world()
+                .resource::<RemapMapVisualsPending>()
+                .is_pending()
+        );
+        assert_eq!(app.world().resource::<DrawFrames>().0, 1);
+
+        app.world_mut().resource_mut::<super::CargoRoutingReady>().0 = true;
+        app.world_mut().run_schedule(FixedUpdate);
+        assert_eq!(
+            app.world().resource::<SimWorld>().state.tick.get(),
+            tick + 1
+        );
+    }
 
     fn sim_test_app() -> App {
         let mut app = App::new();

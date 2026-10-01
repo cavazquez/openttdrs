@@ -118,7 +118,7 @@ impl<'de> Deserialize<'de> for Job {
                 "invalid CargoDist job node or edge topology",
             ));
         }
-        let mut job = Self::new(input.nodes, input.edges, input.settings);
+        let mut job = Self::new_input(input.nodes, input.edges, input.settings);
         job.runtime = input.runtime;
         Ok(job)
     }

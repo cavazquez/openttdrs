@@ -1291,6 +1291,7 @@ impl GameState {
         if !routing_initialized {
             self.rebuild_station_flows();
         }
+        self.prepare_cargo_routing_after_load();
         self.sanitize_all_vehicle_orders();
         self.sync_scaled_max_loan();
     }
@@ -1579,6 +1580,55 @@ impl GameState {
     /// 3. Movimiento del vehículo (vehicle.step).
     pub fn step(&mut self) {
         crate::sim_step::step(self);
+    }
+
+    /// Native link-graph pause control at date fraction 19: a graphical
+    /// caller can keep drawing until the due head is ready. Headless replay
+    /// may call `step` directly and joins synchronously at the same date.
+    #[must_use]
+    pub fn cargo_routing_ready_to_step(&mut self) -> bool {
+        for job in &mut self.runtime.pending_linkgraph_jobs {
+            job.start_worker();
+        }
+        if self.runtime.cargo_routing_pause == runtime::CargoRoutingPause::AfterLoad {
+            if self
+                .runtime
+                .pending_linkgraph_jobs
+                .first()
+                .is_some_and(|job| job.join_date <= self.economy_timer.date && !job.is_ready())
+            {
+                return false;
+            }
+            self.runtime.cargo_routing_pause = runtime::CargoRoutingPause::Ready;
+        }
+        let native = self.cargo_dist.openttd_settings();
+        let interval =
+            u32::from(native.recalc_interval_seconds / crate::flow_stat::ECONOMY_SECONDS_PER_DAY)
+                .max(1);
+        let at_join_window = self.economy_timer.date_fract >= 19
+            && self.economy_timer.date % interval == interval / 2;
+        !at_join_window
+            || self
+                .runtime
+                .pending_linkgraph_jobs
+                .first()
+                .is_none_or(|job| job.join_date > self.economy_timer.date || job.is_ready())
+    }
+
+    pub(crate) fn prepare_cargo_routing_after_load(&mut self) {
+        for job in &mut self.runtime.pending_linkgraph_jobs {
+            job.start_worker();
+        }
+        let due = self
+            .runtime
+            .pending_linkgraph_jobs
+            .first()
+            .is_some_and(|job| job.join_date <= self.economy_timer.date && !job.is_ready());
+        self.runtime.cargo_routing_pause = if due {
+            runtime::CargoRoutingPause::AfterLoad
+        } else {
+            runtime::CargoRoutingPause::Ready
+        };
     }
 
     /// Igual que [`Self::step`] con tiempos por fase (profiling headless).

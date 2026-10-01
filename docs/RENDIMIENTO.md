@@ -372,6 +372,33 @@ SHA256 de los ejecutables: baseline
 `987aefdf5cf5e3c17839710213c039cea0c91eb073315f1c189d184122c49522`,
 candidato `5bdf1260a83b767fd14a32d05d505caf6867b5aaf819da725ee2376decf9639e`.
 
+### Cliente en marcha tras filtrar contextos visuales (2026-10-01)
+
+Comparación aislada de `1f613aad` con el candidato de la etapa 11: misma
+Kale_TitleGame.sav/NewGRF, hardware, 1280×720, cámara fija en escala 2 y audio
+desactivado. Orden antes/después/después/antes, 30 frames de calentamiento y
+40 muestras por run, sin compilaciones ni `perf record` concurrentes.
+[Datos por frame](parity/evidence/visual-context-client-20261001.csv).
+
+- Frame medio: 191,62 / 190,66 → 160,51 / 161,04 ms; FPS por duración media:
+  5,22 / 5,24 → 6,23 / 6,21.
+- Mediana: 119,85 / 120,47 → 91,66 / 90,15 ms. p95 por rango más cercano:
+  391,56 / 381,31 → 348,09 / 352,13 ms. p99 coincide con el máximo en estas
+  40 muestras: 721,88 / 726,38 → 699,30 / 703,67 ms.
+- Efectos: 31,65 / 31,68 → 2,05 / 2,18 ms por frame; simulación:
+  115,47 / 114,66 → 114,41 / 114,73 ms; vidrio:
+  6,64 / 6,52 → 6,41 / 6,42 ms. Los timers de fases no suman el frame.
+- Los cuatro runs avanzan de tick 3.703.103 a 3.703.142. Tick/s observado
+  entre primera y última muestra: 5,23 / 5,26 → 6,24 / 6,22. Cada frame de
+  ambos ejecutables excede 33,33 ms: 80/80 en cada versión.
+
+Es una ventana corta en marcha, con los picos conservados. Las capturas
+congeladas de los seis zooms comprueban otra condición y no acreditan FPS
+en esos zooms. Los controles, la variación raster Out8x ya presente en el
+baseline, SHA256 de binarios y pruebas de callbacks/RNG se registran en
+[la etapa 11](parity/performance-implementation.md#etapa-11--contexto-visual-reducido-cuando-no-puede-ejecutarse-un-callback-f04).
+El presupuesto de 30 FPS y el ritmo nativo de simulación siguen abiertos.
+
 ### Render congelado, seis zooms y movimiento de cámara
 
 Para comparar ambas versiones se usó el driver de mapshot: centro `128,128`,

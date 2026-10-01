@@ -872,6 +872,8 @@ fn visual_effect_head_states(
 /// GRF y estado de la unidad. El helper antiguo sólo podía reconstruir los
 /// registros persistentes y los random bits, por lo que una cadena que leyera
 /// variables como `0x40`, `0x47` o `0xB4` podía elegir otro efecto.
+/// Cuando ningún callback visual puede ejecutarse, conservar esa vista reducida
+/// evita preparar variables relativas y badges que no se consultarán.
 fn vehicle_visual_effect_context(
     state: &openttdrs_core::GameState,
     vehicle_id: u32,
@@ -884,11 +886,29 @@ fn vehicle_visual_effect_context(
     else {
         return openttdrs_core::Action2EvalCtx::default();
     };
+    let has_runtime = engine.newgrf_grfid != 0 && engine.newgrf_runtime.is_some();
+    let has_cb10 = engine.vehicle_callback_mask & 1 != 0;
+    // CB160 does not require the CB10 mask. Action0 can enable it directly;
+    // the default sentinel has bit 6 set but never selects advanced effects.
+    let has_advanced_effect = engine.visual_effect
+        != openttdrs_core::engine::VEHICLE_VISUAL_EFFECT_DEFAULT
+        && engine.visual_effect & (1 << 6) != 0;
+    if !has_runtime || (!has_cb10 && !has_advanced_effect) {
+        return openttdrs_core::action2_eval_ctx_from_vehicle(vehicle);
+    }
+    full_vehicle_visual_effect_context(state, vehicle, engine)
+}
+
+fn full_vehicle_visual_effect_context(
+    state: &openttdrs_core::GameState,
+    vehicle: &Vehicle,
+    engine: &EngineDef,
+) -> openttdrs_core::Action2EvalCtx {
     let primary = crate::render::vehicles::vehicle_livery_colour_for_state(state, vehicle);
     let mut ctx = openttdrs_core::action2_eval_ctx_for_unit_indexed(
         &state.vehicles,
         &state.runtime.fleet_index,
-        vehicle_id,
+        vehicle.id,
         state.tick,
         &state.engine_catalog,
         primary.as_u8(),
@@ -896,7 +916,7 @@ fn vehicle_visual_effect_context(
     openttdrs_core::enrich_vehicle_track_badge_vars(
         &mut ctx,
         &state.vehicles,
-        vehicle_id,
+        vehicle.id,
         &state.map,
         &state.engine_catalog,
         &state.runtime.rail_type_badges,
@@ -1413,6 +1433,116 @@ mod tests {
         let mut reduced_vehicle = vehicle;
         let reduced = openttdrs_core::vehicle_visual_effect_spec(&engine, &mut reduced_vehicle);
         assert_eq!(reduced.kind, VehicleVisualEffectKind::Default);
+    }
+
+    #[test]
+    fn unavailable_visual_callbacks_keep_emission_registers_and_rng() {
+        let mut emitted = 0;
+        for engine_id in [
+            ENGINE_TRAIN_KIRBY,
+            openttdrs_core::engine::ENGINE_TRAIN_MANLEY_MOREL,
+            ENGINE_TRAIN_ASIASTAR,
+        ] {
+            for mode in 0..5 {
+                let mut state = GameState::new(4, 4);
+                let mut vehicle = running_train(engine_id);
+                vehicle.newgrf_persistent_regs.insert(0x23, 147);
+                vehicle.newgrf_random_bits = 0x1234;
+                state.vehicles.push(vehicle);
+                let mut engine = state.vehicles[0].effective_engine().clone();
+                if mode != 0 {
+                    engine.newgrf_grfid = 0x5649_5355;
+                    engine.vehicle_callback_mask = 1;
+                    if mode != 1 {
+                        engine.newgrf_runtime = Some(Box::new(callback_literal(0x40)));
+                    }
+                    if mode == 3 {
+                        engine.newgrf_grfid = 0;
+                    } else if mode >= 2 {
+                        engine.vehicle_callback_mask = 0;
+                    }
+                    if mode == 4 {
+                        engine.visual_effect = 0x18;
+                    }
+                }
+                for counter in 0..32 {
+                    state.vehicles[0].newgrf_tick_counter = counter;
+                    let vehicle = &state.vehicles[0];
+                    let mut expected = vehicle.clone();
+                    let mut actual = vehicle.clone();
+                    let mut full = full_vehicle_visual_effect_context(&state, vehicle, &engine);
+                    let mut reduced = vehicle_visual_effect_context(&state, vehicle.id, &engine);
+                    assert!(!reduced.vars.contains_key(&0xB4));
+                    let expected_spec =
+                        openttdrs_core::vehicle_visual_effect_spec_with_ctx(&engine, &mut full);
+                    let spec =
+                        openttdrs_core::vehicle_visual_effect_spec_with_ctx(&engine, &mut reduced);
+                    assert_eq!(spec, expected_spec);
+                    openttdrs_core::writeback_vehicle_persistent_registers(&mut expected, &full);
+                    openttdrs_core::writeback_vehicle_persistent_registers(&mut actual, &reduced);
+                    let head = VisualEffectHeadState::from_vehicle(&state.map, vehicle, &engine);
+                    let props = openttdrs_core::RailTypeRuntimeProps::defaults();
+                    let mut expected_rng = openttdrs_core::linkgraph_parity::Randomizer::new(99);
+                    let mut actual_rng = expected_rng;
+                    let before = train_smoke_to_emit_with_engine_and_random_with_spec(
+                        &state.map,
+                        &mut expected,
+                        &engine,
+                        expected_spec,
+                        head,
+                        2,
+                        &props,
+                        &mut Some(&mut expected_rng),
+                    );
+                    let after = train_smoke_to_emit_with_engine_and_random_with_spec(
+                        &state.map,
+                        &mut actual,
+                        &engine,
+                        spec,
+                        head,
+                        2,
+                        &props,
+                        &mut Some(&mut actual_rng),
+                    );
+                    assert_eq!(after, before);
+                    assert_eq!(actual_rng, expected_rng);
+                    assert_eq!(
+                        serde_json::to_value(&actual).expect("actual"),
+                        serde_json::to_value(&expected).expect("expected")
+                    );
+                    assert_eq!(actual.newgrf_persistent_regs.get(&0x23), Some(&147));
+                    emitted += usize::from(after.is_some());
+                }
+            }
+        }
+        assert!(emitted > 0);
+    }
+
+    #[test]
+    fn advanced_visual_callback_keeps_full_scope_without_cb10_mask() {
+        let mut state = GameState::new(4, 4);
+        let mut vehicle = running_train(ENGINE_TRAIN_KIRBY);
+        vehicle.cur_speed = 25;
+        let mut engine = vehicle.effective_engine().clone();
+        engine.newgrf_grfid = 0x5649_5355;
+        engine.newgrf_local_id = 0;
+        engine.vehicle_callback_mask = 0;
+        engine.visual_effect = 0x41;
+        engine.newgrf_runtime = Some(Box::new(callback_vehicle_variable(0xB4, 3)));
+        state.vehicles.push(vehicle);
+
+        let mut ctx = vehicle_visual_effect_context(&state, state.vehicles[0].id, &engine);
+        let spec = openttdrs_core::vehicle_visual_effect_spec_with_ctx(&engine, &mut ctx);
+        assert!(spec.advanced);
+        assert_eq!(spec.kind, VehicleVisualEffectKind::Steam);
+        let result = openttdrs_core::resolve_vehicle_spawn_visual_effect_callback_with_ctx(
+            &engine, &mut ctx, 0,
+        )
+        .expect("CB160");
+        assert_eq!(
+            result.count, 1,
+            "B4=25 must reach CB160 even when CB10 is disabled"
+        );
     }
 
     #[test]

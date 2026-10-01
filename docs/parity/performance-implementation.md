@@ -436,13 +436,69 @@ de orden de estas listas. Esta corrección permite comparar imports y no se
 presenta como una ganancia de FPS. F06 sigue pendiente por el costo del árbol
 JSON y F20 por el resto de carga/rehidratación.
 
+## Etapa 11 — Contexto visual reducido cuando no puede ejecutarse un callback (F04)
+
+Los efectos conservan el contexto de la unidad con registros persistentes,
+random bits y variables básicas. Sólo preparan el scope completo, badges,
+vecinos y parámetros GRF si hay runtime y CB10 habilitado o un efecto
+avanzado de Action0. CB160 puede estar habilitado sin la máscara de CB10;
+ese caso conserva el contexto completo. El sentinel de efectos por defecto
+no habilita CB160. No cambian el orden de emisión ni el límite de efectos.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`,
+`vehicle.cpp::Vehicle::UpdateVisualEffect`, líneas 2636–2674, comprueba la
+máscara antes de resolver CB10; `SpawnAdvancedVisualEffect` resuelve CB160
+por separado. Es un descarte acotado del trabajo imposible, no el cierre
+del resolver a demanda ni de todos los scopes NewGRF.
+
+Regresión diferencial: 480 combinaciones de motor steam/diesel/electric,
+contador y runtime/GRFID/máscara/propiedad, comparadas con el contexto completo
+anterior. Coinciden especificación, emisiones, vehículo serializado,
+registros y RNG; se exige al menos una emisión positiva. Otra regresión
+consulta B4 en CB160 sin máscara CB10 y conserva el scope completo. La
+regresión existente de CB10 también permanece verde.
+
+Cliente release con Kale_TitleGame.sav/NewGRF: ABBA, 30 frames de warmup y
+40 muestras por run, sin compilaciones ni perf concurrentes. Efectos:
+31,65 / 31,68 → 2,05 / 2,18 ms por frame; FPS: 5,22 / 5,24 → 6,23 / 6,21.
+La simulación aún promedia unos 115 ms por frame. Los 80 frames nuevos
+exceden 33,33 ms. Método, colas y ticks/s en
+[RENDIMIENTO.md](../RENDIMIENTO.md#cliente-en-marcha-tras-filtrar-contextos-visuales-2026-10-01);
+[datos por frame](evidence/visual-context-client-20261001.csv).
+Baseline `1f613aad`, SHA256
+`19cad4ea6164c5f4605958dda9f6951b42025fcf496ce60d373889ad3c81d60c`;
+candidato `1cf2e9b444835498c2ca3815632ddf88e59f78876ff35bd1e2d548ffbb465b8f`.
+
+Capturas 1280×720, centro 128,128, CLEAN=0 (vehículos incluidos), 180 frames
+con ticks e interpolación congelados. Escalas 0.25/0.5/1/2/4: cero píxeles
+y bloques 4×4 distintos. En escala 8, la primera pareja difiere en
+130 píxeles/81 bloques; el mismo binario anterior reproduce esos 130/81
+al repetirse. Dos parejas nuevas antes/después coinciden en PNG y traza
+raw. No se borra ni se sustituye la primera evidencia:
+[seis zooms](evidence/visual-context-raster-20261001.csv),
+[controles y repeticiones Out8x](evidence/visual-context-raster-repeat-20261001.csv).
+
+El stream final de padres/proxies coincide en las seis primeras parejas
+al omitir IDs ECS locales, índices de entrada y profundidades de entrada;
+se conservan ordinal final, sprite, clave de inserción, profundidad de
+salida, bounds, bandas y scopes. El raw difiere en IDs en In4x y además
+en 40 índices/dos profundidades de entrada en Out8x. Esa equivalencia no
+se usa para ocultar el raster distinto. F17 conserva un sub-issue abierto:
+hacer repetible el renderer Out8x con flota; su causa sigue por aislar.
+Las capturas son diagnóstico y no certifican paridad nativa universal.
+
+Validación: 3.006 core/seis ignorados y 1.661 cliente/dos; Clippy de todos
+los targets de ambos, formato, diff y frescura de docs. Se cierra el descarte
+visual cuando no puede ejecutarse callback. F04 y los 30 FPS siguen abiertos.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV
   de flows/jobs tras mutaciones; acotar/cancelar trabajo pendiente (F02).
 - F04, F09–F11, F13: resolver NewGRF a demanda y corregir variables relativas.
 - F05–F06: snapshots tipados de red y hash sin árbol JSON completo.
-- F07–F08, F17–F18: medir tick residual, compositor y cámara con raster en seis zooms.
+- F07–F08, F17–F18: medir tick residual, compositor y cámara con raster en seis zooms;
+  aislar la variación Out8x entre ejecuciones del mismo cliente con flota.
 - F12, F14–F16: perfilar carga, ocupación y rutas; retirar copias PBS innecesarias.
 - F19–F20, F22: encoding/carga/generación sin bloquear el cliente.
 - F23–F25, F27–F29: caches/invalidación de imágenes, HUD, IA, audio y previews;

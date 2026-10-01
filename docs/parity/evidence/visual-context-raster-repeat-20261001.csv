@@ -1,0 +1,7 @@
+ortho_scale,left,right,different_pixels,different_4x4_blocks,raw_trace_equal,final_stream_equal_without_local_ids
+8,before_initial,before_repeat_3,130,81,False,True
+8,before_repeat_3,after_repeat_3,0,0,True,True
+8,before_repeat_4,after_repeat_4,0,0,True,True
+8,after_initial,after_repeat_3,0,0,True,True
+8,before_repeat_3,before_repeat_4,0,0,True,True
+8,after_repeat_3,after_repeat_4,0,0,True,True

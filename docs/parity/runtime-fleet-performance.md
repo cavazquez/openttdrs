@@ -119,6 +119,15 @@ en una reproducción escalar f32; aún no se confirma su orden efectivo en GPU.
 La variación inicial y el píxel verde Out2x siguen abiertos. No cambia el
 renderer de producción ni se acredita una mejora de FPS en esta etapa.
 
+La etapa 31 reproduce el empate de profundidad con la matriz real de
+Bevy/glam y ensaya una máscara con orden de dibujo. Conserva las entradas y
+los seis streams del sorter, pero pierde 114 coincidencias nativas en Out2x y
+44 en Out4x: el candidato queda retirado. In2x mejora en 2.618 píxeles exactos
+y mantiene 846 sin explicación. Out8x tiene un recorte nativo limitado por la
+cámara. Las mediciones del candidato no muestran una ganancia clara de FPS.
+Sólo se conserva la regresión CPU y la evidencia; F08/F31 y 30 FPS siguen
+abiertos. Los datos completos están en la etapa 31 del registro de implementación.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

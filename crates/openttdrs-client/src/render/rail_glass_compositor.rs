@@ -40,6 +40,8 @@ use crate::render::{MapDynamicVisual, MapTileChunk, MapVisualLayer};
 
 mod sprite_trace;
 pub(crate) use sprite_trace::MapSpriteTraceRequest;
+#[cfg(test)]
+mod projected_depth_tests;
 
 /// Capa reservada para la máscara del vidrio. Las entidades sin `RenderLayers`
 /// siguen perteneciendo a la capa 0, que es la cámara principal.

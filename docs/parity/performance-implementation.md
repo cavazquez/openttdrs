@@ -2110,3 +2110,118 @@ Clippy en todos los targets de ambos, formato, diff y frescura de docs.
 Sólo cierra el sub-issue de captura reproducible de estas entradas y targets.
 Variación raster, orden efectivo de la máscara, F08 completo, cadencia y
 30 FPS continúan abiertos; los FPS vigentes siguen siendo los de la etapa 29.
+
+
+## Etapa 31 — Empates de profundidad y candidato de máscara retirado (F08/F31)
+
+La regla nativa de `ViewportDrawParentSprites` sigue siendo parent y después
+children, en orden. La nueva regresión usa la matriz real de Bevy/glam, cámara
+`(0,-4104,999.9)` y ortho near/far ±2000: los bits de profundidad mundial
+`1075726681` y `1075726728` son distintos y ordenados, pero su proyección f32
+es idéntica. Es una reproducción CPU; no es lectura del depth buffer GPU.
+El test conserva este contrajemplo a confiar sólo en unicidad de profundidad.
+
+Se ensayó una máscara en la fase ordenada `Transparent2d`, sin escribir
+profundidad. El candidato mantenía el shader y uniform Mask, cutoff 0,5 y
+`MAY_DISCARD`; sólo cambiaba la cola y el pipeline de materiales render-world.
+Los fragmentos supervivientes seguían teniendo alpha 1, evitando acumulación
+de oclusores parciales. Los productores actuales de `SpriteMesh` son proxies
+de esa máscara; una futura mezcla de productores requeriría acotar materiales.
+**El candidato está retirado: esta etapa no lo instala en producción.**
+
+El primer prototipo registraba IDs de materiales en el main world. Aunque el
+multiconjunto de descriptores y bytes de imágenes coincidía, el comparador
+estricto detectó cambios de orden de queries y ordinales: resultado falso,
+conservado. La versión render-world-only eliminó esa interferencia. En In2x y
+Out2x conserva todos los campos y órdenes tras renumeración biyectiva de IDs,
+los bytes de las 272/384 imágenes y las máscaras de cobertura. Cambia el
+resultado de oclusión; no altera el stream completo del sorter en ninguno de
+los seis zooms.
+
+Kale, 1280×720, centro 128,128, settle 180, CLEAN=0: diferencias candidato
+frente al control canónico, sin ampliar tolerancia:
+
+- In4x: 0 píxeles / 0 bloques 4×4.
+- In2x: 3.464 / 421; bbox `(0,0,627,385)`.
+- Normal: 346 / 56; bbox `(264,0,386,363)`.
+- Out2x: 1.068 / 275; bbox `(163,81,1123,685)`.
+- Out4x: 1.407 / 502; bbox `(18,232,1154,683)`.
+- Out8x: 219 / 115; bbox `(64,74,1230,684)`.
+
+Se capturó también el oracle OpenTTD fijado en
+`14ec60f248547d4d062a1160f0fc26d742319888`, blitter 8bpp-simple/OpenGFX 8.0.
+Su hook existente exporta PNG, pero no la traza de sorter solicitada; el primer
+wrapper devolvió error por esa ausencia, aunque guardó un PNG válido. Las
+cinco capturas siguientes omiten esa opción y terminan correctamente. CLEAN=0
+no garantiza que ambos engines hayan avanzado los mismos ticks: las capas
+móviles, UI y animaciones no quedan certificadas por esta comparación.
+
+Las coordenadas virtuales nativas equivalen a `(4*x,-4*y)` del mundo del port.
+Con las cámaras registradas, In4x/In2x/Normal/Out2x/Out4x requieren traslación
+vertical de +16/+8/+4/+2/+1 píxeles, sin desplazamiento horizontal. Se deriva
+de coordenadas, no de buscar la mejor coincidencia. En los píxeles modificados,
+In2x da 2.618 nuevos exactos, cero antiguos exactos y 846 que no coinciden con
+ninguno. Normal da 331 / 0 / 15. Out2x da 147 / 114 / 807; Out4x,
+265 / 44 / 1.098. **Hay 114 y 44 coincidencias nativas perdidas**, además de
+las diferencias residuales. No se aceptó una corrección general por mejorar
+sólo In2x. Quedan por aislar muestreo, composición, capas y sincronización.
+
+Out8x fue además limitado por la cámara nativa: virtual left/top
+`(-17736,6244)`, frente al recorte centrado esperado. Su traslado derivado
+es `(-85,75,-42,125)` píxeles, fraccionario; no se cuentan coincidencias
+nativas exactas ni se oculta ese desalineamiento. No es la misma imagen por
+pedir la misma tesela central.
+[Seis zooms, hashes, entradas y comparación nativa](evidence/glass-mask-order-raster-20261001.csv).
+
+GPU real sin trazas, perf ni compilación concurrentes, escala 2, ABBA de
+40 muestras/run. Cámara fija, warmup 120: frame
+44,1518 / 43,8626 → 44,1570 / 44,4278 ms; FPS
+22,649 / 22,798 → 22,646 / 22,508. p95
+58,0800 / 57,9529 → 58,2078 / 56,8690; máximos/p99
+59,2642 / 58,6343 → 58,7312 / 59,1264. TPS
+22,653 / 22,799 → 22,647 / 22,410. El segundo posterior cubre
+3703194–3703233, un tick desplazado; los otros, 3703193–3703232.
+79/80 frames del control y 78/80 del candidato superan 33,33 ms.
+[160 muestras fijas](evidence/glass-mask-order-client-steady-20261001.csv).
+
+Pan, warmup 30: frame
+50,0419 / 50,2029 → 49,4602 / 50,1625 ms; FPS
+19,983 / 19,919 → 20,218 / 19,935. p95
+64,3170 / 63,1072 → 61,8304 / 63,6530; máximos/p99
+130,1233 / 133,1693 → 129,2287 / 131,6171. TPS
+20,838 / 20,801 → 21,090 / 20,801. Todos cubren
+3703103–3703142, 80/80 frames por versión exceden el presupuesto. No hay
+una mejora clara de FPS; las cifras describen un candidato retirado.
+[160 muestras de pan](evidence/glass-mask-order-pan-20261001.csv).
+
+La primera exportación completa Out8x falló por falta de espacio; la repetición
+en /tmp falló por cuota. Se conservan logs y JSON parciales comprimidos, no
+se aceptan como trazas completas. La captura válida Out8x omite los bytes de
+sprites y conserva PNG y sorter. El pan inicial no produjo muestras y venció
+su timeout; se conserva por separado y no entra en estadísticas. Se deduplican
+1.615 archivos de texturas sólo tras comprobar bytes, con hardlinks readonly
+entre artefactos; se recuperan 149.241.528 bytes. El binario inicial retirado y
+el JSON parcial se archivan con verificación SHA256 antes de quitar sus copias.
+La ejecución nativa escalada inicial venció la revisión automática de permisos;
+la alternativa con XDG_DATA_HOME/XDG_CONFIG_HOME propios produjo los PNG.
+
+Artefactos: `target/performance/glass-mask-order-20261001`; segundo intento
+parcial Out8x en `/tmp/openttdrs-glass-mask-order-out8-retry` y primer parcial
+preservado en `/tmp/openttdrs-glass-mask-order-trace-8-partial.json.gz`.
+Cliente control SHA256
+`a0a959b4715b41f7471ffa8131b2525aaf6067da499d0365074173600d7d1a26`;
+primer prototipo
+`e17f752d98edf4a2d233daa7ba5be37c113bd29a8ba49b063e00d60a912707ca`;
+candidato render-world-only
+`a1204ea30bb6420b7b2335b1d28d7a3d2d9f1e0d31da22930cc694fdb22ac4c8`.
+Sus fuentes están conservadas en el directorio de artefactos. `sav_profile`,
+sonda de estado y biblioteca release conservan los hashes exactos de la etapa
+29: se reutiliza la evidencia de 61 fases, no se atribuye un replay nuevo.
+El build del candidato de 53,50 s no acredita mejora de compilación.
+
+Validación de la etapa conservada: 3.035 core/seis ignorados, 1.671 cliente/dos;
+Clippy de ambos para todos los targets, formato, diff, frescura de docs y tres
+tests del comparador de entradas. Esta etapa cierra sólo la reproducción del
+empate f32 y el ensayo documentado. F08/F31, diferencias nativas de máscara,
+variaciones históricas, cadencia y 30 FPS permanecen abiertos. El renderer
+conserva las reglas de la etapa 30 al retirar los dos prototipos.

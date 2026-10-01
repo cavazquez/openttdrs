@@ -250,8 +250,13 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
     };
 
     let p0 = Instant::now();
+    let mut order_depots = crate::depot::DepotSpatialIndex::default();
     for vehicle in &mut state.vehicles {
-        vehicle.sync_order_destination_with_stations(&state.map, &state.stations);
+        vehicle.sync_order_destination_with_depot_index(
+            &state.map,
+            &state.stations,
+            &mut order_depots,
+        );
     }
     timings.order_sync_ns = nanos(p0);
 

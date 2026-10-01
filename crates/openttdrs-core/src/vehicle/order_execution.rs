@@ -165,6 +165,16 @@ impl super::model::Vehicle {
         stations: &[crate::station::Station],
         conditional_depth: usize,
     ) -> bool {
+        self.update_order_dest_with_stations_impl(map, stations, conditional_depth, None)
+    }
+
+    fn update_order_dest_with_stations_impl(
+        &mut self,
+        map: &crate::map::Map,
+        stations: &[crate::station::Station],
+        conditional_depth: usize,
+        mut depot_index: Option<&mut crate::depot::DepotSpatialIndex>,
+    ) -> bool {
         if self.orders.is_empty() {
             return false;
         }
@@ -187,10 +197,11 @@ impl super::model::Vehicle {
                 // Servicio opcional: saltar si no hace falta.
                 if !self.needs_servicing {
                     self.increment_real_order_index();
-                    return self.update_order_dest_with_stations(
+                    return self.update_order_dest_with_stations_impl(
                         map,
                         stations,
                         conditional_depth + 1,
+                        depot_index,
                     );
                 }
                 self.apply_order_destination_with_stations(map, stations, order);
@@ -211,17 +222,21 @@ impl super::model::Vehicle {
                         )
                     )
                 {
-                    if let Some(nearest) =
+                    let nearest = if let Some(index) = depot_index.as_deref_mut() {
+                        crate::depot::nearest_depot_tile_indexed(map, self.pos, self.kind, index)
+                    } else {
                         crate::depot::nearest_depot_tile(map, self.pos, self.kind)
-                    {
+                    };
+                    if let Some(nearest) = nearest {
                         self.dest = nearest;
                         return true;
                     }
                     self.increment_real_order_index();
-                    return self.update_order_dest_with_stations(
+                    return self.update_order_dest_with_stations_impl(
                         map,
                         stations,
                         conditional_depth + 1,
+                        depot_index,
                     );
                 }
                 self.apply_order_destination_with_stations(map, stations, order);
@@ -233,7 +248,12 @@ impl super::model::Vehicle {
                 self.current_order = next;
                 self.update_real_order_index();
                 self.current_order_time = 0;
-                self.update_order_dest_with_stations(map, stations, conditional_depth + 1)
+                self.update_order_dest_with_stations_impl(
+                    map,
+                    stations,
+                    conditional_depth + 1,
+                    depot_index,
+                )
             }
         }
     }
@@ -494,12 +514,33 @@ impl super::model::Vehicle {
         map: &crate::map::Map,
         stations: &[crate::station::Station],
     ) {
+        self.sync_order_destination_impl(map, stations, None);
+    }
+
+    /// Shares depot candidates within a batch that does not mutate the map.
+    /// Callers create a fresh index for each batch so deleted or new depots
+    /// are visible without retaining a chosen destination across ticks.
+    pub(crate) fn sync_order_destination_with_depot_index(
+        &mut self,
+        map: &crate::map::Map,
+        stations: &[crate::station::Station],
+        index: &mut crate::depot::DepotSpatialIndex,
+    ) {
+        self.sync_order_destination_impl(map, stations, Some(index));
+    }
+
+    fn sync_order_destination_impl(
+        &mut self,
+        map: &crate::map::Map,
+        stations: &[crate::station::Station],
+        depot_index: Option<&mut crate::depot::DepotSpatialIndex>,
+    ) {
         if self.orders.is_empty() {
             return;
         }
         self.sanitize_current_order();
         self.update_real_order_index();
-        let _ = self.update_order_dest_with_stations(map, stations, 0);
+        let _ = self.update_order_dest_with_stations_impl(map, stations, 0, depot_index);
     }
 
     pub(super) fn do_advance_after_arrival(&mut self, pass_through: bool) {
@@ -526,5 +567,188 @@ impl super::model::Vehicle {
         {
             self.train_station_departure_hold = true;
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use crate::depot::DepotSpatialIndex;
+    use crate::map::{Map, TileKind};
+    use crate::vehicle::order::OrderConditionKind;
+    use crate::{Command, GameState, TileCoord, Vehicle, VehicleKind, VehicleOrder, apply_command};
+
+    fn depot_map() -> Map {
+        let mut state = GameState::new(12, 12);
+        for (kind, coords) in [
+            (TileKind::RoadDepot, [(3, 2), (2, 3)]),
+            (TileKind::RailDepot, [(7, 2), (6, 3)]),
+            (TileKind::Airport, [(3, 10), (2, 11)]),
+        ] {
+            for (x, y) in coords {
+                let coord = TileCoord::new(x, y);
+                state.map.set_kind(coord, kind).expect("depot kind");
+                if kind == TileKind::Airport {
+                    let mut tile = state.map.get(coord).expect("hangar");
+                    tile.m5 = 1;
+                    state.map.set_tile(coord, tile).expect("hangar piece");
+                }
+            }
+        }
+        let apron = TileCoord::new(2, 2);
+        state
+            .map
+            .set_kind(apron, TileKind::Airport)
+            .expect("airport");
+        let mut tile = state.map.get(apron).expect("apron");
+        tile.m5 = 2;
+        state.map.set_tile(apron, tile).expect("apron piece");
+        for x in [3, 7] {
+            for dx in -1..=1 {
+                state
+                    .map
+                    .set_kind(TileCoord::new(x + dx, 7), TileKind::Water)
+                    .expect("water");
+            }
+            apply_command(
+                &mut state,
+                &Command::PlaceShipDepotDir(TileCoord::new(x, 7), 2),
+            )
+            .expect("ship depot");
+        }
+        state.map
+    }
+
+    fn order_vehicle(kind: VehicleKind, mode: u8, from: TileCoord) -> Vehicle {
+        let missing = TileCoord::new(0, 0);
+        let existing = match kind {
+            VehicleKind::Train => TileCoord::new(7, 2),
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => TileCoord::new(3, 2),
+            VehicleKind::Ship => TileCoord::new(3, 7),
+            VehicleKind::Aircraft => TileCoord::new(3, 10),
+        };
+        let mut vehicle = Vehicle::new(7, kind, from, TileCoord::new(11, 11));
+        vehicle.current_order_time = 57;
+        vehicle.orders = vec![VehicleOrder::depot(missing), VehicleOrder::Tile(existing)];
+        match mode {
+            0 => vehicle.orders.clear(),
+            1 => vehicle.orders[0] = VehicleOrder::depot(existing),
+            3 => vehicle.orders[0] = VehicleOrder::depot(TileCoord::new(-5, 19)),
+            4 | 5 => {
+                vehicle.orders[0] = VehicleOrder::depot_pass_through(missing);
+                vehicle.needs_servicing = mode == 5;
+            }
+            6 => vehicle.orders.insert(
+                0,
+                VehicleOrder::conditional(OrderConditionKind::Unconditionally, 0, 1),
+            ),
+            7 => {
+                vehicle.orders = vec![VehicleOrder::conditional(
+                    OrderConditionKind::Unconditionally,
+                    0,
+                    0,
+                )];
+            }
+            8 => vehicle.orders = vec![VehicleOrder::implicit(TileCoord::new(11, 11))],
+            9 => vehicle.current_order = 98,
+            10 => vehicle.awaiting_load_window = true,
+            11 => {
+                // Existing wrong-kind depots retain the scalar acceptance rule.
+                vehicle.orders[0] = VehicleOrder::depot(TileCoord::new(2, 2));
+            }
+            _ => {}
+        }
+        vehicle
+    }
+
+    fn compare_batch(map: &Map, vehicles: &mut [Vehicle]) -> u64 {
+        let mut index = DepotSpatialIndex::default();
+        for vehicle in vehicles {
+            let mut expected = vehicle.clone();
+            expected.sync_order_destination_with_stations(map, &[]);
+            vehicle.sync_order_destination_with_depot_index(map, &[], &mut index);
+            assert_eq!(
+                serde_json::to_value(&*vehicle).expect("indexed vehicle"),
+                serde_json::to_value(expected).expect("scalar vehicle")
+            );
+        }
+        index.full_map_scans()
+    }
+
+    #[test]
+    fn batch_depot_resolution_preserves_scalar_order_mutations() {
+        let map = depot_map();
+        let kinds = [
+            VehicleKind::Train,
+            VehicleKind::Bus,
+            VehicleKind::Truck,
+            VehicleKind::Tram,
+            VehicleKind::Ship,
+            VehicleKind::Aircraft,
+        ];
+        for mode in 0..12 {
+            for from in [
+                TileCoord::new(2, 2),
+                TileCoord::new(9, 2),
+                TileCoord::new(3, 8),
+            ] {
+                let mut vehicles: Vec<_> = kinds
+                    .iter()
+                    .map(|&kind| order_vehicle(kind, mode, from))
+                    .collect();
+                let scans = compare_batch(&map, &mut vehicles);
+                assert_eq!(
+                    scans,
+                    u64::from(matches!(mode, 2 | 3 | 6 | 9 | 10)),
+                    "mode {mode}"
+                );
+            }
+        }
+        let mut tie = order_vehicle(VehicleKind::Bus, 2, TileCoord::new(2, 2));
+        assert_eq!(compare_batch(&map, std::slice::from_mut(&mut tie)), 1);
+        assert_eq!(tie.dest, TileCoord::new(3, 2));
+    }
+
+    #[test]
+    fn fresh_batch_observes_deleted_depots_and_current_vehicle_positions() {
+        let mut map = Map::new_flat(256, 256, 0);
+        let old = TileCoord::new(20, 20);
+        let far = TileCoord::new(200, 200);
+        let new = TileCoord::new(40, 40);
+        for depot in [old, far] {
+            map.set_kind(depot, TileKind::RoadDepot)
+                .expect("road depot");
+        }
+        let mut vehicles: Vec<_> = (0..32)
+            .map(|id| {
+                let mut vehicle = Vehicle::new(id, VehicleKind::Truck, TileCoord::new(10, 10), old);
+                vehicle.orders = vec![
+                    VehicleOrder::depot(TileCoord::new(500, 500)),
+                    VehicleOrder::Tile(TileCoord::new(250, 250)),
+                ];
+                vehicle
+            })
+            .collect();
+        assert_eq!(compare_batch(&map, &mut vehicles), 1);
+        assert!(vehicles.iter().all(|v| v.dest == old));
+
+        map.set_kind(old, TileKind::Grass)
+            .expect("remove old depot");
+        map.set_kind(new, TileKind::RoadDepot).expect("new depot");
+        vehicles[0].pos = TileCoord::new(210, 210);
+        assert_eq!(compare_batch(&map, &mut vehicles), 1);
+        assert_eq!(vehicles[0].dest, far);
+        assert!(vehicles[1..].iter().all(|v| v.dest == new));
+
+        for depot in [new, far] {
+            map.set_kind(depot, TileKind::Grass)
+                .expect("remove all depots");
+        }
+        assert_eq!(compare_batch(&map, &mut vehicles), 1);
+        assert!(
+            vehicles
+                .iter()
+                .all(|v| v.current_order == 1 && v.dest == TileCoord::new(250, 250))
+        );
     }
 }

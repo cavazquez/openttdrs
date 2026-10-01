@@ -421,9 +421,37 @@ warmup y 40 muestras por run, sin compilaciones ni `perf` concurrentes.
 El movimiento del core pasa de unos 53 a 4 ms en la ventana independiente de
 120 ticks; la comparación de 60 ticks normales conserva estado, eventos y
 teselas. Las pruebas, binarios y medición CPU están en
-[la etapa 12](parity/performance-implementation.md#etapa-12--ocupación-calculada-una-vez-por-intento-pbs-f14f15).
+[la etapa 12](parity/performance-implementation.md#etapa-12--ocupación-calculada-una-vez-por-intento-pbs-f13).
 Queda coste tanto en la simulación como en el cliente. Esta ventana todavía
 no alcanza 30 FPS ni certifica el ritmo nativo o los demás zooms en marcha.
+
+### Cliente en marcha tras compartir candidatos de depósito (2026-10-01)
+
+Comparación de `334e71c2` con la etapa 13, misma partida/NewGRF, hardware,
+1280×720, escala 2, cámara fija y audio desactivado. ABBA, 30 frames de
+warmup y 40 muestras por run, sin compilaciones ni `perf` concurrentes.
+[Datos por frame](parity/evidence/depot-orders-client-20261001.csv).
+
+- Frame medio: 78,80 / 78,88 → 69,22 / 70,01 ms; FPS por duración media:
+  12,69 / 12,68 → 14,45 / 14,29.
+- Mediana: 75,08 / 75,52 → 63,90 / 65,67 ms. p95 por rango más cercano:
+  95,95 / 96,97 → 87,04 / 86,49 ms. p99 coincide con el máximo en estas
+  40 muestras: 175,07 / 173,79 → 154,93 / 166,47 ms.
+- Simulación: 32,65 / 32,62 → 23,93 / 23,95 ms; efectos:
+  2,13 / 2,09 → 2,03 / 2,04 ms; vidrio: 6,49 / 6,49 → 6,47 / 6,47 ms.
+  Los timers de fases no suman el frame.
+- Los dos runs anteriores y el segundo nuevo cubren ticks
+  3.703.103–3.703.142; el primero nuevo cubre 3.703.104–3.703.143.
+  Tick/s observado entre primera y última muestra:
+  13,10 / 13,08 → 14,92 / 14,81. Los 80 frames de cada versión exceden
+  33,33 ms.
+
+La ventana CPU independiente promedia 22,32 / 22,49 ms en 120 ticks con el
+candidato. Las 61 fases normales comparadas conservan estado/eventos/teselas.
+Pruebas, alcance de resolución de depósitos y SHA256 en
+[la etapa 13](parity/performance-implementation.md#etapa-13--compartir-candidatos-de-depósito-al-sincronizar-órdenes-f07).
+Quedan las comprobaciones de aeronaves y trabajo de presentación, además
+de los demás hallazgos. Los 30 FPS y el ritmo nativo siguen abiertos.
 
 ### Render congelado, seis zooms y movimiento de cámara
 

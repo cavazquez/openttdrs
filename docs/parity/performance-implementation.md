@@ -491,7 +491,7 @@ Validación: 3.006 core/seis ignorados y 1.661 cliente/dos; Clippy de todos
 los targets de ambos, formato, diff y frescura de docs. Se cierra el descarte
 visual cuando no puede ejecutarse callback. F04 y los 30 FPS siguen abiertos.
 
-## Etapa 12 — Ocupación calculada una vez por intento PBS (F14/F15)
+## Etapa 12 — Ocupación calculada una vez por intento PBS (F13)
 
 `TryPathReserve` prepara un índice de la flota y su ocupación una vez por
 intento efectivo de reserva. La búsqueda y las comprobaciones de plataformas
@@ -558,9 +558,77 @@ y `6872cdb9f8bd35675ba5294959b56450d531d668f9692ade1ab5cd43602f36b3`.
 
 Validación: 3.008 core/seis ignorados y 1.661 cliente/dos; Clippy en todos
 los targets, formato, diff y frescura de docs. Se cierra la reconstrucción
-por consulta dentro de este intento. F14/F15 y los 30 FPS siguen abiertos;
+por consulta dentro de este intento. F13, F16 y los 30 FPS siguen abiertos;
 las sincronizaciones de órdenes y las comprobaciones de aeronaves son los
 siguientes costes de simulación medidos.
+
+## Etapa 13 — Compartir candidatos de depósito al sincronizar órdenes (F07)
+
+Las dos tandas de sincronización de órdenes del tick comparten un
+`DepotSpatialIndex` local. Su primer lookup recorre el mapa; los siguientes
+consultan únicamente candidatos compatibles. Si ninguna orden requiere esa
+búsqueda, no se inicializa. La recursión de órdenes condicionales y servicio
+opcional conserva el mismo índice. Cada tanda comienza con uno nuevo y sigue
+calculando la elección desde la posición actual; no retiene un destino ni
+depende de invalidaciones de otro consumidor. Los callers aislados conservan
+la API y la búsqueda anterior.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`, `order_cmd.cpp::UpdateOrderDest`,
+líneas 1949–2068, resuelve depósitos concretos por identidad y usa
+`FindClosestDepot` para una orden nearest. `depot_base.h` conserva un pool de
+depósitos y `GetByTile`. El port consultaba todas las teselas por cada orden
+cuyo depósito concreto ya no existía. Esta etapa elimina ese trabajo
+repetido y conserva su selección Manhattan y desempate por fila/columna;
+no acredita la paridad de identidad, propiedad o alcanzabilidad del buscador
+nativo. Tampoco cambia la aceptación previa de un depósito existente de
+otra clase. Esas diferencias de resolución siguen pendientes.
+
+Regresiones: 216 combinaciones de seis clases de vehículo, tres posiciones
+y doce listas/estados, más un empate explícito. Comparan todos los campos
+serializados con la variante escalar: lista vacía, destino existente o
+ausente/fuera del mapa, servicio opcional, condicional/ciclo, implícitas,
+índice inválido y espera de carga. Las tandas sin búsqueda hacen cero scans;
+las que la necesitan hacen uno aunque consulten varias clases. Otra
+regresión compara 32 vehículos en tres tandas sobre un mapa 256²: depósito
+demolido/nuevo, cabeza movida y desaparición de todos los candidatos;
+elección y avance de orden coinciden y cada tanda hace un scan.
+
+Ocho runs release normales de Kale_TitleGame.sav/NewGRF, ABBA por ventana,
+sin builds ni otras capturas concurrentes. En 24 ticks: total
+40,25 / 40,57 → 31,08 / 30,86 ms; sincronización previa de órdenes
+5,08 / 5,06 → 0,340 / 0,337 ms; cierre del tick
+6,49 / 6,44 → 1,68 / 1,66 ms. En 120 ticks: total
+35,56 / 31,97 → 22,32 / 22,49 ms (aproximadamente 34 % menos al promediar
+ambos runs), sincronización 5,03 / 5,05 → 0,321 / 0,323 ms y cierre
+6,34 / 6,37 → 1,61 / 1,63 ms. Se conservan las variaciones entre runs.
+[Tiempos](evidence/depot-orders-timings-20261001.csv).
+Baseline `334e71c2`, SHA256
+`51e3764532b7e4e5d7804ca1b1c3e02101ba39b37080ae396808d3b9de1c59c8`;
+candidato `c58160ce047a91ded5fc42bc5b4089c3fb9c3d3d605783590fa3979c4ae6612d`.
+
+Dos imports independientes y 60 ticks normales conservan tick, hash v4,
+eventos/popups/sonidos, todas las teselas y bloques 4×4: cero diferencias en
+61 fases, sin ordenar listas en la sonda.
+[Comparación](evidence/depot-orders-state-20261001.csv).
+La biblioteca del candidato se identifica con Cargo JSON `--lib`;
+SHA256 de sondas:
+`fd844ec5ceeb481a09a5eba179bbd9488b99889f4a16600abccbe10cef13c229`
+y `589f77a3a0c6a59df0a5816be03b2faba7b7f300bc3bb8246ca378c5d4c32608`.
+
+Cliente en marcha: ABBA, 40 muestras tras 30 de warmup. Simulación:
+32,65 / 32,62 → 23,93 / 23,95 ms por frame;
+FPS: 12,69 / 12,68 → 14,45 / 14,29. Los 80 frames nuevos todavía exceden
+33,33 ms. Ventanas de ticks y colas en
+[RENDIMIENTO.md](../RENDIMIENTO.md#cliente-en-marcha-tras-compartir-candidatos-de-depósito-2026-10-01),
+[muestras](evidence/depot-orders-client-20261001.csv).
+SHA256 de clientes:
+`6872cdb9f8bd35675ba5294959b56450d531d668f9692ade1ab5cd43602f36b3`
+y `5f2583d43d7615c3bd533b709309226e81a89ba29c9a019b561bd4e4385fc0d3`.
+
+Validación: 3.010 core/seis ignorados y 1.661 cliente/dos; Clippy en todos
+los targets, formato, diff y frescura de docs. Se cierra el scan por vehículo
+en estas dos tandas. Reutilizar candidatos entre tandas/ticks requiere
+cubrir su invalidación; F07 y los 30 FPS permanecen abiertos.
 
 ## Trabajo restante
 
@@ -571,6 +639,8 @@ siguientes costes de simulación medidos.
 - F07–F08, F17–F18: medir tick residual, compositor y cámara con raster en seis zooms;
   aislar la variación Out8x entre ejecuciones del mismo cliente con flota.
 - F12, F14–F16: perfilar carga, ocupación y rutas; retirar copias PBS innecesarias.
+- Resolución de depósitos: identidad/tipo, propiedad y alcanzabilidad frente
+  al original; invalidación completa de los índices persistentes.
 - F19–F20, F22: encoding/carga/generación sin bloquear el cliente.
 - F23–F25, F27–F29: caches/invalidación de imágenes, HUD, IA, audio y previews;
   preservar los comportamientos que la revisión ya verificó correctos.

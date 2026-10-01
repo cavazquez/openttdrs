@@ -163,8 +163,13 @@ pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {
 }
 
 pub(super) fn sync_vehicle_order_destinations(state: &mut GameState) {
+    let mut order_depots = crate::depot::DepotSpatialIndex::default();
     for vehicle in &mut state.vehicles {
-        vehicle.sync_order_destination_with_stations(&state.map, &state.stations);
+        vehicle.sync_order_destination_with_depot_index(
+            &state.map,
+            &state.stations,
+            &mut order_depots,
+        );
     }
 }
 

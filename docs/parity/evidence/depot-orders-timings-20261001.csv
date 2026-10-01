@@ -1,0 +1,793 @@
+stage,sample,ticks,block,phase,microseconds,percent
+before,1,24,primer tick,timer_economy,0.0,0.0
+before,1,24,primer tick,tile_animation,76.4,0.0
+before,1,24,primer tick,tile_loop,17.9,0.0
+before,1,24,primer tick,path_recompute,221634.8,86.2
+before,1,24,primer tick,path_order_sync,4958.3,1.9
+before,1,24,primer tick,path_station_route,5693.2,2.2
+before,1,24,primer tick,path_generic_route,210982.1,82.1
+before,1,24,primer tick,vehicle_ops_pre_move,10406.5,4.0
+before,1,24,primer tick,vehicle_ops_only,3888.5,1.5
+before,1,24,primer tick,autoreplace,4.2,0.0
+before,1,24,primer tick,pbs_pre_move,6431.6,2.5
+before,1,24,primer tick,cargo_transfer,9834.5,3.8
+before,1,24,primer tick,cargo_calendar_day,0.9,0.0
+before,1,24,primer tick,cargo_economy_day,10.3,0.0
+before,1,24,primer tick,cargo_aging,248.5,0.1
+before,1,24,primer tick,cargo_unload,7839.4,3.0
+before,1,24,primer tick,unload_selection,1832.4,0.7
+before,1,24,primer tick,unload_acceptance,1325.3,0.5
+before,1,24,primer tick,unload_staging,182.6,0.1
+before,1,24,primer tick,unload_packets,3714.0,1.4
+before,1,24,primer tick,unload_commit,568.3,0.2
+before,1,24,primer tick,unload_reinsert,187.0,0.1
+before,1,24,primer tick,unload_station_events,131.0,0.1
+before,1,24,primer tick,unload_finish,99.3,0.0
+before,1,24,primer tick,cargo_load,1653.8,0.6
+before,1,24,primer tick,movement,5007.1,1.9
+before,1,24,primer tick,vehicle_move,2808.9,1.1
+before,1,24,primer tick,train_collision,196.0,0.1
+before,1,24,primer tick,crashed_vehicle,146.9,0.1
+before,1,24,primer tick,pbs_post_move,1855.2,0.7
+before,1,24,primer tick,landscape,3303.8,1.3
+before,1,24,primer tick,post_tick,6449.8,2.5
+before,1,24,primer tick,TOTAL,257090.5,100.0
+before,1,24,media de 24 ticks,timer_economy,0.0,0.0
+before,1,24,media de 24 ticks,tile_animation,454.1,1.1
+before,1,24,media de 24 ticks,tile_loop,9.2,0.0
+before,1,24,media de 24 ticks,path_recompute,15212.9,37.8
+before,1,24,media de 24 ticks,path_order_sync,5075.7,12.6
+before,1,24,media de 24 ticks,path_station_route,440.4,1.1
+before,1,24,media de 24 ticks,path_generic_route,9695.7,24.1
+before,1,24,media de 24 ticks,vehicle_ops_pre_move,4792.9,11.9
+before,1,24,media de 24 ticks,vehicle_ops_only,3840.6,9.5
+before,1,24,media de 24 ticks,autoreplace,4.2,0.0
+before,1,24,media de 24 ticks,pbs_pre_move,925.0,2.3
+before,1,24,media de 24 ticks,cargo_transfer,4641.2,11.5
+before,1,24,media de 24 ticks,cargo_calendar_day,0.5,0.0
+before,1,24,media de 24 ticks,cargo_economy_day,4.5,0.0
+before,1,24,media de 24 ticks,cargo_aging,120.5,0.3
+before,1,24,media de 24 ticks,cargo_unload,2868.7,7.1
+before,1,24,media de 24 ticks,unload_selection,1233.8,3.1
+before,1,24,media de 24 ticks,unload_acceptance,681.3,1.7
+before,1,24,media de 24 ticks,unload_staging,58.2,0.1
+before,1,24,media de 24 ticks,unload_packets,666.7,1.7
+before,1,24,media de 24 ticks,unload_commit,89.3,0.2
+before,1,24,media de 24 ticks,unload_reinsert,21.1,0.1
+before,1,24,media de 24 ticks,unload_station_events,23.2,0.1
+before,1,24,media de 24 ticks,unload_finish,42.4,0.1
+before,1,24,media de 24 ticks,cargo_load,1628.3,4.0
+before,1,24,media de 24 ticks,movement,5025.8,12.5
+before,1,24,media de 24 ticks,vehicle_move,3461.0,8.6
+before,1,24,media de 24 ticks,train_collision,208.7,0.5
+before,1,24,media de 24 ticks,crashed_vehicle,153.0,0.4
+before,1,24,media de 24 ticks,pbs_post_move,1202.8,3.0
+before,1,24,media de 24 ticks,landscape,3320.4,8.2
+before,1,24,media de 24 ticks,post_tick,6489.1,16.1
+before,1,24,media de 24 ticks,TOTAL,40252.4,100.0
+before,1,24,peor tick (muestra 1),timer_economy,0.0,0.0
+before,1,24,peor tick (muestra 1),tile_animation,76.4,0.0
+before,1,24,peor tick (muestra 1),tile_loop,17.9,0.0
+before,1,24,peor tick (muestra 1),path_recompute,221634.8,86.2
+before,1,24,peor tick (muestra 1),path_order_sync,4958.3,1.9
+before,1,24,peor tick (muestra 1),path_station_route,5693.2,2.2
+before,1,24,peor tick (muestra 1),path_generic_route,210982.1,82.1
+before,1,24,peor tick (muestra 1),vehicle_ops_pre_move,10406.5,4.0
+before,1,24,peor tick (muestra 1),vehicle_ops_only,3888.5,1.5
+before,1,24,peor tick (muestra 1),autoreplace,4.2,0.0
+before,1,24,peor tick (muestra 1),pbs_pre_move,6431.6,2.5
+before,1,24,peor tick (muestra 1),cargo_transfer,9834.5,3.8
+before,1,24,peor tick (muestra 1),cargo_calendar_day,0.9,0.0
+before,1,24,peor tick (muestra 1),cargo_economy_day,10.3,0.0
+before,1,24,peor tick (muestra 1),cargo_aging,248.5,0.1
+before,1,24,peor tick (muestra 1),cargo_unload,7839.4,3.0
+before,1,24,peor tick (muestra 1),unload_selection,1832.4,0.7
+before,1,24,peor tick (muestra 1),unload_acceptance,1325.3,0.5
+before,1,24,peor tick (muestra 1),unload_staging,182.6,0.1
+before,1,24,peor tick (muestra 1),unload_packets,3714.0,1.4
+before,1,24,peor tick (muestra 1),unload_commit,568.3,0.2
+before,1,24,peor tick (muestra 1),unload_reinsert,187.0,0.1
+before,1,24,peor tick (muestra 1),unload_station_events,131.0,0.1
+before,1,24,peor tick (muestra 1),unload_finish,99.3,0.0
+before,1,24,peor tick (muestra 1),cargo_load,1653.8,0.6
+before,1,24,peor tick (muestra 1),movement,5007.1,1.9
+before,1,24,peor tick (muestra 1),vehicle_move,2808.9,1.1
+before,1,24,peor tick (muestra 1),train_collision,196.0,0.1
+before,1,24,peor tick (muestra 1),crashed_vehicle,146.9,0.1
+before,1,24,peor tick (muestra 1),pbs_post_move,1855.2,0.7
+before,1,24,peor tick (muestra 1),landscape,3303.8,1.3
+before,1,24,peor tick (muestra 1),post_tick,6449.8,2.5
+before,1,24,peor tick (muestra 1),TOTAL,257090.5,100.0
+after,1,24,primer tick,timer_economy,0.0,0.0
+after,1,24,primer tick,tile_animation,82.5,0.0
+after,1,24,primer tick,tile_loop,12.3,0.0
+after,1,24,primer tick,path_recompute,223048.0,87.7
+after,1,24,primer tick,path_order_sync,418.0,0.2
+after,1,24,primer tick,path_station_route,5614.2,2.2
+after,1,24,primer tick,path_generic_route,217009.3,85.3
+after,1,24,primer tick,vehicle_ops_pre_move,10430.1,4.1
+after,1,24,primer tick,vehicle_ops_only,3839.4,1.5
+after,1,24,primer tick,autoreplace,4.2,0.0
+after,1,24,primer tick,pbs_pre_move,6503.4,2.6
+after,1,24,primer tick,cargo_transfer,9850.9,3.9
+after,1,24,primer tick,cargo_calendar_day,0.8,0.0
+after,1,24,primer tick,cargo_economy_day,9.5,0.0
+after,1,24,primer tick,cargo_aging,223.6,0.1
+after,1,24,primer tick,cargo_unload,7823.2,3.1
+after,1,24,primer tick,unload_selection,1842.0,0.7
+after,1,24,primer tick,unload_acceptance,1334.1,0.5
+after,1,24,primer tick,unload_staging,174.6,0.1
+after,1,24,primer tick,unload_packets,3685.3,1.4
+after,1,24,primer tick,unload_commit,569.9,0.2
+after,1,24,primer tick,unload_reinsert,191.5,0.1
+after,1,24,primer tick,unload_station_events,130.4,0.1
+after,1,24,primer tick,unload_finish,102.0,0.0
+after,1,24,primer tick,cargo_load,1710.3,0.7
+after,1,24,primer tick,movement,5141.8,2.0
+after,1,24,primer tick,vehicle_move,2848.6,1.1
+after,1,24,primer tick,train_collision,192.1,0.1
+after,1,24,primer tick,crashed_vehicle,164.2,0.1
+after,1,24,primer tick,pbs_post_move,1936.8,0.8
+after,1,24,primer tick,landscape,3630.3,1.4
+after,1,24,primer tick,post_tick,1848.6,0.7
+after,1,24,primer tick,TOTAL,254398.9,100.0
+after,1,24,media de 24 ticks,timer_economy,0.0,0.0
+after,1,24,media de 24 ticks,tile_animation,456.2,1.5
+after,1,24,media de 24 ticks,tile_loop,8.6,0.0
+after,1,24,media de 24 ticks,path_recompute,10725.7,34.5
+after,1,24,media de 24 ticks,path_order_sync,339.5,1.1
+after,1,24,media de 24 ticks,path_station_route,430.3,1.4
+after,1,24,media de 24 ticks,path_generic_route,9953.6,32.0
+after,1,24,media de 24 ticks,vehicle_ops_pre_move,4751.4,15.3
+after,1,24,media de 24 ticks,vehicle_ops_only,3797.6,12.2
+after,1,24,media de 24 ticks,autoreplace,4.0,0.0
+after,1,24,media de 24 ticks,pbs_pre_move,925.7,3.0
+after,1,24,media de 24 ticks,cargo_transfer,4585.0,14.7
+after,1,24,media de 24 ticks,cargo_calendar_day,0.5,0.0
+after,1,24,media de 24 ticks,cargo_economy_day,4.0,0.0
+after,1,24,media de 24 ticks,cargo_aging,97.3,0.3
+after,1,24,media de 24 ticks,cargo_unload,2822.7,9.1
+after,1,24,media de 24 ticks,unload_selection,1213.4,3.9
+after,1,24,media de 24 ticks,unload_acceptance,669.7,2.2
+after,1,24,media de 24 ticks,unload_staging,55.5,0.2
+after,1,24,media de 24 ticks,unload_packets,655.4,2.1
+after,1,24,media de 24 ticks,unload_commit,88.5,0.3
+after,1,24,media de 24 ticks,unload_reinsert,21.5,0.1
+after,1,24,media de 24 ticks,unload_station_events,22.6,0.1
+after,1,24,media de 24 ticks,unload_finish,43.2,0.1
+after,1,24,media de 24 ticks,cargo_load,1641.8,5.3
+after,1,24,media de 24 ticks,movement,4961.4,16.0
+after,1,24,media de 24 ticks,vehicle_move,3405.9,11.0
+after,1,24,media de 24 ticks,train_collision,205.6,0.7
+after,1,24,media de 24 ticks,crashed_vehicle,161.9,0.5
+after,1,24,media de 24 ticks,pbs_post_move,1187.8,3.8
+after,1,24,media de 24 ticks,landscape,3613.3,11.6
+after,1,24,media de 24 ticks,post_tick,1676.3,5.4
+after,1,24,media de 24 ticks,TOTAL,31084.7,100.0
+after,1,24,peor tick (muestra 1),timer_economy,0.0,0.0
+after,1,24,peor tick (muestra 1),tile_animation,82.5,0.0
+after,1,24,peor tick (muestra 1),tile_loop,12.3,0.0
+after,1,24,peor tick (muestra 1),path_recompute,223048.0,87.7
+after,1,24,peor tick (muestra 1),path_order_sync,418.0,0.2
+after,1,24,peor tick (muestra 1),path_station_route,5614.2,2.2
+after,1,24,peor tick (muestra 1),path_generic_route,217009.3,85.3
+after,1,24,peor tick (muestra 1),vehicle_ops_pre_move,10430.1,4.1
+after,1,24,peor tick (muestra 1),vehicle_ops_only,3839.4,1.5
+after,1,24,peor tick (muestra 1),autoreplace,4.2,0.0
+after,1,24,peor tick (muestra 1),pbs_pre_move,6503.4,2.6
+after,1,24,peor tick (muestra 1),cargo_transfer,9850.9,3.9
+after,1,24,peor tick (muestra 1),cargo_calendar_day,0.8,0.0
+after,1,24,peor tick (muestra 1),cargo_economy_day,9.5,0.0
+after,1,24,peor tick (muestra 1),cargo_aging,223.6,0.1
+after,1,24,peor tick (muestra 1),cargo_unload,7823.2,3.1
+after,1,24,peor tick (muestra 1),unload_selection,1842.0,0.7
+after,1,24,peor tick (muestra 1),unload_acceptance,1334.1,0.5
+after,1,24,peor tick (muestra 1),unload_staging,174.6,0.1
+after,1,24,peor tick (muestra 1),unload_packets,3685.3,1.4
+after,1,24,peor tick (muestra 1),unload_commit,569.9,0.2
+after,1,24,peor tick (muestra 1),unload_reinsert,191.5,0.1
+after,1,24,peor tick (muestra 1),unload_station_events,130.4,0.1
+after,1,24,peor tick (muestra 1),unload_finish,102.0,0.0
+after,1,24,peor tick (muestra 1),cargo_load,1710.3,0.7
+after,1,24,peor tick (muestra 1),movement,5141.8,2.0
+after,1,24,peor tick (muestra 1),vehicle_move,2848.6,1.1
+after,1,24,peor tick (muestra 1),train_collision,192.1,0.1
+after,1,24,peor tick (muestra 1),crashed_vehicle,164.2,0.1
+after,1,24,peor tick (muestra 1),pbs_post_move,1936.8,0.8
+after,1,24,peor tick (muestra 1),landscape,3630.3,1.4
+after,1,24,peor tick (muestra 1),post_tick,1848.6,0.7
+after,1,24,peor tick (muestra 1),TOTAL,254398.9,100.0
+after,2,24,primer tick,timer_economy,0.0,0.0
+after,2,24,primer tick,tile_animation,73.6,0.0
+after,2,24,primer tick,tile_loop,10.9,0.0
+after,2,24,primer tick,path_recompute,220517.2,87.8
+after,2,24,primer tick,path_order_sync,409.2,0.2
+after,2,24,primer tick,path_station_route,5714.9,2.3
+after,2,24,primer tick,path_generic_route,214383.3,85.3
+after,2,24,primer tick,vehicle_ops_pre_move,10504.1,4.2
+after,2,24,primer tick,vehicle_ops_only,3846.8,1.5
+after,2,24,primer tick,autoreplace,4.1,0.0
+after,2,24,primer tick,pbs_pre_move,6569.8,2.6
+after,2,24,primer tick,cargo_transfer,9603.2,3.8
+after,2,24,primer tick,cargo_calendar_day,0.8,0.0
+after,2,24,primer tick,cargo_economy_day,9.6,0.0
+after,2,24,primer tick,cargo_aging,226.0,0.1
+after,2,24,primer tick,cargo_unload,7662.7,3.0
+after,2,24,primer tick,unload_selection,1753.2,0.7
+after,2,24,primer tick,unload_acceptance,1306.9,0.5
+after,2,24,primer tick,unload_staging,174.8,0.1
+after,2,24,primer tick,unload_packets,3648.4,1.5
+after,2,24,primer tick,unload_commit,568.0,0.2
+after,2,24,primer tick,unload_reinsert,187.4,0.1
+after,2,24,primer tick,unload_station_events,131.9,0.1
+after,2,24,primer tick,unload_finish,95.8,0.0
+after,2,24,primer tick,cargo_load,1621.6,0.6
+after,2,24,primer tick,movement,4972.4,2.0
+after,2,24,primer tick,vehicle_move,2756.1,1.1
+after,2,24,primer tick,train_collision,188.2,0.1
+after,2,24,primer tick,crashed_vehicle,165.5,0.1
+after,2,24,primer tick,pbs_post_move,1862.5,0.7
+after,2,24,primer tick,landscape,3522.2,1.4
+after,2,24,primer tick,post_tick,1747.4,0.7
+after,2,24,primer tick,TOTAL,251281.6,100.0
+after,2,24,media de 24 ticks,timer_economy,0.0,0.0
+after,2,24,media de 24 ticks,tile_animation,448.7,1.5
+after,2,24,media de 24 ticks,tile_loop,8.0,0.0
+after,2,24,media de 24 ticks,path_recompute,10620.9,34.4
+after,2,24,media de 24 ticks,path_order_sync,337.4,1.1
+after,2,24,media de 24 ticks,path_station_route,435.9,1.4
+after,2,24,media de 24 ticks,path_generic_route,9845.1,31.9
+after,2,24,media de 24 ticks,vehicle_ops_pre_move,4751.7,15.4
+after,2,24,media de 24 ticks,vehicle_ops_only,3797.0,12.3
+after,2,24,media de 24 ticks,autoreplace,4.0,0.0
+after,2,24,media de 24 ticks,pbs_pre_move,926.4,3.0
+after,2,24,media de 24 ticks,cargo_transfer,4538.1,14.7
+after,2,24,media de 24 ticks,cargo_calendar_day,0.5,0.0
+after,2,24,media de 24 ticks,cargo_economy_day,3.9,0.0
+after,2,24,media de 24 ticks,cargo_aging,95.1,0.3
+after,2,24,media de 24 ticks,cargo_unload,2793.4,9.1
+after,2,24,media de 24 ticks,unload_selection,1190.5,3.9
+after,2,24,media de 24 ticks,unload_acceptance,666.2,2.2
+after,2,24,media de 24 ticks,unload_staging,54.1,0.2
+after,2,24,media de 24 ticks,unload_packets,652.6,2.1
+after,2,24,media de 24 ticks,unload_commit,88.4,0.3
+after,2,24,media de 24 ticks,unload_reinsert,21.2,0.1
+after,2,24,media de 24 ticks,unload_station_events,22.9,0.1
+after,2,24,media de 24 ticks,unload_finish,44.9,0.1
+after,2,24,media de 24 ticks,cargo_load,1626.8,5.3
+after,2,24,media de 24 ticks,movement,5001.2,16.2
+after,2,24,media de 24 ticks,vehicle_move,3437.9,11.1
+after,2,24,media de 24 ticks,train_collision,205.6,0.7
+after,2,24,media de 24 ticks,crashed_vehicle,165.5,0.5
+after,2,24,media de 24 ticks,pbs_post_move,1192.0,3.9
+after,2,24,media de 24 ticks,landscape,3530.8,11.4
+after,2,24,media de 24 ticks,post_tick,1663.3,5.4
+after,2,24,media de 24 ticks,TOTAL,30863.1,100.0
+after,2,24,peor tick (muestra 1),timer_economy,0.0,0.0
+after,2,24,peor tick (muestra 1),tile_animation,73.6,0.0
+after,2,24,peor tick (muestra 1),tile_loop,10.9,0.0
+after,2,24,peor tick (muestra 1),path_recompute,220517.2,87.8
+after,2,24,peor tick (muestra 1),path_order_sync,409.2,0.2
+after,2,24,peor tick (muestra 1),path_station_route,5714.9,2.3
+after,2,24,peor tick (muestra 1),path_generic_route,214383.3,85.3
+after,2,24,peor tick (muestra 1),vehicle_ops_pre_move,10504.1,4.2
+after,2,24,peor tick (muestra 1),vehicle_ops_only,3846.8,1.5
+after,2,24,peor tick (muestra 1),autoreplace,4.1,0.0
+after,2,24,peor tick (muestra 1),pbs_pre_move,6569.8,2.6
+after,2,24,peor tick (muestra 1),cargo_transfer,9603.2,3.8
+after,2,24,peor tick (muestra 1),cargo_calendar_day,0.8,0.0
+after,2,24,peor tick (muestra 1),cargo_economy_day,9.6,0.0
+after,2,24,peor tick (muestra 1),cargo_aging,226.0,0.1
+after,2,24,peor tick (muestra 1),cargo_unload,7662.7,3.0
+after,2,24,peor tick (muestra 1),unload_selection,1753.2,0.7
+after,2,24,peor tick (muestra 1),unload_acceptance,1306.9,0.5
+after,2,24,peor tick (muestra 1),unload_staging,174.8,0.1
+after,2,24,peor tick (muestra 1),unload_packets,3648.4,1.5
+after,2,24,peor tick (muestra 1),unload_commit,568.0,0.2
+after,2,24,peor tick (muestra 1),unload_reinsert,187.4,0.1
+after,2,24,peor tick (muestra 1),unload_station_events,131.9,0.1
+after,2,24,peor tick (muestra 1),unload_finish,95.8,0.0
+after,2,24,peor tick (muestra 1),cargo_load,1621.6,0.6
+after,2,24,peor tick (muestra 1),movement,4972.4,2.0
+after,2,24,peor tick (muestra 1),vehicle_move,2756.1,1.1
+after,2,24,peor tick (muestra 1),train_collision,188.2,0.1
+after,2,24,peor tick (muestra 1),crashed_vehicle,165.5,0.1
+after,2,24,peor tick (muestra 1),pbs_post_move,1862.5,0.7
+after,2,24,peor tick (muestra 1),landscape,3522.2,1.4
+after,2,24,peor tick (muestra 1),post_tick,1747.4,0.7
+after,2,24,peor tick (muestra 1),TOTAL,251281.6,100.0
+before,2,24,primer tick,timer_economy,0.0,0.0
+before,2,24,primer tick,tile_animation,79.3,0.0
+before,2,24,primer tick,tile_loop,12.8,0.0
+before,2,24,primer tick,path_recompute,225867.4,86.2
+before,2,24,primer tick,path_order_sync,4982.5,1.9
+before,2,24,primer tick,path_station_route,5680.4,2.2
+before,2,24,primer tick,path_generic_route,215198.7,82.2
+before,2,24,primer tick,vehicle_ops_pre_move,10443.6,4.0
+before,2,24,primer tick,vehicle_ops_only,3909.6,1.5
+before,2,24,primer tick,autoreplace,4.1,0.0
+before,2,24,primer tick,pbs_pre_move,6447.4,2.5
+before,2,24,primer tick,cargo_transfer,10136.5,3.9
+before,2,24,primer tick,cargo_calendar_day,0.9,0.0
+before,2,24,primer tick,cargo_economy_day,11.9,0.0
+before,2,24,primer tick,cargo_aging,253.3,0.1
+before,2,24,primer tick,cargo_unload,8035.8,3.1
+before,2,24,primer tick,unload_selection,1980.6,0.8
+before,2,24,primer tick,unload_acceptance,1343.5,0.5
+before,2,24,primer tick,unload_staging,189.4,0.1
+before,2,24,primer tick,unload_packets,3729.4,1.4
+before,2,24,primer tick,unload_commit,569.4,0.2
+before,2,24,primer tick,unload_reinsert,187.8,0.1
+before,2,24,primer tick,unload_station_events,130.8,0.0
+before,2,24,primer tick,unload_finish,106.1,0.0
+before,2,24,primer tick,cargo_load,1751.1,0.7
+before,2,24,primer tick,movement,5135.6,2.0
+before,2,24,primer tick,vehicle_move,2890.7,1.1
+before,2,24,primer tick,train_collision,211.9,0.1
+before,2,24,primer tick,crashed_vehicle,151.6,0.1
+before,2,24,primer tick,pbs_post_move,1881.2,0.7
+before,2,24,primer tick,landscape,3403.3,1.3
+before,2,24,primer tick,post_tick,6513.6,2.5
+before,2,24,primer tick,TOTAL,261933.6,100.0
+before,2,24,media de 24 ticks,timer_economy,0.0,0.0
+before,2,24,media de 24 ticks,tile_animation,453.0,1.1
+before,2,24,media de 24 ticks,tile_loop,8.8,0.0
+before,2,24,media de 24 ticks,path_recompute,15380.8,37.9
+before,2,24,media de 24 ticks,path_order_sync,5062.1,12.5
+before,2,24,media de 24 ticks,path_station_route,441.3,1.1
+before,2,24,media de 24 ticks,path_generic_route,9876.2,24.3
+before,2,24,media de 24 ticks,vehicle_ops_pre_move,4764.7,11.7
+before,2,24,media de 24 ticks,vehicle_ops_only,3810.9,9.4
+before,2,24,media de 24 ticks,autoreplace,4.2,0.0
+before,2,24,media de 24 ticks,pbs_pre_move,926.6,2.3
+before,2,24,media de 24 ticks,cargo_transfer,4652.5,11.5
+before,2,24,media de 24 ticks,cargo_calendar_day,0.6,0.0
+before,2,24,media de 24 ticks,cargo_economy_day,4.8,0.0
+before,2,24,media de 24 ticks,cargo_aging,125.9,0.3
+before,2,24,media de 24 ticks,cargo_unload,2863.1,7.1
+before,2,24,media de 24 ticks,unload_selection,1233.5,3.0
+before,2,24,media de 24 ticks,unload_acceptance,681.0,1.7
+before,2,24,media de 24 ticks,unload_staging,56.7,0.1
+before,2,24,media de 24 ticks,unload_packets,662.6,1.6
+before,2,24,media de 24 ticks,unload_commit,90.1,0.2
+before,2,24,media de 24 ticks,unload_reinsert,21.7,0.1
+before,2,24,media de 24 ticks,unload_station_events,23.2,0.1
+before,2,24,media de 24 ticks,unload_finish,42.5,0.1
+before,2,24,media de 24 ticks,cargo_load,1639.6,4.0
+before,2,24,media de 24 ticks,movement,5033.8,12.4
+before,2,24,media de 24 ticks,vehicle_move,3468.1,8.5
+before,2,24,media de 24 ticks,train_collision,210.9,0.5
+before,2,24,media de 24 ticks,crashed_vehicle,153.9,0.4
+before,2,24,media de 24 ticks,pbs_post_move,1200.7,3.0
+before,2,24,media de 24 ticks,landscape,3534.6,8.7
+before,2,24,media de 24 ticks,post_tick,6442.6,15.9
+before,2,24,media de 24 ticks,TOTAL,40571.2,100.0
+before,2,24,peor tick (muestra 1),timer_economy,0.0,0.0
+before,2,24,peor tick (muestra 1),tile_animation,79.3,0.0
+before,2,24,peor tick (muestra 1),tile_loop,12.8,0.0
+before,2,24,peor tick (muestra 1),path_recompute,225867.4,86.2
+before,2,24,peor tick (muestra 1),path_order_sync,4982.5,1.9
+before,2,24,peor tick (muestra 1),path_station_route,5680.4,2.2
+before,2,24,peor tick (muestra 1),path_generic_route,215198.7,82.2
+before,2,24,peor tick (muestra 1),vehicle_ops_pre_move,10443.6,4.0
+before,2,24,peor tick (muestra 1),vehicle_ops_only,3909.6,1.5
+before,2,24,peor tick (muestra 1),autoreplace,4.1,0.0
+before,2,24,peor tick (muestra 1),pbs_pre_move,6447.4,2.5
+before,2,24,peor tick (muestra 1),cargo_transfer,10136.5,3.9
+before,2,24,peor tick (muestra 1),cargo_calendar_day,0.9,0.0
+before,2,24,peor tick (muestra 1),cargo_economy_day,11.9,0.0
+before,2,24,peor tick (muestra 1),cargo_aging,253.3,0.1
+before,2,24,peor tick (muestra 1),cargo_unload,8035.8,3.1
+before,2,24,peor tick (muestra 1),unload_selection,1980.6,0.8
+before,2,24,peor tick (muestra 1),unload_acceptance,1343.5,0.5
+before,2,24,peor tick (muestra 1),unload_staging,189.4,0.1
+before,2,24,peor tick (muestra 1),unload_packets,3729.4,1.4
+before,2,24,peor tick (muestra 1),unload_commit,569.4,0.2
+before,2,24,peor tick (muestra 1),unload_reinsert,187.8,0.1
+before,2,24,peor tick (muestra 1),unload_station_events,130.8,0.0
+before,2,24,peor tick (muestra 1),unload_finish,106.1,0.0
+before,2,24,peor tick (muestra 1),cargo_load,1751.1,0.7
+before,2,24,peor tick (muestra 1),movement,5135.6,2.0
+before,2,24,peor tick (muestra 1),vehicle_move,2890.7,1.1
+before,2,24,peor tick (muestra 1),train_collision,211.9,0.1
+before,2,24,peor tick (muestra 1),crashed_vehicle,151.6,0.1
+before,2,24,peor tick (muestra 1),pbs_post_move,1881.2,0.7
+before,2,24,peor tick (muestra 1),landscape,3403.3,1.3
+before,2,24,peor tick (muestra 1),post_tick,6513.6,2.5
+before,2,24,peor tick (muestra 1),TOTAL,261933.6,100.0
+before,1,120,primer tick,timer_economy,0.0,0.0
+before,1,120,primer tick,tile_animation,79.1,0.0
+before,1,120,primer tick,tile_loop,10.8,0.0
+before,1,120,primer tick,path_recompute,221656.8,85.0
+before,1,120,primer tick,path_order_sync,4925.2,1.9
+before,1,120,primer tick,path_station_route,5659.6,2.2
+before,1,120,primer tick,path_generic_route,211065.8,80.9
+before,1,120,primer tick,vehicle_ops_pre_move,10400.0,4.0
+before,1,120,primer tick,vehicle_ops_only,3907.4,1.5
+before,1,120,primer tick,autoreplace,4.9,0.0
+before,1,120,primer tick,pbs_pre_move,6407.6,2.5
+before,1,120,primer tick,cargo_transfer,9779.8,3.8
+before,1,120,primer tick,cargo_calendar_day,1.1,0.0
+before,1,120,primer tick,cargo_economy_day,10.3,0.0
+before,1,120,primer tick,cargo_aging,245.4,0.1
+before,1,120,primer tick,cargo_unload,7790.7,3.0
+before,1,120,primer tick,unload_selection,1813.4,0.7
+before,1,120,primer tick,unload_acceptance,1341.8,0.5
+before,1,120,primer tick,unload_staging,180.9,0.1
+before,1,120,primer tick,unload_packets,3680.3,1.4
+before,1,120,primer tick,unload_commit,563.7,0.2
+before,1,120,primer tick,unload_reinsert,185.5,0.1
+before,1,120,primer tick,unload_station_events,130.9,0.1
+before,1,120,primer tick,unload_finish,93.4,0.0
+before,1,120,primer tick,cargo_load,1650.4,0.6
+before,1,120,primer tick,movement,4971.8,1.9
+before,1,120,primer tick,vehicle_move,2759.9,1.1
+before,1,120,primer tick,train_collision,195.5,0.1
+before,1,120,primer tick,crashed_vehicle,147.7,0.1
+before,1,120,primer tick,pbs_post_move,1868.5,0.7
+before,1,120,primer tick,landscape,7074.4,2.7
+before,1,120,primer tick,post_tick,6481.6,2.5
+before,1,120,primer tick,TOTAL,260788.2,100.0
+before,1,120,media de 120 ticks,timer_economy,0.0,0.0
+before,1,120,media de 120 ticks,tile_animation,426.6,1.2
+before,1,120,media de 120 ticks,tile_loop,7.6,0.0
+before,1,120,media de 120 ticks,path_recompute,7357.1,20.7
+before,1,120,media de 120 ticks,path_order_sync,5025.4,14.1
+before,1,120,media de 120 ticks,path_station_route,224.3,0.6
+before,1,120,media de 120 ticks,path_generic_route,2106.7,5.9
+before,1,120,media de 120 ticks,vehicle_ops_pre_move,4680.4,13.2
+before,1,120,media de 120 ticks,vehicle_ops_only,3699.7,10.4
+before,1,120,media de 120 ticks,autoreplace,4.6,0.0
+before,1,120,media de 120 ticks,pbs_pre_move,969.1,2.7
+before,1,120,media de 120 ticks,cargo_transfer,3645.3,10.3
+before,1,120,media de 120 ticks,cargo_calendar_day,0.4,0.0
+before,1,120,media de 120 ticks,cargo_economy_day,3.8,0.0
+before,1,120,media de 120 ticks,cargo_aging,95.7,0.3
+before,1,120,media de 120 ticks,cargo_unload,1976.7,5.6
+before,1,120,media de 120 ticks,unload_selection,1119.8,3.1
+before,1,120,media de 120 ticks,unload_acceptance,510.2,1.4
+before,1,120,media de 120 ticks,unload_staging,40.3,0.1
+before,1,120,media de 120 ticks,unload_packets,155.4,0.4
+before,1,120,media de 120 ticks,unload_commit,22.8,0.1
+before,1,120,media de 120 ticks,unload_reinsert,5.5,0.0
+before,1,120,media de 120 ticks,unload_station_events,5.8,0.0
+before,1,120,media de 120 ticks,unload_finish,37.8,0.1
+before,1,120,media de 120 ticks,cargo_load,1564.6,4.4
+before,1,120,media de 120 ticks,movement,5684.5,16.0
+before,1,120,media de 120 ticks,vehicle_move,4053.3,11.4
+before,1,120,media de 120 ticks,train_collision,206.1,0.6
+before,1,120,media de 120 ticks,crashed_vehicle,150.0,0.4
+before,1,120,media de 120 ticks,pbs_post_move,1275.0,3.6
+before,1,120,media de 120 ticks,landscape,7132.2,20.1
+before,1,120,media de 120 ticks,post_tick,6344.5,17.8
+before,1,120,media de 120 ticks,TOTAL,35559.1,100.0
+before,1,120,peor tick (muestra 1),timer_economy,0.0,0.0
+before,1,120,peor tick (muestra 1),tile_animation,79.1,0.0
+before,1,120,peor tick (muestra 1),tile_loop,10.8,0.0
+before,1,120,peor tick (muestra 1),path_recompute,221656.8,85.0
+before,1,120,peor tick (muestra 1),path_order_sync,4925.2,1.9
+before,1,120,peor tick (muestra 1),path_station_route,5659.6,2.2
+before,1,120,peor tick (muestra 1),path_generic_route,211065.8,80.9
+before,1,120,peor tick (muestra 1),vehicle_ops_pre_move,10400.0,4.0
+before,1,120,peor tick (muestra 1),vehicle_ops_only,3907.4,1.5
+before,1,120,peor tick (muestra 1),autoreplace,4.9,0.0
+before,1,120,peor tick (muestra 1),pbs_pre_move,6407.6,2.5
+before,1,120,peor tick (muestra 1),cargo_transfer,9779.8,3.8
+before,1,120,peor tick (muestra 1),cargo_calendar_day,1.1,0.0
+before,1,120,peor tick (muestra 1),cargo_economy_day,10.3,0.0
+before,1,120,peor tick (muestra 1),cargo_aging,245.4,0.1
+before,1,120,peor tick (muestra 1),cargo_unload,7790.7,3.0
+before,1,120,peor tick (muestra 1),unload_selection,1813.4,0.7
+before,1,120,peor tick (muestra 1),unload_acceptance,1341.8,0.5
+before,1,120,peor tick (muestra 1),unload_staging,180.9,0.1
+before,1,120,peor tick (muestra 1),unload_packets,3680.3,1.4
+before,1,120,peor tick (muestra 1),unload_commit,563.7,0.2
+before,1,120,peor tick (muestra 1),unload_reinsert,185.5,0.1
+before,1,120,peor tick (muestra 1),unload_station_events,130.9,0.1
+before,1,120,peor tick (muestra 1),unload_finish,93.4,0.0
+before,1,120,peor tick (muestra 1),cargo_load,1650.4,0.6
+before,1,120,peor tick (muestra 1),movement,4971.8,1.9
+before,1,120,peor tick (muestra 1),vehicle_move,2759.9,1.1
+before,1,120,peor tick (muestra 1),train_collision,195.5,0.1
+before,1,120,peor tick (muestra 1),crashed_vehicle,147.7,0.1
+before,1,120,peor tick (muestra 1),pbs_post_move,1868.5,0.7
+before,1,120,peor tick (muestra 1),landscape,7074.4,2.7
+before,1,120,peor tick (muestra 1),post_tick,6481.6,2.5
+before,1,120,peor tick (muestra 1),TOTAL,260788.2,100.0
+after,1,120,primer tick,timer_economy,0.0,0.0
+after,1,120,primer tick,tile_animation,76.3,0.0
+after,1,120,primer tick,tile_loop,15.4,0.0
+after,1,120,primer tick,path_recompute,220105.2,87.7
+after,1,120,primer tick,path_order_sync,420.9,0.2
+after,1,120,primer tick,path_station_route,5647.0,2.3
+after,1,120,primer tick,path_generic_route,214029.8,85.3
+after,1,120,primer tick,vehicle_ops_pre_move,10414.5,4.2
+after,1,120,primer tick,vehicle_ops_only,3795.3,1.5
+after,1,120,primer tick,autoreplace,4.1,0.0
+after,1,120,primer tick,pbs_pre_move,6531.6,2.6
+after,1,120,primer tick,cargo_transfer,9860.2,3.9
+after,1,120,primer tick,cargo_calendar_day,1.0,0.0
+after,1,120,primer tick,cargo_economy_day,10.3,0.0
+after,1,120,primer tick,cargo_aging,226.2,0.1
+after,1,120,primer tick,cargo_unload,7839.2,3.1
+after,1,120,primer tick,unload_selection,1882.2,0.8
+after,1,120,primer tick,unload_acceptance,1320.5,0.5
+after,1,120,primer tick,unload_staging,179.0,0.1
+after,1,120,primer tick,unload_packets,3666.6,1.5
+after,1,120,primer tick,unload_commit,575.0,0.2
+after,1,120,primer tick,unload_reinsert,194.6,0.1
+after,1,120,primer tick,unload_station_events,128.5,0.1
+after,1,120,primer tick,unload_finish,100.4,0.0
+after,1,120,primer tick,cargo_load,1701.4,0.7
+after,1,120,primer tick,movement,5025.9,2.0
+after,1,120,primer tick,vehicle_move,2813.2,1.1
+after,1,120,primer tick,train_collision,193.8,0.1
+after,1,120,primer tick,crashed_vehicle,160.2,0.1
+after,1,120,primer tick,pbs_post_move,1858.6,0.7
+after,1,120,primer tick,landscape,3275.9,1.3
+after,1,120,primer tick,post_tick,1765.9,0.7
+after,1,120,primer tick,TOTAL,250888.7,100.0
+after,1,120,media de 120 ticks,timer_economy,0.0,0.0
+after,1,120,media de 120 ticks,tile_animation,428.3,1.9
+after,1,120,media de 120 ticks,tile_loop,8.4,0.0
+after,1,120,media de 120 ticks,path_recompute,2674.9,12.0
+after,1,120,media de 120 ticks,path_order_sync,321.3,1.4
+after,1,120,media de 120 ticks,path_station_route,217.8,1.0
+after,1,120,media de 120 ticks,path_generic_route,2133.8,9.6
+after,1,120,media de 120 ticks,vehicle_ops_pre_move,4641.6,20.8
+after,1,120,media de 120 ticks,vehicle_ops_only,3666.1,16.4
+after,1,120,media de 120 ticks,autoreplace,3.9,0.0
+after,1,120,media de 120 ticks,pbs_pre_move,964.1,4.3
+after,1,120,media de 120 ticks,cargo_transfer,3614.1,16.2
+after,1,120,media de 120 ticks,cargo_calendar_day,0.4,0.0
+after,1,120,media de 120 ticks,cargo_economy_day,3.7,0.0
+after,1,120,media de 120 ticks,cargo_aging,82.5,0.4
+after,1,120,media de 120 ticks,cargo_unload,1962.3,8.8
+after,1,120,media de 120 ticks,unload_selection,1118.5,5.0
+after,1,120,media de 120 ticks,unload_acceptance,498.8,2.2
+after,1,120,media de 120 ticks,unload_staging,39.8,0.2
+after,1,120,media de 120 ticks,unload_packets,155.1,0.7
+after,1,120,media de 120 ticks,unload_commit,22.4,0.1
+after,1,120,media de 120 ticks,unload_reinsert,5.2,0.0
+after,1,120,media de 120 ticks,unload_station_events,5.6,0.0
+after,1,120,media de 120 ticks,unload_finish,37.2,0.2
+after,1,120,media de 120 ticks,cargo_load,1561.0,7.0
+after,1,120,media de 120 ticks,movement,5716.1,25.6
+after,1,120,media de 120 ticks,vehicle_move,4081.5,18.3
+after,1,120,media de 120 ticks,train_collision,200.4,0.9
+after,1,120,media de 120 ticks,crashed_vehicle,162.5,0.7
+after,1,120,media de 120 ticks,pbs_post_move,1271.6,5.7
+after,1,120,media de 120 ticks,landscape,3324.3,14.9
+after,1,120,media de 120 ticks,post_tick,1613.9,7.2
+after,1,120,media de 120 ticks,TOTAL,22317.6,100.0
+after,1,120,peor tick (muestra 1),timer_economy,0.0,0.0
+after,1,120,peor tick (muestra 1),tile_animation,76.3,0.0
+after,1,120,peor tick (muestra 1),tile_loop,15.4,0.0
+after,1,120,peor tick (muestra 1),path_recompute,220105.2,87.7
+after,1,120,peor tick (muestra 1),path_order_sync,420.9,0.2
+after,1,120,peor tick (muestra 1),path_station_route,5647.0,2.3
+after,1,120,peor tick (muestra 1),path_generic_route,214029.8,85.3
+after,1,120,peor tick (muestra 1),vehicle_ops_pre_move,10414.5,4.2
+after,1,120,peor tick (muestra 1),vehicle_ops_only,3795.3,1.5
+after,1,120,peor tick (muestra 1),autoreplace,4.1,0.0
+after,1,120,peor tick (muestra 1),pbs_pre_move,6531.6,2.6
+after,1,120,peor tick (muestra 1),cargo_transfer,9860.2,3.9
+after,1,120,peor tick (muestra 1),cargo_calendar_day,1.0,0.0
+after,1,120,peor tick (muestra 1),cargo_economy_day,10.3,0.0
+after,1,120,peor tick (muestra 1),cargo_aging,226.2,0.1
+after,1,120,peor tick (muestra 1),cargo_unload,7839.2,3.1
+after,1,120,peor tick (muestra 1),unload_selection,1882.2,0.8
+after,1,120,peor tick (muestra 1),unload_acceptance,1320.5,0.5
+after,1,120,peor tick (muestra 1),unload_staging,179.0,0.1
+after,1,120,peor tick (muestra 1),unload_packets,3666.6,1.5
+after,1,120,peor tick (muestra 1),unload_commit,575.0,0.2
+after,1,120,peor tick (muestra 1),unload_reinsert,194.6,0.1
+after,1,120,peor tick (muestra 1),unload_station_events,128.5,0.1
+after,1,120,peor tick (muestra 1),unload_finish,100.4,0.0
+after,1,120,peor tick (muestra 1),cargo_load,1701.4,0.7
+after,1,120,peor tick (muestra 1),movement,5025.9,2.0
+after,1,120,peor tick (muestra 1),vehicle_move,2813.2,1.1
+after,1,120,peor tick (muestra 1),train_collision,193.8,0.1
+after,1,120,peor tick (muestra 1),crashed_vehicle,160.2,0.1
+after,1,120,peor tick (muestra 1),pbs_post_move,1858.6,0.7
+after,1,120,peor tick (muestra 1),landscape,3275.9,1.3
+after,1,120,peor tick (muestra 1),post_tick,1765.9,0.7
+after,1,120,peor tick (muestra 1),TOTAL,250888.7,100.0
+after,2,120,primer tick,timer_economy,0.0,0.0
+after,2,120,primer tick,tile_animation,83.8,0.0
+after,2,120,primer tick,tile_loop,11.2,0.0
+after,2,120,primer tick,path_recompute,220797.2,87.7
+after,2,120,primer tick,path_order_sync,416.3,0.2
+after,2,120,primer tick,path_station_route,5669.0,2.3
+after,2,120,primer tick,path_generic_route,214704.9,85.3
+after,2,120,primer tick,vehicle_ops_pre_move,10439.5,4.1
+after,2,120,primer tick,vehicle_ops_only,3853.0,1.5
+after,2,120,primer tick,autoreplace,4.4,0.0
+after,2,120,primer tick,pbs_pre_move,6499.0,2.6
+after,2,120,primer tick,cargo_transfer,9723.9,3.9
+after,2,120,primer tick,cargo_calendar_day,0.9,0.0
+after,2,120,primer tick,cargo_economy_day,10.0,0.0
+after,2,120,primer tick,cargo_aging,240.4,0.1
+after,2,120,primer tick,cargo_unload,7735.4,3.1
+after,2,120,primer tick,unload_selection,1812.7,0.7
+after,2,120,primer tick,unload_acceptance,1306.6,0.5
+after,2,120,primer tick,unload_staging,182.2,0.1
+after,2,120,primer tick,unload_packets,3662.3,1.5
+after,2,120,primer tick,unload_commit,559.3,0.2
+after,2,120,primer tick,unload_reinsert,186.8,0.1
+after,2,120,primer tick,unload_station_events,126.7,0.1
+after,2,120,primer tick,unload_finish,97.0,0.0
+after,2,120,primer tick,cargo_load,1654.1,0.7
+after,2,120,primer tick,movement,5015.3,2.0
+after,2,120,primer tick,vehicle_move,2807.7,1.1
+after,2,120,primer tick,train_collision,190.6,0.1
+after,2,120,primer tick,crashed_vehicle,161.0,0.1
+after,2,120,primer tick,pbs_post_move,1856.0,0.7
+after,2,120,primer tick,landscape,3500.4,1.4
+after,2,120,primer tick,post_tick,1773.2,0.7
+after,2,120,primer tick,TOTAL,251693.6,100.0
+after,2,120,media de 120 ticks,timer_economy,0.0,0.0
+after,2,120,media de 120 ticks,tile_animation,428.0,1.9
+after,2,120,media de 120 ticks,tile_loop,7.9,0.0
+after,2,120,media de 120 ticks,path_recompute,2683.7,11.9
+after,2,120,media de 120 ticks,path_order_sync,323.2,1.4
+after,2,120,media de 120 ticks,path_station_route,217.3,1.0
+after,2,120,media de 120 ticks,path_generic_route,2141.2,9.5
+after,2,120,media de 120 ticks,vehicle_ops_pre_move,4636.8,20.6
+after,2,120,media de 120 ticks,vehicle_ops_only,3658.9,16.3
+after,2,120,media de 120 ticks,autoreplace,4.0,0.0
+after,2,120,media de 120 ticks,pbs_pre_move,966.5,4.3
+after,2,120,media de 120 ticks,cargo_transfer,3603.9,16.0
+after,2,120,media de 120 ticks,cargo_calendar_day,0.4,0.0
+after,2,120,media de 120 ticks,cargo_economy_day,3.4,0.0
+after,2,120,media de 120 ticks,cargo_aging,80.7,0.4
+after,2,120,media de 120 ticks,cargo_unload,1959.1,8.7
+after,2,120,media de 120 ticks,unload_selection,1114.0,5.0
+after,2,120,media de 120 ticks,unload_acceptance,500.1,2.2
+after,2,120,media de 120 ticks,unload_staging,39.9,0.2
+after,2,120,media de 120 ticks,unload_packets,156.4,0.7
+after,2,120,media de 120 ticks,unload_commit,21.8,0.1
+after,2,120,media de 120 ticks,unload_reinsert,4.8,0.0
+after,2,120,media de 120 ticks,unload_station_events,5.6,0.0
+after,2,120,media de 120 ticks,unload_finish,36.4,0.2
+after,2,120,media de 120 ticks,cargo_load,1556.2,6.9
+after,2,120,media de 120 ticks,movement,5710.5,25.4
+after,2,120,media de 120 ticks,vehicle_move,4073.8,18.1
+after,2,120,media de 120 ticks,train_collision,199.5,0.9
+after,2,120,media de 120 ticks,crashed_vehicle,166.0,0.7
+after,2,120,media de 120 ticks,pbs_post_move,1271.1,5.7
+after,2,120,media de 120 ticks,landscape,3498.9,15.6
+after,2,120,media de 120 ticks,post_tick,1627.7,7.2
+after,2,120,media de 120 ticks,TOTAL,22493.1,100.0
+after,2,120,peor tick (muestra 1),timer_economy,0.0,0.0
+after,2,120,peor tick (muestra 1),tile_animation,83.8,0.0
+after,2,120,peor tick (muestra 1),tile_loop,11.2,0.0
+after,2,120,peor tick (muestra 1),path_recompute,220797.2,87.7
+after,2,120,peor tick (muestra 1),path_order_sync,416.3,0.2
+after,2,120,peor tick (muestra 1),path_station_route,5669.0,2.3
+after,2,120,peor tick (muestra 1),path_generic_route,214704.9,85.3
+after,2,120,peor tick (muestra 1),vehicle_ops_pre_move,10439.5,4.1
+after,2,120,peor tick (muestra 1),vehicle_ops_only,3853.0,1.5
+after,2,120,peor tick (muestra 1),autoreplace,4.4,0.0
+after,2,120,peor tick (muestra 1),pbs_pre_move,6499.0,2.6
+after,2,120,peor tick (muestra 1),cargo_transfer,9723.9,3.9
+after,2,120,peor tick (muestra 1),cargo_calendar_day,0.9,0.0
+after,2,120,peor tick (muestra 1),cargo_economy_day,10.0,0.0
+after,2,120,peor tick (muestra 1),cargo_aging,240.4,0.1
+after,2,120,peor tick (muestra 1),cargo_unload,7735.4,3.1
+after,2,120,peor tick (muestra 1),unload_selection,1812.7,0.7
+after,2,120,peor tick (muestra 1),unload_acceptance,1306.6,0.5
+after,2,120,peor tick (muestra 1),unload_staging,182.2,0.1
+after,2,120,peor tick (muestra 1),unload_packets,3662.3,1.5
+after,2,120,peor tick (muestra 1),unload_commit,559.3,0.2
+after,2,120,peor tick (muestra 1),unload_reinsert,186.8,0.1
+after,2,120,peor tick (muestra 1),unload_station_events,126.7,0.1
+after,2,120,peor tick (muestra 1),unload_finish,97.0,0.0
+after,2,120,peor tick (muestra 1),cargo_load,1654.1,0.7
+after,2,120,peor tick (muestra 1),movement,5015.3,2.0
+after,2,120,peor tick (muestra 1),vehicle_move,2807.7,1.1
+after,2,120,peor tick (muestra 1),train_collision,190.6,0.1
+after,2,120,peor tick (muestra 1),crashed_vehicle,161.0,0.1
+after,2,120,peor tick (muestra 1),pbs_post_move,1856.0,0.7
+after,2,120,peor tick (muestra 1),landscape,3500.4,1.4
+after,2,120,peor tick (muestra 1),post_tick,1773.2,0.7
+after,2,120,peor tick (muestra 1),TOTAL,251693.6,100.0
+before,2,120,primer tick,timer_economy,0.0,0.0
+before,2,120,primer tick,tile_animation,76.2,0.0
+before,2,120,primer tick,tile_loop,11.0,0.0
+before,2,120,primer tick,path_recompute,229060.0,86.5
+before,2,120,primer tick,path_order_sync,4931.0,1.9
+before,2,120,primer tick,path_station_route,5733.0,2.2
+before,2,120,primer tick,path_generic_route,218388.1,82.5
+before,2,120,primer tick,vehicle_ops_pre_move,10461.1,4.0
+before,2,120,primer tick,vehicle_ops_only,3909.0,1.5
+before,2,120,primer tick,autoreplace,4.2,0.0
+before,2,120,primer tick,pbs_pre_move,6463.7,2.4
+before,2,120,primer tick,cargo_transfer,9866.3,3.7
+before,2,120,primer tick,cargo_calendar_day,0.8,0.0
+before,2,120,primer tick,cargo_economy_day,10.7,0.0
+before,2,120,primer tick,cargo_aging,250.2,0.1
+before,2,120,primer tick,cargo_unload,7896.1,3.0
+before,2,120,primer tick,unload_selection,1794.9,0.7
+before,2,120,primer tick,unload_acceptance,1369.6,0.5
+before,2,120,primer tick,unload_staging,183.9,0.1
+before,2,120,primer tick,unload_packets,3755.2,1.4
+before,2,120,primer tick,unload_commit,580.9,0.2
+before,2,120,primer tick,unload_reinsert,190.8,0.1
+before,2,120,primer tick,unload_station_events,135.8,0.1
+before,2,120,primer tick,unload_finish,95.0,0.0
+before,2,120,primer tick,cargo_load,1624.8,0.6
+before,2,120,primer tick,movement,5149.6,1.9
+before,2,120,primer tick,vehicle_move,2930.9,1.1
+before,2,120,primer tick,train_collision,196.5,0.1
+before,2,120,primer tick,crashed_vehicle,150.9,0.1
+before,2,120,primer tick,pbs_post_move,1871.2,0.7
+before,2,120,primer tick,landscape,3313.5,1.3
+before,2,120,primer tick,post_tick,6472.8,2.4
+before,2,120,primer tick,TOTAL,264729.5,100.0
+before,2,120,media de 120 ticks,timer_economy,0.0,0.0
+before,2,120,media de 120 ticks,tile_animation,427.3,1.3
+before,2,120,media de 120 ticks,tile_loop,7.6,0.0
+before,2,120,media de 120 ticks,path_recompute,7446.3,23.3
+before,2,120,media de 120 ticks,path_order_sync,5050.5,15.8
+before,2,120,media de 120 ticks,path_station_route,223.4,0.7
+before,2,120,media de 120 ticks,path_generic_route,2171.7,6.8
+before,2,120,media de 120 ticks,vehicle_ops_pre_move,4668.1,14.6
+before,2,120,media de 120 ticks,vehicle_ops_only,3688.5,11.5
+before,2,120,media de 120 ticks,autoreplace,4.0,0.0
+before,2,120,media de 120 ticks,pbs_pre_move,968.3,3.0
+before,2,120,media de 120 ticks,cargo_transfer,3644.0,11.4
+before,2,120,media de 120 ticks,cargo_calendar_day,0.4,0.0
+before,2,120,media de 120 ticks,cargo_economy_day,3.8,0.0
+before,2,120,media de 120 ticks,cargo_aging,95.9,0.3
+before,2,120,media de 120 ticks,cargo_unload,1985.4,6.2
+before,2,120,media de 120 ticks,unload_selection,1131.3,3.5
+before,2,120,media de 120 ticks,unload_acceptance,504.7,1.6
+before,2,120,media de 120 ticks,unload_staging,40.3,0.1
+before,2,120,media de 120 ticks,unload_packets,157.4,0.5
+before,2,120,media de 120 ticks,unload_commit,22.8,0.1
+before,2,120,media de 120 ticks,unload_reinsert,5.1,0.0
+before,2,120,media de 120 ticks,unload_station_events,5.9,0.0
+before,2,120,media de 120 ticks,unload_finish,36.6,0.1
+before,2,120,media de 120 ticks,cargo_load,1554.3,4.9
+before,2,120,media de 120 ticks,movement,5710.8,17.9
+before,2,120,media de 120 ticks,vehicle_move,4078.7,12.8
+before,2,120,media de 120 ticks,train_collision,200.7,0.6
+before,2,120,media de 120 ticks,crashed_vehicle,150.0,0.5
+before,2,120,media de 120 ticks,pbs_post_move,1281.3,4.0
+before,2,120,media de 120 ticks,landscape,3411.9,10.7
+before,2,120,media de 120 ticks,post_tick,6371.1,19.9
+before,2,120,media de 120 ticks,TOTAL,31971.8,100.0
+before,2,120,peor tick (muestra 1),timer_economy,0.0,0.0
+before,2,120,peor tick (muestra 1),tile_animation,76.2,0.0
+before,2,120,peor tick (muestra 1),tile_loop,11.0,0.0
+before,2,120,peor tick (muestra 1),path_recompute,229060.0,86.5
+before,2,120,peor tick (muestra 1),path_order_sync,4931.0,1.9
+before,2,120,peor tick (muestra 1),path_station_route,5733.0,2.2
+before,2,120,peor tick (muestra 1),path_generic_route,218388.1,82.5
+before,2,120,peor tick (muestra 1),vehicle_ops_pre_move,10461.1,4.0
+before,2,120,peor tick (muestra 1),vehicle_ops_only,3909.0,1.5
+before,2,120,peor tick (muestra 1),autoreplace,4.2,0.0
+before,2,120,peor tick (muestra 1),pbs_pre_move,6463.7,2.4
+before,2,120,peor tick (muestra 1),cargo_transfer,9866.3,3.7
+before,2,120,peor tick (muestra 1),cargo_calendar_day,0.8,0.0
+before,2,120,peor tick (muestra 1),cargo_economy_day,10.7,0.0
+before,2,120,peor tick (muestra 1),cargo_aging,250.2,0.1
+before,2,120,peor tick (muestra 1),cargo_unload,7896.1,3.0
+before,2,120,peor tick (muestra 1),unload_selection,1794.9,0.7
+before,2,120,peor tick (muestra 1),unload_acceptance,1369.6,0.5
+before,2,120,peor tick (muestra 1),unload_staging,183.9,0.1
+before,2,120,peor tick (muestra 1),unload_packets,3755.2,1.4
+before,2,120,peor tick (muestra 1),unload_commit,580.9,0.2
+before,2,120,peor tick (muestra 1),unload_reinsert,190.8,0.1
+before,2,120,peor tick (muestra 1),unload_station_events,135.8,0.1
+before,2,120,peor tick (muestra 1),unload_finish,95.0,0.0
+before,2,120,peor tick (muestra 1),cargo_load,1624.8,0.6
+before,2,120,peor tick (muestra 1),movement,5149.6,1.9
+before,2,120,peor tick (muestra 1),vehicle_move,2930.9,1.1
+before,2,120,peor tick (muestra 1),train_collision,196.5,0.1
+before,2,120,peor tick (muestra 1),crashed_vehicle,150.9,0.1
+before,2,120,peor tick (muestra 1),pbs_post_move,1871.2,0.7
+before,2,120,peor tick (muestra 1),landscape,3313.5,1.3
+before,2,120,peor tick (muestra 1),post_tick,6472.8,2.4
+before,2,120,peor tick (muestra 1),TOTAL,264729.5,100.0

@@ -2073,6 +2073,23 @@ fn station_animation_whole_tiles(
     tiles
 }
 
+fn station_animation_trigger_is_enabled(
+    stations: &[Station],
+    catalog: &[StationSpecDef],
+    anchor: TileCoord,
+    trigger: StationAnimationTrigger,
+) -> bool {
+    stations
+        .iter()
+        .find(|station| station.pos == anchor)
+        .and_then(|station| station_spec_def(catalog, station.station_spec))
+        .is_some_and(|def| {
+            def.from_newgrf
+                && def.newgrf_runtime.is_some()
+                && def.animation_triggers & trigger.mask() != 0
+        })
+}
+
 /// Ejecuta CB140 sobre todas las teselas de la estación (`TA_WHOLE`).
 ///
 /// `cargo` se traduce al id local del GRF por cada spec antes de llenar los
@@ -2224,7 +2241,7 @@ fn trigger_newgrf_station_animation_for_station_with_industries<S: BuildHasher>(
     trigger: StationAnimationTrigger,
     cargo: Option<CargoType>,
 ) -> Vec<TileCoord> {
-    trigger_newgrf_station_animation_for_station_with_industries_and_sounds(
+    trigger_newgrf_station_animation_for_station_with_industries_and_sounds::<S, true>(
         map,
         tick,
         stations,
@@ -2243,7 +2260,10 @@ fn trigger_newgrf_station_animation_for_station_with_industries<S: BuildHasher>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn trigger_newgrf_station_animation_for_station_with_industries_and_sounds<S: BuildHasher>(
+fn trigger_newgrf_station_animation_for_station_with_industries_and_sounds<
+    S: BuildHasher,
+    const CHECK_TRIGGER: bool,
+>(
     map: &mut Map,
     tick: u64,
     stations: &mut [Station],
@@ -2259,6 +2279,14 @@ fn trigger_newgrf_station_animation_for_station_with_industries_and_sounds<S: Bu
     cargo: Option<CargoType>,
     sound_events: Option<&mut Vec<StationAnimationSound>>,
 ) -> Vec<TileCoord> {
+    // Native TriggerStationAnimation checks its mask before selecting tiles.
+    // Keep the legacy walk when active tiles may need stale-entry cleanup.
+    if CHECK_TRIGGER
+        && active_tiles.is_empty()
+        && !station_animation_trigger_is_enabled(stations, catalog, station_anchor, trigger)
+    {
+        return Vec::new();
+    }
     let tiles = station_animation_whole_tiles(map, stations, station_anchor);
     let mut dirty = Vec::new();
     let mut sound_events = sound_events;
@@ -2305,7 +2333,7 @@ pub fn trigger_newgrf_station_animation_for_station_with_towns_and_world_and_car
     cargo: Option<CargoType>,
     sound_events: &mut Vec<StationAnimationSound>,
 ) -> Vec<TileCoord> {
-    trigger_newgrf_station_animation_for_station_with_industries_and_sounds(
+    trigger_newgrf_station_animation_for_station_with_industries_and_sounds::<S, true>(
         map,
         tick,
         stations,
@@ -2477,7 +2505,7 @@ fn trigger_newgrf_station_animation_for_platform_with_industries<S: BuildHasher>
     trigger_tile: TileCoord,
     trigger: StationAnimationTrigger,
 ) -> Vec<TileCoord> {
-    trigger_newgrf_station_animation_for_platform_with_industries_and_sounds(
+    trigger_newgrf_station_animation_for_platform_with_industries_and_sounds::<S, true>(
         map,
         tick,
         stations,
@@ -2496,7 +2524,10 @@ fn trigger_newgrf_station_animation_for_platform_with_industries<S: BuildHasher>
 }
 
 #[allow(clippy::too_many_arguments)]
-fn trigger_newgrf_station_animation_for_platform_with_industries_and_sounds<S: BuildHasher>(
+fn trigger_newgrf_station_animation_for_platform_with_industries_and_sounds<
+    S: BuildHasher,
+    const CHECK_TRIGGER: bool,
+>(
     map: &mut Map,
     tick: u64,
     stations: &mut [Station],
@@ -2512,6 +2543,12 @@ fn trigger_newgrf_station_animation_for_platform_with_industries_and_sounds<S: B
     trigger: StationAnimationTrigger,
     sound_events: Option<&mut Vec<StationAnimationSound>>,
 ) -> Vec<TileCoord> {
+    if CHECK_TRIGGER
+        && active_tiles.is_empty()
+        && !station_animation_trigger_is_enabled(stations, catalog, station_anchor, trigger)
+    {
+        return Vec::new();
+    }
     let Some(station) = stations
         .iter()
         .find(|station| station.pos == station_anchor)
@@ -2575,7 +2612,7 @@ pub fn trigger_newgrf_station_animation_for_platform_with_towns_and_world_and_ca
     trigger: StationAnimationTrigger,
     sound_events: &mut Vec<StationAnimationSound>,
 ) -> Vec<TileCoord> {
-    trigger_newgrf_station_animation_for_platform_with_industries_and_sounds(
+    trigger_newgrf_station_animation_for_platform_with_industries_and_sounds::<S, true>(
         map,
         tick,
         stations,
@@ -4364,6 +4401,149 @@ mod tests {
         assert_eq!(state.runtime.pending_newgrf_sounds[0].priority, 7);
         assert_eq!(state.runtime.pending_newgrf_sounds[0].at, Some(coord));
         assert!(state.runtime.pending_newgrf_sounds[0].ambient);
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)] // Matriz de áreas, masks y limpieza legacy.
+    fn station_trigger_filter_preserves_callbacks_sounds_and_stale_cleanup() {
+        fn run<const CHECK: bool>(
+            whole: bool,
+            map: &mut Map,
+            stations: &mut [Station],
+            catalog: &[StationSpecDef],
+            active: &mut HashSet<TileCoord>,
+            sounds: &mut Vec<StationAnimationSound>,
+            anchor: TileCoord,
+        ) -> Vec<TileCoord> {
+            if whole {
+                trigger_newgrf_station_animation_for_station_with_industries_and_sounds::<_, CHECK>(
+                    map,
+                    19,
+                    stations,
+                    &[],
+                    &[],
+                    Some(&[]),
+                    Climate::Temperate,
+                    catalog,
+                    &[],
+                    active,
+                    anchor,
+                    StationAnimationTrigger::NewCargo,
+                    Some(CargoType::Coal),
+                    Some(sounds),
+                )
+            } else {
+                trigger_newgrf_station_animation_for_platform_with_industries_and_sounds::<_, CHECK>(
+                    map,
+                    19,
+                    stations,
+                    &[],
+                    &[],
+                    Some(&[]),
+                    Climate::Temperate,
+                    catalog,
+                    &[],
+                    active,
+                    anchor,
+                    anchor,
+                    StationAnimationTrigger::VehicleLoads,
+                    Some(sounds),
+                )
+            }
+        }
+        let first = TileCoord::new(1, 1);
+        let second = TileCoord::new(2, 1);
+        let other = TileCoord::new(3, 1);
+        for mode in 0..7 {
+            let mut map = Map::new_flat(5, 4, 0);
+            for coord in [first, second, other] {
+                let mut tile = map.get(coord).unwrap();
+                tile.kind = TileKind::Station;
+                tile.mapt = 0x50;
+                tile.m5 = 0;
+                tile.m6 = if mode == 6 {
+                    STATION_TYPE_RAIL_WAYPOINT << 3
+                } else {
+                    0
+                };
+                map.set_tile(coord, tile).unwrap();
+            }
+            let mut stations = vec![
+                Station::new_with_kind(first, StopKind::RailStation),
+                Station::new_with_kind(other, StopKind::RailStation),
+            ];
+            stations[0].newgrf_random_bits = 0x1234;
+            stations[0].newgrf_persistent_regs.insert(0x30, 42);
+            let mut catalog = crate::vanilla_station_spec_catalog();
+            catalog[0].from_newgrf = true;
+            catalog[0].newgrf_grfid = 0x534E_4401;
+            catalog[0].animation_triggers = crate::STATION_ANIMATION_TRIGGER_NEW_CARGO
+                | crate::STATION_ANIMATION_TRIGGER_VEHICLE_LOADS;
+            catalog[0].newgrf_runtime = Some(Box::new(station_animation_sound_callbacks()));
+            match mode {
+                1 => catalog[0].animation_triggers = 0,
+                2 => catalog[0].newgrf_runtime = None,
+                3 => catalog[0].from_newgrf = false,
+                4 => catalog.clear(),
+                5 => catalog[0].animation_triggers = crate::STATION_ANIMATION_TRIGGER_NEW_CARGO,
+                6 => stations[0].stop_kind = StopKind::RailWaypoint,
+                _ => {}
+            }
+            for with_active in [false, true] {
+                for whole in [false, true] {
+                    let mut expected_map = map.clone();
+                    let mut actual_map = map.clone();
+                    let mut expected_stations = stations.clone();
+                    let mut actual_stations = stations.clone();
+                    let mut expected_active = if with_active {
+                        HashSet::from([first, second, other])
+                    } else {
+                        HashSet::new()
+                    };
+                    let mut actual_active = expected_active.clone();
+                    let mut expected_sounds = Vec::new();
+                    let mut actual_sounds = Vec::new();
+                    let expected_dirty = run::<false>(
+                        whole,
+                        &mut expected_map,
+                        &mut expected_stations,
+                        &catalog,
+                        &mut expected_active,
+                        &mut expected_sounds,
+                        first,
+                    );
+                    let dirty = run::<true>(
+                        whole,
+                        &mut actual_map,
+                        &mut actual_stations,
+                        &catalog,
+                        &mut actual_active,
+                        &mut actual_sounds,
+                        first,
+                    );
+                    assert_eq!(dirty, expected_dirty);
+                    assert_eq!(actual_active, expected_active);
+                    assert_eq!(format!("{actual_sounds:?}"), format!("{expected_sounds:?}"));
+                    assert_eq!(
+                        serde_json::to_vec(&actual_map).unwrap(),
+                        serde_json::to_vec(&expected_map).unwrap()
+                    );
+                    assert_eq!(
+                        serde_json::to_vec(&actual_stations).unwrap(),
+                        serde_json::to_vec(&expected_stations).unwrap()
+                    );
+                    if mode == 0 && whole {
+                        assert_eq!(dirty, vec![first, second]);
+                        assert_eq!(actual_sounds.len(), 2);
+                        assert_eq!(actual_map.get(first).unwrap().m7, 5);
+                    }
+                    if with_active && matches!(mode, 2..=4) {
+                        assert!(!actual_active.contains(&first));
+                        assert!(actual_active.contains(&other));
+                    }
+                }
+            }
+        }
     }
 
     #[test]

@@ -342,6 +342,67 @@ Validación: 3.004 core/seis ignorados, 1.659 cliente/dos; Clippy en todos los
 targets de ambos, formato, diff y frescura de docs. F12/F31 y el presupuesto
 de 30 FPS siguen abiertos.
 
+## Etapa 9 — Descartar triggers ferroviarios antes de preparar geometría (F12)
+
+Las animaciones de toda una estación o de un andén comprueban primero si su
+spec tiene runtime NewGRF y habilita el trigger solicitado. Si no hay teselas
+animadas activas y el trigger no puede ejecutarse, terminan antes del
+flood-fill y de construir los contextos. Con teselas activas conservan el
+recorrido anterior, incluida la eliminación de entradas inválidas. Los
+callbacks habilitados conservan orden, sonidos, registros persistentes,
+random bits y dirty tiles. La geometría legacy, sus adyacencias y su límite
+de 64 tiles siguen pendientes; el port modela un spec por estación.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`,
+`newgrf_station.cpp::TriggerStationAnimation`, líneas 903–938: máscara
+`cached_anim_triggers` antes de seleccionar área y evaluar callbacks. El
+filtro reproduce ese descarte; no acredita por sí solo la paridad nativa
+de la generación de parámetros aleatorios de CB140.
+
+Regresión diferencial de las variantes con/sin filtro: 28 combinaciones de
+área, máscara, runtime ausente, spec vanilla/ausente, waypoint y conjunto
+activo vacío/no vacío. Compara el mapa y las estaciones serializados, el
+orden dirty, sonidos y limpieza de entradas antiguas; incluye callbacks
+positivos en estaciones adyacentes.
+
+Ocho runs release de Kale_TitleGame.sav con NewGRF, orden
+antes/después/después/antes por ventana, sin compilaciones concurrentes.
+Cuatro ticks: total 441,98 / 426,56 → 98,12 / 93,18 ms,
+descarga 318,94 / 305,88 → 6,50 / 6,26 ms y carga
+27,56 / 26,22 → 1,65 / 1,55 ms. En 24 ticks: total
+175,78 / 175,87 → 88,51 / 89,83 ms (aproximadamente 49 % menos),
+descarga 72,18 / 73,04 → 2,83 / 2,85 ms y carga
+17,83 / 17,94 → 1,64 / 1,62 ms. Los eventos de estación pasan de
+68,89 / 69,95 a 0,0225 / 0,0224 ms en esa ventana.
+Datos: [station-trigger-filter-20261001.csv](evidence/station-trigger-filter-20261001.csv).
+Baseline `00402e6f` (SHA256 `c34b669d09925edf2064c0e29429049e1ca8ff74caee80d403277bd918d37b8f`),
+candidato `8c851b70bc205ffd9392ef447c50bc2eb3efcb1d68a9a83fc4ae6c328cadf3ee`.
+
+Se comparan además el estado inicial y 24 ticks **normales**, sin relojes de
+perfil, en dos builds independientes. Las 25 fases coinciden en hash canónico
+v4, eventos/popups/sonidos, todas las teselas y bloques 4×4: cero diferencias.
+Sonda: [trace_sav_sim_state.rs](../../scripts/trace_sav_sim_state.rs).
+Datos: [station-trigger-state-20261001.csv](evidence/station-trigger-state-20261001.csv).
+Las sondas tienen SHA256 `6a2de05098765db4549adc5bfa617fd4ec5b278e9be418bed7149433ef1b7935`
+y `02a0b0b808d50b5536971e4915c9002183e5d2d44dbadbb2c394ac31512a2182`.
+
+La sonda ordena una vez las listas compartidas por ID antes de comenzar.
+Sin ese paso, incluso dos imports con el mismo binario difieren en el hash
+inicial: `from_sav_game` materializa ese vector desde un HashMap. Dos estados
+JSON independientes eran iguales tras ordenar únicamente sus 134 listas.
+No se cambia el algoritmo de hash ni se ocultan campos durante los ticks;
+corregir ese orden en el importador es el siguiente sub-issue de F06/F20.
+La sonda se compila contra cada build mediante `rustc --edition=2024
+scripts/trace_sav_sim_state.rs --extern openttdrs_core=<rlib> -L
+dependency=target/release/deps -C opt-level=2 -o /tmp/state-trace` y se ejecuta
+con `save/Kale_TitleGame.sav 24 <directorio-de-tiles>`.
+
+Validación: 3.005 core/seis ignorados, 1.659 cliente/dos; Clippy en todos los
+targets de ambos, formato, diff y frescura de docs. Se cierra este descarte
+acotado. El movimiento de vehículos queda alrededor de 52 ms y las rutas
+alrededor de 15 ms en 24 ticks; F12 y los 30 FPS siguen abiertos. Aún no hay
+una nueva medición de ventana/GPU para atribuir FPS a esta etapa.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV

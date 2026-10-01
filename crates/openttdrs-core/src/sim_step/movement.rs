@@ -83,6 +83,16 @@ fn trigger_depot_on_entry(state: &mut GameState, index: usize, was_in_depot: boo
 }
 
 pub(super) fn tick_aircraft_phases(state: &mut GameState) {
+    // The crash queue resolves IDs with first-match semantics. A malformed
+    // fleet with duplicate IDs can make a ground vehicle's queue entry refer
+    // to an aircraft, so retain the previous traversal in that case. Use live
+    // IDs: depot operations may have changed the fleet since the tick index.
+    let mut ids = ahash::AHashSet::with_capacity(state.vehicles.len());
+    let unique_ids = state.vehicles.iter().all(|vehicle| ids.insert(vehicle.id));
+    tick_aircraft_phases_impl(state, unique_ids);
+}
+
+fn tick_aircraft_phases_impl(state: &mut GameState, only_aircraft: bool) {
     use crate::aircraft_movement::{
         AircraftPhaseEvent, tick_aircraft_phase_with_catalog_and_plane_speed,
     };
@@ -90,6 +100,9 @@ pub(super) fn tick_aircraft_phases(state: &mut GameState) {
 
     let mut brake_checks = Vec::new();
     for i in 0..state.vehicles.len() {
+        if only_aircraft && state.vehicles[i].kind != VehicleKind::Aircraft {
+            continue;
+        }
         let previous_phase = state.vehicles[i].aircraft_phase;
         let prev_pos = state.vehicles[i].airport_pos;
         let prev_fta = state.vehicles[i].airport_fta_active;
@@ -1092,13 +1105,213 @@ fn reroute_head_on_to_alt_platform(state: &mut GameState, vehicle_idx: usize) {
 mod tests {
     use super::{
         handle_vehicle_breakdown, move_vehicles, record_vehicle_running_tick,
-        sync_road_articulated_parts, tick_road_depot_movement, trigger_depot_on_entry,
-        update_vehicle_running_sounds, vehicle_entered_train_tunnel,
+        sync_road_articulated_parts, tick_aircraft_phases, tick_aircraft_phases_impl,
+        tick_road_depot_movement, trigger_depot_on_entry, update_vehicle_running_sounds,
+        vehicle_entered_train_tunnel,
     };
     use crate::engine::engines_table;
     use crate::newgrf_sprites::{Action2RandomEntry, TrainSpriteAssign, TrainSpriteGraphics};
     use crate::{GameState, TileCoord, TileKind, Vehicle, VehicleKind};
     use std::collections::VecDeque;
+
+    fn assert_aircraft_phase_state(actual: &GameState, expected: &GameState) {
+        assert_eq!(actual.map.tiles(), expected.map.tiles());
+        assert_eq!(
+            format!("{:?}", actual.vehicles),
+            format!("{:?}", expected.vehicles)
+        );
+        assert_eq!(
+            serde_json::to_value(&actual.stations).unwrap(),
+            serde_json::to_value(&expected.stations).unwrap()
+        );
+        assert_eq!(actual.random, expected.random);
+        assert_eq!(
+            actual.runtime.pending_sim_events.iter().collect::<Vec<_>>(),
+            expected
+                .runtime
+                .pending_sim_events
+                .iter()
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            format!("{:?}", actual.runtime.pending_newgrf_sounds),
+            format!("{:?}", expected.runtime.pending_newgrf_sounds)
+        );
+        assert_eq!(
+            actual.runtime.landscape_tile_dirty,
+            expected.runtime.landscape_tile_dirty
+        );
+        assert_eq!(
+            serde_json::to_value(&actual.news).unwrap(),
+            serde_json::to_value(&expected.news).unwrap()
+        );
+    }
+
+    fn add_non_aircraft(state: &mut GameState, pos: TileCoord) {
+        for (offset, kind) in [
+            VehicleKind::Train,
+            VehicleKind::Bus,
+            VehicleKind::Truck,
+            VehicleKind::Tram,
+            VehicleKind::Ship,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut vehicle = Vehicle::new(u32::try_from(offset).unwrap() + 100, kind, pos, pos);
+            vehicle.aircraft_phase = crate::vehicle::AircraftPhase::Landing;
+            vehicle.airport_fta_active = true;
+            vehicle.airport_pos = 11;
+            vehicle.running = true;
+            state.vehicles.push(vehicle);
+        }
+    }
+
+    #[test]
+    fn aircraft_only_dispatch_preserves_mixed_fleets() {
+        let mut landings = 0;
+        let helicopter = engines_table()
+            .iter()
+            .find(|engine| crate::engine::aircraft_is_helicopter_def(engine))
+            .unwrap()
+            .id;
+        for running in [false, true] {
+            for speed in [1, 4] {
+                let mut state = GameState::new(12, 12);
+                let hangar = TileCoord::new(3, 3);
+                state.map.set_kind(hangar, TileKind::Airport).unwrap();
+                let mut tile = state.map.get(hangar).unwrap();
+                tile.m5 = crate::airport::AirportPiece::Hangar as u8;
+                state.map.set_tile(hangar, tile).unwrap();
+                state.construction.plane_speed = speed;
+                for (id, phase, engine) in [
+                    (
+                        1,
+                        crate::vehicle::AircraftPhase::Flying,
+                        crate::engine::ENGINE_AIRCRAFT_DAKOTA,
+                    ),
+                    (2, crate::vehicle::AircraftPhase::Takeoff, helicopter),
+                    (
+                        3,
+                        crate::vehicle::AircraftPhase::Landing,
+                        crate::engine::ENGINE_AIRCRAFT_FOKKER,
+                    ),
+                ] {
+                    let mut vehicle = Vehicle::new(id, VehicleKind::Aircraft, hangar, hangar);
+                    vehicle.engine_id = Some(engine);
+                    vehicle.running = running;
+                    vehicle.aircraft_phase = phase;
+                    vehicle.aircraft_phase_ticks = 1;
+                    vehicle.progress = 255;
+                    state.vehicles.push(vehicle);
+                }
+                // Aircraft followers remain eligible; only the vehicle kind
+                // is filtered, not consist status or whether it is stopped.
+                state.vehicles[2].prev_unit = Some(1);
+                add_non_aircraft(&mut state, hangar);
+                let mut expected = state.clone();
+                for _ in 0..40 {
+                    tick_aircraft_phases_impl(&mut expected, false);
+                    tick_aircraft_phases(&mut state);
+                    assert_aircraft_phase_state(&state, &expected);
+                    landings += state
+                        .runtime
+                        .pending_sim_events
+                        .iter()
+                        .filter(|event| {
+                            matches!(event, crate::sim_events::SimEvent::AircraftLanding { .. })
+                        })
+                        .count();
+                    state.runtime.pending_sim_events.drain();
+                    expected.runtime.pending_sim_events.drain();
+                }
+            }
+        }
+        assert!(landings > 0);
+    }
+
+    fn brake_phase_fixture(running: bool, speed: u8, no_crash: bool, duplicate: bool) -> GameState {
+        let mut state = GameState::new(24, 24);
+        crate::apply_command(
+            &mut state,
+            &crate::Command::PlaceAirportArea {
+                origin: TileCoord::new(2, 2),
+                axis_y: false,
+                spec: crate::AirportSpecId::Small,
+            },
+        )
+        .unwrap();
+        state.runtime.pending_sim_events.drain();
+        let hangar = state.stations[0].pos;
+        let mut aircraft = Vehicle::new(1, VehicleKind::Aircraft, hangar, hangar);
+        aircraft.engine_id = Some(crate::engine::ENGINE_AIRCRAFT_FOKKER);
+        aircraft.running = running;
+        aircraft.aircraft_phase = crate::vehicle::AircraftPhase::Landing;
+        aircraft.airport_fta_active = true;
+        aircraft.airport_fta_station = Some(hangar);
+        aircraft.airport_pos = 11;
+        aircraft.airport_prev_pos = 10;
+        aircraft.airport_heading = crate::airport_fta::AirportHeading::Landing;
+        aircraft.airport_waypoint_reached = true;
+        state.vehicles.push(aircraft);
+        add_non_aircraft(&mut state, hangar);
+        if duplicate {
+            state.vehicles[1].id = 1;
+        }
+        state.cheats.enabled = no_crash;
+        state.cheats.no_jetcrash = no_crash;
+        state.construction.plane_speed = speed;
+        state
+    }
+
+    #[test]
+    fn aircraft_dispatch_preserves_brake_rng_crashes_and_duplicate_aliases() {
+        let seed = (0..10_000)
+            .find(|&seed| {
+                let mut rng = crate::cargodist::parity::rng::Randomizer::new(seed);
+                crate::aircraft_crash::should_crash_short_strip_jet(
+                    true,
+                    true,
+                    false,
+                    crate::aircraft_crash::roll_crash_die(&mut rng),
+                )
+            })
+            .unwrap();
+        let mut crashes = 0;
+        let mut rolls = 0;
+        for running in [false, true] {
+            for speed in [1, 4] {
+                for no_crash in [false, true] {
+                    for duplicate in [false, true] {
+                        let mut state = brake_phase_fixture(running, speed, no_crash, duplicate);
+                        state.random.set_seed(seed);
+                        let initial_rng = state.random;
+                        let mut expected = state.clone();
+                        tick_aircraft_phases_impl(&mut expected, false);
+                        tick_aircraft_phases(&mut state);
+                        assert_aircraft_phase_state(&state, &expected);
+                        crashes += state
+                            .runtime
+                            .pending_sim_events
+                            .iter()
+                            .filter(|event| {
+                                matches!(event, crate::sim_events::SimEvent::AircraftCrash { .. })
+                            })
+                            .count();
+                        rolls += usize::from(state.random != initial_rng);
+                        if running && no_crash && duplicate {
+                            let mut two_rolls = initial_rng;
+                            let _ = crate::aircraft_crash::roll_crash_die(&mut two_rolls);
+                            let _ = crate::aircraft_crash::roll_crash_die(&mut two_rolls);
+                            assert_eq!(state.random, two_rolls);
+                        }
+                    }
+                }
+            }
+        }
+        assert!(crashes > 0);
+        assert!(rolls > 0);
+    }
 
     fn depot_random_runtime() -> TrainSpriteGraphics {
         let mut gfx = TrainSpriteGraphics::default();

@@ -630,6 +630,72 @@ los targets, formato, diff y frescura de docs. Se cierra el scan por vehículo
 en estas dos tandas. Reutilizar candidatos entre tandas/ticks requiere
 cubrir su invalidación; F07 y los 30 FPS permanecen abiertos.
 
+## Etapa 14 — Despachar la fase aérea sólo a aeronaves (F07)
+
+Con IDs únicos, la fase aérea omite trenes, buses, camiones, tranvías y
+barcos antes de preparar sus contextos y entradas de comprobación de freno.
+Conserva el orden de los aviones, incluidos seguidores y detenidos. Comprueba
+los IDs vivos mediante un conjunto local: operaciones de depósito pueden
+haber cambiado la flota desde la construcción del índice del tick. Con IDs
+duplicados mantiene el recorrido anterior; una entrada de otro tipo puede
+resolver por ID a un avión anterior y consumir otra tirada de accidente.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`,
+`aircraft_cmd.cpp::Aircraft::Tick`, líneas 2134–2154, ejecuta el handler de
+esa clase y filtra además `IsNormalAircraft`. El helper aéreo del port ya
+descartaba otros tipos, pero el caller seguía encolándolos para la búsqueda
+de vehículo/estación y comprobación de freno. Esta etapa elimina ese trabajo;
+conserva el modelo actual de unidades aéreas y no cierra toda su paridad nativa.
+
+Regresiones diferenciales: cuatro configuraciones de running/plane-speed
+durante 40 fases cada una, con tres aeronaves (incluido helicóptero y
+seguidor), cinco clases terrestres/navales y un aterrizaje positivo.
+Otras 16 combinaciones de running, velocidad, cheat e ID duplicado verifican
+entrada a freno FTA, accidente positivo, vehículo eliminado, noticias,
+eventos/sonidos, estaciones, teselas y RNG. Dos casos duplicados con el
+cheat comprueban explícitamente que se conservan las dos tiradas. No se
+reordena la flota ni se descarta una aeronave por su estado de consist.
+
+Ocho runs release normales de Kale_TitleGame.sav/NewGRF, ABBA por ventana,
+sin builds ni otras capturas concurrentes. En 24 ticks: total
+30,69 / 31,61 → 27,03 / 27,20 ms; fase previa al movimiento
+4,73 / 4,76 → 1,20 / 1,20 ms. En 120 ticks: total
+22,12 / 26,17 → 18,90 / 22,72 ms (aproximadamente 14 % menos al promediar
+ambos runs); fase previa 4,63 / 4,64 → 1,23 / 1,24 ms.
+El componente `vehicle_ops_only` pasa de 3,66 / 3,66 a 0,251 / 0,254 ms.
+Landscape varía en ambos binarios: 3,18 / 7,18 y 3,31 / 6,96 ms;
+se conserva esa variación y no se atribuye al filtro aéreo.
+[Tiempos](evidence/aircraft-phase-timings-20261001.csv).
+Baseline `daa8f652`, SHA256
+`c58160ce047a91ded5fc42bc5b4089c3fb9c3d3d605783590fa3979c4ae6612d`;
+candidato `61e90735174c56e15fe017f6a1d6d3d956701afae26e50c186a7d49821eeb472`.
+
+Dos imports independientes y 60 ticks normales: cero diferencias en tick,
+hash v4, eventos/popups/sonidos, todas las teselas y bloques 4×4, en 61 fases
+sin ordenar listas en la sonda.
+[Comparación](evidence/aircraft-phase-state-20261001.csv).
+Cargo JSON `--lib` identifica la biblioteca exacta del candidato;
+SHA256 de sondas:
+`589f77a3a0c6a59df0a5816be03b2faba7b7f300bc3bb8246ca378c5d4c32608`
+y `71c1eec12edcfa42af43be7251ceb47b0a605fbc58fe4a76fbfc834dddbc3261`.
+
+Cliente en marcha, ABBA de 40 muestras tras 30 de warmup: simulación
+23,85 / 23,90 → 20,95 / 20,80 ms por frame;
+FPS 14,15 / 14,47 → 14,87 / 14,85. Los 80 frames nuevos siguen sobre
+33,33 ms. Ventanas de ticks y colas en
+[RENDIMIENTO.md](../RENDIMIENTO.md#cliente-en-marcha-tras-filtrar-la-fase-aérea-2026-10-01),
+[muestras](evidence/aircraft-phase-client-20261001.csv).
+SHA256 de clientes:
+`5f2583d43d7615c3bd533b709309226e81a89ba29c9a019b561bd4e4385fc0d3`
+y `b1f7707905fd79ff868be682cad2223c10cc0c8170df70ae591d51bdf821104b`.
+La revisión automática de permisos venció antes de iniciar la captura GPU;
+el único reintento permitido se autorizó y las cuatro corridas finalizaron.
+
+Validación: 3.012 core/seis ignorados y 1.661 cliente/dos; Clippy en todos
+los targets, formato, diff y frescura de docs. Se cierra el trabajo de fase
+aérea sobre los otros tipos en flotas con IDs únicos. F07 y los 30 FPS siguen
+abiertos; la presentación domina el tiempo restante del frame medido.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV

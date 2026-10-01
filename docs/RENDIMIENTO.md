@@ -453,6 +453,34 @@ Pruebas, alcance de resolución de depósitos y SHA256 en
 Quedan las comprobaciones de aeronaves y trabajo de presentación, además
 de los demás hallazgos. Los 30 FPS y el ritmo nativo siguen abiertos.
 
+### Cliente en marcha tras filtrar la fase aérea (2026-10-01)
+
+Comparación de `daa8f652` con la etapa 14, misma partida/NewGRF, hardware,
+1280×720, escala 2, cámara fija y audio desactivado. ABBA, 30 frames de
+warmup y 40 muestras por run, sin compilaciones ni `perf` concurrentes.
+[Datos por frame](parity/evidence/aircraft-phase-client-20261001.csv).
+
+- Frame medio: 70,67 / 69,09 → 67,24 / 67,34 ms; FPS por duración media:
+  14,15 / 14,47 → 14,87 / 14,85.
+- Mediana: 67,11 / 63,88 → 63,71 / 62,96 ms. p95 por rango más cercano:
+  87,47 / 87,07 → 83,25 / 83,42 ms. p99 coincide con el máximo en estas
+  40 muestras: 167,13 / 155,95 → 162,93 / 166,84 ms.
+- Simulación: 23,85 / 23,90 → 20,95 / 20,80 ms; efectos:
+  2,25 / 2,04 → 2,06 / 2,05 ms; vidrio: 6,67 / 6,44 → 6,52 / 6,56 ms.
+  Los timers de fases no suman el frame.
+- El segundo run anterior cubre ticks 3.703.104–3.703.143; los demás,
+  3.703.103–3.703.142. Tick/s observado entre primera y última muestra:
+  14,66 / 14,96 → 15,43 / 15,44. Los 80 frames de cada versión exceden
+  33,33 ms.
+
+La fase previa al movimiento del core baja de unos 4,6 a 1,2 ms en 120 ticks;
+el tick completo conserva variaciones en landscape. Las 61 fases normales
+mantienen estado/eventos/teselas. Pruebas de accidentes y duplicados, alcance
+de unidades aéreas y SHA256 en
+[la etapa 14](parity/performance-implementation.md#etapa-14--despachar-la-fase-aérea-sólo-a-aeronaves-f07).
+El cliente todavía no alcanza 30 FPS. La siguiente medición debe atribuir
+el trabajo de presentación residual y conservar las colas del frame.
+
 ### Render congelado, seis zooms y movimiento de cámara
 
 Para comparar ambas versiones se usó el driver de mapshot: centro `128,128`,

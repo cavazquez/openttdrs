@@ -32,8 +32,8 @@ pub use newgrf_vars::{
 pub use pose::{TrainUnitPose, consist_unit_poses};
 pub(crate) use topology::unit_capacity_for_vehicle;
 pub use topology::{
-    consist_changed, consist_changed_with_map, consist_changed_with_map_and_catalog,
-    consist_changed_with_map_and_catalog_and_cargo,
+    ConsistChangeContext, consist_changed, consist_changed_indexed, consist_changed_with_map,
+    consist_changed_with_map_and_catalog, consist_changed_with_map_and_catalog_and_cargo,
     consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier,
     consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits,
     consist_head_id, consist_unit_ids, consist_unit_ids_indexed, engine_is_train_engine,
@@ -376,6 +376,134 @@ mod tests {
         assert!(vs[0].cached_max_speed < u16::MAX);
         assert!(vs[0].compatible_railtypes != 0);
         assert!(!vs[1].powered_wagon);
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn consist_refresh_indexed_matches_legacy_with_shuffled_ids_and_live_cargo() {
+        let mut vehicles = vec![train(900), train(17), train(43), train(7)];
+        vehicles[0].engine_id = Some(10);
+        for unit in &mut vehicles[1..3] {
+            unit.engine_id = Some(11);
+        }
+        assert!(attach_wagon(&mut vehicles, 900, 17).is_ok());
+        assert!(attach_wagon(&mut vehicles, 900, 43).is_ok());
+        vehicles.rotate_left(2);
+
+        let mut head = crate::engine::engine_for_vehicle(VehicleKind::Train, 0).clone();
+        head.id = 10;
+        head.max_speed = 160;
+        head.capacity = 0;
+        head.cargo = None;
+        let mut wagon = crate::engine::engine_by_id(crate::engine::ENGINE_WAGON_PASSENGER)
+            .expect("passenger wagon")
+            .clone();
+        wagon.id = 11;
+        wagon.max_speed = 40;
+        wagon.newgrf_grfid = 0x4341_5036;
+        wagon.newgrf_local_id = 0;
+        let mut graphics = crate::newgrf_sprites::TrainSpriteGraphics::default();
+        graphics
+            .assigns
+            .push(crate::newgrf_sprites::TrainSpriteAssign {
+                local_id: 0,
+                set_id: 2,
+            });
+        graphics.action2_var.insert(
+            2,
+            crate::newgrf_sprites::Action2VarEntry {
+                first: crate::newgrf_sprites::Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: crate::newgrf_sprites::Action2VarAdjust {
+                        and_mask: 42,
+                        ..crate::newgrf_sprites::Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        wagon.newgrf_runtime = Some(Box::new(graphics));
+        let engines = vec![head, wagon];
+        let cargo = CargoType::Custom(3);
+        let cargo_catalog = vec![crate::CargoSpecDef {
+            id: cargo.cargo_id(),
+            label: "TEST".to_owned(),
+            weight: 16,
+            is_freight: true,
+            ..crate::CargoSpecDef::default()
+        }];
+        let mut fleet = crate::FleetIndex::default();
+        fleet.rebuild(&vehicles);
+        for (freight_trains, wagon_speed_limits, stacked) in [(1, true, true), (3, false, false)] {
+            for (slot, unit) in vehicles.iter_mut().enumerate() {
+                unit.cargo = u32::try_from(slot + 1).expect("small fleet") * 8;
+                unit.cargo_type = Some(cargo);
+                unit.newgrf_persistent_regs.insert(0x30, unit.cargo);
+                unit.newgrf_random_bits = u16::try_from(slot + 17).expect("small fleet");
+                unit.pos = if stacked {
+                    TileCoord::new(2, 2)
+                } else {
+                    TileCoord::new(i32::try_from(slot).expect("small fleet"), 2)
+                };
+            }
+            let mut expected = vehicles.clone();
+            let mut indexed = vehicles.clone();
+            consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits(
+                &mut expected,
+                900,
+                None,
+                &engines,
+                &cargo_catalog,
+                freight_trains,
+                wagon_speed_limits,
+            );
+            let context = ConsistChangeContext {
+                map: None,
+                engine_catalog: &engines,
+                cargo_catalog: &cargo_catalog,
+                freight_trains,
+                wagon_speed_limits,
+            };
+            consist_changed_indexed(&mut indexed, &fleet, 900, context);
+            assert_eq!(
+                serde_json::to_vec(&indexed).expect("vehicles"),
+                serde_json::to_vec(&expected).expect("vehicles")
+            );
+            // Standalone callers without a prepared runtime keep the fallback.
+            let mut preview = vehicles.clone();
+            consist_changed_indexed(&mut preview, &crate::FleetIndex::default(), 900, context);
+            assert_eq!(
+                serde_json::to_vec(&preview).expect("vehicles"),
+                serde_json::to_vec(&expected).expect("vehicles")
+            );
+        }
+        assert_eq!(fleet.rebuilds(), 1);
+
+        // Changing the Vec generation requires a new index, as in the tick loop.
+        vehicles.swap(0, 3);
+        fleet.rebuild(&vehicles);
+        let mut expected = vehicles.clone();
+        consist_changed_with_map_and_catalog_and_cargo(&mut expected, 900, None, &engines, &[]);
+        consist_changed_indexed(
+            &mut vehicles,
+            &fleet,
+            900,
+            ConsistChangeContext {
+                map: None,
+                engine_catalog: &engines,
+                cargo_catalog: &[],
+                freight_trains: 1,
+                wagon_speed_limits: true,
+            },
+        );
+        assert_eq!(
+            serde_json::to_vec(&vehicles).expect("vehicles"),
+            serde_json::to_vec(&expected).expect("vehicles")
+        );
+        assert_eq!(fleet.rebuilds(), 2);
     }
 
     #[test]

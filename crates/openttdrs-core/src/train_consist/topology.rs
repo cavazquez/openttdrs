@@ -229,7 +229,6 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
 /// El wrapper legacy mantiene `vehicle.wagon_speed_limits = true`; los
 /// caminos que disponen de [`GameState`](crate::GameState) deben pasar el
 /// valor persistido en `state.construction.wagon_speed_limits`.
-#[allow(clippy::too_many_lines)]
 pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits(
     vehicles: &mut [Vehicle],
     head_id: u32,
@@ -240,6 +239,78 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
     wagon_speed_limits: bool,
 ) {
     let ids = consist_unit_ids(vehicles, head_id);
+    consist_changed_impl(
+        vehicles,
+        None,
+        head_id,
+        &ids,
+        ConsistChangeContext {
+            map,
+            engine_catalog,
+            cargo_catalog,
+            freight_trains,
+            wagon_speed_limits,
+        },
+    );
+}
+
+/// Immutable inputs for refreshing the derived properties of a train consist.
+#[derive(Debug, Clone, Copy)]
+pub struct ConsistChangeContext<'a> {
+    pub map: Option<&'a crate::Map>,
+    pub engine_catalog: &'a [EngineDef],
+    pub cargo_catalog: &'a [crate::cargo_spec::CargoSpecDef],
+    pub freight_trains: u8,
+    pub wagon_speed_limits: bool,
+}
+
+/// Reuses a current fleet index without rebuilding it for each train.
+/// Rebuild the index after changing vehicle IDs, slots or consist links.
+/// Isolated queries without a prepared index retain the legacy fallback.
+pub fn consist_changed_indexed(
+    vehicles: &mut [Vehicle],
+    fleet: &crate::FleetIndex,
+    head_id: u32,
+    context: ConsistChangeContext<'_>,
+) {
+    let ids = fleet.consist(head_id);
+    if ids.is_empty() {
+        consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits(
+            vehicles,
+            head_id,
+            context.map,
+            context.engine_catalog,
+            context.cargo_catalog,
+            context.freight_trains,
+            context.wagon_speed_limits,
+        );
+        return;
+    }
+    consist_changed_impl(vehicles, Some(fleet), head_id, ids, context);
+}
+
+fn consist_slot(vehicles: &[Vehicle], fleet: Option<&crate::FleetIndex>, id: u32) -> Option<usize> {
+    fleet
+        .and_then(|index| index.slot(id))
+        .filter(|&slot| vehicles.get(slot).is_some_and(|vehicle| vehicle.id == id))
+        .or_else(|| vehicles.iter().position(|vehicle| vehicle.id == id))
+}
+
+#[allow(clippy::too_many_lines)]
+fn consist_changed_impl(
+    vehicles: &mut [Vehicle],
+    fleet: Option<&crate::FleetIndex>,
+    head_id: u32,
+    ids: &[u32],
+    context: ConsistChangeContext<'_>,
+) {
+    let ConsistChangeContext {
+        map,
+        engine_catalog,
+        cargo_catalog,
+        freight_trains,
+        wagon_speed_limits,
+    } = context;
     if ids.is_empty() {
         return;
     }
@@ -249,10 +320,11 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
     // porque `cached_veh_length` no forma parte del registro que reconstruye
     // este modelo; refrescar sólo motores NewGRF evita alterar fixtures vanilla
     // que usan una longitud sintética para probar la geometría.
-    for &id in &ids {
-        let Some(vehicle) = vehicles.iter_mut().find(|vehicle| vehicle.id == id) else {
+    for &id in ids {
+        let Some(slot) = consist_slot(vehicles, fleet, id) else {
             continue;
         };
+        let vehicle = &mut vehicles[slot];
         let Some(engine) = vehicle
             .engine_id
             .and_then(|engine_id| engine_for_id(engine_catalog, engine_id))
@@ -264,9 +336,8 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
         }
     }
 
-    let head_eng = vehicles
-        .iter()
-        .find(|v| v.id == head_id)
+    let head_eng = consist_slot(vehicles, fleet, head_id)
+        .and_then(|slot| vehicles.get(slot))
         .and_then(|v| v.engine_id)
         .and_then(|id| engine_for_id(engine_catalog, id))
         .unwrap_or_else(|| crate::engine::engine_for_vehicle(VehicleKind::Train, 0));
@@ -287,10 +358,11 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
 
     // Primera pasada: marcar powered wagons y acumular métricas.
     let mut powered_flags: Vec<(u32, bool)> = Vec::with_capacity(ids.len());
-    for &id in &ids {
-        let Some(v) = vehicles.iter_mut().find(|v| v.id == id) else {
+    for &id in ids {
+        let Some(slot) = consist_slot(vehicles, fleet, id) else {
             continue;
         };
+        let v = &mut vehicles[slot];
         let configured_engine = v.engine_id.and_then(|id| engine_for_id(engine_catalog, id));
         let eng = configured_engine.unwrap_or_else(|| crate::engine::engine_for_vehicle(v.kind, 0));
         let visual_spec = crate::newgrf_callback::vehicle_visual_effect_spec(eng, v);
@@ -303,15 +375,16 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
         powered_flags.push((id, powered));
     }
     for &(id, powered) in &powered_flags {
-        if let Some(v) = vehicles.iter_mut().find(|v| v.id == id) {
-            v.powered_wagon = powered;
+        if let Some(slot) = consist_slot(vehicles, fleet, id) {
+            vehicles[slot].powered_wagon = powered;
         }
     }
 
-    for &id in &ids {
-        let Some(v) = vehicles.iter_mut().find(|v| v.id == id) else {
+    for &id in ids {
+        let Some(slot) = consist_slot(vehicles, fleet, id) else {
             continue;
         };
+        let v = &mut vehicles[slot];
         total_len = total_len.saturating_add(u16::from(v.unit_length.max(1)));
         let configured_engine = v.engine_id.and_then(|id| engine_for_id(engine_catalog, id));
         let eng = configured_engine.unwrap_or_else(|| crate::engine::engine_for_vehicle(v.kind, 0));
@@ -425,7 +498,8 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
     if total_cap == 0 {
         total_cap = crate::vehicle::VEHICLE_CAPACITY;
     }
-    if let Some(head) = vehicles.iter_mut().find(|v| v.id == head_id) {
+    if let Some(slot) = consist_slot(vehicles, fleet, head_id) {
+        let head = &mut vehicles[slot];
         head.cached_total_length = total_len.max(u16::from(super::VEHICLE_LENGTH));
         head.capacity = total_cap;
         head.cached_power_hp = total_power;
@@ -446,7 +520,7 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
             head.cargo_type = cargo_type;
         }
     }
-    sync_consist_followers_and_curve_cache(vehicles, head_id, &ids, map);
+    sync_consist_followers_and_curve_cache(vehicles, fleet, head_id, ids, map);
 }
 
 fn engine_for_id(engine_catalog: &[EngineDef], id: u16) -> Option<&EngineDef> {
@@ -459,25 +533,32 @@ fn engine_for_id(engine_catalog: &[EngineDef], id: u16) -> Option<&EngineDef> {
 /// Sincroniza poses derivadas de las unidades y `cached_max_curve_speed`.
 fn sync_consist_followers_and_curve_cache(
     vehicles: &mut [Vehicle],
+    fleet: Option<&crate::FleetIndex>,
     head_id: u32,
     ids: &[u32],
     map: Option<&crate::map::Map>,
 ) {
-    let head_snap = vehicles
-        .iter()
-        .find(|v| v.id == head_id)
+    let head_snap = consist_slot(vehicles, fleet, head_id)
+        .and_then(|slot| vehicles.get(slot))
         .map(|v| v.direction);
     let Some(head_dir) = head_snap else {
         return;
     };
-    super::controller::propagate_consist_unit_poses_with_map(vehicles, head_id, map);
+    if let Some(fleet) = fleet {
+        super::controller::propagate_consist_unit_poses_with_map_indexed(
+            vehicles, fleet, head_id, map,
+        );
+    } else {
+        super::controller::propagate_consist_unit_poses_with_map(vehicles, head_id, map);
+    }
     let mut units = Vec::with_capacity(ids.len());
     for &id in ids {
-        if let Some(v) = vehicles.iter().find(|v| v.id == id) {
+        if let Some(v) = consist_slot(vehicles, fleet, id).and_then(|slot| vehicles.get(slot)) {
             units.push((v.direction, v.unit_length.max(1)));
         }
     }
-    if let Some(head) = vehicles.iter_mut().find(|v| v.id == head_id) {
+    if let Some(slot) = consist_slot(vehicles, fleet, head_id) {
+        let head = &mut vehicles[slot];
         head.curve_prev_direction = head_dir;
         head.cached_max_curve_speed = crate::engine::get_curve_speed_limit(
             crate::engine::TrainAccelerationModel::Realistic,

@@ -181,6 +181,43 @@ de capacidad dinámica CB36, cantidad de carga, refit, capacidad nativa por
 unidad y entrega a industrias conservan su resultado. F12 sigue abierto para
 perfilar terminales, paquetes y agregados; F13 para builders repetidos.
 
+## Etapa 5 — Índice vigente al refrescar formaciones (sub-issue F13)
+
+El refresco de capacidad/peso de cada cabeza usaba el wrapper que reconstruye
+`FleetIndex`, seguido por más wrappers al propagar poses. Ahora recibe el
+índice del tick, resuelve los slots en O(1) y usa también la propagación indexada.
+Se conservan las pasadas y el orden de callbacks sobre cada unidad. El wrapper
+de consultas aisladas conserva su implementación; la nueva API tiene un
+fallback cuando falta un índice preparado. Un cambio de IDs, slots o enlaces
+requiere reconstruir el índice antes de usar la nueva API.
+
+Oracle de fuente: OpenTTD 15.3 `14ec60f2`, `train_cmd.cpp::Train::ConsistChanged`
+recorre `Next()` y consulta las unidades/motores existentes. El port conserva
+sus reglas actuales de capacidad y pose; esta etapa reduce las búsquedas de
+entidades y los builders, sin ampliar por sí sola la paridad de esas reglas.
+
+Regresión: bytes completos de vehículos iguales al wrapper en flota con IDs
+desordenados, NewGRF CB36, registros/bits aleatorios, carga custom, multiplicador
+de freight, ambos ajustes de velocidad de vagones, formación apilada y posiciones
+distintas. Se comprueba también el fallback de preview y la generación posterior
+a reordenar el Vec y reconstruir el índice.
+
+Medición release sobre Kale_TitleGame.sav con NewGRF, orden
+antes/después/después/antes, sin compilaciones concurrentes. En los primeros
+cuatro ticks: carga 105,98 / 104,63 → 38,29 / 39,37 ms; tick completo
+512,98 / 515,68 → 442,78 / 458,85 ms. En 24 ticks: carga
+96,87 / 96,70 → 30,75 / 30,86 ms; total
+265,98 / 267,06 → 202,57 / 201,82 ms, una reducción aproximada del 24 %.
+Descarga sigue alrededor de 83 ms en esa ventana; el objetivo de FPS sigue
+abierto. Los datos por fase están en
+[consist-index-20260930.csv](evidence/consist-index-20260930.csv).
+Baseline `1fba1491` (SHA256 `15ee18b001d076d44795d2ca99f980f22284a7d1cfe60df8c61155fd592febc6`),
+candidato `a859f5f15fd62facfd8a8d2d4ad8d392af9ec7caf211b2063ee6ac8af96ac495`.
+
+Validación: 2.999 core/seis ignorados, 1.659 cliente/dos; Clippy de ambos en
+todos los targets, formato, diff y frescura de docs. Se cierra este callsite
+acotado de F13; los demás builders y subfases de carga siguen en revisión.
+
 ## Trabajo restante
 
 - F03/F21: grafos por componente, estadísticas nativas de producción y SAV

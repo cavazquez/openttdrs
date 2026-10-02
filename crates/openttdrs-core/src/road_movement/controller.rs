@@ -157,17 +157,19 @@ pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
             return false;
         }
 
-        vehicles[v_idx].frame = next_frame;
-        sync_road_position_from_table(&mut vehicles[v_idx], drive_on_right);
-        if !entered && next_frame == stop {
+        // Native service checks the current frame after finishing the
+        // stationary direction steps, before advancing toward the exit.
+        if !entered && vehicles[v_idx].frame == stop {
             let v = &mut vehicles[v_idx];
             v.road_state |= RVSB_ENTERED_STOP;
             v.cur_speed = 0;
             v.subspeed = 0;
             v.progress = 0;
             v.advance_destination_after_arrival_with_catalog(engine_catalog);
-            return true;
+            return false;
         }
+        vehicles[v_idx].frame = next_frame;
+        sync_road_position_from_table(&mut vehicles[v_idx], drive_on_right);
         return true;
     }
 
@@ -1601,11 +1603,11 @@ mod tests {
             if vehicles[index].road_state & RVSB_ENTERED_STOP != 0 {
                 return;
             }
-            assert!(individual_road_vehicle_controller(
-                vehicles,
-                index,
-                Some(map)
-            ));
+            if !individual_road_vehicle_controller(vehicles, index, Some(map)) {
+                assert_ne!(vehicles[index].road_state & RVSB_ENTERED_STOP, 0);
+                assert_eq!(vehicles[index].cur_speed, 0);
+                return;
+            }
         }
         panic!("bay service was not reached within the native table/turn bound");
     }

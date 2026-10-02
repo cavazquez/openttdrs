@@ -371,9 +371,56 @@ queda cubierta por las fixtures, no por equivalencia raster global.
 
 La compilación release recompiló core y cliente (80,68 s); binario
 `c63db3c8e156d8d677b694cd60a12989d8697750fa1fadcc75a757fbb31c1ebe`.
-Evidencia en `target/parity/road-bay-turn-direction-20261002/`. Permanece abierta la
-secuencia de llegada: el original resuelve el giro y comprueba el frame
-actual de parada; el port aún comprueba `next_frame` al activar la carga.
+Evidencia en `target/parity/road-bay-turn-direction-20261002/`. La secuencia
+de llegada se trata en el sub-issue siguiente; el remanente de movimiento
+durante carga y el recorrido completo siguen pendientes.
+
+## #326-ROAD-BAY-ARRIVAL — giro completo antes de empezar la carga
+
+El oracle anterior excluía el servicio y marcaba `ENTERED_STOP` para medir
+geometría. El nuevo ejecuta también el bloque nativo completo de llegada,
+su tabla de frames de parada y el cambio de velocidad de `BeginLoading`.
+Conserva esos fragmentos sin modificaciones, junto a las tablas, funciones
+de rumbo y bloque de giro. Adapta el almacenamiento y el bucle de llamadas;
+estación, órdenes, tráfico, pago, RNG, animación y viewport son stubs.
+`BeginLoading` retiene sólo la asignación nativa de velocidad cero.
+
+Se reproducen 432 estados hasta la llegada en las 16 tablas de dársenas,
+ambos lados de circulación y bahías cercana/lejana. La regresión recorre
+864 muestras de bus/camión y comprueba frame, posición, rumbo, velocidad,
+bit de entrada, comienzo de carga y resultado del controlador.
+
+Antes fallaba en tabla 32/subpaso 26: el original mantenía velocidad 21
+y no empezaba a cargar; el port ya tenía velocidad cero. OpenTTD conserva
+el punto de parada durante cuatro cambios de rumbo y empieza a cargar
+orientado hacia la salida. El port comprueba ahora el frame actual después
+de resolver el giro y devuelve `false` al entrar en servicio, igual que
+la rama nativa; no avanza al siguiente punto de la tabla.
+
+```bash
+python3 scripts/oracle_road_bay_arrival.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/road-bay-arrival-fresh --check
+cargo test -p openttdrs-core --test native_road_bay_arrival
+```
+
+**Cerrado el sub-issue de disparo de llegada después del giro.** Pasan las
+siete regresiones de giro/llegada, Clippy estricto de core/cliente, 3.048
+tests de core (6 ignorados), 1.700 del cliente (2 ignorados), formato,
+frescura de docs y `git diff --check`.
+
+Los [controles de zoom](evidence/road-bay-arrival-control-raster-20261002.csv)
+conservan cámara, PNG y traza completa de composición en las siete
+peticiones. En `0.50`/`2` coinciden todas las entradas de dibujo, 265/368
+buffers CPU y máscaras de cobertura/oclusión. Son controles congelados:
+la secuencia de llegada queda medida por las muestras nativas, no por esas
+capturas. Release recompiló core y cliente (85,73 s); binario
+`6e4f52b4bab17e896db632e76ee365e6828b3ef185bce3bd080612523bda4a7f`.
+
+Evidencia conservada en
+`target/parity/road-bay-arrival-20261002/`. No certifica los ticks completos,
+servicio, remanentes ni eventos de estación: el port aún reinicia `subspeed`
+y usa un sentinel de `progress` al cargar; el método nativo no los borra.
 
 ## Alcance pendiente
 

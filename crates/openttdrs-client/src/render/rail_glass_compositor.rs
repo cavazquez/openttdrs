@@ -917,6 +917,87 @@ mod tests {
     }
 
     #[test]
+    fn persistent_masks_preserve_liveness_when_a_source_index_is_reused() {
+        let mut assets = Assets::<Image>::default();
+        let images = [assets.add(Image::default()), assets.add(Image::default())];
+        let mut legacy = App::new();
+        legacy.add_systems(Update, sync_legacy);
+        let mut cached = App::new();
+        cached.add_systems(Update, sync_rail_glass_mask_proxies);
+        for app in [&mut legacy, &mut cached] {
+            spawn_source(app.world_mut(), 0, &images[0]);
+            app.update();
+            app.update();
+            let source = app
+                .world_mut()
+                .query_filtered::<Entity, With<SourceId>>()
+                .single(app.world())
+                .unwrap();
+            // Both associations coexist until cleanup. The old source must
+            // neither reuse the replacement's link nor clear it during retain.
+            let replacement = app.world_mut().despawn_no_free(source).unwrap();
+            assert_eq!(source.index_u32(), replacement.index_u32());
+            assert_ne!(source, replacement);
+            app.world_mut()
+                .spawn_at(
+                    replacement,
+                    (
+                        SourceId(1),
+                        MapVisualLayer,
+                        Sprite::from_image(images[1].clone()),
+                        Anchor::TOP_LEFT,
+                        Transform::from_xyz(19.0, 23.0, 29.0),
+                        Visibility::Visible,
+                    ),
+                )
+                .unwrap();
+            app.update();
+            app.update();
+        }
+        assert_eq!(
+            mask_states(legacy.world_mut()),
+            mask_states(cached.world_mut())
+        );
+        assert_eq!(mask_states(cached.world_mut()).len(), 1);
+        // Removal is detected from current query membership, including when
+        // component-removal messages have already expired before this system.
+        for app in [&mut legacy, &mut cached] {
+            let source = app
+                .world_mut()
+                .query_filtered::<Entity, With<SourceId>>()
+                .single(app.world())
+                .unwrap();
+            app.world_mut()
+                .entity_mut(source)
+                .remove::<MapVisualLayer>();
+            for _ in 0..4 {
+                app.world_mut().clear_trackers();
+            }
+            app.update();
+        }
+        assert!(mask_states(cached.world_mut()).is_empty());
+        assert_eq!(
+            mask_states(legacy.world_mut()),
+            mask_states(cached.world_mut())
+        );
+        for app in [&mut legacy, &mut cached] {
+            let source = app
+                .world_mut()
+                .query_filtered::<Entity, With<SourceId>>()
+                .single(app.world())
+                .unwrap();
+            app.world_mut().entity_mut(source).insert(MapVisualLayer);
+            app.update();
+            app.update();
+        }
+        assert_eq!(
+            mask_states(legacy.world_mut()),
+            mask_states(cached.world_mut())
+        );
+        assert_eq!(mask_states(cached.world_mut()).len(), 1);
+    }
+
+    #[test]
     fn cached_masks_repair_external_edits_without_source_changes() {
         let mut app = App::new();
         app.add_systems(Update, sync_rail_glass_mask_proxies);

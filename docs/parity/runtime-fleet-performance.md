@@ -396,3 +396,11 @@ pérdidas y un evento activo fuera de orden. El coste de máscaras es
 Los 480 frames bajo perf son diagnóstico; no reemplazan la ABBA de 61.
 El siguiente sub-issue mide las comprobaciones repetidas de proxies antes
 de modificar su caché; los contratos visuales y 30 FPS permanecen abiertos.
+
+La [etapa 63](performance-implementation.md#etapa-63--lookup-indexado-de-máscaras-ensayo-retirado-f08f18f31)
+prueba enlaces generacionales directos: máscaras bajan 15,1 % fijo y
+13,3 % pan, con una mejora global ~0,47 ms. La primera reconstrucción
+Out4x difiere en 319 píxeles/119 bloques; las cuatro repeticiones exactas
+no omiten ese fallo. La candidata se retira y sólo se conserva la regresión
+de generaciones y bajas expiradas. La producción sigue siendo 61;
+la variación Out4x debe aislarse antes de retomar esta optimización.

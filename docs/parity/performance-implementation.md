@@ -4695,3 +4695,75 @@ No hay cambio Rust: se reutilizan los gates completos de ese SHA
 (3037 core/6 ignoradas, 1693 cliente/2 ignoradas y ambos Clippy estrictos),
 y se ejecutan formato, docs y diff para esta publicación. Se cierra sólo
 el perfil renovado; 30 FPS por frame, 37 ticks/s y jugabilidad siguen abiertos.
+
+## Etapa 63 — Lookup indexado de máscaras: ensayo retirado (F08/F18/F31)
+
+El perfil 62 identifica 3,42–3,87 ms de máscaras. Se prueba un enlace
+directo por `Entity::index_u32()`, conservando la entidad completa, la
+asociación hash original y su orden de limpieza. La query y sus filtros
+son byte-idénticos; se mantienen los checks de cambios/existencia del proxy
+y la aritmética del compositor. El vector agrega memoria hasta el mayor
+índice de fuente y conserva esa capacidad; no reduce memoria.
+
+Pasan cuatro regresiones de máscaras, incluidas las 48 fases diferenciales
+y reparación de cada campo del proxy. La prueba nueva reemplaza una fuente
+por otra generación del mismo índice mientras conviven ambas asociaciones,
+comprueba dos frames estables, deja vencer las bajas y reinserta la fuente.
+El oracle de Draw original de 44 se ejecuta otra vez: pin, CSV y ambos
+buffers de propiedad coinciden exactamente, incluido el solapamiento de
+68 píxeles. Es un contrato binario alpha a 2×, no raster SAV completo.
+
+La candidata pasa 3037 core/6 ignoradas, 1694 cliente/2 ignoradas, ambos
+Clippy estrictos, formato, docs y diff. Release aislada **53,227 s**, core
+fresco 754dc09a, binario readonly 187547768 bytes SHA
+215d3157071734e8444aede5cc8320f9d689cb558f5669f13356c8a73c77123b.
+Se guarda como **candidata retirada**, no como producción final; no se
+acredita mejora de compilación por una corrida.
+
+GPU Kale pausada, centro 128,128, 1280×720, settle 180, CLEAN=0, 28 capturas
+nuevas en siete escalas solicitadas, seis efectivas. **13/14** comparaciones
+control/candidata conservan PNG y stream completos. La reconstruida Out4x
+falla con **319 píxeles/119 bloques** y ocho diferencias de `input_index`
+del sorter. El PNG coincide con el estado 11b55400 ya registrado en 60,
+pero eso no explica su causa ni permite omitir el fallo. Las cuatro
+comparaciones de inputs completos In2x/Out2x, 265/368 imágenes CPU y ambas
+máscaras son exactas. Las cuatro variantes Out2x conservan (32,139) =
+(32,80,4) y el orden 1614/1586.
+[Raster](evidence/indexed-mask-source-links-raster-20261002.csv),
+[inputs](evidence/indexed-mask-source-links-sprite-inputs-20261002.csv),
+[copas](evidence/indexed-mask-source-links-native-tree-children-20261002.csv).
+
+Cuatro repeticiones Out4x full, en ABBA, coinciden exactamente en PNG y
+stream con el control inicial 89e9e6aa. **Se conserva el fallo inicial**;
+las repeticiones no lo convierten en una validación completa. Out8x mantiene
+27 píxeles/7 bloques distintos al reconstruir en ambas versiones.
+[Repeticiones](evidence/indexed-mask-source-links-out4-repeats-20261002.csv).
+
+ABBA activa aislada, básico y Main en ambos binarios, warmup 120, 40
+frames/run, dos runs por versión en fijo y pan estabilizado. Las ocho
+corridas cubren los mismos ticks 3703193–3703232. Máscaras fijo **3,5619 →
+3,0257 ms** (−15,1 %); pan **3,8254 → 3,3147** (−13,3 %). Frame fijo
+**40,0995 → 39,6266 ms** (24,938 → 25,236 FPS), **69/80 → 69/80**
+sobre 33,33 ms, máximo 53,586 → 53,320. Pan **42,5687 → 42,1048 ms**
+(23,491 → 23,750 FPS), **77/80 → 72/80**, máximo 63,352 → 62,838.
+La simulación cambia sólo +0,0055/+0,0257 ms, con el mismo core. Se conserva
+el ahorro observado de la fase en este ensayo; no alcanza 30 FPS por frame
+ni 37 ticks/s y no se publica por el gate visual pendiente.
+[Frames fijos](evidence/indexed-mask-source-links-steady-20261002.csv)
+y [pan](evidence/indexed-mask-source-links-pan-settled-20261002.csv).
+
+Se restaura la candidata mediante comparación exacta con su snapshot.
+**El prefijo completo de producción coincide byte por byte con el control**;
+sólo se conserva la regresión de generaciones/bajas, que también pasa sobre
+la implementación anterior. Se repiten los gates del estado final. La primera
+prueba cliente final falla al copiar el ejecutable aislado de paletas por
+ENOSPC; se preservan dos cachés antiguas con bytes/modo/mtime verificados,
+se recupera espacio y se repite completa sin cambiar ni omitir la prueba. Los CSV
+etiquetan `candidate_retained=False`; sus timings no corresponden a una
+optimización instalada. La producción de rendimiento continúa siendo 61.
+
+Fuentes, binarios, drivers, el fallo, repeticiones, oracle y gates candidato
+y final quedan en target/performance/indexed-mask-source-links-20261002.
+Se cierra sólo la evaluación/retirada del lookup. La siguiente etapa aísla
+la variación congelada Out4x antes de volver a proponer la caché; F08/F18,
+los demás zooms y la jugabilidad permanecen abiertos.

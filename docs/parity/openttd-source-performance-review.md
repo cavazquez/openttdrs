@@ -572,6 +572,12 @@ MCF sigue en otro thread. El siguiente ensayo debe reducir recorridos
 repetidos sin cambiar liveness, generaciones, orden ni el contrato de 44.
 No hay cambio de producción ni nueva certificación de FPS en esta etapa.
 
+La [etapa 63](performance-implementation.md#etapa-63--lookup-indexado-de-máscaras-ensayo-retirado-f08f18f31)
+retira el acceso directo pese a reducir máscaras 15,1/13,3 %: el primer
+Out4x reconstruido difiere en 319 píxeles y las repeticiones no explican
+el fallo. Producción vuelve byte por byte a 61 y conserva una regresión
+de generaciones/bajas. No se publican esos FPS como mejora instalada.
+
 ### F19 — El guardado bloquea UI y codifica dos veces el JSON
 
 P2 · Persistencia · Evidencia: **Fuente** · Alcance estimado: medio.

@@ -1,0 +1,9 @@
+candidate_retained,scale,comparison,complete_sprite_inputs_equal,cpu_image_bytes_equal,cpu_images_compared,coverage_equal,occlusion_equal
+False,.5,default-change,True,True,265,True,True
+False,.5,redraw-change,True,True,265,True,True
+False,.5,control-redraw,False,True,265,True,True
+False,.5,candidate-redraw,False,True,265,True,True
+False,2,default-change,True,True,368,True,True
+False,2,redraw-change,True,True,368,True,True
+False,2,control-redraw,False,True,368,True,True
+False,2,candidate-redraw,False,True,368,True,True

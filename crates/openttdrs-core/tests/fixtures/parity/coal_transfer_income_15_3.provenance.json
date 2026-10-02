@@ -1,0 +1,3612 @@
+{
+  "contract": "V1-COAL-TRANSFER-INCOME",
+  "fixture": {
+    "cases": 512,
+    "path": "crates/openttdrs-core/tests/fixtures/parity/coal_transfer_income_15_3.tsv",
+    "sha256": "f3b2668abe03cc6628a8cf4e1825a1dd9b1a3c3b9c7926db46bac6bb38366ab8"
+  },
+  "generator": "scripts/temperate_payment_oracle.py",
+  "oracle": {
+    "execution": "literal C++ body extracted and compiled with CargoSpec stubs",
+    "function": "GetTransportedGoodsIncome",
+    "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+    "openttd_tag": "15.3",
+    "source_sha256": {
+      "src/economy.cpp": "d8fcb150f911e1d26d7eca87f4fef2ccda1dcb4c53652ba4e3440213cd5a1374",
+      "src/table/cargo_const.h": "eac009bb66a180298414e2616fe2a3e793c0c5b42ec27c7318946afe41a4d706"
+    }
+  },
+  "parameters": {
+    "cases": [
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 0
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 1
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 2
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 3
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 4
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 5
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 6
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 7
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 8
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 9
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 10
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 11
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 12
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 13
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 14
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 15
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 16
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 17
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 18
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 19
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 20
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 21
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 22
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 23
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 24
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 25
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 26
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 27
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 28
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 29
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 30
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 31
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 32
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 33
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 34
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 35
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 36
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 37
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 38
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 39
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 40
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 41
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 42
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 43
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 44
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 45
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 46
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 47
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 48
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 49
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 50
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 51
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 52
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 53
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 54
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 55
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 56
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 57
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 58
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 59
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 60
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 61
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 62
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 63
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 64
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 65
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 66
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 67
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 68
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 69
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 70
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 71
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 72
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 73
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 74
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 75
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 76
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 77
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 78
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 79
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 80
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 81
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 82
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 83
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 84
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 85
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 86
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 87
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 88
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 89
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 90
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 91
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 92
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 93
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 94
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 95
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 96
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 97
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 98
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 99
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 100
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 101
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 102
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 103
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 104
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 105
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 106
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 107
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 108
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 109
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 110
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 111
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 112
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 113
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 114
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 115
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 116
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 117
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 118
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 119
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 120
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 121
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 122
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 123
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 124
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 125
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 126
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 127
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 128
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 129
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 130
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 131
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 132
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 133
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 134
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 135
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 136
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 137
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 138
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 139
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 140
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 141
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 142
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 143
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 144
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 145
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 146
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 147
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 148
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 149
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 150
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 151
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 152
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 153
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 154
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 155
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 156
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 157
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 158
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 159
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 160
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 161
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 162
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 163
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 164
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 165
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 166
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 167
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 168
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 169
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 170
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 171
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 172
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 173
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 174
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 175
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 176
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 177
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 178
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 179
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 180
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 181
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 182
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 183
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 184
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 185
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 186
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 187
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 188
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 189
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 190
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 191
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 192
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 193
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 194
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 195
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 196
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 197
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 198
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 199
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 200
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 201
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 202
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 203
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 204
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 205
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 206
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 207
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 208
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 209
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 210
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 211
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 212
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 213
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 214
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 215
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 216
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 217
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 218
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 219
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 220
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 221
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 222
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 223
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 224
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 225
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 226
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 227
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 228
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 229
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 230
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 231
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 232
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 233
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 234
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 235
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 236
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 237
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 238
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 239
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 240
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 241
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 242
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 243
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 244
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 245
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 246
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 247
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 248
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 249
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 250
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 251
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 252
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 253
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 254
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 20,
+        "phase": "transfer",
+        "transit_days": 255
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 0
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 1
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 2
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 3
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 4
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 5
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 6
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 7
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 8
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 9
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 10
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 11
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 12
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 13
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 14
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 15
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 16
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 17
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 18
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 19
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 20
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 21
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 22
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 23
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 24
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 25
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 26
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 27
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 28
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 29
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 30
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 31
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 32
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 33
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 34
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 35
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 36
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 37
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 38
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 39
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 40
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 41
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 42
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 43
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 44
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 45
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 46
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 47
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 48
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 49
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 50
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 51
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 52
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 53
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 54
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 55
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 56
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 57
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 58
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 59
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 60
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 61
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 62
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 63
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 64
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 65
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 66
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 67
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 68
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 69
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 70
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 71
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 72
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 73
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 74
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 75
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 76
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 77
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 78
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 79
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 80
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 81
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 82
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 83
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 84
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 85
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 86
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 87
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 88
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 89
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 90
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 91
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 92
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 93
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 94
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 95
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 96
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 97
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 98
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 99
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 100
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 101
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 102
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 103
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 104
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 105
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 106
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 107
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 108
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 109
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 110
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 111
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 112
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 113
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 114
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 115
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 116
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 117
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 118
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 119
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 120
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 121
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 122
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 123
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 124
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 125
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 126
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 127
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 128
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 129
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 130
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 131
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 132
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 133
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 134
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 135
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 136
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 137
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 138
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 139
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 140
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 141
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 142
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 143
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 144
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 145
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 146
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 147
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 148
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 149
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 150
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 151
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 152
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 153
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 154
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 155
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 156
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 157
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 158
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 159
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 160
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 161
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 162
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 163
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 164
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 165
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 166
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 167
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 168
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 169
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 170
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 171
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 172
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 173
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 174
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 175
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 176
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 177
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 178
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 179
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 180
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 181
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 182
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 183
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 184
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 185
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 186
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 187
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 188
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 189
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 190
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 191
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 192
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 193
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 194
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 195
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 196
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 197
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 198
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 199
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 200
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 201
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 202
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 203
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 204
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 205
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 206
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 207
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 208
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 209
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 210
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 211
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 212
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 213
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 214
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 215
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 216
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 217
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 218
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 219
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 220
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 221
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 222
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 223
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 224
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 225
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 226
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 227
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 228
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 229
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 230
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 231
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 232
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 233
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 234
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 235
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 236
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 237
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 238
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 239
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 240
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 241
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 242
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 243
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 244
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 245
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 246
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 247
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 248
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 249
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 250
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 251
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 252
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 253
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 254
+      },
+      {
+        "cargo": "COAL",
+        "count": 4,
+        "distance": 40,
+        "phase": "final",
+        "transit_days": 255
+      }
+    ],
+    "climate": "Temperate",
+    "feeder_payment_share_percent": 75,
+    "inflation_payment": 65536,
+    "newgrf": false
+  },
+  "schema_version": 1
+}

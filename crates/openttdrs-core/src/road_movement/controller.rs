@@ -5,9 +5,7 @@ use crate::engine::{
     update_road_vehicle_speed,
 };
 use crate::map::Map;
-use crate::road_movement::bay::{
-    bay_direction_at_frame_side, bay_drive_entry_side, bay_stop_frame_side,
-};
+use crate::road_movement::bay::{bay_drive_entry_side, bay_stop_frame_side};
 use crate::road_movement::drive_data::{RDE_NEXT_TILE, road_drive_entry};
 use crate::road_movement::overtake::{drive_state_with_overtake_and_side, tick_overtaking};
 use crate::road_movement::rvsb::{
@@ -135,6 +133,20 @@ pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
         return finish_road_vehicle_turn(vehicles, v_idx, map, drive_on_right, rd.diagdir());
     }
 
+    let current_x = vehicles[v_idx].road_x;
+    let current_y = vehicles[v_idx].road_y;
+    let next_x = (current_x & !(ROAD_TILE_SIZE - 1)) + i32::from(rd.x & 15);
+    let next_y = (current_y & !(ROAD_TILE_SIZE - 1)) + i32::from(rd.y & 15);
+    let new_dir = road_sliding_direction(&vehicles[v_idx], next_x, next_y);
+    if new_dir != vehicles[v_idx].direction {
+        vehicles[v_idx].set_direction_with_curve_penalty(
+            new_dir,
+            map,
+            crate::engine::TrainAccelerationModel::Original,
+        );
+        return true;
+    }
+
     if is_bay_road_state(state) {
         let stop = bay_stop_frame_side(state, drive_on_right).unwrap_or(u8::MAX);
         let entered = state & RVSB_ENTERED_STOP != 0;
@@ -156,30 +168,6 @@ pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
             v.advance_destination_after_arrival_with_catalog(engine_catalog);
             return true;
         }
-        if next_frame != stop
-            && let Some(direction) =
-                bay_direction_at_frame_side(state, f32::from(next_frame), drive_on_right)
-        {
-            vehicles[v_idx].set_direction_with_curve_penalty(
-                direction,
-                map,
-                crate::engine::TrainAccelerationModel::Original,
-            );
-        }
-        return true;
-    }
-
-    let current_x = vehicles[v_idx].road_x;
-    let current_y = vehicles[v_idx].road_y;
-    let next_x = (current_x & !(ROAD_TILE_SIZE - 1)) + i32::from(rd.x & 15);
-    let next_y = (current_y & !(ROAD_TILE_SIZE - 1)) + i32::from(rd.y & 15);
-    let new_dir = road_sliding_direction(&vehicles[v_idx], next_x, next_y);
-    if new_dir != vehicles[v_idx].direction {
-        vehicles[v_idx].set_direction_with_curve_penalty(
-            new_dir,
-            map,
-            crate::engine::TrainAccelerationModel::Original,
-        );
         return true;
     }
 
@@ -1608,6 +1596,20 @@ mod tests {
         assert_eq!(v.pos, end);
     }
 
+    fn advance_to_bay_service(vehicles: &mut [Vehicle], index: usize, map: &Map) {
+        for _ in 0..64 {
+            if vehicles[index].road_state & RVSB_ENTERED_STOP != 0 {
+                return;
+            }
+            assert!(individual_road_vehicle_controller(
+                vehicles,
+                index,
+                Some(map)
+            ));
+        }
+        panic!("bay service was not reached within the native table/turn bound");
+    }
+
     #[test]
     fn bay_arrival_happens_at_stop_frame_not_tile_boundary() {
         let (map, stop, approach) = bay_map();
@@ -1624,13 +1626,7 @@ mod tests {
         assert!(!vehicles[0].awaiting_load_window);
 
         let stop_frame = bay_stop_frame(vehicles[0].road_state).unwrap();
-        for _ in 0..stop_frame {
-            assert!(individual_road_vehicle_controller(
-                &mut vehicles,
-                0,
-                Some(&map)
-            ));
-        }
+        advance_to_bay_service(&mut vehicles, 0, &map);
         assert_eq!(vehicles[0].frame, stop_frame);
         assert_ne!(vehicles[0].road_state & RVSB_ENTERED_STOP, 0);
         assert!(vehicles[0].awaiting_load_window);
@@ -1650,14 +1646,7 @@ mod tests {
             0,
             Some(&map)
         ));
-        let first_stop = bay_stop_frame(vehicles[0].road_state).unwrap();
-        for _ in 0..first_stop {
-            assert!(individual_road_vehicle_controller(
-                &mut vehicles,
-                0,
-                Some(&map)
-            ));
-        }
+        advance_to_bay_service(&mut vehicles, 0, &map);
         assert_eq!(vehicles[0].road_state & RVSB_USING_SECOND_BAY, 0);
 
         assert!(individual_road_vehicle_controller(
@@ -1666,14 +1655,7 @@ mod tests {
             Some(&map)
         ));
         assert_ne!(vehicles[1].road_state & RVSB_USING_SECOND_BAY, 0);
-        let second_stop = bay_stop_frame(vehicles[1].road_state).unwrap();
-        for _ in 0..second_stop {
-            assert!(individual_road_vehicle_controller(
-                &mut vehicles,
-                1,
-                Some(&map)
-            ));
-        }
+        advance_to_bay_service(&mut vehicles, 1, &map);
 
         assert!(!individual_road_vehicle_controller(
             &mut vehicles,
@@ -1692,21 +1674,17 @@ mod tests {
             0,
             Some(&map)
         ));
-        let stop_frame = bay_stop_frame(vehicles[0].road_state).unwrap();
-        for _ in 0..stop_frame {
-            assert!(individual_road_vehicle_controller(
-                &mut vehicles,
-                0,
-                Some(&map)
-            ));
-        }
+        advance_to_bay_service(&mut vehicles, 0, &map);
         vehicles[0].awaiting_load_window = false;
         vehicles[0].current_order = 1;
         vehicles[0].dest = TileCoord::new(6, 3);
         vehicles[0].path = VecDeque::from([approach, TileCoord::new(5, 3)]);
         vehicles[0].progress = 0;
 
-        while vehicles[0].pos == stop {
+        for _ in 0..64 {
+            if vehicles[0].pos != stop {
+                break;
+            }
             assert!(individual_road_vehicle_controller(
                 &mut vehicles,
                 0,

@@ -11,7 +11,7 @@ using uint = unsigned;
 #include "native-constants.inc"
 struct RoadDriveEntry { uint8_t x, y; };
 #include "native-drive-arrays.inc"
-const std::array<const RoadDriveEntry *, 32> drive_tables = {{
+const std::array<const RoadDriveEntry *, 64> drive_tables = {{
 #include "native-drive-bindings.inc"
 }};
 constexpr int AM_ORIGINAL = 0;
@@ -34,13 +34,19 @@ void emit(unsigned table, unsigned step, const RoadVehicle &v, bool turn_only) {
               << v.y_pos << ',' << unsigned(v.direction) << ',' << v.cur_speed << ',' << turn_only << '\n';
 }
 int main(int argc, char **argv) {
-    assert(argc == 2);
+    assert(argc == 2 || argc == 3);
+    const bool bay = argc == 3;
     std::ofstream predictions(argv[1]);
     assert(predictions);
     predictions << "table,substep,budget,x,y,direction\n" << std::fixed << std::setprecision(8);
     std::cout << "table,substep,frame,x,y,direction,speed,turn_only\n";
-    for (unsigned table = 0; table < 32; ++table) {
-        if ((table & 7) >= 6) continue; // Reversal tables have separate controller branches.
+    for (unsigned table = 0; table < 64; ++table) {
+        if (bay) {
+            if (table < 32 || (table & 4) != 0) continue; // Entered-stop bindings repeat these arrays.
+            assert(drive_tables[table] == drive_tables[table | 4]);
+        } else if (table >= 32 || (table & 7) >= 6) {
+            continue; // Reversal tables have separate controller branches.
+        }
         const RoadDriveEntry *data = drive_tables[table];
         RoadVehicle v;
         v.x_pos = data[0].x;

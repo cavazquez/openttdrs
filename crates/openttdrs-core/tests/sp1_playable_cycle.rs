@@ -18,7 +18,8 @@ use openttdrs_core::{
 };
 
 const MAX_ROUTE_TICKS: usize = 40_000;
-const JSON_CONTINUATION_TICKS: usize = 2_000;
+// Covers delivery after the native stationary bay-turn steps, as well as JSON replay.
+const JSON_CONTINUATION_TICKS: usize = 3_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FirstRouteReport {

@@ -22,6 +22,7 @@ def main():
     parser.add_argument('--openttd', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--check', action='store_true')
+    parser.add_argument('--bay', action='store_true', help='movement/turn fragments in 16 bay tables; station service excluded')
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=False)
     sources = {}
@@ -65,10 +66,15 @@ def main():
         if match is None:
             raise ValueError('native road array missing: ' + str(index))
         arrays.append(match[0])
+    for match in re.finditer(r'static const RoadDriveEntry _rv_station_\w+\[\] = \{.*?\};',
+                             sources['src/table/roadveh_movement.h'], re.S):
+        arrays.append(match[0])
+    if len(arrays) != 48:
+        raise ValueError('expected 32 ordinary and 16 bay arrays')
     save('drive-arrays', '\n'.join(arrays))
     rows = re.search(r'_road_road_drive_data\[\] = \{(.*?)\};',
-                     sources['src/table/roadveh_movement.h'], re.S)[1].splitlines()[1:33]
-    if [line.strip().rstrip(',') for line in rows] != ['_roadveh_drive_data_' + str(i) for i in range(32)]:
+                     sources['src/table/roadveh_movement.h'], re.S)[1].splitlines()[1:65]
+    if [line.strip().rstrip(',') for line in rows[:32]] != ['_roadveh_drive_data_' + str(i) for i in range(32)] or len(rows) != 64:
         raise ValueError('native drive table binding differs')
     save('drive-bindings', '\n'.join(rows))
     constants = []
@@ -93,14 +99,18 @@ def main():
     command = ['c++', '-std=c++20', '-O2', '-Wall', '-Wextra', '-Werror', str(cpp), '-o', str(binary)]
     subprocess.run(command, check=True)
     binary.chmod(0o555)
-    budget_path = args.out / 'native-road-render-budget.csv'
-    output = subprocess.check_output([str(binary.resolve()), str(budget_path.resolve())], text=True)
-    (args.out / 'native-road-vehicle-turn-direction.csv').write_text(output)
+    prefix = 'native-road-bay' if args.bay else 'native-road'
+    budget_path = args.out / (prefix + '-render-budget.csv')
+    invocation = [str(binary.resolve()), str(budget_path.resolve())]
+    if args.bay:
+        invocation.append('--bay')
+    output = subprocess.check_output(invocation, text=True)
+    (args.out / (prefix + '-vehicle-turn-direction.csv')).write_text(output)
     if args.check:
-        fixture = Path(__file__).resolve().parents[1] / 'crates/openttdrs-core/tests/fixtures/parity/native-road-vehicle-turn-direction.csv'
+        fixture = Path(__file__).resolve().parents[1] / 'crates/openttdrs-core/tests/fixtures/parity' / (prefix + '-vehicle-turn-direction.csv')
         if output != fixture.read_text():
             raise ValueError('native road turn states differ from fixture')
-        budget_fixture = fixture.with_name('native-road-render-budget.csv')
+        budget_fixture = fixture.with_name(prefix + '-render-budget.csv')
         if budget_path.read_text() != budget_fixture.read_text():
             raise ValueError('native road render budgets differ from fixture')
     (args.out / 'provenance.json').write_text(json.dumps(dict(
@@ -108,8 +118,10 @@ def main():
         unmodified_fragments_sha256=fragments, rows=len(output.splitlines()) - 1,
         render_budget_rows=len(budget_path.read_text().splitlines()) - 1,
         render_scope='Adapted continuous interpolation between stored native turn/move states; exact native GetAdvanceDistance costs. This does not execute the native renderer.',
-        command=command, scope=__doc__), indent=2) + '\n')
-    print('Native road direction/turn-delay states:', len(output.splitlines()) - 1, 'rows, 24 ordinary drive tables')
+        command=command, invocation=invocation,
+        scope=__doc__ if not args.bay else 'Unchanged native bay arrays, direction and turn fragments; adapted outer loop excludes station service, traffic, RNG, tile transitions and speed integration.'), indent=2) + '\n')
+    print('Native road direction/turn-delay states:', len(output.splitlines()) - 1,
+          'rows, 16 bay tables' if args.bay else 'rows, 24 ordinary drive tables')
 
 
 if __name__ == '__main__':

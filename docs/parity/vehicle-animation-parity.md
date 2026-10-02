@@ -299,6 +299,82 @@ La variación del compositor reproducida en etapas anteriores sigue abierta.
 La evidencia completa de esta etapa se conserva en
 `target/parity/train-consist-short-track-20261002/`.
 
+## #326-ROAD-BAY-MOVEMENT-TURNS — pasos de giro en dársenas
+
+Antes del cambio fallan las tres comparaciones. En tabla 32, primer avance,
+OpenTTD conserva `DIR_NE` y velocidad 112; el port asigna `DIR_E` y velocidad
+84. La tangente centrada de la tabla adelantaba el giro. También avanzaba el
+frame y la posición al cambiar rumbo, aunque el bloque nativo conserva ambos
+durante ese paso de giro.
+
+El controlador comparte ahora el bloque de rumbo con la carretera normal
+antes de resolver la rama de bahía. La presentación consulta ese mismo
+rumbo y consume los pasos estacionarios sobre los puntos de la tabla. La
+comparación de presupuesto incluye el error de representación de `frame_f`
+para evitar que un límite entero quede justo por debajo del coste nativo
+tras convertirlo a `f32`. No se modifica la regla de llegada/carga en esta
+etapa.
+
+La opción `--bay` del oracle añade las 16 tablas nativas de dársenas y los
+64 enlaces originales. Comprueba que el bit `RVSB_ENTERED_STOP` selecciona
+la misma tabla; los cuerpos de rumbo y giro siguen sin modificaciones.
+El bucle adaptado omite servicio de estación, tráfico, RNG, saltos de tesela
+e integración de velocidad. La regresión física marca ese bit en sus
+estados para suprimir el servicio. Esto mide la regla de movimiento de las
+tablas, no una entrada/carga/salida completa.
+
+Pasan 752 estados físicos y sus orientaciones, y 7.520 presupuestos para
+bus y camión (15.040 poses). Comprueban frame, posición y velocidad exactos,
+giro estacionario, rumbo dibujado y coordenadas con tolerancia `0.0001`.
+También siguen pasando las tres fixtures/regresiones de carretera normal.
+
+Las pruebas de servicio dejan de suponer un frame por llamada: esperan el
+estado de parada y acotan la salida a 64 subpasos, manteniendo sus
+postcondiciones. El primer intento general quedó en un bucle de esa prueba
+porque preparaba la salida antes de completar la llegada; permanece
+conservado. Una segunda ejecución detectó el límite ajustado de continuación
+JSON: a los 2.000 ticks el camión tenía 22 unidades y frame 11 dentro de la
+dársena de destino; la muestra a 2.100 ya registra 22 unidades entregadas.
+El diagnóstico de 4.000 ticks mantiene ambas ramas canónicas idénticas.
+El límite final pasa a 3.000, con las mismas comprobaciones de estado,
+entrega e ingreso. Esto valida la continuidad/jugabilidad de ese escenario,
+no su cronología completa contra el simulador nativo.
+
+La tercera ejecución detectó una expectativa económica de edad fija (24)
+frente a la edad final medida (25). La procedencia sólo ejecuta el kernel
+nativo de pago con entradas elegidas: no mide una partida nativa. Se
+conservan los vectores originales y se añaden 512 pagos nativos por edad;
+la prueba mantiene el ledger exacto para la entrada medida. El alcance y
+la reproducción quedan en [transferencia de carbón V1](coal-transfer-v1.md).
+
+```bash
+python3 scripts/oracle_road_vehicle_turn_direction.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/road-bay-turn-direction-fresh --bay --check
+cargo test -p openttdrs-core --test native_road_bay_turn_direction
+```
+
+**Cerrado el sub-issue de movimiento y orientación dentro de las tablas de
+dársenas.** Pasan Clippy estricto de core/cliente, 3.047 tests de core
+(6 ignorados), 1.700 del cliente (2 ignorados), formato, frescura de docs y
+`git diff --check`. El oracle de pagos reproduce sus tres corpus y el de
+carreteras conserva los casos ordinarios.
+
+Los [controles de zoom](evidence/road-bay-turn-direction-control-raster-20261002.csv)
+mantienen cámara y PNG idénticos en las siete peticiones. En `0.50`/`2`,
+coinciden 265/368 buffers CPU y ambas máscaras; las entradas completas
+cambian en once campos de dos sprites dinámicos y sus proxies (orientación,
+ancla y un prisma). El PNG idéntico no certifica esas entradas: están fuera
+de la vista. En `8` cambia la traza de ordenación, conservando el PNG.
+Estas capturas son controles de una partida congelada; la geometría nativa
+queda cubierta por las fixtures, no por equivalencia raster global.
+
+La compilación release recompiló core y cliente (80,68 s); binario
+`c63db3c8e156d8d677b694cd60a12989d8697750fa1fadcc75a757fbb31c1ebe`.
+Evidencia en `target/parity/road-bay-turn-direction-20261002/`. Permanece abierta la
+secuencia de llegada: el original resuelve el giro y comprueba el frame
+actual de parada; el port aún comprueba `next_frame` al activar la carga.
+
 ## Alcance pendiente
 
 - La emisión está ligada a `Update`: agrupar ticks puede omitir decisiones de

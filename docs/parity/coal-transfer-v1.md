@@ -1,6 +1,6 @@
 # Transferencia de carbón V1 contra OpenTTD 15.3
 
-Actualizado: 2026-09-20.
+Actualizado: 2026-10-02.
 
 El contrato V1-PKT de [#587](https://github.com/cavazquez/openttdrs/issues/587)
 fija un recorrido Temperate de 64×64 con una mina, una parada de transferencia,
@@ -39,8 +39,10 @@ tramo final acredita una vez el bruto; el ledger verifica exactamente
 
 `scripts/temperate_payment_oracle.py` compila el cuerpo literal nativo de
 `GetTransportedGoodsIncome` del pin OpenTTD 15.3. Además del corpus V1-PAY,
-emite dos filas para este recorrido: `transfer COAL 4 20 7 57` y
-`final COAL 4 40 24 107`. No se usa el cálculo Rust para generar esos valores.
+conserva dos vectores de pago: `transfer COAL 4 20 7 57` y
+`final COAL 4 40 24 107`. Sus edades son entradas elegidas para la fórmula,
+no una cronología medida ejecutando camiones en el simulador nativo.
+No se usa el cálculo Rust para generar esos valores.
 
 La traza está versionada en
 `crates/openttdrs-core/tests/fixtures/parity/coal_transfer_15_3.tsv`; su
@@ -50,11 +52,22 @@ Su procedencia acompaña la fixture y fija el commit `15.3`
 `14ec60f248547d4d062a1160f0fc26d742319888`, los hashes de las fuentes nativas
 y el porcentaje de feeder usado por el contrato.
 
+`coal_transfer_income_15_3.tsv` amplía el mismo cuerpo C++ a 512 entradas:
+cuatro unidades de carbón, distancias 20/40 y edades 0–255. Su procedencia
+acompaña el corpus; `--check` reproduce los tres corpus y sus hashes.
+La prueba de recorrido consulta el pago nativo con la edad real del packet,
+mantiene cantidades/distancias fijas y exige el ledger exacto y la
+conservación física. Otra regresión compara los 512 pagos con Rust y
+conserva ambos vectores originales. Tras corregir los giros de dársena,
+la edad final pasó de 24 a 25: imponer 24 confundía una entrada económica
+del harness con un resultado de una partida nativa que no se ejecutó.
+
 ```bash
 python3 scripts/temperate_payment_oracle.py reference/openttd-upstream --check
 cargo test -p openttdrs-core --test v1_coal_transfer
 ```
 
-Quedan fuera rutas CargoDist complejas, varios hubs, reparto multicompañía,
-NewGRF y la equivalencia económica global. Este contrato certifica sólo los dos
-tramos, su ledger y su conservación física.
+Quedan fuera la cronología nativa del recorrido completo, rutas CargoDist
+complejas, varios hubs, reparto multicompañía, NewGRF y la equivalencia
+económica global. Este contrato verifica los pagos para las entradas medidas
+en el port, su ledger y su conservación física.

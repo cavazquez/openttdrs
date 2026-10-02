@@ -18,6 +18,8 @@ const SECOND_TRUCK_ID: u32 = 2;
 const MAX_ROUTE_TICKS: usize = 40_000;
 const V1_INFLATION_PAYMENT: u64 = 1 << 16;
 const NATIVE_ORACLE_TRACE: &str = include_str!("fixtures/parity/coal_transfer_15_3.tsv");
+const NATIVE_INCOME_CASES: &str = include_str!("fixtures/parity/coal_transfer_income_15_3.tsv");
+const V1_PACKET_UNITS: u16 = 4;
 
 fn transfer_command_log() -> Vec<Command> {
     let mut commands = Vec::new();
@@ -139,8 +141,8 @@ struct NativeOracleCase {
     income: i64,
 }
 
-fn native_oracle_case(phase: &str) -> NativeOracleCase {
-    let mut lines = NATIVE_ORACLE_TRACE.lines();
+fn native_oracle_case(phase: &str, transit_periods: u16) -> NativeOracleCase {
+    let mut lines = NATIVE_INCOME_CASES.lines();
     assert_eq!(
         lines.next(),
         Some("phase\tcargo\tcount\tdistance\ttransit_days\tincome"),
@@ -149,18 +151,22 @@ fn native_oracle_case(phase: &str) -> NativeOracleCase {
     let rows = lines.collect::<Vec<_>>();
     assert_eq!(
         rows.len(),
-        2,
-        "la traza acotada debe conservar sus dos tramos nativos"
+        512,
+        "dos distancias y 256 edades de entrada al pago nativo"
     );
     let matches = rows
         .iter()
-        .filter(|row| row.split('\t').next() == Some(phase))
+        .filter(|row| {
+            let columns = row.split('\t').collect::<Vec<_>>();
+            columns[0] == phase
+                && columns[4].parse::<u16>().expect("edad de entrada") == transit_periods
+        })
         .copied()
         .collect::<Vec<_>>();
     assert_eq!(
         matches.len(),
         1,
-        "la traza debe tener un único tramo nativo {phase}"
+        "el corpus debe tener un único pago para {phase}, edad {transit_periods}"
     );
     let columns = matches[0].split('\t').collect::<Vec<_>>();
     assert_eq!(columns.len(), 6, "fila V1-COAL-TRANSFER completa");
@@ -171,6 +177,44 @@ fn native_oracle_case(phase: &str) -> NativeOracleCase {
         distance: columns[3].parse().expect("distancia nativa"),
         transit_periods: columns[4].parse().expect("edad nativa"),
         income: columns[5].parse().expect("pago nativo"),
+    }
+}
+
+#[test]
+fn v1_coal_transfer_income_matches_native_period_sweep() {
+    for row in NATIVE_INCOME_CASES.lines().skip(1) {
+        let columns = row.split('\t').collect::<Vec<_>>();
+        let age = columns[4].parse().expect("edad de entrada al pago");
+        let native = native_oracle_case(columns[0], age);
+        assert_eq!(native.units, V1_PACKET_UNITS);
+        assert_eq!(
+            openttdrs_core::economy::transported_goods_income(
+                u32::from(native.units),
+                native.distance,
+                native.transit_periods,
+                CargoType::Coal,
+                V1_INFLATION_PAYMENT,
+            ),
+            native.income,
+            "pago nativo para {}, edad {}",
+            columns[0],
+            age
+        );
+    }
+    // Preserve both original payment vectors. Their ages are inputs to the
+    // native payment kernel, not measured results of a native truck journey.
+    for row in NATIVE_ORACLE_TRACE.lines().skip(1) {
+        let columns = row.split('\t').collect::<Vec<_>>();
+        let age = columns[4].parse().expect("edad del vector original");
+        let native = native_oracle_case(columns[0], age);
+        assert_eq!(
+            native.income,
+            columns[5].parse::<i64>().expect("pago original")
+        );
+        assert_eq!(
+            native.distance,
+            columns[3].parse::<u32>().expect("distancia original")
+        );
     }
 }
 
@@ -212,7 +256,7 @@ fn oracle_slice(
     );
     assert_eq!(
         packet.periods_in_transit, expected.transit_periods,
-        "edad de la traza debe coincidir con el oracle nativo"
+        "el pago nativo debe recibir la edad real del packet"
     );
     OracleSlice {
         units: packet.count,
@@ -301,7 +345,7 @@ fn play_transfer_route() -> CoalTransferReport {
                     })
                 })
         {
-            let expected = native_oracle_case("transfer");
+            let expected = native_oracle_case("transfer", packet.periods_in_transit);
             let expected_share = feeder_share_of(expected.income);
             let trace = oracle_slice(packet, TRANSFER_STOP, expected, expected_share);
             assert_eq!(
@@ -331,10 +375,9 @@ fn play_transfer_route() -> CoalTransferReport {
             .cargo_units_final_delivered
             .saturating_sub(final_before);
         if final_trace.is_none() && final_delta > 0 {
-            let expected = native_oracle_case("final");
             assert_eq!(
                 final_delta,
-                u64::from(expected.units),
+                u64::from(V1_PACKET_UNITS),
                 "la entrega final debe liquidar exactamente el tramo nativo"
             );
             assert_eq!(
@@ -357,6 +400,7 @@ fn play_transfer_route() -> CoalTransferReport {
             let slices = portions
                 .iter()
                 .map(|packet| {
+                    let expected = native_oracle_case("final", packet.periods_in_transit);
                     oracle_slice(
                         packet,
                         FIRST_ROUTE_DELIVER_STOP,
@@ -452,8 +496,8 @@ fn play_transfer_route() -> CoalTransferReport {
 #[test]
 fn v1_two_truck_coal_transfer_conserves_cargo_and_matches_ledger_twice() {
     let first = play_transfer_route();
-    let transfer_oracle = native_oracle_case("transfer");
-    let final_oracle = native_oracle_case("final");
+    let transfer_oracle = native_oracle_case("transfer", first.trace.transfer.transit_periods);
+    let final_oracle = native_oracle_case("final", first.trace.final_slices[0].transit_periods);
     assert!(
         first.ticks_to_final_delivery < MAX_ROUTE_TICKS,
         "la entrega final debe ocurrir antes de {MAX_ROUTE_TICKS} ticks"

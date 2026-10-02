@@ -3,9 +3,9 @@
 
 El harness extrae el cuerpo literal de ``GetTransportedGoodsIncome`` desde el
 checkout OpenTTD fijado, lo compila con stubs mínimos de ``CargoSpec`` y emite
-los 198 pagos Temperate del contrato y la traza acotada de carbón con dos
-tramos. No calcula el lado de referencia con Rust ni reescribe la fórmula de
-OpenTTD en Python.
+los 198 pagos Temperate, los dos vectores originales de carbón y 512 pagos
+por distancia y edad. No ejecuta una ruta nativa. No calcula el lado de
+referencia con Rust ni reescribe la fórmula de OpenTTD en Python.
 
 Uso:
   python3 scripts/temperate_payment_oracle.py reference/openttd-upstream --check
@@ -32,6 +32,8 @@ TRANSFER_FIXTURE = ROOT / "crates/openttdrs-core/tests/fixtures/parity/coal_tran
 TRANSFER_PROVENANCE = (
     ROOT / "crates/openttdrs-core/tests/fixtures/parity/coal_transfer_15_3.provenance.json"
 )
+TRANSFER_INCOME_FIXTURE = ROOT / "crates/openttdrs-core/tests/fixtures/parity/coal_transfer_income_15_3.tsv"
+TRANSFER_INCOME_PROVENANCE = TRANSFER_INCOME_FIXTURE.with_suffix(".provenance.json")
 REFERENCE_MANIFEST = ROOT / "docs/parity/openttd-reference.json"
 ECONOMY_CPP = Path("src/economy.cpp")
 CARGO_CONST_H = Path("src/table/cargo_const.h")
@@ -42,6 +44,12 @@ TRANSIT_DAYS = (0, 30, 100)
 TRANSFER_TRACE_CASES = (
     ("transfer", "COAL", 4, 20, 7),
     ("final", "COAL", 4, 40, 24),
+)
+# Income inputs only: this harness does not execute a native vehicle journey.
+TRANSFER_INCOME_CASES = tuple(
+    (phase, "COAL", 4, distance, periods)
+    for phase, distance in (("transfer", 20), ("final", 40))
+    for periods in range(256)
 )
 
 
@@ -245,13 +253,15 @@ int main()
 """
 
 
-def transfer_trace_harness_main(specs: list[tuple[str, int, int, int]]) -> str:
+def transfer_trace_harness_main(
+    specs: list[tuple[str, int, int, int]], cases=TRANSFER_TRACE_CASES
+) -> str:
     cargo_indices = {name: index for index, (name, _, _, _) in enumerate(specs)}
     rows = ",\n        ".join(
         "TraceCase{"
         f'"{phase}", static_cast<CargoType>({cargo_indices[cargo]}), {count}, {distance}, {transit}'
         "}"
-        for phase, cargo, count, distance, transit in TRANSFER_TRACE_CASES
+        for phase, cargo, count, distance, transit in cases
     )
     cargo_specs = ",\n        ".join(
         f"CargoSpec{{{payment}, {{{fast}, {slow}}}, CargoCallbackMasks{{}}}}"
@@ -271,7 +281,7 @@ int main()
     g_cargo_specs = std::array<CargoSpec, 11>{{
         {cargo_specs}
     }};
-    const std::array<TraceCase, {len(TRANSFER_TRACE_CASES)}> cases{{{{
+    const std::array<TraceCase, {len(cases)}> cases{{{{
         {rows}
     }}}};
 
@@ -310,9 +320,9 @@ def native_table(source: Path) -> str:
     return run_native_harness(literal_function, harness_main(specs))
 
 
-def native_transfer_trace(source: Path) -> str:
+def native_transfer_trace(source: Path, cases=TRANSFER_TRACE_CASES) -> str:
     literal_function, specs = native_harness_inputs(source)
-    return run_native_harness(literal_function, transfer_trace_harness_main(specs))
+    return run_native_harness(literal_function, transfer_trace_harness_main(specs, cases))
 
 
 def fixture_case_count(table: str) -> int:
@@ -325,15 +335,15 @@ def fixture_case_count(table: str) -> int:
     return expected
 
 
-def transfer_trace_case_count(trace: str) -> int:
+def transfer_trace_case_count(trace: str, cases=TRANSFER_TRACE_CASES) -> int:
     lines = trace.splitlines()
     if not lines or lines[0] != "phase\tcargo\tcount\tdistance\ttransit_days\tincome":
         raise RuntimeError("la traza nativa no tiene el encabezado V1-COAL-TRANSFER")
-    if len(lines) - 1 != len(TRANSFER_TRACE_CASES):
+    if len(lines) - 1 != len(cases):
         raise RuntimeError(
-            f"la traza nativa tiene {len(lines) - 1} casos; se esperaban {len(TRANSFER_TRACE_CASES)}"
+            f"la traza nativa tiene {len(lines) - 1} casos; se esperaban {len(cases)}"
         )
-    return len(TRANSFER_TRACE_CASES)
+    return len(cases)
 
 
 def oracle_provenance(source: Path, manifest: dict[str, object]) -> dict[str, object]:
@@ -373,11 +383,12 @@ def expected_provenance(source: Path, manifest: dict[str, object], table: str) -
 
 
 def expected_transfer_provenance(
-    source: Path, manifest: dict[str, object], trace: str
+    source: Path, manifest: dict[str, object], trace: str,
+    cases=TRANSFER_TRACE_CASES, fixture: Path = TRANSFER_FIXTURE,
 ) -> dict[str, object]:
     return {
         "schema_version": 1,
-        "contract": "V1-COAL-TRANSFER",
+        "contract": "V1-COAL-TRANSFER" if fixture == TRANSFER_FIXTURE else "V1-COAL-TRANSFER-INCOME",
         "generator": "scripts/temperate_payment_oracle.py",
         "oracle": oracle_provenance(source, manifest),
         "parameters": {
@@ -392,14 +403,14 @@ def expected_transfer_provenance(
                     "distance": distance,
                     "transit_days": transit,
                 }
-                for phase, cargo, count, distance, transit in TRANSFER_TRACE_CASES
+                for phase, cargo, count, distance, transit in cases
             ],
             "feeder_payment_share_percent": 75,
         },
         "fixture": {
-            "path": str(TRANSFER_FIXTURE.relative_to(ROOT)),
+            "path": str(fixture.relative_to(ROOT)),
             "sha256": sha256_bytes(trace.encode("utf-8")),
-            "cases": transfer_trace_case_count(trace),
+            "cases": transfer_trace_case_count(trace, cases),
         },
     }
 
@@ -426,15 +437,18 @@ def check_fixture(table: str, provenance: dict[str, object]) -> None:
         raise RuntimeError("DRIFT V1-PAY: la procedencia/hash no coincide con la tabla nativa")
 
 
-def check_transfer_trace(trace: str, provenance: dict[str, object]) -> None:
-    if not TRANSFER_FIXTURE.is_file():
-        raise RuntimeError(f"falta fixture versionada: {TRANSFER_FIXTURE}")
-    current = TRANSFER_FIXTURE.read_text(encoding="utf-8")
+def check_transfer_trace(
+    trace: str, provenance: dict[str, object], fixture: Path = TRANSFER_FIXTURE,
+    provenance_path: Path = TRANSFER_PROVENANCE,
+) -> None:
+    if not fixture.is_file():
+        raise RuntimeError(f"falta fixture versionada: {fixture}")
+    current = fixture.read_text(encoding="utf-8")
     if current != trace:
         raise RuntimeError(f"DRIFT V1-COAL-TRANSFER: {first_difference(trace, current)}")
-    if not TRANSFER_PROVENANCE.is_file():
-        raise RuntimeError(f"falta procedencia versionada: {TRANSFER_PROVENANCE}")
-    current_provenance = json.loads(TRANSFER_PROVENANCE.read_text(encoding="utf-8"))
+    if not provenance_path.is_file():
+        raise RuntimeError(f"falta procedencia versionada: {provenance_path}")
+    current_provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
     if current_provenance != provenance:
         raise RuntimeError(
             "DRIFT V1-COAL-TRANSFER: la procedencia/hash no coincide con la traza nativa"
@@ -463,17 +477,23 @@ def main(argv: list[str] | None = None) -> int:
         verify_source(args.source, manifest)
         table = native_table(args.source)
         trace = native_transfer_trace(args.source)
+        income_sweep = native_transfer_trace(args.source, TRANSFER_INCOME_CASES)
         provenance = expected_provenance(args.source, manifest, table)
         transfer_provenance = expected_transfer_provenance(args.source, manifest, trace)
+        income_provenance = expected_transfer_provenance(
+            args.source, manifest, income_sweep, TRANSFER_INCOME_CASES, TRANSFER_INCOME_FIXTURE
+        )
         if args.check:
             check_fixture(table, provenance)
             check_transfer_trace(trace, transfer_provenance)
+            check_transfer_trace(income_sweep, income_provenance, TRANSFER_INCOME_FIXTURE, TRANSFER_INCOME_PROVENANCE)
             print(f"OK: V1-PAY {provenance['fixture']['cases']} casos nativos; hash {provenance['fixture']['sha256']}")
             print(
                 "OK: V1-COAL-TRANSFER "
                 f"{transfer_provenance['fixture']['cases']} casos nativos; "
                 f"hash {transfer_provenance['fixture']['sha256']}"
             )
+            print(f"OK: V1-COAL-TRANSFER-INCOME {income_provenance['fixture']['cases']} pagos nativos")
         elif args.write:
             FIXTURE.write_text(table, encoding="utf-8")
             PROVENANCE.write_text(json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -481,14 +501,20 @@ def main(argv: list[str] | None = None) -> int:
             TRANSFER_PROVENANCE.write_text(
                 json.dumps(transfer_provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"
             )
+            TRANSFER_INCOME_FIXTURE.write_text(income_sweep, encoding="utf-8")
+            TRANSFER_INCOME_PROVENANCE.write_text(
+                json.dumps(income_provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
             print(
                 "Escritos "
                 f"{FIXTURE.relative_to(ROOT)}, {PROVENANCE.relative_to(ROOT)}, "
-                f"{TRANSFER_FIXTURE.relative_to(ROOT)} y {TRANSFER_PROVENANCE.relative_to(ROOT)}"
+                f"{TRANSFER_FIXTURE.relative_to(ROOT)}, {TRANSFER_PROVENANCE.relative_to(ROOT)}, "
+                f"{TRANSFER_INCOME_FIXTURE.relative_to(ROOT)} y {TRANSFER_INCOME_PROVENANCE.relative_to(ROOT)}"
             )
         else:
             print(table, end="")
             print(trace, end="")
+            print(income_sweep, end="")
     except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"FAIL V1-PAY: {exc}", file=sys.stderr)
         return 1

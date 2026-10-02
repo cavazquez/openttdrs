@@ -1,8 +1,8 @@
 //! Funciones de rendering: dirección y posición sub-tesela para sprites.
 
 use super::bay::{
-    bay_direction_at_frame_side, bay_render_direction, bay_subtile, bay_subtile_at_frame_side,
-    direction_from_subtile_delta, parked_inside_bay,
+    bay_direction_at_frame_side, bay_drive_entry_side, bay_render_direction, bay_subtile,
+    bay_subtile_at_frame_side, direction_from_subtile_delta, parked_inside_bay,
 };
 use super::curves::{
     depart_u_turn_curve, sample_curve, straight_subtile, train_straight_subtile, turn_curve,
@@ -348,13 +348,17 @@ const fn is_road_kind(kind: VehicleKind) -> bool {
 
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn road_frame_subtile(v: &Vehicle, frame_f: f32, drive_on_right: bool) -> Option<(f32, f32)> {
-    if is_bay_road_state(v.road_state) {
-        return bay_subtile_at_frame_side(v.road_state, frame_f, drive_on_right);
-    }
-    let state =
-        drive_state_with_overtake_and_side(v.road_state, v.overtaking, drive_on_right) & 0x1F;
-    if let Some((position, _)) = ordinary_road_render_sample(v, state, frame_f) {
+    let bay = is_bay_road_state(v.road_state);
+    let state = if bay {
+        v.road_state
+    } else {
+        drive_state_with_overtake_and_side(v.road_state, v.overtaking, drive_on_right) & 0x1F
+    };
+    if let Some((position, _)) = road_table_render_sample(v, state, frame_f, drive_on_right) {
         return Some(position);
+    }
+    if bay {
+        return bay_subtile_at_frame_side(v.road_state, frame_f, drive_on_right);
     }
     let frame_f = frame_f.max(0.0);
     let index = frame_f.floor().min(f32::from(u8::MAX)) as u8;
@@ -377,13 +381,17 @@ fn road_frame_direction(
     frame_f: f32,
     drive_on_right: bool,
 ) -> Option<VehicleDirection> {
-    if is_bay_road_state(v.road_state) {
-        return bay_direction_at_frame_side(v.road_state, frame_f, drive_on_right);
-    }
-    let state =
-        drive_state_with_overtake_and_side(v.road_state, v.overtaking, drive_on_right) & 0x1F;
-    if let Some((_, direction)) = ordinary_road_render_sample(v, state, frame_f) {
+    let bay = is_bay_road_state(v.road_state);
+    let state = if bay {
+        v.road_state
+    } else {
+        drive_state_with_overtake_and_side(v.road_state, v.overtaking, drive_on_right) & 0x1F
+    };
+    if let Some((_, direction)) = road_table_render_sample(v, state, frame_f, drive_on_right) {
         return Some(direction);
+    }
+    if bay {
+        return bay_direction_at_frame_side(v.road_state, frame_f, drive_on_right);
     }
     let index = frame_f.floor().clamp(0.0, f32::from(u8::MAX)) as u8;
     let here = normal_road_point(state, index)?;
@@ -400,27 +408,33 @@ fn road_frame_direction(
     direction_from_subtile_delta(here.0 - previous.0, here.1 - previous.1)
 }
 
-/// Predict ordinary road movement from the authoritative heading. A turn
+/// Predict road/bay table movement from the authoritative heading. A turn
 /// consumes one controller step while keeping its position/frame unchanged;
 /// its new heading also changes the cost of the following step.
 #[allow(clippy::cast_precision_loss)]
-fn ordinary_road_render_sample(
+fn road_table_render_sample(
     v: &Vehicle,
     state: u8,
     frame_f: f32,
+    drive_on_right: bool,
 ) -> Option<((f32, f32), VehicleDirection)> {
-    if !v.road_pos_valid || state & 7 >= 6 {
+    if !v.road_pos_valid || (!is_bay_road_state(state) && state & 7 >= 6) {
         return None;
     }
     let mut frame = v.frame;
-    let mut position = normal_road_point(state, frame)?;
+    let mut position = road_table_point(state, frame, drive_on_right)?;
     let mut direction = v.direction;
     let mut budget = (frame_f - f32::from(frame)).max(0.0)
+        * crate::engine::get_advance_distance(direction) as f32;
+    // Adding a normalized budget to a large table frame loses a few low
+    // bits. Keep exact controller boundaries within that representation error.
+    let budget_error = frame_f.abs().max(1.0)
+        * f32::EPSILON
         * crate::engine::get_advance_distance(direction) as f32;
     loop {
         let Some(next) = frame
             .checked_add(1)
-            .and_then(|index| normal_road_point(state, index))
+            .and_then(|index| road_table_point(state, index, drive_on_right))
         else {
             return Some((position, direction));
         };
@@ -433,7 +447,7 @@ fn ordinary_road_render_sample(
             next.1 as i32,
         );
         let cost = crate::engine::get_advance_distance(direction) as f32;
-        if budget < cost {
+        if budget + budget_error < cost {
             if new_direction == direction {
                 let fraction = budget / cost;
                 position = (
@@ -443,7 +457,7 @@ fn ordinary_road_render_sample(
             }
             return Some((position, direction));
         }
-        budget -= cost;
+        budget = (budget - cost).max(0.0);
         if new_direction == direction {
             frame = frame.saturating_add(1);
             position = next;
@@ -451,6 +465,17 @@ fn ordinary_road_render_sample(
             direction = new_direction;
         }
     }
+}
+
+fn road_table_point(state: u8, frame: u8, drive_on_right: bool) -> Option<(f32, f32)> {
+    if !is_bay_road_state(state) {
+        return normal_road_point(state, frame);
+    }
+    let entry = bay_drive_entry_side(state, frame, drive_on_right)?;
+    if entry.is_next_tile() || entry.is_turned() {
+        return None;
+    }
+    Some((f32::from(entry.x), f32::from(entry.y)))
 }
 
 fn normal_road_point(state: u8, frame: u8) -> Option<(f32, f32)> {

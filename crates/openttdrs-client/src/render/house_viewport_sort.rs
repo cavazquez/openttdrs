@@ -1838,7 +1838,9 @@ pub(crate) fn sort_viewport_sortable_parents(
     // también al quedar uno (o ninguno) evita que un child de un chunk
     // descargado conserve el límite de una escena anterior.
     child_depth_windows.next_parent_depth.clear();
-    if input.is_empty() {
+    // A source represented entirely by local draw-band proxies has no global
+    // slot, but still contributes visible sprites to each native band.
+    if input.is_empty() && segment_proxy_candidates.is_empty() {
         for proxy_entity in existing_segment_proxies.into_values() {
             if let Ok((_, _, _, mut visibility, _, _, _, _)) = segment_proxies.get_mut(proxy_entity)
             {
@@ -2143,6 +2145,87 @@ mod tests {
             }),
         ));
         world
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn standalone_segmented_parent_keeps_all_visible_draw_bands() {
+        let mut world = viewport_scope_test_world(128, 128);
+        let sprite = Sprite {
+            custom_size: Some(Vec2::new(100.0, 300.0)),
+            rect: Some(Rect::from_corners(Vec2::ZERO, Vec2::new(100.0, 300.0))),
+            ..Default::default()
+        };
+        let transform = Transform::from_xyz(0.0, 0.0, 2.0);
+        let source = world
+            .spawn((
+                ViewportSortableParent {
+                    sprite_id: 5473,
+                    bounds: ParentSpriteBounds::new(0, 0, 0, 15, 15, 31),
+                    insertion_key: viewport_insertion_key(5, 5, 0),
+                    source_depth: 2.0,
+                },
+                ViewportSortableSegmentedSource {
+                    sprite: sprite.clone(),
+                    transform,
+                },
+                sprite,
+                transform,
+                Anchor::CENTER,
+            ))
+            .id();
+        let mut schedule = Schedule::default();
+        schedule.add_systems(sort_viewport_sortable_parents);
+        schedule.run(&mut world);
+        schedule.run(&mut world);
+        let mut proxies = world.query_filtered::<(
+            &ViewportSortableSegmentProxy,
+            &Sprite,
+            &Anchor,
+            &Transform,
+            &Visibility,
+        ), With<ViewportSortableSegmentProxy>>();
+        let mut window = world.query::<&Window>();
+        let window = window.single(&world).unwrap();
+        let scope = DiagonalViewportSortScope::from_camera(
+            Vec2::ZERO,
+            1.0,
+            window.width(),
+            window.height(),
+        );
+        let source_bounds = SpriteScreenBounds {
+            left: -50.0,
+            right: 50.0,
+            bottom: -150.0,
+            top: 150.0,
+        };
+        let expected_bands = scope.visible_sprite_bands(source_bounds);
+        let mut actual_bands: Vec<_> = proxies.iter(&world).map(|(proxy, ..)| proxy.band).collect();
+        actual_bands.sort_unstable();
+        assert_eq!(actual_bands, expected_bands);
+        assert_eq!(world.get::<Visibility>(source), Some(&Visibility::Hidden));
+        let mut covered_rows = [0_u8; 300];
+        for (proxy, sprite, anchor, transform, visibility) in proxies.iter(&world) {
+            assert_eq!(proxy.source_child, source);
+            assert_eq!(*visibility, Visibility::Inherited);
+            let bounds = sprite_screen_bounds(sprite, anchor, transform, None, None).unwrap();
+            assert_eq!(bounds.left, source_bounds.left);
+            assert_eq!(bounds.right, source_bounds.right);
+            for (row, count) in covered_rows.iter_mut().enumerate() {
+                let center = source_bounds.bottom + row as f32 + 0.5;
+                *count += u8::from(bounds.bottom <= center && center < bounds.top);
+            }
+        }
+        assert_eq!(covered_rows, [1; 300], "each source row must draw once");
+
+        let mut cameras = world.query_filtered::<&mut Transform, With<PrimaryGameCamera>>();
+        cameras.single_mut(&mut world).unwrap().translation.x = 3_000.0;
+        schedule.run(&mut world);
+        assert_eq!(proxies.iter(&world).count(), 0);
+        cameras.single_mut(&mut world).unwrap().translation.x = 0.0;
+        schedule.run(&mut world);
+        schedule.run(&mut world);
+        assert_eq!(proxies.iter(&world).count(), expected_bands.len());
     }
 
     #[test]

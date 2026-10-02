@@ -2775,3 +2775,60 @@ formato, tres self-tests del comparador, frescura de docs y diff sin errores.
 Se cierra sólo el sub-issue de flags de poses reutilizadas, con reparación y
 retiro diferido. F08/F18/F31 completos, fuente segmentada sin parents globales,
 empates f32, variaciones históricas, cadencia y 30 FPS siguen abiertos.
+
+## Etapa 37 — Conservar el único parent segmentado (F08/F18)
+
+Una fuente representada por proxies de bandas queda oculta en su entidad
+original y no ocupa un slot global. La salida temprana del sorter comprobaba
+sólo la lista global: si estaba vacía, descartaba también las bandas visibles.
+Ahora retorna únicamente cuando ambas listas están vacías. Conserva el sort
+local, sus profundidades, queries, desempates y retirada diferida existentes.
+
+La regresión ejecuta el sistema real con un único parent de 100×300 y ningún
+parent ordinario. Antes del cambio falla: recibe cero bandas en lugar de las
+seis esperadas. Después exige bandas 4–9, fuente original oculta y cada una
+de las 300 filas cubierta exactamente una vez. Mover la cámara fuera de la
+fuente retira todos los proxies; volver recrea las seis bandas. Pasan las
+28 regresiones de viewport. El fallo anterior y las fuentes antes/después
+quedan conservados en target/performance/standalone-segmented-parent-20261001.
+
+Oracle nativo: se extraen sin editar las funciones AddSortableSpriteToDraw,
+ViewportSortParentSprites y ViewportDrawParentSprites del viewport.cpp
+prístino de OpenTTD 14ec60f248547d4d062a1160f0fc26d742319888. La sonda C++
+usa esas funciones con un sprite opaco de 100×300, origen cero y 15 bandas
+de una ventana 1280×720. Produce un parent y una llamada de dibujo en cada
+banda 4–9, cubriendo cada fila una vez. El manifiesto conserva el hash de
+fuente y de las tres funciones; compila con Clang C++20, warnings como errores.
+El dibujante es un stub que registra rectángulos opacos: valida preservación
+del parent y geometría de bandas, sin certificar texturas, transparencia,
+SpriteCombine ni composición GPU nativa.
+[Salida de las 15 bandas](evidence/standalone-segmented-parent-native-bands-20261001.csv).
+
+GPU real, Kale congelada en tick 3703074, centro 128,128, 1280×720,
+clean=0, settle=180 y sin colector en ambas versiones: los doce PNG de los
+seis zooms son exactos, con cero píxeles/bloques 4×4 distintos y streams
+completos de sort idénticos bajo renombrado biyectivo de identidades.
+In2x/Out2x conservan todas las entradas ordenadas y referencias, bytes CPU
+de 272/384 imágenes y ambas máscaras. No se modifica tolerancia ni se acepta
+reordenar entradas por igualdad de multiconjuntos. Las trazas gzip se verifican
+antes de archivar; los bytes de imágenes se verifican antes de deduplicar.
+Esta matriz comprueba conservación de Kale, donde ya existen otros parents;
+la regresión aislada y la sonda nativa cubren el caso corregido.
+[Seis parejas](evidence/standalone-segmented-parent-raster-20261001.csv).
+
+Control inmutable de la etapa 36: d1c5847e. Candidato:
+01066a4ddc27fff00d95ff51eac96c0b0464e013047d5889944cb67013475d47,
+conservado mediante enlace a /tmp junto a las fuentes exactas. Cargo confirma
+fresh la misma biblioteca core real del cliente 09d42185. Release incremental
+53,03 s total / unidad cliente 52,87, dependencias frescas, reporte HTML y
+JSON preservados. No hay desglose frontend/codegen/link ni mejora de
+compilación atribuida. Esta etapa corrige una desaparición; no mide ni
+atribuye ganancia de FPS.
+
+Validación: 3.035 tests core/seis ignorados y 1.677 del cliente/dos ignorados;
+28 regresiones de viewport, Clippy en todos los targets de ambos crates,
+formato, tres self-tests del comparador, frescura de docs y diff sin errores.
+
+Se cierra únicamente el sub-issue del parent segmentado aislado y su salida
+vacía. F08/F18/F31 completos, empates f32, variaciones históricas,
+paridad nativa general, cadencia y 30 FPS siguen abiertos.

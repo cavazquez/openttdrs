@@ -406,9 +406,12 @@ Fuentes: [Rust: `render/house_viewport_sort.rs`, L1241](https://github.com/cavaz
 La [etapa 36](performance-implementation.md#etapa-36--no-invalidar-poses-estables-de-proxies-f18f31)
 evita invalidaciones falsas de pose/ancla/visibilidad y conserva reparación y
 borrado diferido. Seis zooms y entradas completas coinciden; las dos tandas de
-tiempos no acreditan ganancia clara de FPS. Queda pendiente el caso reproducible
-de fuentes segmentadas sin parents globales: la salida temprana descarta
-candidates locales visibles. No se cierra F18 ni el contrato nativo completo.
+tiempos no acreditan ganancia clara de FPS. La
+[etapa 37](performance-implementation.md#etapa-37--conservar-el-único-parent-segmentado-f08f18)
+corrige la desaparición de una fuente segmentada sin parents globales:
+regresión de seis bandas, sonda geométrica con las funciones nativas y
+conservación de Kale en seis zooms. No se cierra F18 ni el contrato nativo
+completo; las escrituras de Sprite reutilizado siguen pendientes.
 
 ### F19 — El guardado bloquea UI y codifica dos veces el JSON
 

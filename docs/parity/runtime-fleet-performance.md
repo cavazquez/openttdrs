@@ -169,8 +169,13 @@ sus bits no cambian y conserva ocultación previa al borrado diferido. Seis
 zooms y entradas/bytes/máscaras In2x/Out2x son exactos. Dos tandas ABBA no
 acreditan mejora clara de FPS ni reducción uniforme de PostUpdate; se retiene
 la reducción de invalidaciones cubierta por la regresión. Las cifras y el
-run desplazado de la primera tanda se conservan en la etapa 36. El siguiente
-sub-issue es la escena de fuentes segmentadas sin parents globales.
+run desplazado de la primera tanda se conservan en la etapa 36.
+
+La etapa 37 corrige la desaparición de una fuente segmentada sin parents
+globales. La regresión exige las seis bandas y cada fila una sola vez; una
+sonda de las funciones nativas confirma ese contrato geométrico. Kale
+conserva los seis zooms, entradas, bytes y máscaras capturados. No se mide
+una ganancia de FPS en esta corrección; continúan las cifras de la etapa 36.
 
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y

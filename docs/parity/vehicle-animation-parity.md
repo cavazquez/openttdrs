@@ -3,6 +3,9 @@
 Actualizado: 2026-10-02. Trabajo de FPS pausado por indicación del usuario.
 Referencia nativa: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.
+Las escalas citadas de las capturas/CSV son ortográficas: `0.25/0.50/1/2/4/8`
+corresponden a magnificación visible `4×/2×/1×/0.50×/0.25×/0.125×`.
+La petición ortográfica `0.125` se limita a `0.25`.
 
 ## #329-CB160-FA-LIFETIME — ciclo y sprites de humo avanzado
 
@@ -127,6 +130,62 @@ ambas escalas. Este diagnóstico omite identidades/orden y no certifica sus
 relaciones completas ni raster nativo. Sigue abierta la variación de aliases
 del compositor observada antes de esta etapa. Evidencia privada en
 `target/parity/road-vehicle-turn-direction-20261002/`.
+
+## #326-TRAIN-HEAD-IN-TILE-PIXELS — posición en piezas de vía
+
+La comparación nativa reproduce dos errores de presentación. La función de
+geometría escalaba el avance físico al último píxel del borde: incluso en
+recta, edad de píxel 0 y remanente 48/192, entregaba `14.765625` en vez de
+`14.75`. En las piezas cortas de ocho posiciones, ese mismo ajuste comprimía
+el recorrido todavía más. Además, la pose dividía el remanente por el coste
+del siguiente tramo lógico en vez del rumbo físico actual; una diagonal corta
+usa coste 256, frente a 192 de un tramo de un solo eje.
+
+La geometría aplica ahora un píxel por eje activo para cada paso físico y
+conserva su fracción. La pose y su avance fraccional consultan el rumbo físico.
+El sentinel legacy `255` conserva la consulta al último punto del borde.
+No cambia el controlador, la ruta ni el tick de simulación.
+
+`oracle_train_subtile_motion.py` extrae de la referencia fijada la tabla
+`_initial_tile_subcoord`, `GetNewVehiclePos` y `GetAdvanceDistance` sin
+modificaciones. Adapta el almacenamiento y la consulta de tesela; interpola
+continuamente entre dos posiciones nativas como presentación del port. Sus
+512 muestras cubren las doce entradas válidas a las seis piezas, todos sus
+píxeles y remanentes 0, 1/4, 1/2 y 3/4 de paso. La regresión construye el mapa
+y la ruta, consulta pose, posición y orientación por la vía real del renderer
+del core y exige rumbo exacto y tolerancia de `0.0001` píxel de mundo.
+
+Esto certifica la cabeza dentro de la pieza, con los remanentes indicados.
+No ejecuta el renderer nativo ni certifica importación, saltos de tesela,
+aceleración, separación/coste de followers o un recorrido completo. La
+extrapolación que cruza una pieza corta sigue requiriendo el criterio correcto
+de ocho pasos y la reconstrucción de la pieza siguiente; no se cierra aquí.
+
+```bash
+python3 scripts/oracle_train_subtile_motion.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/train-subtile-motion-fresh --check
+cargo test -p openttdrs-core --test native_train_subtile_motion
+```
+
+Gates aprobados: oracle independiente (`--check`), regresión de 512 muestras,
+formato, Clippy estricto, 3.041 tests de core (6 ignorados), 1.700 de cliente
+(2 ignorados), frescura de docs y diff. **Cerrado el sub-issue de posición de cabeza dentro de la pieza**, con
+publicación de la etapa. Los [controles visuales](evidence/train-native-subtile-motion-control-raster-20261002.csv)
+conservan cámara en todas las escalas excepto el primer `0.25`, que permanece
+como intento no comparable. En `0.50`, `1`, `2`, `4` y `8` cambian
+0/111/172/133/33 píxeles (0/26/44/42/21 bloques 4×4). En `0.50`/`2` coinciden
+los 633 buffers CPU, cobertura y oclusión, pero las entradas y composición
+completas cambian con las posiciones corregidas; no se declaran iguales.
+El [diagnóstico de X/Y](evidence/train-native-subtile-motion-control-attribution-20261002.csv)
+encuentra cero cambios de posición en sprites estáticos con identidad raw
+compartida. `2` comparte las 43.209 entidades; `0.50` comparte 8.751/12.165,
+por lo que esa comparación sólo cubre el subconjunto indicado. No certifica
+aliases ni profundidades del compositor. La [repetición de `0.25`](evidence/train-native-subtile-motion-control-repeat-20261002.csv)
+conserva cámara, composición y PNG idénticos; el intento inicial no comparable
+permanece registrado.
+Evidencia privada en
+`target/parity/train-native-subtile-motion-20261002/`.
 
 ## Alcance pendiente
 

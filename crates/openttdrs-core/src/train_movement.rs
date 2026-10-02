@@ -348,9 +348,10 @@ pub const fn rail_track_sides(track_bit: u8) -> Option<(u8, u8)> {
 
 /// Sub-tesela continua sobre un track concreto.
 ///
-/// Replica `_vehicle_subcoord`: toma la coordenada/dirección exacta de entrada
-/// y avanza en línea recta hasta el borde. UPPER/LOWER/LEFT/RIGHT ya son
-/// diagonales cortas en coordenadas sub-tesela, no curvas Bézier.
+/// La entrada coincide con `_initial_tile_subcoord` nativa. El progreso de
+/// movimiento representa `(rail_pixel + remanente) / 16 * 255`, incluso en
+/// piezas cortas: cada incremento físico desplaza un píxel por eje activo.
+/// `255` conserva el sentinel de extremo usado por consultas legacy.
 #[must_use]
 pub fn train_subtile_on_track(enter_diag: u8, track_bit: u8, progress: f32) -> Option<(f32, f32)> {
     let track = rail_track_index(track_bit)?;
@@ -377,12 +378,15 @@ pub fn train_subtile_on_track(enter_diag: u8, track_bit: u8, progress: f32) -> O
     if steps == u8::MAX {
         return None;
     }
-    let x0 = f32::from(sub.x);
-    let y0 = f32::from(sub.y);
-    let x1 = f32::from(i16::from(sub.x) + dx * i16::from(steps));
-    let y1 = f32::from(i16::from(sub.y) + dy * i16::from(steps));
-    let t = (progress / 255.0).clamp(0.0, 1.0);
-    Some((x0 + (x1 - x0) * t, y0 + (y1 - y0) * t))
+    let pixels = if progress >= 255.0 {
+        f32::from(steps)
+    } else {
+        (progress / 255.0).max(0.0) * 16.0
+    };
+    Some((
+        f32::from(sub.x) + f32::from(dx) * pixels,
+        f32::from(sub.y) + f32::from(dy) * pixels,
+    ))
 }
 
 /// Sub-tesela continua eligiendo una pieza desde el lado de entrada.

@@ -29,7 +29,7 @@ impl VehiclePose {
             crate::engine::train_visual_progress_from_motion(
                 v.rail_pixel,
                 v.progress,
-                crate::engine::get_advance_distance(v.movement_direction()),
+                crate::engine::get_advance_distance(v.direction),
             )
         } else {
             f32::from(v.progress)
@@ -296,7 +296,7 @@ pub fn extrapolate_vehicle_pose(v: &Vehicle, alpha: f32) -> VehiclePose {
         }
         let physical_step =
             crate::engine::get_advance_speed(v.effective_speed()).saturating_mul(2) as f32;
-        let advance_distance = crate::engine::get_advance_distance(v.movement_direction()) as f32;
+        let advance_distance = crate::engine::get_advance_distance(v.direction) as f32;
         let delta = physical_step / advance_distance.max(1.0) * (255.0 / 16.0) * alpha;
         pose.progress_f += delta;
         let mut path_index = pose.path_index;

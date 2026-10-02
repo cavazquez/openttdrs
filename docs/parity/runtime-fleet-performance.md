@@ -253,6 +253,12 @@ el modo desactivado cambia ampliamente los tres zooms lejanos. Su alcance
 no incluye todas las reglas de la sesión interactiva. No hay nuevo benchmark
 de FPS; el siguiente paso vuelve al perfil de CPU de la flota activa.
 
+El perfil actual 51 registra 2188 muestras activas y 853 pausadas sin pérdidas.
+Se observan costes de máscaras, visibilidad, extracción y sorter; MCF aparece
+en otro thread. Sus 480 frames están instrumentados y no sustituyen las ABBA
+de FPS retenidas. El HUD oculto aún analiza la flota; será la siguiente tarea
+acotada antes de medir de nuevo sin perf.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

@@ -3926,3 +3926,43 @@ conserva y se corrige su delimitador. Se cierra sólo el selector y su control
 de regresión. F08/F31, importación, 30 FPS y jugabilidad siguen abiertos.
 La siguiente etapa vuelve al perfil de CPU de Kale activa con el cliente
 vigente, para elegir el siguiente coste medido del frame.
+
+## Etapa 51 — Perfil actual de CPU activa y pausada (F07/F24/F31)
+
+El cliente inmutable 50 (ac807968) se ejecuta con Kale, GPU real,
+1280×720 y escala 2, sin MAP_SHOT ni compilación concurrente. Cada run
+conserva 240 frames tras warmup 120. Perf cpu-clock:u, 199 Hz y DWARF 32768
+empieza sólo después del flush 60; se conserva el ACK del FIFO.
+Activo: 2188 samples, 7456,730 ms entre primera/última muestra, cero perdidos.
+Pausado: 853, 3023,791 ms, cero perdidos; tick fijo 3703074.
+Se conservan 480 frames y 50 filas de hojas IP:
+[frames instrumentados](evidence/current-client-residual-frames-20261002.csv),
+[CPU por hoja](evidence/current-client-residual-perf-20261002.csv).
+
+Activo incluye máscaras (3,43 % agregado por símbolo), query paralela de
+visibilidad (2,93 %), sort de parents (2,38 %) y extracción Mesh2d (2,06 %).
+Son porcentajes de CPU muestreada del proceso y sus threads, no del frame.
+Las pilas children siguen sin aportar callers fiables; se usa la IP sampleada.
+MCF también aparece, pero sus muestras están en TID 529917, distinto del
+principal 529899. No se infiere bloqueo del frame por esa presencia.
+El thread principal concentra 10,01 %; sus hojas incluyen movimientos de
+filas ECS, swap_remove y despawns. No se atribuyen todos a un único productor.
+
+Pausado: visibilidad paralela 6,57 %, sorter puro 2,23 %, máscaras 2,11 %,
+Mesh2d 2,11 % y VehicleOperationalSummary::analyze 1,99 %.
+El HUD técnico arranca oculto, pero update_tile_info_text no comprueba su
+visibilidad antes de construir la clave y analizar la flota. Es el siguiente
+coste acotado que se corregirá, conservando la actualización al mostrarlo.
+La presencia de layout UI tampoco cuantifica por sí sola una mejora posible.
+
+Frames bajo perf: media activa 41,5846 ms, p95 53,045, máximo 70,5977;
+216/240 superan 33,33 ms, ticks 3703193–3703432. Pausada 16,6802 ms,
+p95 17,3369, máximo 19,1261; cero excedidos. No son una ABBA sin perf,
+una mejora de FPS ni una resta que aísle el coste de simulación: cambian
+también movimiento, remap y estado de la partida.
+
+Logs, FIFO, fuentes del driver, trazas con PID/TID/IP, binario y hashes quedan
+en `target/performance/current-client-residual-20261002`. Fuentes del juego
+sin cambios; se reutilizan los gates 50 y se ejecutan docs/diff.
+Se cierra sólo la renovación de este perfil. F07/F24/F31, 30 FPS y
+jugabilidad siguen abiertos; continúa la corrección del trabajo del HUD oculto.

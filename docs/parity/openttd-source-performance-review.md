@@ -586,6 +586,12 @@ P3 · UI · Evidencia: **Fuente** · Alcance estimado: corto.
 
 **Cómo comprobarla:** Dinero, carga, feedback, selección, locale y zoom actualizados en el momento correcto. No reducir frecuencia de input para ahorrar un barrido de resumen.
 
+La [etapa 51](performance-implementation.md#etapa-51--perfil-actual-de-cpu-activa-y-pausada-f07f24f31)
+observa VehicleOperationalSummary::analyze en 1,99 % de la CPU muestreada
+pausada. El HUD técnico arranca oculto y aun así prepara su texto cada frame.
+Se corregirá primero ese trabajo, conservando el refresco inmediato al
+mostrarlo; el porcentaje no acredita una ganancia de FPS.
+
 Fuentes: [Rust: `display/mod.rs`, L328](https://github.com/cavazquez/openttdrs/blob/8994755781092e2e7a6baf463a2126d9125fbebb/crates/openttdrs-client/src/ui/hud/display/mod.rs#L328);
 [OpenTTD: `src/window.cpp`, L3237](https://github.com/OpenTTD/OpenTTD/blob/14ec60f248547d4d062a1160f0fc26d742319888/src/window.cpp#L3237).
 

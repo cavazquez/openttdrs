@@ -404,3 +404,10 @@ Out4x difiere en 319 píxeles/119 bloques; las cuatro repeticiones exactas
 no omiten ese fallo. La candidata se retira y sólo se conserva la regresión
 de generaciones y bajas expiradas. La producción sigue siendo 61;
 la variación Out4x debe aislarse antes de retomar esta optimización.
+
+La [etapa 64](performance-implementation.md#etapa-64--repetibilidad-congelada-out4x-f08f31)
+repite Out4x 8 veces con inputs/bins y 8 sin Main: PNG y sorter exactos
+en un único binario 61. Todos los inputs, 463 imágenes y máscaras coinciden
+en la tanda completa; bins idénticos con frames 180/181. No se reproduce
+ni se explica el fallo de 319 píxeles. Sigue retirada la caché de 63 y
+se investigará por regresión la falta de reintento de layouts tardíos.

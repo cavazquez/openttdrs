@@ -1,0 +1,8 @@
+sample,complete_inputs_equal,cpu_image_bytes_equal,cpu_images_compared,raw_mask_order_equal,mask_request_frame,mask_extracted_frame,sprites_different_rows,meshes_different_rows,cameras_different_rows
+2,True,True,463,True,180,181,0,0,0
+3,True,True,463,True,180,181,0,0,0
+4,True,True,463,True,180,181,0,0,0
+5,True,True,463,True,180,181,0,0,0
+6,True,True,463,True,180,181,0,0,0
+7,True,True,463,True,180,181,0,0,0
+8,True,True,463,True,180,181,0,0,0

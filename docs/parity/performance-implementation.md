@@ -4767,3 +4767,48 @@ y final quedan en target/performance/indexed-mask-source-links-20261002.
 Se cierra sólo la evaluación/retirada del lookup. La siguiente etapa aísla
 la variación congelada Out4x antes de volver a proponer la caché; F08/F18,
 los demás zooms y la jugabilidad permanecen abiertos.
+
+## Etapa 64 — Repetibilidad congelada Out4x (F08/F31)
+
+Se usa un único ejecutable readonly de producción 61, SHA
+3c46fd9b1140597d35bcde9c81042c0f1b77c22651fa78ddd56f524de22e1ba1,
+compatible con el prefijo de producción final de 63. Kale pausada, escala 4,
+centro 128,128, 1280×720, settle 180, CLEAN=0, reconstrucción completa.
+No hay cambio Rust ni se reinstala la caché retirada.
+
+Ocho capturas con inputs Main, texturas, cámaras, masks y bins AlphaMask2d
+coinciden en PNG 89e9e6aa, cobertura, oclusión y sorter. Las siete
+comparaciones frente a la primera son exactas en **todos los campos y
+listas**, tras renombrar únicamente identidades temporales preservando sus
+alias; no se ordenan arrays ni se omiten floats. Las **463 imágenes CPU**
+también coinciden por posición y bytes. Los hashes JSON raw difieren por
+identidades de assets, no por diferencias adicionales normalizadas.
+[Hashes](evidence/out4-repeatability-capture-hashes-20261002.csv)
+y [inputs completos](evidence/out4-repeatability-complete-input-comparison-20261002.csv).
+
+La traza de bins e instancias preparada es raw idéntica en los ocho casos,
+con input frame **180** y extracción **181**. Su ámbito es después de
+PrepareBindGroups; no es una lectura de comandos GPU ni prueba de su orden
+efectivo. El resultado se controla mediante ambas máscaras leídas de la GPU.
+
+Ocho capturas adicionales sin colector Main, con el mismo ejecutable,
+conservan PNG y stream completo frente a la primera instrumentada.
+[Control sin Main](evidence/out4-repeatability-untraced-comparison-20261002.csv).
+No se reproduce el estado 11b55400 ni los 319 píxeles de 60/63; **no se
+cierra ese fallo**. Esta tanda tampoco demuestra que el colector no pueda
+influir en otra configuración o que la candidata retirada lo haya causado.
+
+La lectura de fuente encuentra otra condición acotada: el redondeo nativo
+de posición consulta sólo Added<Sprite>. Si el layout falta en esa visita,
+continúa sin registrar un reintento. Es una hipótesis comprobable de carga
+tardía; todavía no se atribuyen a ella los 319 píxeles. La siguiente etapa
+debe reproducir esa omisión con una regresión antes de modificar el sistema.
+
+Drivers, capturas, bytes y trazas verificadas quedan en
+target/performance/out4-repeatability-20261002. Los JSON grandes se escriben
+en scratch propio y se comprimen verificando SHA antes de retirarlos; las
+texturas se preservan mediante comparación byte exacta y enlaces a copias
+readonly verificadas. Se reutilizan los gates Rust finales de 63, sin
+cambio de fuentes, y se ejecutan formato, docs y diff. Se cierra sólo esta
+tanda de repetibilidad. Compositor, lectura universal, FPS y jugabilidad
+continúan abiertos; no hay nuevo benchmark de rendimiento.

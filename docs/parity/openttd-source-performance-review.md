@@ -578,6 +578,12 @@ Out4x reconstruido difiere en 319 píxeles y las repeticiones no explican
 el fallo. Producción vuelve byte por byte a 61 y conserva una regresión
 de generaciones/bajas. No se publican esos FPS como mejora instalada.
 
+La [etapa 64](performance-implementation.md#etapa-64--repetibilidad-congelada-out4x-f08f31)
+conserva inputs, texturas, máscaras y bins en ocho repeticiones Out4x de
+61, más ocho controles sin Main exactos. No reproduce ni cierra los 319
+píxeles previos. Se debe probar la omisión de redondeo con layout tardío;
+no se presenta esa condición como causa demostrada de la imagen alterna.
+
 ### F19 — El guardado bloquea UI y codifica dos veces el JSON
 
 P2 · Persistencia · Evidencia: **Fuente** · Alcance estimado: medio.

@@ -45,7 +45,7 @@ struct VertexOutput {
 }
 ";
 
-fn read_buffer(device: &wgpu::Device, buffer: &wgpu::Buffer) -> Vec<u8> {
+pub(crate) fn read_buffer(device: &wgpu::Device, buffer: &wgpu::Buffer) -> Vec<u8> {
     let (tx, rx) = std::sync::mpsc::channel();
     buffer
         .slice(..)
@@ -194,6 +194,11 @@ fn draw(
     )
 }
 
+pub(crate) fn captured_clip_from_world() -> Mat4 {
+    Mat4::from_cols_array(&CLIP_FROM_VIEW.map(f32::from_bits))
+        * Mat4::from_cols_array(&WORLD_FROM_VIEW.map(f32::from_bits)).inverse()
+}
+
 fn main() {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::VULKAN,
@@ -249,8 +254,7 @@ fn main() {
         multiview_mask: None,
         cache: None,
     });
-    let matrix = Mat4::from_cols_array(&CLIP_FROM_VIEW.map(f32::from_bits))
-        * Mat4::from_cols_array(&WORLD_FROM_VIEW.map(f32::from_bits)).inverse();
+    let matrix = captured_clip_from_world();
     let parent = f32::from_bits(PARENT_BITS);
     let child = f32::from_bits(CHILD_BITS);
     assert!(parent < child);

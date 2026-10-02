@@ -1,0 +1,5 @@
+run,order,pixels,background,parent,glass_on_parent,glass_on_background
+1,parent_child,13728,9616,2096,68,1948
+1,child_parent,13728,9616,2164,0,1948
+2,parent_child,13728,9616,2096,68,1948
+2,child_parent,13728,9616,2164,0,1948

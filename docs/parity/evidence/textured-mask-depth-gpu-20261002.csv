@@ -1,0 +1,9 @@
+run,projection,order,pixels,ownership_differences_native,background,parent,glass,min_nonzero_depth_bits,max_nonzero_depth_bits
+1,captured,parent_child,13728,0,9616,2096,2016,1048597585,1048597585
+1,captured,child_parent,13728,68,9616,2164,1948,1048597585,1048597585
+1,zero_depth_offset,parent_child,13728,0,9616,2096,2016,975312349,975312397
+1,zero_depth_offset,child_parent,13728,0,9616,2096,2016,975312349,975312397
+2,captured,parent_child,13728,0,9616,2096,2016,1048597585,1048597585
+2,captured,child_parent,13728,68,9616,2164,1948,1048597585,1048597585
+2,zero_depth_offset,parent_child,13728,0,9616,2096,2016,975312349,975312397
+2,zero_depth_offset,child_parent,13728,0,9616,2096,2016,975312349,975312397

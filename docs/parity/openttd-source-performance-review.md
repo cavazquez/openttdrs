@@ -269,6 +269,13 @@ ambos almacenan 1048597585 y cambia el ganador al invertir el dibujo.
 Dos ejecuciones GPU y controles son exactos. Sólo cierra esa reproducción;
 no cambia el compositor ni atribuye aún los 204 píxeles o las otras variaciones.
 
+La [etapa 44](performance-implementation.md#etapa-44--solapamiento-texturado-contra-el-blitter-original-f08f31)
+incorpora los RGBA reales y ejecuta Draw original con etiquetas de propiedad.
+El orden inverso pierde 68 píxeles de vidrio en GPU, idénticos en dos runs;
+parent→child coincide con el blitter en los 13.728. El control sin offset
+separa Z, pero recortaría sprites negativos y no se instala. Falta una
+corrección de rango completo y el oracle de escena; F08 permanece abierto.
+
 ### F09 — Var 62 usa crashed para el bit de Hidden
 
 P2 · NewGRF · Evidencia: **Fuente** · Alcance estimado: medio.
@@ -667,6 +674,10 @@ La etapa 43 añade lectura real de color/profundidad para dos planos con
 la matriz capturada, confirmando el empate que antes sólo acreditaba CPU.
 Es una sonda aislada con controles; no un timer de todo el frame ni un oracle
 de raster/importación. El programa conserva las cifras de la etapa 41.
+
+La etapa 44 compara lecturas GPU texturadas con Draw original para una
+pareja capturada. No mide rendimiento del frame; conserva la producción
+y cifras 41 mientras descarta instalar el offset cero por su recorte de Z.
 
 ### F32 — Separar contratos facilita optimizar sin romper paridad
 

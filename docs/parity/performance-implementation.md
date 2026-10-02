@@ -3472,3 +3472,73 @@ Validación nueva: compilación de la sonda con warnings estrictos, rustfmt,
 dos ejecuciones GPU con controles/aserciones, tres self-tests del comparador,
 frescura de docs y diff. Los 3.035 core/1.682 cliente y 32 viewport de la
 versión retenida siguen siendo la evidencia previa, no un rerun de esta etapa.
+
+## Etapa 44 — Solapamiento texturado contra el blitter original (F08/F31)
+
+Se reconstruye la pareja de la etapa 43 con sus bytes RGBA reales: parent
+66×52 y el recorte 66×52 del child atlas 1258. Sus SHA256 son
+772b0a25c8400ecf9dd32e04c70ea699bd2030cb2bd3dee5839a4d3f24d3967f y
+db519d732823da6fb30f9b2c66b857d5342eadc9b5bada7ca066f8c029387f20.
+Hay 541/504 píxeles opacos; ambos alpha sólo contienen 0/255. Comparten
+17 píxeles opacos, que ocupan 68 píxeles con nearest a 2×. El child opaco
+tiene RGB 252/248/128, suficiente para el predicado rojo de la máscara.
+
+[probe_mask_pair_native.py](../../scripts/probe_mask_pair_native.py) extrae
+la función Draw completa y sin modificar de 8bpp_optimized.cpp prístino
+14ec60f248547d4d062a1160f0fc26d742319888. La función tiene 2.278 bytes y SHA256
+527ccdb519631f7df96f7d31cb59167b90c0cb1ab1c0dc29c0ba90668e37f2b3.
+El scaffold codifica los alpha binarios escalados en RLE y suministra tipos
+mínimos; no sustituye Draw. Dibuja parent Normal y child Transparent con
+una tabla artificial que etiqueta vidrio sobre parent/fondo. Se verifica
+cada uno de los 13.728 píxeles. Son etiquetas de propiedad, no la paleta
+nativa, el decoder de sprites ni un oracle SAV completo.
+
+El orden parent→child de ViewportDrawParentSprites conserva 68 etiquetas
+de vidrio sobre parent. El control child→parent las pierde. Dos ejecuciones
+C++ producen los mismos buffers y [cuatro filas nativas](evidence/textured-mask-depth-native-20261002.csv).
+
+[probe_textured_mask_pair.rs](../../scripts/probe_textured_mask_pair.rs)
+sube los RGBA reales como Rgba8UnormSrgb y usa nearest, máscara alpha 0,5,
+Depth32Float, GreaterEqual, escritura activada y MSAA 1. Conserva world XY/Z
+y la matriz capturada para Z; sustituye XY por un quad 132×104. Usa el recorte
+del atlas con UV 0..1, por lo que no certifica su transformación UV completa,
+frustum, vecinos, tonemapping ni color final del compositor.
+
+Con la matriz capturada, parent→child coincide con la propiedad nativa en
+todos los píxeles. Child→parent difiere exactamente en los 68 de solapamiento;
+ambos planos almacenan 1048597585. El control experimental con offset Z cero
+almacena 975312349..975312397 y conserva el ganador nativo en ambos órdenes.
+Dos ejecuciones GPU producen las mismas ocho copias de RGBA/profundidad y
+[ocho filas GPU](evidence/textured-mask-depth-gpu-20261002.csv). La sonda 43
+también se repite después de compartir su helper: sus doce lecturas siguen
+idénticas al CSV publicado. Hardware: RX 7600/RADV NAVI33, Vulkan/Mesa 26.0.8;
+otros backends quedan pendientes.
+
+El offset cero **no se instala** en la cámara. La misma captura contiene
+2.775 sprites de mapa con Z negativo; 203 tienen ViewVisibility e
+InheritedVisibility activos. Su rango visible es -97,56..902 y el conjunto
+de mapa -98,08..902; proxies y fuentes coinciden en estos recuentos.
+[Rango y SHA de la captura](evidence/textured-mask-depth-range-20261002.csv).
+Las flags visibles pertenecen a la traza ECS, no certifican cobertura de un
+píxel. Una proyección sin offset recortaría esos Z negativos. La corrección
+debe conservar el dominio original y validarse sobre la escena completa.
+
+Se cierra sólo el sub-issue de reproducir este solapamiento texturado contra
+Draw original y medir su dependencia del orden en GPU. No se atribuyen aún
+los 204 píxeles de Kale a esta pareja ni se corrige F08. Faltan el orden
+efectivo de la pasada, una corrección de rango completo, el oracle nativo de
+escena y seis zooms. Importación, cadencia y 30 FPS permanecen abiertos.
+
+Entradas, C++ generado, ejecutables, lecturas, logs y manifiesto con SHA/tamaños
+se conservan en `target/performance/textured-mask-depth-pair-20261002`.
+Los scripts reciben ese directorio; el GPU requiere ejecutar primero el
+oracle nativo. La compilación Rust usa las rlib de la etapa 43, cambiando el
+archivo de entrada a scripts/probe_textured_mask_pair.rs. Compila con
+-D warnings; ambos scripts Rust pasan rustfmt, Python compila y el C++ usa
+-Wall/-Wextra. Son herramientas aisladas, sin mejora de compilación del cliente.
+
+Validación: dos runs C++/GPU con aserciones por píxel y readbacks exactos,
+sonda 43 sin cambios de resultados, tres self-tests del comparador, formato,
+docs y diff. Core/cliente y el binario permanecen idénticos a la etapa 41;
+sus suites previas (3.035 core, 1.682 cliente, 32 viewport) no se presentan
+como reejecutadas. No hay nueva medición de FPS.

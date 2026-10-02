@@ -214,8 +214,11 @@ la evidencia del experimento no cuenta como optimización ni cierre.
 
 La etapa 43 lee un empate parent/child en el buffer GPU usando la matriz
 real capturada: cambiar el orden cambia negro/rojo. Los controles y dos runs
-coinciden; el compositor sigue igual. Falta el solapamiento texturado y el
-oracle nativo antes de corregirlo. No es una mejora de FPS ni cierre de F08.
+coinciden; el compositor sigue igual. La etapa 44 añade texturas y Draw
+original: invertir el orden pierde 68 píxeles del solapamiento real. El
+control que separa Z recortaría sprites negativos y no se instala. Falta la
+corrección de rango completo y el oracle de escena antes de validarla en
+seis zooms. Estas sondas no son mejoras de FPS ni cierres de F08.
 
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y

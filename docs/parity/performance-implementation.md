@@ -3144,3 +3144,123 @@ retirar cada archivo original. El tar de 1.001.250.840 bytes y manifiesto en
 
 Se cierra sólo el orden de retiro de proxies segmentados. F08/F18 completos,
 empates y variaciones históricas, paridad nativa, cadencia y 30 FPS siguen abiertos.
+
+
+## Etapa 41 — Conservar los grupos ordenados de children (F18/F31)
+
+El sistema reconstruía un HashMap y ordenaba todos los grupos de children
+cada frame, aunque parent/source_depth no cambiaran. Un Local conserva los
+índices por child y parent; sólo ordena los parents afectados por altas,
+cambios, bajas o promoción independiente. Sigue consultando todos los
+children y calculando cada profundidad contra el parent y ventana vivos:
+no conserva una pose antigua ni cambia intervalos, desempates o escrituras.
+El orden por source_depth::total_cmp y bits de Entity permanece idéntico.
+
+La regresión diferencial usa Query<Ref<_>> y RemovedComponents reales de
+Bevy: 64 children/16 parents y 97 fases con estabilidad, profundidades raw
+(incluidos signos de cero y NaN), reparenting, despawn/recreación, retirada y
+reposición del componente, y promoción. Compara todos los índices y grupos
+con un scan/ordenado completo, exige cero grupos reordenados en estabilidad
+y conserva las pruebas existentes de ventanas/parents y transformaciones.
+
+La primera caché no recuperaba mensajes expirados cuando el sistema InGame
+no se ejecutaba. Una sonda con el helper exacto y ECS real reproduce dos
+entradas cacheadas frente a una viva después de borrar y reemplazar con el
+mismo número de entidades. El candidato final comprueba la cantidad tras
+insertar altas y elimina IDs sin componente vivo si difiere. La regresión
+incluye dos actualizaciones omitidas, reemplazo con igual cantidad y baja
+sin reemplazo; la sonda y las 32 pruebas de viewport pasan. La sonda aislada
+compila en unos 0,47 s reutilizando Bevy ya compilado: es una ayuda para
+iterar ese helper, no una mejora de compilación del programa completo.
+Se conservan fuentes/logs del prototipo, fallo y reparación en
+`target/performance/viewport-child-groups-20261001`.
+
+Fuente nativa: ViewportSortParentSprites/ViewportDrawParentSprites del
+viewport.cpp prístino 14ec60f248547d4d062a1160f0fc26d742319888 mantienen
+el bloque parent/children. Se revalida el pin/hash y se reutiliza sólo el
+alcance geométrico de la sonda 37; esta etapa no añade un oracle C++ de
+callbacks, GPU ni importación. La caché Local es interna del port.
+
+Kale congelada, tick 3703074, centro 128,128, 1280×720, clean=0,
+settle=180 y colectores apagados: los doce PNG de seis zooms son exactos,
+cero píxeles/bloques 4×4 distintos, y streams completos de sort idénticos
+bajo renombrado biyectivo de entidades. In2x/Out2x conservan todas las
+entradas ordenadas/referencias, bytes de 272/384 imágenes CPU y ambas
+máscaras. Los gzip y bytes se verifican antes de deduplicar. Estos seis
+pares no resuelven las variaciones históricas ni certifican el lector SAV.
+[Seis parejas](evidence/viewport-child-groups-raster-20261001.csv).
+
+Dos tandas ABBA activas, GPU, escala 2, 40 muestras/run, colector básico y
+Main detail en ambas versiones; fijo warmup 120 y pan 30. Sin perf, trazas
+ni compilaciones concurrentes. Se conservan 640 muestras básicas y 640
+registros Main. Los valores siguientes son ms salvo FPS/TPS; p99 coincide
+con máximo con 40 muestras/run.
+
+Primera fija: frame 41,4742 / 41,4709 → 41,2161 / 41,1846;
+FPS 24,111 / 24,113 → 24,262 / 24,281; medianas 40,3916 / 41,0069 → 40,8537 / 40,959;
+p95 55,0193 / 54,7026 → 54,2264 / 54,4642; máximos/p99 57,496 / 59,0858 → 58,0067 / 56,8373;
+TPS 24,118 / 24,124 → 24,241 / 24,275. Ticks antes → después: 3703193..3703232 / 3703193..3703232 → 3703193..3703232 / 3703193..3703232.
+Frames >33,33 ms: 68/80 → 67/80.
+Medias combinadas: frame 41,4725 → 41,2003; children 0,7998 → 0,6771; sort 4,2103 → 4,2272; simulación 14,2738 → 14,2803; efectos 0,5249 → 0,5123; glass 2,5216 → 2,4718;
+Main/Update/PostUpdate: Main 39,1917 → 38,9445; Update 17,3869 → 17,1429; PostUpdate 6,8336 → 6,8342.
+[160 muestras](evidence/viewport-child-groups-steady-20261001.csv),
+[160 registros Main](evidence/viewport-child-groups-steady-phases-20261001.csv).
+
+Primera pan: frame 47,4785 / 46,6549 → 47,0338 / 49,7833;
+FPS 21,062 / 21,434 → 21,261 / 20,087; medianas 44,421 / 43,7206 → 43,9668 / 45,5922;
+p95 61,2604 / 60,0188 → 60,2076 / 76,8448; máximos/p99 129,9408 / 129,4817 → 132,8733 / 127,7951;
+TPS 22,044 / 22,456 → 22,305 / 20,928. Ticks antes → después: 3703103..3703142 / 3703103..3703142 → 3703103..3703142 / 3703103..3703142.
+Frames >33,33 ms: 79/80 → 79/80.
+Medias combinadas: frame 47,0667 → 48,4086; children 0,8053 → 0,6745; sort 4,0207 → 4,1288; simulación 14,9088 → 15,3138; efectos 0,526 → 0,5501; glass 2,444 → 2,5079;
+Main/Update/PostUpdate: Main 41,7124 → 42,8984; Update 17,9292 → 18,4246; PostUpdate 8,0766 → 8,345.
+[160 muestras](evidence/viewport-child-groups-pan-20261001.csv),
+[160 registros Main](evidence/viewport-child-groups-pan-phases-20261001.csv).
+
+Repetición fija: frame 41,424 / 41,4924 → 41,0653 / 41,178;
+FPS 24,141 / 24,101 → 24,351 / 24,285; medianas 40,7081 / 40,7986 → 40,5782 / 40,9558;
+p95 54,9619 / 54,5874 → 54,8019 / 55,188; máximos/p99 57,893 / 57,6978 → 57,0188 / 58,191;
+TPS 24,13 / 24,075 → 24,337 / 24,284. Ticks antes → después: 3703193..3703232 / 3703193..3703232 → 3703193..3703232 / 3703193..3703232.
+Frames >33,33 ms: 69/80 → 67/80.
+Medias combinadas: frame 41,4582 → 41,1217; children 0,7889 → 0,6627; sort 4,152 → 4,1981; simulación 14,3417 → 14,2635; efectos 0,5279 → 0,535; glass 2,4655 → 2,4498;
+Main/Update/PostUpdate: Main 39,176 → 38,8681; Update 17,248 → 17,0712; PostUpdate 6,8937 → 6,8218.
+[160 muestras](evidence/viewport-child-groups-repeat-steady-20261001.csv),
+[160 registros Main](evidence/viewport-child-groups-repeat-steady-phases-20261001.csv).
+
+Repetición pan: frame 46,7155 / 46,2724 → 46,6793 / 46,7357;
+FPS 21,406 / 21,611 → 21,423 / 21,397; medianas 43,7981 / 43,4618 → 43,1164 / 43,1755;
+p95 60,2539 / 59,9648 → 60,7943 / 59,9806; máximos/p99 126,6997 / 127,1697 → 131,6645 / 131,1749;
+TPS 22,389 / 22,625 → 22,472 / 22,436. Ticks antes → después: 3703103..3703142 / 3703104..3703143 → 3703103..3703142 / 3703103..3703142.
+Frames >33,33 ms: 77/80 → 79/80.
+Medias combinadas: frame 46,4939 → 46,7075; children 0,7782 → 0,6546; sort 4,0251 → 4,0499; simulación 14,7549 → 14,8985; efectos 0,553 → 0,533; glass 2,4065 → 2,4117;
+Main/Update/PostUpdate: Main 41,3526 → 41,3475; Update 17,8098 → 17,7174; PostUpdate 8,0175 → 7,9519.
+[160 muestras](evidence/viewport-child-groups-repeat-pan-20261001.csv),
+[160 registros Main](evidence/viewport-child-groups-repeat-pan-phases-20261001.csv).
+
+Children baja unos 0,12–0,13 ms (~15–16 %) en las cuatro comparaciones.
+Los frames fijos bajan sólo ~0,27–0,34 ms y siguen cerca de 24 FPS. Pan no
+mejora de forma consistente: la primera tanda contiene un after de 49,7833
+ms/p95 76,8448; la repetición también conserva medias y máximos peores.
+El segundo control pan repetido está desplazado un tick, sin afirmar que
+compara el mismo estado activo. No se descartan picos ni se atribuye toda
+la diferencia de frame a esta caché. Main/basic alinean frame/tick y los
+intervalos suman dentro de 0,001 ms; Main mide el ciclo actual y frame_ms
+el intervalo previo, por lo que restarlos por fila no mide GPU.
+
+Control b999a0b9f1641329fad963dc217ff01a519f7bd2f9ccabbe571e6c8a1b605e6a;
+candidato final 41d26421c0e79fbf55a43619726c3aef7d2362efe90499ffbaa57d1a1516039c.
+Fuentes y ejecutables inmutables preservados; el final es un archivo readonly
+en el directorio propio de trabajo. El prototipo 1d41297c se conserva y no
+es el candidato medido. Release final incremental 53,71 s total / unidad
+cliente 53,54; core real 6240adc8 fresh e idéntico. HTML/JSON preservados,
+sin nuevo replay de 61 fases, desglose frontend/codegen/link ni mejora de
+compilación atribuida.
+
+Validación: 3.035 core/seis ignorados (antes del guard final, core no cambia),
+1.682 cliente/dos ignorados con el guard final, 32 viewport, Clippy de ambos
+crates/todos los targets, formato, tres self-tests del comparador, frescura
+de docs y diff correctos. Se conservan los fallos iniciales de visibilidad
+del tipo y de la sonda de mensajes expirados antes de las correcciones.
+
+Se cierra sólo la reconstrucción/ordenado de grupos estables y su recuperación
+tras avisos expirados. F18/F31 completos, compositor F08, cadencia F07,
+paridad/importación nativa, 37 ticks/s y 30 FPS siguen abiertos.

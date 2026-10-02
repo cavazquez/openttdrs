@@ -199,6 +199,14 @@ real cubre las dos ramas y la repetición estable. Seis zooms y tres parejas
 Out2x conservan imágenes/entradas/máscaras exactas. No se mide FPS activo ni
 se da por resuelta la variación 39: permanecen las cifras y límites de la 39.
 
+La etapa 41 conserva los grupos ordenados de children y recupera bajas
+cuyos mensajes expiraron. Las regresiones diferenciales y seis zooms son
+exactos. Dos tandas bajan esa fase ~0,12–0,13 ms; la ganancia de frame fijo
+es pequeña y pan no mejora consistentemente. Continúa cerca de 24 FPS
+fijo / 21,4 pan. La
+[etapa 41](performance-implementation.md#etapa-41--conservar-los-grupos-ordenados-de-children-f18f31)
+conserva distribuciones, picos y ticks; el objetivo permanece abierto.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

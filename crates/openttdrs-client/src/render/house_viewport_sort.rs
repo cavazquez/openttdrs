@@ -2092,6 +2092,112 @@ pub(crate) fn sort_viewport_sortable_parents(
     }
 }
 
+/// Membership and native child insertion ranks are stable until a child is
+/// added, removed, reparented, or promoted. Parent poses/windows remain live.
+#[derive(Default)]
+pub(crate) struct ViewportChildGroups {
+    by_child: EntityHashMap<(Entity, f32)>,
+    by_parent: EntityHashMap<Vec<(Entity, f32)>>,
+    independent: EntityHashSet,
+    initialized: bool,
+}
+
+impl ViewportChildGroups {
+    fn remove_from_group(&mut self, entity: Entity, parent: Entity) {
+        if let Some(group) = self.by_parent.get_mut(&parent) {
+            group.retain(|&(child, _)| child != entity);
+            if group.is_empty() {
+                self.by_parent.remove(&parent);
+            }
+        }
+    }
+
+    fn refresh<'a>(
+        &mut self,
+        children: impl Iterator<Item = (Entity, Ref<'a, ViewportSortableChild>)>,
+        removed: impl Iterator<Item = Entity>,
+        independent: &EntityHashSet,
+        live_count: usize,
+        is_live: impl Fn(Entity) -> bool,
+    ) -> usize {
+        let mut dirty_parents = EntityHashSet::default();
+        for entity in removed {
+            if let Some((parent, _)) = self.by_child.remove(&entity) {
+                self.remove_from_group(entity, parent);
+                dirty_parents.insert(parent);
+            }
+        }
+        // Promotion changes are independent of the child component's change tick.
+        if self.independent != *independent {
+            let changed: Vec<_> = self
+                .independent
+                .symmetric_difference(independent)
+                .copied()
+                .collect();
+            for entity in changed {
+                if let Some(&(parent, depth)) = self.by_child.get(&entity) {
+                    self.remove_from_group(entity, parent);
+                    if !independent.contains(&entity) {
+                        self.by_parent
+                            .entry(parent)
+                            .or_default()
+                            .push((entity, depth));
+                    }
+                    dirty_parents.insert(parent);
+                }
+            }
+            self.independent.clone_from(independent);
+        }
+        for (entity, child) in children {
+            if self.initialized && !child.is_changed() {
+                continue;
+            }
+            if let Some((old_parent, _)) = self
+                .by_child
+                .insert(entity, (child.parent, child.source_depth))
+            {
+                self.remove_from_group(entity, old_parent);
+                dirty_parents.insert(old_parent);
+            }
+            if !independent.contains(&entity) {
+                self.by_parent
+                    .entry(child.parent)
+                    .or_default()
+                    .push((entity, child.source_depth));
+            }
+            dirty_parents.insert(child.parent);
+        }
+        // RemovedComponents messages can expire while InGame is not running.
+        // New additions are already in by_child, so even replacement by the
+        // same number of entities exposes a stale entry as a count mismatch.
+        if self.by_child.len() != live_count {
+            let stale: Vec<_> = self
+                .by_child
+                .keys()
+                .copied()
+                .filter(|&entity| !is_live(entity))
+                .collect();
+            for entity in stale {
+                if let Some((parent, _)) = self.by_child.remove(&entity) {
+                    self.remove_from_group(entity, parent);
+                    dirty_parents.insert(parent);
+                }
+            }
+        }
+        for parent in &dirty_parents {
+            if let Some(group) = self.by_parent.get_mut(parent) {
+                group.sort_unstable_by(|(left_entity, left_depth), (right_entity, right_depth)| {
+                    left_depth
+                        .total_cmp(right_depth)
+                        .then_with(|| left_entity.to_bits().cmp(&right_entity.to_bits()))
+                });
+            }
+        }
+        self.initialized = true;
+        dirty_parents.len()
+    }
+}
+
 /// Actualiza los children tras la animación de elevadores y el sort de padres.
 ///
 /// Cada conjunto de children ocupa el intervalo entre su parent y el siguiente
@@ -2102,35 +2208,25 @@ pub(crate) fn sync_viewport_sortable_children(
         (Entity, &ViewportSortableParent, &Transform),
         (With<ViewportSortableParent>, Without<ViewportSortableChild>),
     >,
-    children: Query<(Entity, &ViewportSortableChild), With<ViewportSortableChild>>,
+    children: Query<(Entity, Ref<ViewportSortableChild>), With<ViewportSortableChild>>,
     mut child_transforms: Query<&mut Transform, With<ViewportSortableChild>>,
     child_depth_windows: Res<ViewportSortableChildDepthWindows>,
+    mut removed: RemovedComponents<ViewportSortableChild>,
+    mut groups: Local<ViewportChildGroups>,
 ) {
     let _measurement = crate::performance::measure(crate::performance::Phase::Children);
-    let mut children_by_parent: EntityHashMap<Vec<(Entity, f32)>> = EntityHashMap::new();
-    for (entity, child) in &children {
-        if child_depth_windows.independent_children.contains(&entity) {
-            continue;
-        }
-        children_by_parent
-            .entry(child.parent)
-            .or_default()
-            .push((entity, child.source_depth));
-    }
-
-    for (parent_entity, children) in &mut children_by_parent {
+    groups.refresh(
+        children.iter(),
+        removed.read(),
+        &child_depth_windows.independent_children,
+        children.count(),
+        |entity| children.contains(entity),
+    );
+    for (parent_entity, children) in &groups.by_parent {
         let Ok((_, parent, parent_transform)) = parents.get(*parent_entity) else {
             continue;
         };
-
-        // `AddChildSpriteScreen` preserva la inserción de children. La
-        // profundidad de origen es el desempate estable que ya usaban los
-        // spawners; `Entity` sólo resuelve dos capas con la misma profundidad.
-        children.sort_unstable_by(|(left_entity, left_depth), (right_entity, right_depth)| {
-            left_depth
-                .total_cmp(right_depth)
-                .then_with(|| left_entity.to_bits().cmp(&right_entity.to_bits()))
-        });
+        // Ranks retain AddChildSpriteScreen order; only affected groups re-sort.
         let child_count = children.len();
         let next_parent_depth = child_depth_windows
             .next_parent_depth
@@ -3937,6 +4033,215 @@ mod tests {
                 50.0
             );
         }
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn cached_child_groups_match_full_scan_across_mutations() {
+        use bevy::ecs::system::SystemState;
+        use std::collections::BTreeMap;
+
+        let mut world = World::new();
+        let parents: Vec<_> = (0..16).map(|_| world.spawn_empty().id()).collect();
+        let mut entities: Vec<_> = (0..64)
+            .map(|id| {
+                world
+                    .spawn(ViewportSortableChild {
+                        parent: parents[id % parents.len()],
+                        source_depth: 1.0 + id as f32 / 1024.0,
+                    })
+                    .id()
+            })
+            .collect();
+        let mut params = SystemState::<(
+            Query<(Entity, Ref<ViewportSortableChild>)>,
+            RemovedComponents<ViewportSortableChild>,
+        )>::new(&mut world);
+        let mut cache = ViewportChildGroups::default();
+        let mut independent = EntityHashSet::default();
+        let mut parked = None;
+        for phase in 0..97 {
+            let slot = phase % entities.len();
+            let entity = entities[slot];
+            if phase > 0 {
+                match phase % 8 {
+                    0 => {}
+                    1 => {
+                        let depths = [
+                            0.0,
+                            -0.0,
+                            f32::from_bits(0x7fc0_0001),
+                            f32::from_bits(0xffc0_0002),
+                            1.000_05,
+                            1.000_15,
+                        ];
+                        world
+                            .get_mut::<ViewportSortableChild>(entity)
+                            .unwrap()
+                            .source_depth = depths[(phase / 8) % depths.len()];
+                    }
+                    2 => {
+                        world
+                            .get_mut::<ViewportSortableChild>(entity)
+                            .unwrap()
+                            .parent = if phase % 3 == 0 {
+                            Entity::PLACEHOLDER
+                        } else {
+                            parents[(phase / 8) % parents.len()]
+                        };
+                    }
+                    3 => {
+                        world.despawn(entity);
+                        entities[slot] = world
+                            .spawn(ViewportSortableChild {
+                                parent: parents[(phase / 8) % parents.len()],
+                                source_depth: phase as f32 / 100.0,
+                            })
+                            .id();
+                    }
+                    4 => {
+                        world.entity_mut(entity).remove::<ViewportSortableChild>();
+                        parked = Some(entity);
+                    }
+                    5 => {
+                        world
+                            .entity_mut(parked.take().unwrap())
+                            .insert(ViewportSortableChild {
+                                parent: parents[(phase / 8) % parents.len()],
+                                source_depth: 1.000_1,
+                            });
+                    }
+                    6 => {
+                        independent.insert(entity);
+                    }
+                    7 => {
+                        independent.clear();
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            {
+                let (query, mut removed) = params.get_mut(&mut world).unwrap();
+                let dirty = cache.refresh(
+                    query.iter(),
+                    removed.read(),
+                    &independent,
+                    query.count(),
+                    |entity| query.contains(entity),
+                );
+                if phase > 0 && phase % 8 == 0 {
+                    assert_eq!(dirty, 0, "stable frame must reuse every group");
+                }
+                let mut reference: EntityHashMap<Vec<(Entity, f32)>> = EntityHashMap::default();
+                let mut reference_children = BTreeMap::new();
+                for (entity, child) in &query {
+                    reference_children.insert(
+                        entity.to_bits(),
+                        (child.parent.to_bits(), child.source_depth.to_bits()),
+                    );
+                    if !independent.contains(&entity) {
+                        reference
+                            .entry(child.parent)
+                            .or_default()
+                            .push((entity, child.source_depth));
+                    }
+                }
+                for group in reference.values_mut() {
+                    group.sort_unstable_by(|(le, ld), (re, rd)| {
+                        ld.total_cmp(rd)
+                            .then_with(|| le.to_bits().cmp(&re.to_bits()))
+                    });
+                }
+                let canonical =
+                    |groups: &EntityHashMap<Vec<(Entity, f32)>>| -> BTreeMap<u64, Vec<(u64, u32)>> {
+                        groups
+                            .iter()
+                            .map(|(parent, group)| {
+                                (
+                                    parent.to_bits(),
+                                    group
+                                        .iter()
+                                        .map(|&(entity, depth)| (entity.to_bits(), depth.to_bits()))
+                                        .collect(),
+                                )
+                            })
+                            .collect()
+                    };
+                assert_eq!(
+                    canonical(&cache.by_parent),
+                    canonical(&reference),
+                    "phase {phase}"
+                );
+                let actual_children: BTreeMap<_, _> = cache
+                    .by_child
+                    .iter()
+                    .map(|(entity, &(parent, depth))| {
+                        (entity.to_bits(), (parent.to_bits(), depth.to_bits()))
+                    })
+                    .collect();
+                assert_eq!(
+                    actual_children, reference_children,
+                    "all cached source bits, phase {phase}"
+                );
+            }
+            params.apply(&mut world);
+            world.clear_trackers();
+        }
+        {
+            let (query, mut removed) = params.get_mut(&mut world).unwrap();
+            assert_eq!(
+                cache.refresh(
+                    query.iter(),
+                    removed.read(),
+                    &independent,
+                    query.count(),
+                    |entity| query.contains(entity)
+                ),
+                0
+            );
+        }
+        // Simulate a stopped render system: two updates expire removals before
+        // it resumes. Replacement keeps the live count unchanged.
+        let stale = entities[0];
+        world.despawn(stale);
+        world.clear_trackers();
+        world.clear_trackers();
+        let replacement = world
+            .spawn(ViewportSortableChild {
+                parent: parents[0],
+                source_depth: -0.0,
+            })
+            .id();
+        {
+            let (query, mut removed) = params.get_mut(&mut world).unwrap();
+            let removals: Vec<_> = removed.read().collect();
+            assert!(removals.is_empty(), "the removal message really expired");
+            cache.refresh(
+                query.iter(),
+                removals.into_iter(),
+                &independent,
+                query.count(),
+                |entity| query.contains(entity),
+            );
+            assert!(!cache.by_child.contains_key(&stale));
+            assert!(cache.by_child.contains_key(&replacement));
+            assert_eq!(cache.by_child.len(), query.count());
+        }
+        // Expiration with no replacement must also remove an entire last group.
+        world.despawn(replacement);
+        world.clear_trackers();
+        world.clear_trackers();
+        let (query, mut removed) = params.get_mut(&mut world).unwrap();
+        assert!(removed.read().next().is_none());
+        cache.refresh(
+            query.iter(),
+            std::iter::empty(),
+            &independent,
+            query.count(),
+            |entity| query.contains(entity),
+        );
+        assert!(!cache.by_child.contains_key(&replacement));
+        assert_eq!(cache.by_child.len(), query.count());
     }
 
     #[test]

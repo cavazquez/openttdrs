@@ -429,6 +429,12 @@ regresión del sistema falla antes y pasa en ambas ramas; seis zooms y tres
 parejas Out2x son exactos. No prueba la causa de la variación 39, no elimina
 los empates f32 ni acredita mejora de FPS. F08/F18 permanecen abiertos.
 
+La [etapa 41](performance-implementation.md#etapa-41--conservar-los-grupos-ordenados-de-children-f18f31)
+conserva grupos por parent y ordena sólo los afectados, recuperando bajas
+con mensajes expirados. Las regresiones diferenciales y seis zooms pasan;
+children baja ~0,12–0,13 ms. El frame fijo mejora poco y pan no mejora
+consistentemente: se conservan ambas tandas y sus picos. F18 sigue abierto.
+
 ### F19 — El guardado bloquea UI y codifica dos veces el JSON
 
 P2 · Persistencia · Evidencia: **Fuente** · Alcance estimado: medio.
@@ -635,6 +641,11 @@ La etapa 39 mide dos nuevas tandas ABBA con Main y registro básico alineados:
 efectos ~0,5 ms, Update ~17,3–17,9, PostUpdate ~6,9 fijo/8,1 pan, y
 ~24 FPS fijo/~21,4 pan. Conserva ticks desplazados y todos los picos. El
 lookup mejora Update; no explica aún todo el frame ni cumple 30 FPS.
+
+La etapa 41 repite dos tandas: ~24,3 FPS fijo y ~21,4 pan, children
+~0,66 ms, simulación ~14–15, Update ~17–18 y PostUpdate ~6,8/8,0.
+La reducción de children es consistente; el frame pan no lo es. Todos los
+runs, máximos y el control desplazado se conservan en la evidencia enlazada.
 
 ### F32 — Separar contratos facilita optimizar sin romper paridad
 

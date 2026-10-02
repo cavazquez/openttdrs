@@ -5048,3 +5048,99 @@ esta medición. F17/F31, variaciones raster y jugabilidad continúan abiertos.
 El siguiente ensayo retiene el suelo sólo cuando cambia la etapa de un
 campo vanilla, manteniendo el rebuild para cercas, terreno, conversión,
 comandos y dependencias NewGRF no cubiertas.
+
+## Etapa 68 — Retención de cultivos: tres variantes retiradas (F17/F31)
+
+Fecha 2026-10-02. Baseline publicado 92379db0 y ejecutable b48c9d05.
+La etapa 67 identificó rebuilds 16×16 por cambios exclusivos de cultivo.
+Se ensayó separar esos avisos, validar un suelo vanilla vivo y cambiar sólo
+su frame. Las variantes conservaban bytes de mapa, cercas, altura, entidad,
+Transform, prioridad de remap, otros avisos y fallback de NewGRF/fuentes
+incompatibles. El cliente receptor de red mantuvo el remap general.
+**Las tres variantes se retiran por fallar la GPU; nada de esta optimización
+queda en producción ni se acredita una mejora de FPS.**
+
+La primera variante agregaba el componente `FieldGround` en Table. Una
+regresión posterior falla: añadir la marca mueve la tabla del sprite de
+TableId(2) a TableId(3). SparseSet conserva tablas, filas y orden de la
+consulta densa en el caso aislado, pero no corrige el raster completo.
+La tercera variante acumula avisos y valida el sprite en RenderRefresh,
+quitando la consulta gráfica de FixedUpdate; tampoco supera el gate visual.
+Estas hipótesis no bastan para explicar todo el orden real de extracción.
+
+Se preservan **84 capturas nuevas**: tres variantes × siete escalas
+solicitadas × carga/reconstrucción × control/candidata. Hay seis zooms
+efectivos: 0,125× se limita a 0,25×. Cada variante coincide sólo en In4x;
+las cinco restantes fallan. En 0,50× las diferencias son **2448/357**,
+**2880/412** y **1320/147** píxeles/bloques 4×4. Normal: 1149/284,
+901/243 y 819/180; Out2x: 878/181, 947/212 y 1605/400; Out4x: 728/310,
+1300/464 y 703/294; Out8x: 258/129, 275/153 y 337/178. Ambas rutas de
+cada ejecutable conservan su PNG; las 28 comparaciones de controles seleccionadas coinciden
+exactamente entre las tres tandas. Esto no borra los fallos intermitentes
+Out4x/Out2x registrados en etapas anteriores.
+
+[Resumen de variantes](evidence/field-crop-retained-trial-summary-20261002.csv)
+y [todos los fallos raster](evidence/field-crop-retained-trial-raster-20261002.csv).
+Las trazas Main completas fallan: orden, aliases y posiciones de tablas de
+assets difieren. En los pares SparseSet/Queued de 0,50×, el multiset de todas
+las propiedades de sprites, meshes y cámaras —incluyendo Transform completo
+y metadatos enlazados, con identidad de imagen/layout por contenido— coincide.
+Los bytes y metadatos de las imágenes también conservan su multiset. **Es sólo
+diagnóstico**: no certifica aliases biyectivos, orden ni comandos GPU.
+La cobertura es idéntica en los pares capturados; la oclusión cambia. La
+precisión del depth y el desempate del compositor siguen como hipótesis
+prioritaria, no como causa íntegramente demostrada ni contrato cerrado.
+
+La prueba de invalidación del núcleo falla antes del ensayo y pasa en las
+candidatas. Su sonda ejecuta 200 ticks de Kale y conserva **41 muestras** del
+hash FNV persistido, RNG y LFSR cada cinco ticks. Reclasifica 338 de 398 avisos
+de paisaje; conserva 60 generales, 270 señales, 250 aeropuerto, 1568 reservas
+y 26 industriales. Se guardan las listas completas; unir de nuevo los avisos
+conserva el multiset sólo como diagnóstico, no su orden. La sonda no ejecuta
+VehicleIndex ni efectos del cliente y no certifica el runtime completo. Estos
+avisos nuevos pertenecen a las candidatas retiradas, **no al programa final**.
+[Hashes y RNG](evidence/field-crop-retained-core-state-20261002.csv),
+[notices originales](evidence/field-crop-retained-core-notices-20261002.csv).
+
+Se conserva únicamente una regresión del **selector de sprite de campo**.
+Ejecuta `DrawTile_Clear`, `SlopeToSpriteOffset` y las tablas originales
+extraídas sin modificar del pin 14ec60f2: **288 filas**, nueve etapas × 32
+valores de pendiente; comprueba un DrawGroundSprite y una llamada a cercas.
+DrawBridgeMiddle y el dibujo de cercas se stubbean. Este oracle no certifica
+decoder, paletas, geometría de puentes, raster SAV ni importación. Las dos
+primeras extracciones fallidas quedan preservadas; el resultado se reproduce
+independientemente con `--check`. Scripts: oracle_field_ground.py/.cpp y
+fixture native-field-ground.csv. El Draw 8bpp original del contrato de 44
+también conserva CSV y dos buffers de 13728 etiquetas, incluido el overlap
+de 68 píxeles; ese caso alpha binario a 2× no acredita raster SAV completo.
+
+Table pasa 3039 core/6 ignoradas y 1701 cliente/2; SparseSet y Queued,
+1702 cliente/2 con el mismo core. Clippy estrictos pasan. Releases medidas:
+**78,001 s** recompilando core/net/cliente, **53,634 s** y **53,081 s** con
+core fresco. No son cargas comparables para declarar una mejora de compilación.
+Binarios readonly: a339e737, 187279360 bytes; 45fa9633, 187278088; 59d86b32,
+187360240. Los dos últimos reutilizan core 0e156eaa de la primera candidata.
+No se ejecuta ABBA de FPS de ninguna variante que ya falló el gate visual.
+
+La retirada verifica las fuentes contra snapshots de la candidata antes de
+restaurar las nueve originales byte a byte; el archivo nuevo se elimina sólo
+tras comprobar su copia exacta. Después se reinserta el test del selector
+sobre el código original. El ejecutable activo se reemplaza con una copia
+regular verificada del control b48c9d05; los artefactos Cargo y snapshots de
+las candidatas permanecen intactos. Gates finales: **3037 core/6 ignoradas, 1698 cliente/2**, ambos Clippy
+estrictos, formato, docs y diff. Se conserva sólo el test nuevo del selector.
+Un primer test completo falló por cuota de temporales, sin cambiar código;
+al usar TMPDIR del proyecto pasa. Los caches core inactivos 1naf9npn5y34n,
+1qvn0fpkhtnub y 1a6s6v1fwrmmj se preservan por SHA, modo y mtime ns antes de
+retirar sólo esas rutas: 3710 archivos, 5556902089 bytes → 1919300879 bytes
+recuperables en 267 partes. No se retiró ningún cache activo ni evidencia.
+
+La evidencia privada, fuentes nativas, binarios, intentos fallidos,
+capturas y restauración quedan en target/performance/field-crop-retained-20261002.
+F17/F31, el compositor, cadencia y 30 FPS siguen abiertos. La siguiente etapa
+compara el depth del compositor con la regla nativa antes de retomar la
+retención de campos; un único zoom aprobado no certifica lectura ni render.
+
+Catorce CSV públicos conservan **5351 filas**; Native-field-ground
+aporta otras 288 en su fixture. La evidencia de candidatos retirados se
+etiqueta como tal en el resumen y el raster combinado.

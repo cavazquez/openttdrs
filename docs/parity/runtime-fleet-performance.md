@@ -332,6 +332,13 @@ children baja 17,7 % fijo /18,3 % pan. El frame observado queda ~24,89 FPS
 fijo /23,50 pan, con 69/80 y 77/80 fuera de presupuesto; dos runs desplazan
 un tick. La reducción de esa fase no acredita 30 FPS ni 37 ticks/s.
 
+La [etapa 68](performance-implementation.md#etapa-68--retención-de-cultivos-tres-variantes-retiradas-f17f31)
+ensaya y retira tres variantes de cultivos retenidos: el mapa/RNG muestreado
+permanece igual, pero cinco de seis zooms efectivos cambian el raster. Se
+preservan 84 capturas, fallos y el selector de 288 estados nativos. Producción
+y ejecutable activo vuelven al control aceptado; no se acredita una ganancia
+de FPS. Continúa el depth del compositor antes de retomar esa optimización.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

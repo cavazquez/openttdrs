@@ -495,6 +495,16 @@ ventana desplazada; no atribuye cada baja ni una ganancia de FPS. El siguiente
 ensayo conserva el suelo en cambios exclusivos de etapa, con rebuild para
 las demás dependencias. F17 general continúa abierto.
 
+La [etapa 68](performance-implementation.md#etapa-68--retención-de-cultivos-tres-variantes-retiradas-f17f31)
+retira tres variantes de suelo de campo retenido. In4x coincide, pero cinco
+zooms efectivos fallan; se preservan 84 capturas y el selector nativo de
+288 estados. SparseSet conserva tablas/filas en la regresión aislada, pero
+la GPU aún difiere, incluso difiriendo la consulta gráfica a RenderRefresh.
+Contenido y geometrías conservan su multiset diagnóstico en dos pares In2x;
+orden, aliases y oclusión siguen distintos. No se mide ni se acepta una
+mejora de FPS. El siguiente bloque examina precisión y desempate del depth
+con el oracle nativo. F17/F31 permanecen abiertos.
+
 ### F18 — El sort ya tiene caché y no es un Z plano
 
 P2 · Render · Evidencia: **Fuente** · Alcance estimado: medio.

@@ -4234,6 +4234,35 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::expect_used)] // Numeric fixture emitted by the pinned native oracle.
+    fn field_ground_states_match_unmodified_native_drawtile_clear() {
+        let fixture = include_str!("../../../tests/fixtures/native-field-ground.csv");
+        let mut count = 0;
+        for line in fixture.lines().skip(1) {
+            let values: Vec<u32> = line
+                .split(',')
+                .map(|value| value.parse().expect("native numeric column"))
+                .collect();
+            let [stage, slope, offset, sprite_id, fence_calls] = values[..] else {
+                panic!("native field row must have five columns");
+            };
+            assert_eq!(stage, count / 32);
+            assert_eq!(slope, count % 32);
+            assert_eq!(
+                u32::from(crate::iso::slope_sprite_offset(slope as u8)),
+                offset
+            );
+            assert_eq!(
+                field_ground_sprite_id(stage as usize, slope as u8),
+                sprite_id
+            );
+            assert_eq!(fence_calls, 1);
+            count += 1;
+        }
+        assert_eq!(count, 9 * 32);
+    }
+
+    #[test]
     fn clear_ground_selector_matches_openttd_drawtile_clear() {
         // DrawClearLandTile: base + density * 19 + SlopeToSpriteOffset.
         assert_eq!(clear_ground_sprite_id(CLEAR_GROUND_GRASS, 0, 0, 0, 0), 3924);

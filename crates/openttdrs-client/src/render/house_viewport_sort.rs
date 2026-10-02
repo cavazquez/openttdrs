@@ -2134,11 +2134,34 @@ pub(crate) fn sort_viewport_sortable_parents(
 pub(crate) struct ViewportChildGroups {
     by_child: EntityHashMap<(Entity, f32, Option<u8>)>,
     by_parent: EntityHashMap<Vec<(Entity, f32, Option<u8>)>>,
+    /// Dense ECS indices avoid a hash lookup for every child without metadata.
+    /// Keep the full entity so a reused index cannot inherit an old ordinal.
+    ordinal_entities: Vec<Option<Entity>>,
     independent: EntityHashSet,
     initialized: bool,
 }
 
 impl ViewportChildGroups {
+    fn has_cached_ordinal(&self, entity: Entity) -> bool {
+        self.ordinal_entities
+            .get(entity.index_u32() as usize)
+            .is_some_and(|&cached| cached == Some(entity))
+    }
+
+    fn set_cached_ordinal(&mut self, entity: Entity, present: bool) {
+        let index = entity.index_u32() as usize;
+        if present {
+            if self.ordinal_entities.len() <= index {
+                self.ordinal_entities.resize(index + 1, None);
+            }
+            self.ordinal_entities[index] = Some(entity);
+        } else if let Some(slot) = self.ordinal_entities.get_mut(index)
+            && *slot == Some(entity)
+        {
+            *slot = None;
+        }
+    }
+
     fn remove_from_group(&mut self, entity: Entity, parent: Entity) {
         if let Some(group) = self.by_parent.get_mut(&parent) {
             group.retain(|&(child, _, _)| child != entity);
@@ -2165,6 +2188,7 @@ impl ViewportChildGroups {
         let mut dirty_parents = EntityHashSet::default();
         for entity in removed {
             if let Some((parent, _, _)) = self.by_child.remove(&entity) {
+                self.set_cached_ordinal(entity, false);
                 self.remove_from_group(entity, parent);
                 dirty_parents.insert(parent);
             }
@@ -2192,17 +2216,14 @@ impl ViewportChildGroups {
         }
         for (entity, child, promotable) in children {
             let ordinal_changed = promotable.as_ref().map_or_else(
-                || {
-                    self.by_child
-                        .get(&entity)
-                        .is_some_and(|(_, _, ordinal)| ordinal.is_some())
-                },
+                || self.has_cached_ordinal(entity),
                 DetectChanges::is_changed,
             );
             if self.initialized && !child.is_changed() && !ordinal_changed {
                 continue;
             }
             let ordinal = promotable.map(|child| child.combine_ordinal);
+            self.set_cached_ordinal(entity, ordinal.is_some());
             if let Some((old_parent, _, _)) = self
                 .by_child
                 .insert(entity, (child.parent, child.source_depth, ordinal))
@@ -2231,6 +2252,7 @@ impl ViewportChildGroups {
                 .collect();
             for entity in stale {
                 if let Some((parent, _, _)) = self.by_child.remove(&entity) {
+                    self.set_cached_ordinal(entity, false);
                     self.remove_from_group(entity, parent);
                     dirty_parents.insert(parent);
                 }
@@ -4613,6 +4635,37 @@ mod tests {
         world.entity_mut(second).insert(metadata(3));
         assert_eq!(refresh(&mut world, &mut cache), 1);
         assert_eq!(order(&cache), vec![first, second]);
+
+        // An expired removal is repaired after additions. Clearing the old
+        // generation must not clear the replacement's ordinal presence.
+        let replacement = world
+            .despawn_no_free(second)
+            .expect("replacement generation");
+        world.clear_trackers();
+        world.clear_trackers();
+        world
+            .spawn_at(
+                replacement,
+                (
+                    ViewportSortableChild {
+                        parent,
+                        source_depth: 1.0,
+                    },
+                    metadata(0),
+                ),
+            )
+            .expect("spawn the same index with its new generation");
+        assert_eq!(replacement.index(), second.index());
+        assert_ne!(replacement, second);
+        assert_eq!(refresh(&mut world, &mut cache), 1);
+        assert_eq!(order(&cache), vec![replacement, first]);
+        assert!(!cache.by_child.contains_key(&second));
+        world
+            .entity_mut(replacement)
+            .remove::<ViewportSortablePromotableChild>();
+        assert_eq!(refresh(&mut world, &mut cache), 1);
+        assert_eq!(cache.by_child[&replacement].2, None);
+        assert_eq!(refresh(&mut world, &mut cache), 0);
     }
 
     #[test]

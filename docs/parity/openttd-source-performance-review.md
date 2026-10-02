@@ -556,6 +556,15 @@ cuesta ~0,23–0,26 ms adicionales en children; la ABBA da 23,93 FPS fijo y
 23,21 pan, con un tick de diferencia en la ventana fija. Ese coste y los
 contratos generales siguen abiertos; no se certifica lectura universal.
 
+La [etapa 61](performance-implementation.md#etapa-61--marca-generacional-del-ordinal-de-children-f18f31)
+reemplaza la consulta hash de presencia por una marca indexada que conserva
+la generación ECS. Cubre bajas expiradas, índice reutilizado y retiro del
+ordinal nuevo, sin cambiar query/comparator/Z. Los seis zooms y ambos modos
+coinciden antes/después en PNG y sorter; In2x/Out2x conservan todos los inputs,
+texturas y máscaras. Children baja 17,7 % fijo y 18,3 % en pan. El frame
+queda ~24,89/23,50 FPS con ventanas desplazadas en dos runs; no se atribuye
+toda la diferencia global a la marca. Los fallos generales permanecen abiertos.
+
 ### F19 — El guardado bloquea UI y codifica dos veces el JSON
 
 P2 · Persistencia · Evidencia: **Fuente** · Alcance estimado: medio.

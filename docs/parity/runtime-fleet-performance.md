@@ -325,6 +325,13 @@ children; ABBA ~23,93 FPS fijo /23,21 pan (72/80 y 78/80 fuera de presupuesto).
 La ventana fija candidata cubre un tick posterior. Se cierra sólo el orden
 cubierto y se continúa con su coste y los fallos visuales abiertos.
 
+La [etapa 61](performance-implementation.md#etapa-61--marca-generacional-del-ordinal-de-children-f18f31)
+retira el hash repetido de presencia del ordinal, preservando la generación
+y el orden nativo de 60. Seis zooms y ambos modos coinciden antes/después;
+children baja 17,7 % fijo /18,3 % pan. El frame observado queda ~24,89 FPS
+fijo /23,50 pan, con 69/80 y 77/80 fuera de presupuesto; dos runs desplazan
+un tick. La reducción de esa fase no acredita 30 FPS ni 37 ticks/s.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

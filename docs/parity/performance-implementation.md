@@ -4567,3 +4567,70 @@ target/performance/remaining-raster-input-order-20261002.
 Se cierra sólo el desempate de copas cubierto. La variación Out4x inicial,
 Out8x, composición/lectura universal, coste de children, 37 ticks/s,
 30 FPS por frame y jugabilidad completa siguen abiertos.
+
+## Etapa 61 — Marca generacional del ordinal de children (F18/F31)
+
+La etapa 60 conserva el orden nativo de las copas, pero children suma
+~0,23–0,26 ms. Cada child sin metadata consulta `by_child` por hash para
+averiguar si antes tenía ordinal. La candidata reemplaza únicamente esa
+consulta por una marca `Option<Entity>` indexada con `Entity::index_u32()`;
+la comparación de la entidad completa conserva la generación. Se actualiza
+al cambiar el metadata o retirar children, incluidas las bajas cuyo mensaje
+venció. Las limpiezas de una generación anterior no borran la marca del
+reemplazo. La query, sus filtros, el comparator y la aritmética Z de 60 se
+conservan. El vector crece hasta el mayor índice marcado y conserva esa
+capacidad; no se presenta como una reducción de memoria.
+
+La regresión de 60 se amplía con baja expirada, reutilización del mismo
+índice mediante `despawn_no_free`/`spawn_at`, y retiro del ordinal de la
+nueva generación. El primer intento suponía que el allocator normal
+reutilizaba el índice inmediatamente: falló al entregar otro, se conserva
+ese log y se usa la API explícita para ejercitar el contrato previsto.
+Pasan esa regresión, las 97 fases diferenciales de grupos, el par nativo
+con dos asignaciones, **3037 core/6 ignoradas** y **1693 cliente/2 ignoradas**,
+Clippy estricto de ambos, formato, docs y diff. El oracle original de árboles
+de 60 sigue siendo el contrato de emisión; no se modifica la regla nativa.
+
+Release aislada del cliente **54,094 s**, core fresco 754dc09a. Binario
+copiado readonly 187571408 bytes, SHA
+3c46fd9b1140597d35bcde9c81042c0f1b77c22651fa78ddd56f524de22e1ba1.
+No se atribuye una mejora de compilación a esta modificación.
+
+GPU real, Kale pausada, centro 128,128, 1280×720, settle 180, CLEAN=0:
+28 capturas nuevas comparan control/candidata y carga normal/reconstruida.
+En los seis niveles 0,25/0,5/1/2/4/8, **las 14 comparaciones antes/después
+son PNG exactos y streams completos idénticos**. La petición extra 0,125
+se limita a 0,25. Las cuatro comparaciones de inputs completos In2x/Out2x
+antes/después también son exactas, al igual que 265/368 imágenes CPU y
+ambas máscaras. Las copas 1614/1586 mantienen su Z creciente y (32,139)
+conserva (32,80,4) en las cuatro variantes.
+[Raster](evidence/cached-child-combine-ordinal-raster-20261002.csv),
+[inputs](evidence/cached-child-combine-ordinal-sprite-inputs-20261002.csv),
+[par de copas](evidence/cached-child-combine-ordinal-native-tree-children-20261002.csv).
+
+Las diferencias entre carga y reconstrucción siguen siendo otro contrato:
+In2x/Out2x conservan inputs Main distintos en ambas versiones; Out4x tiene
+stream distinto con PNG exacto, y Out8x conserva **27 píxeles/7 bloques** y
+stream distinto. La variación inicial Out4x de 60 no reaparece en estas
+cuatro capturas y permanece abierta en su registro. La equivalencia de esta
+optimización no certifica el compositor general ni la lectura universal.
+
+ABBA GPU activa, escala 2, warmup 120, 40 frames/run, básico y Main en
+ambas versiones, sin compilación/pruebas simultáneas: children **0,9485 →
+0,7803 ms** fijo (−17,7 %) y **1,0119 → 0,8270 ms** en pan (−18,3 %).
+Se conserva la reducción acotada de esa fase. El frame fijo **41,3380 →
+40,1733 ms** (24,191 → 24,892 FPS), **72/80 → 69/80** fuera del presupuesto;
+pan estabilizado **42,9619 → 42,5442 ms** (23,276 → 23,505 FPS), **76/80 →
+77/80**, máximos 63,849 → 62,259 ms. Una candidata fija y un control pan
+cubren un tick posterior; las otras seis corridas cubren 3703193–3703232.
+La simulación fija también baja 0,645 ms y no cambia en producción; no se
+atribuye toda la diferencia de frame a la marca ni se certifican picos de
+transición. [Frames fijos](evidence/cached-child-combine-ordinal-steady-20261002.csv)
+y [pan estabilizado](evidence/cached-child-combine-ordinal-pan-settled-20261002.csv).
+
+Fuentes, controles, drivers y resultados:
+target/performance/cached-child-combine-ordinal-20261002.
+Se cierra sólo la consulta hash repetida de presencia del ordinal. F18
+restante, fallos de composición, 37 ticks/s, 30 FPS por frame y jugabilidad
+completa siguen abiertos. La próxima etapa debe medir el coste residual
+del render antes de escoger otra modificación.

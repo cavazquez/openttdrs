@@ -1930,7 +1930,8 @@ impl super::model::Vehicle {
         if let Some(order) = self.current_order_ref().copied()
             && order.should_wait_for_loading(self.cargo, self.capacity)
         {
-            self.progress = 255;
+            self.awaiting_load_window = true;
+            self.hold_station_movement();
             return;
         }
         if self.schedule_timetable_wait(super::model::TimetableWaitKind::AfterArrival) {

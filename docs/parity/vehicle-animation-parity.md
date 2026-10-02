@@ -821,6 +821,58 @@ sólo de fracciones al completar servicio. Siguen abiertos espera/full-load,
 horarios, decisiones de carga, callbacks, tick de salida y viaje completo.
 FPS sigue pausado; #326/#329 permanecen abiertos.
 
+## #326-STATION-FULL-LOAD-HOLD — esperar carga completa sin moverse
+
+Al cerrar una ventana sin transferencia activa, el port borraba la espera y
+forzaba progreso `255` aunque la orden siguiera esperando carga completa.
+El tren podía ejecutar movimiento físico antes de reabrir la ventana: pixel
+ferroviario `4 → 12`, progreso `191 → 63`, subspeed `99 → 147`. La regresión
+nativa también falla antes del arreglo con fracciones de entrada `0/0`:
+el port termina en `63/48`. Ahora se mantiene la ventana de espera y se aplica
+el mismo freno físico que durante transferencia activa.
+
+`oracle_station_loading_guard.py` compila los cuerpos completos e intactos de
+`Vehicle::HandleLoading` y `LeaveStation`, con enums nativos. Enumera train/road,
+modo, flag LoadingFinished, espera/lateness/tiempo de orden, 21 pares de
+progreso/subspeed y 1/2/10/100 llamadas: **24.192 filas**. Se adaptan flags,
+almacenamiento, órdenes, reloj y efectos externos. LoadingFinished es una
+entrada; el oracle no calcula la política de carga ni avanza el reloj entre
+llamadas. La fixture se reproduce byte a byte; el corpus anterior de salida
+de estación también permanece idéntico.
+
+Las regresiones comparan carga FullLoad y FullLoadAny de una sola capacidad
+`40`, con NoUnload activo para aislar la espera y sin transferencia activa.
+En train/bus/truck, las cargas `0/1/39` conservan ventana, orden, velocidad,
+fracciones y posición física: **1.512 estados**. La carga `40` cierra la
+ventana y avanza la orden conservando fracciones: **126 estados**. Esta última
+prueba llama sólo al cierre, sin certificar movimiento posterior a la salida.
+El fallback sintético conserva la normalización de endpoint existente.
+
+```bash
+python3 scripts/oracle_station_loading_guard.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/station-loading-guard-fresh --check
+cargo test -p openttdrs-core --lib native_loading_guard
+```
+
+Validación general: **3.061 core / 1.701 client**, sin fallos, 6/2 ignorados;
+ambos Clippy estrictos, formato, documentación y diff pasan. Client tests usa
+`CARGO_INCREMENTAL=0`, sin cambiar la configuración del proyecto.
+
+Release reconstruida en **79.03 s**, core `fresh:false`,
+client SHA-256 `798fe553db90cd097e24caf31ea3b914718199b4932eae595e030132823c6fa1`. Los
+[controles congelados](evidence/station-full-load-hold-control-raster-20261002.csv)
+en seis escalas y `.125` limitada a `.25` dan PNG, cámara principal y
+orden completo idénticos. En `.5`/`2` coinciden todas las entradas de sprites,
+**265/368 buffers CPU**, cobertura y oclusión. Kale pausado no certifica una
+espera de carga completa real ni el renderer completo de OpenTTD.
+Evidencia privada en `target/parity/station-full-load-hold-20261002/` y
+`target/parity/station-loading-guard-prototype-20261002/`. El cierre se limita
+a la espera sin transferencia de estas órdenes y geometrías físicas. Siguen
+abiertos descarga pendiente con NoUnload desactivado, consist/capacidades y
+decisiones completas de carga, horarios, callbacks/RNG, tick completo, mundo,
+viaje completo y renderer nativo. FPS sigue pausado; #326/#329 siguen abiertos.
+
 ## Alcance pendiente
 
 - La emisión está ligada a `Update`: agrupar ticks puede omitir decisiones de

@@ -10,6 +10,139 @@ use super::VEHICLE_CAPACITY;
 use super::model::{DIR_N, DIR_NE, DIR_S, DIR_SE, DIR_SW, Vehicle, VehicleKind};
 use super::order::{OrderConditionKind, VehicleOrder};
 
+fn full_load_wait_vehicle(
+    kind: VehicleKind,
+    any: bool,
+    cargo: u32,
+    progress: u8,
+    subspeed: u8,
+) -> Vehicle {
+    let at = TileCoord::new(1, 1);
+    let mut v = Vehicle::new(1, kind, at, at);
+    v.running = true;
+    v.awaiting_load_window = true;
+    v.capacity = 40;
+    v.cargo = cargo;
+    let mut order = VehicleOrder::station_with_flags(at, true, true);
+    if any && let VehicleOrder::Station { load_type, .. } = &mut order {
+        *load_type = super::OrderLoadType::FullLoadAny;
+    }
+    v.orders = vec![order, VehicleOrder::station(TileCoord::new(1, 2))];
+    v.cur_speed = 0;
+    v.progress = progress;
+    v.subspeed = subspeed;
+    v.rail_pixel = 4;
+    v.direction = DIR_NE;
+    if kind != VehicleKind::Train {
+        v.road_pos_valid = true;
+        v.road_state = crate::road_movement::rvsb::RVSB_IN_ROAD_STOP
+            | crate::road_movement::rvsb::RVSB_ENTERED_STOP;
+        v.frame = 20;
+        v.road_x = 21;
+        v.road_y = 22;
+        v.direction = DIR_SE;
+    }
+    v
+}
+
+#[test]
+fn unfinished_full_load_keeps_native_loading_guard_and_physical_position() {
+    let mut cases = 0;
+    for kind in [VehicleKind::Train, VehicleKind::Bus, VehicleKind::Truck] {
+        for line in include_str!("../../tests/fixtures/parity/native-station-loading-guard.csv")
+            .lines()
+            .skip(1)
+        {
+            let fields: Vec<i16> = line
+                .split(',')
+                .map(|field| field.parse().unwrap())
+                .collect();
+            if fields[1..6] != [0, 0, 0, 0, 0] || (kind == VehicleKind::Train) != (fields[0] == 0) {
+                continue;
+            }
+            assert_eq!(fields[12], 3, "native order remains OT_LOADING");
+            assert_eq!(fields[13], 0, "native order index does not advance");
+            assert_eq!(fields[14], 1, "native registration remains active");
+            for any in [false, true] {
+                for cargo in [0, 1, 39] {
+                    let mut v = full_load_wait_vehicle(
+                        kind,
+                        any,
+                        cargo,
+                        u8::try_from(fields[6]).unwrap(),
+                        u8::try_from(fields[7]).unwrap(),
+                    );
+                    for _ in 0..fields[8] {
+                        v.step();
+                    }
+                    assert_eq!(
+                        (v.cur_speed, i16::from(v.progress), i16::from(v.subspeed)),
+                        (u16::try_from(fields[9]).unwrap(), fields[10], fields[11]),
+                        "{line}, {kind:?}, any={any}, cargo={cargo}"
+                    );
+                    assert!(v.awaiting_load_window, "{line}, {kind:?}");
+                    assert_eq!(v.current_order, 0, "{line}");
+                    assert_eq!(v.pos, TileCoord::new(1, 1), "{line}");
+                    assert_eq!(v.rail_pixel, 4, "{line}, {kind:?}");
+                    if kind != VehicleKind::Train {
+                        assert_eq!(
+                            (v.frame, v.road_x, v.road_y, v.direction),
+                            (20, 21, 22, DIR_SE),
+                            "{line}"
+                        );
+                    }
+                    cases += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(cases, 1512);
+}
+
+#[test]
+fn completed_full_load_closes_native_loading_guard_without_deadlock() {
+    let mut cases = 0;
+    for kind in [VehicleKind::Train, VehicleKind::Bus, VehicleKind::Truck] {
+        for line in include_str!("../../tests/fixtures/parity/native-station-loading-guard.csv")
+            .lines()
+            .skip(1)
+        {
+            let fields: Vec<i16> = line
+                .split(',')
+                .map(|field| field.parse().unwrap())
+                .collect();
+            if fields[1..6] != [0, 1, 0, 0, 0]
+                || fields[8] != 1
+                || (kind == VehicleKind::Train) != (fields[0] == 0)
+            {
+                continue;
+            }
+            assert_eq!(fields[12], 4, "native OT_LEAVESTATION");
+            assert_eq!(fields[13], 1, "native order index advances");
+            assert_eq!(fields[14], 0, "native station registration closes");
+            for any in [false, true] {
+                let mut v = full_load_wait_vehicle(
+                    kind,
+                    any,
+                    40,
+                    u8::try_from(fields[6]).unwrap(),
+                    u8::try_from(fields[7]).unwrap(),
+                );
+                v.complete_station_load_window();
+                assert!(!v.awaiting_load_window, "{line}");
+                assert_eq!(v.current_order, 1, "{line}");
+                assert_eq!(
+                    (v.cur_speed, i16::from(v.progress), i16::from(v.subspeed)),
+                    (u16::try_from(fields[9]).unwrap(), fields[10], fields[11]),
+                    "{line}"
+                );
+                cases += 1;
+            }
+        }
+    }
+    assert_eq!(cases, 126);
+}
+
 #[test]
 fn station_window_phases_preserve_native_road_hold_remainders() {
     let mut cases = 0;

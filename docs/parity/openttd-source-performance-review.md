@@ -137,11 +137,13 @@ save, sólo tamaño, cantidades y tiempos.
 
 P1 · CargoDist · Evidencia: **Medido** · Alcance estimado: grande.
 
-**Port:** Cuando la descarga marca link_graph_dirty, unload_vehicles llama a rebuild_station_flows antes de cargar. En la partida de estrés, descarga ocupa el 85,1 % del tick hidratado (1.150,7 de 1.352,1 ms). La caché exacta ya evita cargos sin cambios, pero no evita resolver pasajeros que cambian continuamente.
+**Port al auditar 89947557:** La descarga invocaba rebuild_station_flows antes de cargar. Ocupaba el 85,1 % del tick hidratado (1.150,7 de 1.352,1 ms); esas cifras describen esa versión inicial.
+
+**Estado actual:** La [etapa 2](performance-implementation.md#etapa-2--solver-en-workers-y-frontera-de-publicación-f01f02) retiró Demand/MCF de descarga y del rollover mensual. unload_vehicles registra estadísticas y conserva los flows hasta JoinNext. Su ganancia y regresiones están en esa etapa; la simulación activa actual (~14–15 ms) no se atribuye a aquel recálculo retirado. El grafo nativo F03 y los oracles de transferencias/join siguen pendientes.
 
 **Original:** OpenTTD acumula estadísticas en LinkGraph y programa su recálculo mediante LinkGraphSchedule; no ejecuta el solver global después de cada descarga.
 
-**Propuesta:** Concentrar la evolución del grafo en el scheduler nativo. Mantener los flows publicados entre joins y retirar el recálculo inmediato sólo después de comparar transferencias reales contra el original.
+**Pendiente:** Mantener la frontera ya implementada y completar los oracles de transferencias y estadísticas/componentes nativos de F03. No volver a proponer como pendiente el recálculo inmediato que ya se retiró.
 
 **Cómo comprobarla:** Comparar flows, destino de paquetes, reservas, pagos, RNG y fechas de publicación a lo largo de producción, transferencias y un rollover mensual. Volver a medir la descarga y todo el tick.
 
@@ -152,11 +154,13 @@ Fuentes: [Rust: `sim_step/cargo_transfer.rs`, L1450](https://github.com/cavazque
 
 P1 · CargoDist · Evidencia: **Fuente** · Alcance estimado: grande.
 
-**Port:** on_tick_link_graph copia estaciones, grafo y catálogo al crear jobs. Guarda el trabajo pendiente y ejecuta run_full_pipeline sincrónicamente dentro de station_flows_from_jobs cuando llega el join.
+**Port al auditar 89947557:** Los jobs copiaban estaciones/grafo/catálogos y ejecutaban el pipeline en el join.
+
+**Estado actual:** La [etapa 2](performance-implementation.md#etapa-2--solver-en-workers-y-frontera-de-publicación-f01f02) prepara snapshots de entradas y lanza rayon::spawn desde PendingLinkGraphJob. Un resultado inmutable compartido se publica en la fecha del join; el cliente conserva Update/render durante la espera. Sólo el fallback tras fallo de worker reproduce el solver sincrónicamente. Persisten F03, SAV tras mutaciones y la cancelación/recursos de jobs descartados; no se acredita paridad nativa completa ni 30 FPS.
 
 **Original:** SpawnNext crea un LinkGraphJob que usa SpawnThread; JoinNext publica en orden y en su fecha. Si no terminó, PauseControl pausa el avance autoritativo antes del join. La disponibilidad del worker no decide el tick de publicación.
 
-**Propuesta:** Ejecutar la parte pura del solver sobre snapshots en workers con cola acotada, identificación de generación y publicación determinista. Si vence un job, mantener la interfaz activa mientras se espera y mostrar esa espera.
+**Pendiente:** Completar límites/cancelación de recursos de jobs descartados y los oracles nativos de F03/SAV. Conservar los snapshots, la publicación determinista y el render durante espera ya implementados.
 
 **Cómo comprobarla:** Forzar workers rápidos y lentos; obtener idénticos flows y hashes al variar sus tiempos. Cubrir cancelación por carga de mundo, eliminación de estación, cola de jobs y lockstep.
 
@@ -434,6 +438,12 @@ conserva grupos por parent y ordena sólo los afectados, recuperando bajas
 con mensajes expirados. Las regresiones diferenciales y seis zooms pasan;
 children baja ~0,12–0,13 ms. El frame fijo mejora poco y pan no mejora
 consistentemente: se conservan ambas tandas y sus picos. F18 sigue abierto.
+
+La [etapa 42](performance-implementation.md#etapa-42--preparación-compartida-de-recorte-retirada-f18f31)
+ensayó preparar geometría de recorte una vez por fuente. Se retiró: dos
+ABBA empeoran el frame y no reducen consistentemente sort. El diferencial
+CPU pasa, pero In2x inicial falla 204 píxeles y dos repeticiones son exactas.
+Se conservan todos los resultados; producción vuelve a la etapa 41.
 
 ### F19 — El guardado bloquea UI y codifica dos veces el JSON
 

@@ -3264,3 +3264,131 @@ del tipo y de la sonda de mensajes expirados antes de las correcciones.
 Se cierra sólo la reconstrucción/ordenado de grupos estables y su recuperación
 tras avisos expirados. F18/F31 completos, compositor F08, cadencia F07,
 paridad/importación nativa, 37 ticks/s y 30 FPS siguen abiertos.
+
+
+## Etapa 42 — Preparación compartida de recorte retirada (F18/F31)
+
+El experimento preparaba tamaño, rectángulo de textura, bounds y coordenadas
+locales una vez por fuente/pasada y reutilizaba esos valores al recortar sus
+bandas. Conservaba operaciones y orden de los recortes, soporte/fallback de
+rotación, flips y geometría, sin nuevo recurso ECS ni estado entre frames.
+**Se retiró el candidato completo**: no mejora el frame y no reduce el sort
+consistentemente. El código retenido vuelve byte a byte a c56bbaa6; este
+experimento no cuenta como optimización implementada ni cierre de F18/F31.
+
+Un diferencial contra el helper anterior exacto compara 16.000 casos con
+imagen, rect, atlas existente/ausente, tamaño personalizado, cinco anclas,
+posiciones fraccionarias/signos de cero, escalas admitidas/no admitidas,
+rotación y ocho tipos de bandas (disjuntas, cruzadas, vacías, invertidas e
+ilimitadas). Todos los campos de Sprite y los bits de Transform coinciden.
+La sonda usa Bevy real ya compilado y tarda ~0,53 s en compilar; no reemplaza
+la validación del cliente ni acredita una mejora del build completo. El test
+y helper quedan sólo en la fuente/probe privada retirada, no en producción.
+
+El pin nativo 14ec60f248547d4d062a1160f0fc26d742319888 y viewport.cpp
+SHA256 33511385834e72f002b4a2f8c336d23799707f42b9b4b309ce5d91a4dd4aabe9
+se revalidan. AddSortableSpriteToDraw prepara los extents contra dpi y
+ViewportDrawParentSprites conserva el bloque de children. Se reutiliza sólo
+el alcance geométrico de la sonda 37, sin nuevo oracle GPU/callback C++.
+
+Kale congelada, tick 3703074, centro 128,128, 1280×720, clean=0,
+settle=180 y colectores apagados: **cinco de seis parejas iniciales exactas**
+y los seis streams completos de sort coinciden bajo renombrado biyectivo.
+In2x inicial cambia **204 píxeles / 45 bloques 4×4**, PNG candidato
+4e1118f0448939a1ff06af6b151142402a5880541664707ffef680e10be85d54.
+272 imágenes CPU y cobertura coinciden; entradas ordenadas/oclusión fallan.
+Out2x conserva entradas ordenadas, 384 imágenes y ambas máscaras.
+Dos nuevas parejas In2x con los mismos binarios son exactas en todos esos
+contratos y recuperan 60da415e. El fallo inicial no se oculta ni se convierte
+en 6/6. [Matriz inicial](evidence/prepared-band-clipping-raster-20261001.csv),
+[tres parejas In2x](evidence/prepared-band-clipping-in2-repeats-20261001.csv).
+
+La captura fallida y una exacta del mismo candidato tienen fuentes/assets
+idénticos, fuentes de mesh únicas y valores bit a bit por fuente canónica;
+los multiconjuntos de meshes/cámaras coinciden quitando únicamente sus IDs
+propios. Cambia el orden de filas. Ese diagnóstico no dispensa el fallo de
+entradas ordenadas ni prueba qué orden/empate GPU decide el resultado. La
+variante de PNG ya existía históricamente; su identidad no demuestra causa,
+paridad nativa ni que el lector SAV sea correcto en todos los zooms.
+[Diagnóstico mismo binario](evidence/prepared-band-clipping-same-binary-in2-20261001.csv).
+Los gzip/bytes CPU se verifican antes de archivar/deduplicar.
+
+Dos tandas ABBA activas, GPU, escala 2, 40 muestras/run, básico y Main detail
+en ambas versiones; fijo warmup 120 y pan 30. Sin perf, trazas ni compilación
+concurrentes. Se conservan 640 muestras básicas y 640 registros Main. Ms
+salvo FPS/TPS; p99 coincide con máximo con 40 muestras/run.
+
+Primera fija: frame 41,5023 / 41,0024 → 42,1032 / 41,7209;
+FPS 24,095 / 24,389 → 23,751 / 23,969; medianas 40,8705 / 40,4029 → 41,8734 / 41,4522;
+p95 55,1805 / 55,247 → 54,8956 / 55,386; máximos/p99 58,7297 / 56,7915 → 61,8892 / 57,5956;
+TPS 24,154 / 24,379 → 23,738 / 23,978. Ticks antes → después: 3703193..3703232 / 3703193..3703232 → 3703193..3703232 / 3703193..3703232.
+Frames >33,33 ms: 66/80 → 70/80.
+Medias combinadas: frame 41,2523 → 41,9121; children 0,6584 → 0,6672; sort 4,2872 → 4,169; simulación 14,2646 → 14,7037; efectos 0,5157 → 0,5299; glass 2,4571 → 2,4909;
+Main/Update/PostUpdate: Main 38,9006 → 39,5662; Update 17,1507 → 17,1783; PostUpdate 6,7922 → 6,9775.
+[160 muestras](evidence/prepared-band-clipping-steady-20261001.csv),
+[160 registros Main](evidence/prepared-band-clipping-steady-phases-20261001.csv).
+
+Primera pan: frame 46,6359 / 46,6772 → 47,8474 / 46,7185;
+FPS 21,443 / 21,424 → 20,9 / 21,405; medianas 43,5602 / 43,0727 → 44,4579 / 43,2596;
+p95 59,0675 / 60,2821 → 61,8528 / 60,0607; máximos/p99 129,7387 / 130,1399 → 134,3396 / 125,0911;
+TPS 22,469 / 22,453 → 21,916 / 22,367. Ticks antes → después: 3703103..3703142 / 3703103..3703142 → 3703103..3703142 / 3703104..3703143.
+Frames >33,33 ms: 78/80 → 78/80.
+Medias combinadas: frame 46,6566 → 47,283; children 0,6438 → 0,6497; sort 4,0427 → 4,0401; simulación 14,7672 → 15,2884; efectos 0,5384 → 0,5709; glass 2,4089 → 2,4215;
+Main/Update/PostUpdate: Main 41,2955 → 42,0379; Update 17,7388 → 17,841; PostUpdate 8,0032 → 8,1079.
+[160 muestras](evidence/prepared-band-clipping-pan-20261001.csv),
+[160 registros Main](evidence/prepared-band-clipping-pan-phases-20261001.csv).
+
+Repetición fija: frame 41,2915 / 41,4149 → 42,0013 / 41,9429;
+FPS 24,218 / 24,146 → 23,809 / 23,842; medianas 40,7232 / 40,4881 → 41,3414 / 41,2462;
+p95 54,5236 / 55,0978 → 56,2333 / 56,2599; máximos/p99 57,3767 / 57,0011 → 59,0919 / 58,2072;
+TPS 24,212 / 24,024 → 23,829 / 23,84. Ticks antes → después: 3703193..3703232 / 3703194..3703233 → 3703193..3703232 / 3703193..3703232.
+Frames >33,33 ms: 66/80 → 70/80.
+Medias combinadas: frame 41,3532 → 41,9721; children 0,683 → 0,686; sort 4,1859 → 4,2285; simulación 14,3257 → 14,6942; efectos 0,5385 → 0,5487; glass 2,4811 → 2,4816;
+Main/Update/PostUpdate: Main 39,0799 → 39,6423; Update 17,2289 → 17,33; PostUpdate 6,8195 → 6,9258.
+[160 muestras](evidence/prepared-band-clipping-repeat-steady-20261001.csv),
+[160 registros Main](evidence/prepared-band-clipping-repeat-steady-phases-20261001.csv).
+
+Repetición pan: frame 46,7995 / 46,8156 → 47,0786 / 47,0985;
+FPS 21,368 / 21,36 → 21,241 / 21,232; medianas 43,4177 / 43,0811 → 43,9641 / 44,7219;
+p95 59,8715 / 60,5474 → 58,7443 / 59,1379; máximos/p99 128,9606 / 129,4124 → 126,7012 / 127,6965;
+TPS 22,375 / 22,373 → 22,204 / 22,207. Ticks antes → después: 3703103..3703142 / 3703103..3703142 → 3703103..3703142 / 3703103..3703142.
+Frames >33,33 ms: 79/80 → 79/80.
+Medias combinadas: frame 46,8075 → 47,0885; children 0,6563 → 0,6624; sort 4,0604 → 4,0117; simulación 14,9203 → 15,1867; efectos 0,5393 → 0,5346; glass 2,4116 → 2,3959;
+Main/Update/PostUpdate: Main 41,4353 → 41,7552; Update 17,7226 → 17,7308; PostUpdate 8,0054 → 8,0526.
+[160 muestras](evidence/prepared-band-clipping-repeat-pan-20261001.csv),
+[160 registros Main](evidence/prepared-band-clipping-repeat-pan-phases-20261001.csv).
+
+El frame fijo empeora ~0,66 y ~0,62 ms en las dos tandas; pan ~0,63 y
+~0,28 ms. Sort sólo baja 4,2872 → 4,169 en la primera fija y sube
+4,1859 → 4,2285 en la repetición; pan apenas cambia. También cambia la
+simulación pese a que core es idéntico: no se atribuye causalmente toda esa
+variación al helper. La evidencia no justifica retener su coste/complejidad.
+Se conserva el after pan inicial desplazado un tick y el segundo control
+fijo repetido desplazado; no se afirma igualdad de estados activos para
+esos runs. No se descartan máximos ni se acredita 30 FPS/37 ticks/s.
+Main/basic alinean frame/tick y suman dentro de 0,001 ms; su diferencia por
+fila no mide GPU porque frame_ms corresponde al intervalo previo.
+
+Control 41d26421c0e79fbf55a43619726c3aef7d2362efe90499ffbaa57d1a1516039c;
+candidato retirado a71e0386feade44f5d2ac4fb36a2ec97ab5261d2b1d981db6d346169712b9624,
+con fuentes, probe, logs y ejecutables inmutables en
+`target/performance/prepared-band-clipping-20261001`.
+Release candidato 54,09 s total / cliente 53,91; core real 6240adc8 fresh e
+idéntico. HTML/JSON preservados, sin nuevo replay de 61 fases ni mejora de
+compilación. La fuente retenida coincide con la etapa 41 ya validada.
+El rebuild restaurado tarda 53,48 s y produce exactamente el SHA256
+41d26421 de la etapa 41; se preserva su HTML/JSON y un ejecutable readonly.
+No se confunde ese rebuild con un nuevo candidato optimizado.
+
+Gates del candidato: 3.035 core/seis ignorados, 1.683 cliente/dos ignorados,
+33 viewport incluido el diferencial, Clippy de ambos/todos los targets,
+formato, docs y diff. Tras la retirada no se retiene ese test ni ese helper;
+el código de producción es el validado en 41 (1.682 cliente/32 viewport).
+Los self-tests del comparador y docs/diff se repiten al registrar la etapa.
+
+Además se corrigen dos descripciones obsoletas de F01/F02: la descarga ya
+conserva los flows y PendingLinkGraphJob lanza el solver en workers desde
+la etapa 2. Las cifras del primer perfil se identifican como históricas,
+sin cerrar F03, SAV mutado, recursos de jobs ni otros contratos pendientes.
+La evaluación de este experimento concluye como retirada; F08/F18/F31,
+cadencia, importación/paridad nativa y el objetivo de jugabilidad siguen abiertos.

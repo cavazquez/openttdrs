@@ -207,37 +207,36 @@ fijo / 21,4 pan. La
 [etapa 41](performance-implementation.md#etapa-41--conservar-los-grupos-ordenados-de-children-f18f31)
 conserva distribuciones, picos y ticks; el objetivo permanece abierto.
 
+El experimento de preparación de recorte de la etapa 42 se retira: no mejora
+el frame en las dos tandas. In2x inicial difiere 204 píxeles y dos nuevas
+parejas son exactas con el mismo candidato. Producción conserva la etapa 41;
+la evidencia del experimento no cuenta como optimización ni cierre.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios
 de validación; no acredita mejoras implementadas ni cierra este objetivo.
 
-En el cliente en marcha, `perf record -e cpu-clock:u` atribuyó el **83,55 %**
-del tiempo de CPU a `fill_relative_vehicle_vars`, usado por los efectos
-visuales. Ese coste no aparecía en el perfil aislado de `GameState::step`.
-El CSV incluye ahora `effects_ms` para distinguirlo del tick de simulación.
+Antes de las etapas actuales, `perf record -e cpu-clock:u` atribuyó el
+83,55 % de CPU a fill_relative_vehicle_vars en efectos. Es una medición
+histórica: las etapas posteriores redujeron efectos hasta ~0,5 ms. El CSV
+separa effects_ms de la simulación; ese porcentaje no describe el cliente actual.
 
-`unload_vehicles` llama a `rebuild_station_flows` al finalizar cada tick con
-aristas modificadas. Eso ejecuta Demand + MCF global en el hilo que también
-debe dibujar el cliente. La caché ayuda a cargos sin cambios, pero pasajeros
-vuelve a invalidarse continuamente en la partida de estrés.
-
-El port ya implementa la cadencia de `OnTick_LinkGraph` en
-`sim_step/landscape.rs`: snapshots en SpawnNext y publicación al vencer
-JoinNext. La reconstrucción inmediata desde descarga y el rollover mensual
-se superponen a ese scheduler. Además, el scheduler actual calcula el job
-sincrónicamente al hacer join. OpenTTD 15.3 ejecuta `SpawnThread` y mantiene
-el dibujo durante una espera de CargoDist.
+La etapa 2 retiró el recálculo de Demand/MCF de descarga y mes, lanzó el solver
+en workers y conservó los flows hasta JoinNext. PendingLinkGraphJob comparte
+un resultado inmutable; el cliente sigue dibujando durante la espera. La
+frontera JSON de la etapa 1 conserva jobs/flows. Ya no se trata ese solver
+inmediato como cuello de botella vigente. F03, el SAV tras mutaciones y los
+recursos/cancelación de jobs descartados permanecen pendientes.
 
 Para cerrar este bloque:
 
-1. Integrar la actualización del grafo con SpawnNext/JoinNext, sin publicar
-   rutas nuevas por cada descarga. Verificar ticks, flows y RNG contra el
-   oracle nativo con transferencias reales.
-2. Calcular jobs sobre snapshots en workers, publicar en orden determinista
-   en su fecha de join y conservar el render si un job vence sin terminar.
-   Cubrir clonación, comandos, guardado/carga y lockstep; los jobs pendientes
-   y los flows runtime actuales no se serializan en JSON.
+1. Completar oracles de estadísticas/componentes nativos, transferencias,
+   flows, RNG y fechas de publicación. La frontera de SpawnNext/JoinNext
+   está implementada, pero no certifica el grafo completo de OpenTTD.
+2. Completar límites y cancelación de recursos de workers de mundos
+   descartados y el SAV tras mutaciones, conservando publicación y snapshots
+   deterministas, JSON y lockstep ya cubiertos.
 3. Volver a perfilar carga, reservas/PBS, rutas y callbacks con NewGRF activo
    tras retirar el coste global del tick. El tiempo restante también debe
    entrar en 27 ms; desplazar MCF por sí solo no lo acredita.

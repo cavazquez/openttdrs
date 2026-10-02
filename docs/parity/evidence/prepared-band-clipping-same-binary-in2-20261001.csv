@@ -1,0 +1,2 @@
+scope,same_immutable_binary_sha256,sources_equal,assets_equal,meshes_multiset_equal_without_own_ids,mesh_sources_unique,mesh_values_by_canonical_source_equal_without_own_ids,cameras_multiset_equal_without_own_ids
+diagnostic only; does not waive ordered input failures,a71e0386feade44f5d2ac4fb36a2ec97ab5261d2b1d981db6d346169712b9624,True,True,True,"[true, true]",True,True

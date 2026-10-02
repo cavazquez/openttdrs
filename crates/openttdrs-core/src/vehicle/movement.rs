@@ -1851,12 +1851,15 @@ impl super::model::Vehicle {
                 self.maybe_insert_implicit_order(station);
             }
             self.awaiting_load_window = true;
-            if self.kind == super::model::VehicleKind::Train {
-                // `TrainEnterStation` llama a `BeginLoading`, que sólo pone
-                // `cur_speed` a cero. El `subspeed` y el `progress` restante
-                // pertenecen al mismo `TrainLocoHandler` y se guardan al
-                // retornar; sobrescribirlos aquí salta el remanente físico
-                // de la entrada a plataforma (`train_cmd.cpp`).
+            let physical_bay = self.road_pos_valid
+                && matches!(
+                    self.kind,
+                    super::model::VehicleKind::Bus | super::model::VehicleKind::Truck
+                )
+                && crate::road_movement::rvsb::is_bay_road_state(self.road_state);
+            if self.kind == super::model::VehicleKind::Train || physical_bay {
+                // Native BeginLoading stops speed. The train/road handler
+                // keeps subspeed and stores its own movement remainder.
                 self.cur_speed = 0;
             } else {
                 self.progress = 255;

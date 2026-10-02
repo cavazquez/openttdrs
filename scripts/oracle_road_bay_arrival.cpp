@@ -1,5 +1,8 @@
 // Native bay arrival/turn fragments with explicit standalone service stubs.
 #include <array>
+#include <algorithm>
+#include <cstdlib>
+#define NOT_REACHED() std::abort()
 #include <cassert>
 #include <cstdint>
 #include <iostream>
@@ -13,6 +16,7 @@ const std::array<const RoadDriveEntry *, 64> drive_tables = {{
 #include "native-drive-bindings.inc"
 }};
 #include "native-stop-frames.inc"
+constexpr int AM_REALISTIC = 1, AS_BRAKE = 0;
 constexpr int AM_ORIGINAL = 0, RVS_ENTERED_STOP = 2, RVS_DRIVE_SIDE = 4;
 constexpr int RVSB_IN_ROAD_STOP = 32, RVSB_IN_ROAD_STOP_END = 48;
 constexpr int RVSB_IN_DT_ROAD_STOP = 64, RVSB_IN_DT_ROAD_STOP_END = 80;
@@ -32,7 +36,10 @@ struct Order {
 };
 struct RoadVehicle {
     int x_pos = 0, y_pos = 0;
-    unsigned frame = 0, cur_speed = 112, state = 32;
+    unsigned frame = 0, state = 32;
+    uint16_t cur_speed = 112;
+    uint8_t subspeed = 0, progress = 0;
+    unsigned overtaking = 0;
     Direction direction = DIR_N;
     TileIndex tile = 0;
     int owner = 0, compatible_roadtypes = 0, last_station_visited = -1, index = 0;
@@ -47,6 +54,13 @@ struct RoadVehicle {
 #include "native-begin-loading-speed.inc"
         begin_loading = true;
     }
+int GetCurrentMaxSpeed() const { return 112; }
+    int GetAcceleration() const { return 0; }
+    int GetAccelerationStatus() const { return AS_BRAKE; }
+    RoadVehicle *Next() const { return nullptr; }
+    int UpdateSpeed();
+#include "native-advance-speed.inc"
+#include "native-do-update-speed.inc"
 #include "native-advance-distance.inc"
 };
 struct Station { int index = 0; static Station *GetByTile(TileIndex) { static Station st; return &st; } };
@@ -92,13 +106,27 @@ bool native_bay_step(RoadVehicle *v) {
     v->y_pos = y;
     return true;
 }
+#include "native-road-update-speed.inc"
+bool IndividualRoadVehicleController(RoadVehicle *v, const RoadVehicle *) { return native_bay_step(v); }
+bool RoadVehCheckTrainCrash(RoadVehicle *) { return false; }
+void native_tick(RoadVehicle *v) {
+int j = v->UpdateSpeed();
+int adv_spd = v->GetAdvanceDistance();
+bool blocked = false;
+#include "native-tick-loop.inc"
+#include "native-tick-progress.inc"
+}
+
 void emit(unsigned table, unsigned step, const RoadVehicle &v, bool result) {
     std::cout << table << ',' << step << ',' << v.frame << ',' << v.x_pos << ','
               << v.y_pos << ',' << unsigned(v.direction) << ',' << v.cur_speed << ','
               << HasBit(v.state, RVS_ENTERED_STOP) << ',' << result << ',' << v.begin_loading << '\n';
 }
-int main() {
-    std::cout << "table,substep,frame,x,y,direction,speed,entered,result,begin_loading\n";
+int main(int argc, char **) {
+    assert(argc == 1 || argc == 2);
+    const bool tick = argc == 2;
+    if (tick) std::cout << "table,frame,x,y,direction,input_speed,input_subspeed,input_progress,speed,subspeed,progress,entered,loading\n";
+    else std::cout << "table,substep,frame,x,y,direction,speed,entered,result,begin_loading\n";
     for (unsigned table = 32; table < 64; ++table) {
         if ((table & (1U << RVS_ENTERED_STOP)) != 0) continue;
         _settings_game.vehicle.road_side = table >= 48;
@@ -109,12 +137,28 @@ int main() {
         v.x_pos = data[0].x;
         v.y_pos = data[0].y;
         v.direction = RoadVehGetNewDirection(&v, data[1].x, data[1].y);
-        emit(table, 0, v, true);
+        if (!tick) emit(table, 0, v, true);
         for (unsigned step = 1; ; ++step) {
             assert(step < 64);
             const bool result = native_bay_step(&v);
-            emit(table, step, v, result);
+            if (!tick) emit(table, step, v, result);
             if (!result) { assert(v.begin_loading); break; }
+        }
+        if (tick) {
+            for (unsigned speed : {0U,1U,7U,12U,20U,64U})
+            for (unsigned subspeed : {0U,99U,255U})
+            for (unsigned progress : {0U,1U,127U,191U,192U,255U}) {
+                RoadVehicle sample = v;
+                sample.state &= ~(1U << RVS_ENTERED_STOP);
+                sample.begin_loading = false;
+                sample.cur_speed = speed; sample.subspeed = subspeed; sample.progress = progress;
+                RoadStop::GetByTile(0, RoadStopType::Bus)->busy = true;
+                native_tick(&sample);
+                assert(sample.frame == v.frame && sample.x_pos == v.x_pos && sample.y_pos == v.y_pos && sample.direction == v.direction);
+                std::cout << table << ',' << v.frame << ',' << v.x_pos << ',' << v.y_pos << ',' << unsigned(v.direction) << ','
+                          << speed << ',' << subspeed << ',' << progress << ',' << sample.cur_speed << ',' << unsigned(sample.subspeed) << ','
+                          << unsigned(sample.progress) << ',' << HasBit(sample.state,RVS_ENTERED_STOP) << ',' << sample.begin_loading << '\n';
+            }
         }
     }
 }

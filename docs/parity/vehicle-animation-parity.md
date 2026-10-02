@@ -419,8 +419,55 @@ capturas. Release recompiló core y cliente (85,73 s); binario
 
 Evidencia conservada en
 `target/parity/road-bay-arrival-20261002/`. No certifica los ticks completos,
-servicio, remanentes ni eventos de estación: el port aún reinicia `subspeed`
-y usa un sentinel de `progress` al cargar; el método nativo no los borra.
+servicio completo ni eventos de estación. El remanente del tick de entrada
+se trata en el sub-issue siguiente; los ticks posteriores de carga/salida
+continúan abiertos.
+
+## #326-ROAD-BAY-LOADING-REMAINDER — fracciones del tick de entrada
+
+La opción `--tick` amplía el oracle de llegada con `DoUpdateSpeed`,
+`RoadVehicle::UpdateSpeed`, `GetAdvanceSpeed`, el bucle de movimiento y la
+asignación final de `progress`, todos extraídos sin modificaciones del pin.
+Usa aceleración original, límite fijo 112 y una sola unidad; conserva los
+stubs de servicio y excluye continuación de carga, tráfico, callbacks,
+RNG y recorrido completo. La posición inicial sale del bucle nativo de
+llegada, antes de variar las entradas fraccionarias.
+
+Hay 1.728 entradas: 16 tablas, seis velocidades, tres `subspeed` y seis
+remanentes. La regresión exige igualdad exacta en 3.456 casos de bus/camión:
+velocidad, fracciones, frame, posición, rumbo, bit de entrada y carga.
+Antes fallaba con velocidad cero y remanente 192: OpenTTD empezaba a cargar
+y guardaba 191; el port guardaba el sentinel 255. También borraba `subspeed`.
+
+La llegada deja de borrar esas fracciones y la apertura de carga de una
+dársena física conserva el remanente, como la rama de trenes. El controlador
+guarda su propio resto al retornar. Las llamadas sintéticas sin posición
+física conservan su contrato previo.
+
+```bash
+python3 scripts/oracle_road_bay_arrival.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/road-bay-loading-remainder-fresh --tick --check
+cargo test -p openttdrs-core --test native_road_bay_loading_remainder
+```
+
+**Cerrado el sub-issue del tick de entrada en carga.** También pasan 8.160
+poses de presentación de los estados que empiezan a cargar (bus/camión,
+cinco alfas): mantienen el punto y rumbo nativos. Pasan Clippy estricto de
+core/cliente, 3.049 tests de core (6 ignorados), 1.700 del cliente (2
+ignorados), formato, frescura de docs y `git diff --check`. Tras reforzar
+la regresión visual se repitieron su ejecución, Clippy de core y formato.
+
+Los [controles de zoom](evidence/road-bay-loading-remainder-control-raster-20261002.csv)
+conservan cámara, PNG y composición en las siete peticiones. En `0.50`/`2`
+coinciden todas las entradas, 265/368 buffers CPU y las máscaras. La partida
+está congelada: esos controles no certifican el servicio de estación.
+Release recompiló core y cliente (81,69 s); binario
+`794b721627f032245286ea6d6c5b83a6c93cb38e623602294183dcc00ec70631`.
+
+Evidencia en `target/parity/road-bay-loading-remainder-20261002/`.
+Esto no cierra las fracciones durante los ticks posteriores de transferencia
+y salida ni el modelo de aceleración realista.
 
 ## Alcance pendiente
 

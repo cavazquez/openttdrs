@@ -163,8 +163,6 @@ pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
             let v = &mut vehicles[v_idx];
             v.road_state |= RVSB_ENTERED_STOP;
             v.cur_speed = 0;
-            v.subspeed = 0;
-            v.progress = 0;
             v.advance_destination_after_arrival_with_catalog(engine_catalog);
             return false;
         }

@@ -21,6 +21,7 @@ def main():
     parser.add_argument('--openttd', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--check', action='store_true')
+    parser.add_argument('--tick', action='store_true', help='native loading-entry tick: original acceleration, fixed speed ceiling 112')
     parser.add_argument('--base-oracle', type=Path, default=Path(__file__).with_name('oracle_road_vehicle_turn_direction.py'))
     parser.add_argument('--template', type=Path, default=Path(__file__).with_suffix('.cpp'))
     args = parser.parse_args()
@@ -41,14 +42,29 @@ def main():
     loading = function_body(vehicle_source.decode(), 'void Vehicle::BeginLoading(')
     speed = next(line for line in loading.splitlines() if line.strip() == 'this->cur_speed = 0;')
     fragments = {'arrival-branch': branch, 'stop-frames': stop_frames, 'begin-loading-speed': speed}
+    extra_sources = {}
+    for name in ['src/ground_vehicle.hpp', 'src/vehicle_base.h']:
+        raw = subprocess.check_output(['git', '-C', str(args.openttd), 'show', PIN + ':' + name])
+        (args.out / ('native-' + name.replace('/', '__'))).write_bytes(raw)
+        extra_sources[name] = raw.decode()
+    road_source = (base / 'native-src__roadveh_cmd.cpp').read_text()
+    tick_controller = function_body(road_source, 'static bool RoadVehController(')
+    fragments.update({
+        'do-update-speed': function_body(extra_sources['src/ground_vehicle.hpp'], 'inline uint DoUpdateSpeed('),
+        'advance-speed': function_body(extra_sources['src/vehicle_base.h'], 'static inline uint GetAdvanceSpeed('),
+        'road-update-speed': function_body(road_source, 'int RoadVehicle::UpdateSpeed('),
+        'tick-loop': function_body(tick_controller, 'while (j >= adv_spd)'),
+        'tick-progress': next(line for line in tick_controller.splitlines() if 'v->progress == 0' in line),
+    })
     for name, body in fragments.items():
         (args.out / ('native-' + name + '.inc')).write_text(body + '\n')
     cpp = args.out / 'oracle.cpp'
     shutil.copy2(args.template, cpp)
     command = ['c++', '-std=c++20', '-O2', '-Wall', '-Wextra', '-Werror', str(cpp), '-o', str(args.out / 'oracle')]
     subprocess.run(command, check=True)
-    output = subprocess.check_output([str((args.out / 'oracle').resolve())], text=True)
-    result = args.out / 'native-road-bay-arrival.csv'
+    invocation = [str((args.out / 'oracle').resolve())] + (['--tick'] if args.tick else [])
+    output = subprocess.check_output(invocation, text=True)
+    result = args.out / ('native-road-bay-loading-remainder.csv' if args.tick else 'native-road-bay-arrival.csv')
     result.write_text(output)
     if args.check:
         root = args.base_oracle.resolve().parents[1]
@@ -56,10 +72,12 @@ def main():
     provenance = dict(native_pin=PIN, rows=len(output.splitlines()) - 1,
                       unchanged_fragments_sha256={name: hashlib.sha256(body.encode()).hexdigest() for name, body in fragments.items()},
                       vehicle_source_sha256=hashlib.sha256(vehicle_source).hexdigest(),
-                      scope=__doc__, command=command,
+                      extra_sources_sha256={name: hashlib.sha256(body.encode()).hexdigest() for name, body in extra_sources.items()},
+                      scope=__doc__ if not args.tick else 'Adapted one-vehicle loading-entry tick with unchanged native speed, advance, movement loop/progress and arrival fragments. Original acceleration; fixed speed ceiling 112. No service continuation, traffic, callbacks, RNG or full journey.',
+                      command=command, invocation=invocation,
                       movement_source_provenance=json.loads((base / 'provenance.json').read_text()))
     (args.out / 'provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
-    print('Native bay arrivals:', provenance['rows'], 'states in 16 tables')
+    print('Native bay loading-entry ticks:' if args.tick else 'Native bay arrivals:', provenance['rows'], 'states in 16 tables')
 
 
 if __name__ == '__main__':

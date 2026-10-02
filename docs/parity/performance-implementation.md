@@ -3392,3 +3392,83 @@ la etapa 2. Las cifras del primer perfil se identifican como históricas,
 sin cerrar F03, SAV mutado, recursos de jobs ni otros contratos pendientes.
 La evaluación de este experimento concluye como retirada; F08/F18/F31,
 cadencia, importación/paridad nativa y el objetivo de jugabilidad siguen abiertos.
+
+
+## Etapa 43 — Reproducción GPU del empate parent/child (F08/F31)
+
+La prueba CPU 31 demostraba dos profundidades distintas con igual proyección,
+pero no leía un buffer GPU. La nueva sonda
+[scripts/probe_projected_mask_depth.rs](../../scripts/probe_projected_mask_depth.rs)
+lee color y Depth32Float de una pasada Vulkan 8×8 en la RX 7600. Usa los bits
+exactos de clip_from_view y GlobalTransform de la cámara de oclusión de la
+captura In2x fallida 42, y calcula clip_from_world con el mismo glam/Bevy
+0.19.1. El shader multiplica ese uniforme por world_position como
+mesh2d_position_world_to_clip. Sustituye XY por un triángulo de cobertura
+completa para aislar Z; no incorpora las texturas ni todo el render de Kale.
+
+La fuente capturada contiene exactamente un proxy por profundidad
+1075726681 / 1075726728, en el mismo XY. La primera fuente es un parent
+sprite 1163 negro en la máscara; la segunda es su child RailGlassMaskSource,
+atlas 1258 rojo en la máscara, que referencia aquel parent. Conservan
+profundidades world distintas, con parent < child. Los datos e imágenes SHA
+se registran en [la pareja real](evidence/projected-mask-depth-source-pair-20261002.csv).
+Los IDs identifican esa captura, no un contrato de identidad entre mundos.
+
+El pipeline de la sonda usa el estado de profundidad de Bevy 2D Mask:
+Depth32Float, escritura activada, GreaterEqual y MSAA 1. Las lecturas reales
+almacenan **1048597585 en ambos planos**, como la proyección CPU. Dibujar
+parent→child deja rojo; child→parent deja negro, con los mismos bits de
+profundidad. El control a igual Z también gana según el último plano. El
+control separado por 0,01 deja rojo en ambos órdenes y almacena valores
+1048597585 / 1048597669 distintos. Se leen copias GPU de color y profundidad,
+no una estimación Python de la matriz. Dos ejecuciones independientes
+cumplen todas las aserciones y producen CSV idéntico:
+[24 lecturas](evidence/projected-mask-depth-gpu-20261002.csv).
+
+La GPU informada es AMD Radeon RX 7600, RADV NAVI33, Vulkan/Mesa 26.0.8.
+La sonda rechaza adaptadores CPU; no certifica otros backends/hardware.
+La compilación directa reutiliza las rlib ya construidas y dura ~0,46 s,
+con -D warnings y rustfmt correctos. El primer intento no compiló porque
+InstanceDescriptor no implementa Default en wgpu 29; se ajustó a su API
+local new_without_display_handle y se preservó ese fallo. Fuentes, matrices,
+binario, logs y SHA/tamaños están en
+`target/performance/projected-mask-depth-gpu-20261002`.
+
+Reproducción en este checkout con dependencias debug ya compiladas:
+
+```bash
+CARGO_MANIFEST_DIR="$PWD/crates/openttdrs-client" \
+CARGO_PKG_NAME=openttdrs-client \
+rustc --edition=2024 scripts/probe_projected_mask_depth.rs \
+  -L dependency=target/debug/deps \
+  --extern bevy=target/debug/deps/libbevy-dab1181ebfc551e7.rlib \
+  --extern wgpu=target/debug/deps/libwgpu-29980cb70bc93dff.rlib \
+  -C linker=clang -C link-arg=-fuse-ld=mold -C opt-level=1 -D warnings \
+  -o /tmp/openttdrs-projected-mask-depth-probe
+/tmp/openttdrs-projected-mask-depth-probe > /tmp/openttdrs-projected-mask-depth.csv
+```
+
+Los hashes de rlib corresponden a este perfil/checkout. Si cambian, usar las
+rlib de esa misma compilación; no mezclar variantes de dependencias. La sonda
+no activa perf ni cambia configuración del kernel. Su build aislado no es
+una mejora de compilación del cliente completo.
+
+Fuentes verificadas localmente: Bevy mesh2d/mesh.rs (Depth32Float,
+GreaterEqual, escritura del modo Mask), mesh2d_functions.wgsl (producto de
+matrices) y OpenTTD viewport.cpp prístino 14ec60f2,
+ViewportDrawParentSprites, que dibuja el parent antes de recorrer sus children.
+No se añade aquí una sonda nativa completa ni se cambia el compositor.
+
+Se cierra sólo el sub-issue de observar el empate y su dependencia del orden
+en GPU para esta pareja/matriz. No prueba que esos dos planos, sin sus
+texturas/vecinos, expliquen los 204 píxeles de Kale ni la variación Out2x.
+Falta reconstruir el solapamiento real, medir orden efectivo del compositor,
+comparar con el blitter nativo y validar cualquier corrección en seis zooms.
+No se amplían tolerancias ni se acredita importación o 30 FPS.
+
+El programa y su binario continúan idénticos a la etapa 41; no se recompilan
+ni repiten suites core/cliente ya pasadas porque no cambian esos crates.
+Validación nueva: compilación de la sonda con warnings estrictos, rustfmt,
+dos ejecuciones GPU con controles/aserciones, tres self-tests del comparador,
+frescura de docs y diff. Los 3.035 core/1.682 cliente y 32 viewport de la
+versión retenida siguen siendo la evidencia previa, no un rerun de esta etapa.

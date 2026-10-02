@@ -212,6 +212,11 @@ el frame en las dos tandas. In2x inicial difiere 204 píxeles y dos nuevas
 parejas son exactas con el mismo candidato. Producción conserva la etapa 41;
 la evidencia del experimento no cuenta como optimización ni cierre.
 
+La etapa 43 lee un empate parent/child en el buffer GPU usando la matriz
+real capturada: cambiar el orden cambia negro/rojo. Los controles y dos runs
+coinciden; el compositor sigue igual. Falta el solapamiento texturado y el
+oracle nativo antes de corregirlo. No es una mejora de FPS ni cierre de F08.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

@@ -263,6 +263,12 @@ exactos; los valores de máscara por fuente también, pero cambia el orden
 ECS. Ese diagnóstico no permite dispensar entradas ordenadas, dar por
 probada la causa ni cerrar F08. Véase la evidencia en la etapa 39.
 
+La [etapa 43](performance-implementation.md#etapa-43--reproducción-gpu-del-empate-parentchild-f08f31)
+lee el empate en Depth32Float para una pareja parent/child real de In2x:
+ambos almacenan 1048597585 y cambia el ganador al invertir el dibujo.
+Dos ejecuciones GPU y controles son exactos. Sólo cierra esa reproducción;
+no cambia el compositor ni atribuye aún los 204 píxeles o las otras variaciones.
+
 ### F09 — Var 62 usa crashed para el bit de Hidden
 
 P2 · NewGRF · Evidencia: **Fuente** · Alcance estimado: medio.
@@ -656,6 +662,11 @@ La etapa 41 repite dos tandas: ~24,3 FPS fijo y ~21,4 pan, children
 ~0,66 ms, simulación ~14–15, Update ~17–18 y PostUpdate ~6,8/8,0.
 La reducción de children es consistente; el frame pan no lo es. Todos los
 runs, máximos y el control desplazado se conservan en la evidencia enlazada.
+
+La etapa 43 añade lectura real de color/profundidad para dos planos con
+la matriz capturada, confirmando el empate que antes sólo acreditaba CPU.
+Es una sonda aislada con controles; no un timer de todo el frame ni un oracle
+de raster/importación. El programa conserva las cifras de la etapa 41.
 
 ### F32 — Separar contratos facilita optimizar sin romper paridad
 

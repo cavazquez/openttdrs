@@ -139,6 +139,7 @@ fn sync_native_map_sprite_position(
     camera_state: Res<MapShotCameraState>,
     images: Res<Assets<Image>>,
     layouts: Res<Assets<TextureAtlasLayout>>,
+    mut pending: Local<bevy::ecs::entity::EntityHashSet>,
     mut queries: ParamSet<(
         Query<
             (&Transform, &Projection),
@@ -147,10 +148,7 @@ fn sync_native_map_sprite_position(
                 Without<crate::render::MapPreviewCamera>,
             ),
         >,
-        Query<
-            (&Sprite, &mut Transform, &Anchor),
-            (With<crate::render::MapVisualLayer>, Added<Sprite>),
-        >,
+        Query<(Entity, Ref<Sprite>, &mut Transform, &Anchor), With<crate::render::MapVisualLayer>>,
     )>,
 ) {
     let capture_requested = crate::sprites::company_palette::native_zoom_capture_requested();
@@ -179,27 +177,37 @@ fn sync_native_map_sprite_position(
     else {
         return;
     };
-    for (sprite, mut transform, anchor) in &mut queries.p1() {
+    let mut sprites = queries.p1();
+    for (entity, sprite, mut transform, anchor) in &mut sprites {
+        if !sprite.is_added() && !pending.contains(&entity) {
+            continue;
+        }
         if sprite.custom_size.is_some()
             || *anchor != Anchor::CENTER
             || transform.rotation != Quat::IDENTITY
             || transform.scale != Vec3::ONE
         {
+            pending.remove(&entity);
             continue;
         }
         let source_size = if let Some(atlas) = sprite.texture_atlas.as_ref() {
             let Some(rect) = atlas.texture_rect(&layouts) else {
+                pending.insert(entity);
                 continue;
             };
-            native_map_sprite_visible_size(sprite, rect.as_rect())
+            native_map_sprite_visible_size(&sprite, rect.as_rect())
         } else {
-            let Some(source_size) = native_map_direct_sprite_source_size(
-                sprite,
-                rounding,
-                images
-                    .get(&sprite.image)
-                    .map(|image| image.size().as_vec2()),
-            ) else {
+            if rounding != NativeMapSpritePositionRounding::Floor {
+                pending.remove(&entity);
+                continue;
+            }
+            let image_size = images
+                .get(&sprite.image)
+                .map(|image| image.size().as_vec2());
+            let Some(source_size) =
+                native_map_direct_sprite_source_size(&sprite, rounding, image_size)
+            else {
+                pending.insert(entity);
                 continue;
             };
             source_size
@@ -226,7 +234,11 @@ fn sync_native_map_sprite_position(
         let world_top = camera.y + (window_height * 0.5 - screen_top) * scale;
         transform.translation.x = world_left + source_size.x * 0.5;
         transform.translation.y = world_top - source_size.y * 0.5;
+        pending.remove(&entity);
     }
+    // Membership catches expired removal messages and full entity identities
+    // keep a recycled index from inheriting an old source's pending attempt.
+    pending.retain(|entity| sprites.contains(*entity));
 }
 
 #[must_use]
@@ -664,6 +676,186 @@ mod tests {
         assert_eq!(
             super::native_map_sprite_position_rounding(true, 8.0, true),
             None
+        );
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn native_position_rounding_retries_a_late_atlas_layout() {
+        use bevy::prelude::{
+            App, Assets, Image, TextureAtlas, TextureAtlasLayout, Transform, UVec2, Vec3, Window,
+        };
+        use bevy::sprite::Anchor;
+        use bevy::window::PrimaryWindow;
+
+        const PROBE: &str = "OPENTTDRS_TEST_LATE_NATIVE_POSITION";
+        if std::env::var_os(PROBE).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+                .args(["--exact", "render::world::plugin::tests::native_position_rounding_retries_a_late_atlas_layout", "--nocapture"])
+                .env(PROBE, "1")
+                .env("OPENTTDRS_MAP_SHOT", "late-layout-test")
+                .env("OPENTTDRS_MAP_SHOT_NATIVE_ZOOM", "1")
+                .output()
+                .expect("isolated native capture test");
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+
+        let mut app = App::new();
+        app.insert_resource(Assets::<Image>::default());
+        app.insert_resource(Assets::<TextureAtlasLayout>::default());
+        app.insert_resource(crate::camera::MapShotCameraState::default());
+        app.add_systems(
+            bevy::prelude::Update,
+            super::sync_native_map_sprite_position,
+        );
+        app.world_mut().spawn((
+            Window {
+                resolution: (1280, 720).into(),
+                ..Window::default()
+            },
+            PrimaryWindow,
+        ));
+        let camera = app
+            .world_mut()
+            .spawn((
+                crate::render::PrimaryGameCamera,
+                Transform::default(),
+                Projection::Orthographic(OrthographicProjection {
+                    scale: 4.0,
+                    ..OrthographicProjection::default_2d()
+                }),
+            ))
+            .id();
+        let layout = app
+            .world()
+            .resource::<Assets<TextureAtlasLayout>>()
+            .reserve_handle();
+        let initial = Transform::from_xyz(0.5, 0.5, 7.0);
+        let source = app
+            .world_mut()
+            .spawn((
+                crate::render::MapVisualLayer,
+                Sprite {
+                    texture_atlas: Some(TextureAtlas {
+                        layout: layout.clone(),
+                        index: 0,
+                    }),
+                    ..Sprite::default()
+                },
+                initial,
+                Anchor::CENTER,
+            ))
+            .id();
+        app.update();
+        assert_eq!(
+            *app.world().get::<Transform>(source).expect("source"),
+            initial
+        );
+        app.world_mut()
+            .resource_mut::<Assets<TextureAtlasLayout>>()
+            .insert(
+                layout.id(),
+                TextureAtlasLayout::from_grid(UVec2::splat(8), 1, 1, None, None),
+            )
+            .expect("late layout");
+        app.update();
+        let expected = Transform::from_translation(Vec3::new(4.0, 0.0, 7.0));
+        assert_eq!(
+            *app.world().get::<Transform>(source).expect("source"),
+            expected,
+            "layout arrival must retry the skipped Added<Sprite> source"
+        );
+        // Once rounded, a stable source must not be snapped again when the
+        // camera moves or the atlas is replaced.
+        app.world_mut()
+            .get_mut::<Transform>(camera)
+            .expect("camera")
+            .translation
+            .x = 0.75;
+        app.world_mut()
+            .resource_mut::<Assets<TextureAtlasLayout>>()
+            .insert(
+                layout.id(),
+                TextureAtlasLayout::from_grid(UVec2::splat(12), 1, 1, None, None),
+            )
+            .expect("replacement layout");
+        app.update();
+        assert_eq!(
+            *app.world().get::<Transform>(source).expect("source"),
+            expected
+        );
+
+        *app.world_mut()
+            .get_mut::<Transform>(camera)
+            .expect("camera") = Transform::default();
+        *app.world_mut()
+            .get_mut::<Projection>(camera)
+            .expect("projection") = Projection::Orthographic(OrthographicProjection {
+            scale: 2.0,
+            ..OrthographicProjection::default_2d()
+        });
+        app.world_mut()
+            .resource_mut::<crate::camera::MapShotCameraState>()
+            .clamped = true;
+        let image = app.world().resource::<Assets<Image>>().reserve_handle();
+        let direct = app
+            .world_mut()
+            .spawn((
+                crate::render::MapVisualLayer,
+                Sprite::from_image(image.clone()),
+                initial,
+                Anchor::CENTER,
+            ))
+            .id();
+        app.update();
+        assert_eq!(
+            *app.world().get::<Transform>(direct).expect("direct source"),
+            initial
+        );
+        let loaded_image = Image::default();
+        assert_eq!(loaded_image.size(), UVec2::ONE);
+        app.world_mut()
+            .resource_mut::<Assets<Image>>()
+            .insert(image.id(), loaded_image)
+            .expect("late image");
+        app.update();
+        assert_eq!(
+            app.world()
+                .get::<Transform>(direct)
+                .expect("direct source")
+                .translation,
+            Vec3::new(0.5, 1.5, 7.0)
+        );
+
+        let missing = app.world().resource::<Assets<Image>>().reserve_handle();
+        let retired = app
+            .world_mut()
+            .spawn((
+                crate::render::MapVisualLayer,
+                Sprite::from_image(missing),
+                initial,
+                Anchor::CENTER,
+            ))
+            .id();
+        app.update();
+        app.world_mut().despawn(retired);
+        for _ in 0..4 {
+            app.world_mut().clear_trackers();
+        }
+        app.update();
+        app.update();
+        assert_eq!(
+            app.world()
+                .get::<Transform>(direct)
+                .expect("stable direct source")
+                .translation,
+            Vec3::new(0.5, 1.5, 7.0)
         );
     }
 

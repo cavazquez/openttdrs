@@ -4812,3 +4812,83 @@ readonly verificadas. Se reutilizan los gates Rust finales de 63, sin
 cambio de fuentes, y se ejecutan formato, docs y diff. Se cierra sólo esta
 tanda de repetibilidad. Compositor, lectura universal, FPS y jugabilidad
 continúan abiertos; no hay nuevo benchmark de rendimiento.
+
+## Etapa 65 — Reintento de posición cuando el asset llega tarde (F08/F31)
+
+Se reproduce una omisión del ajuste de posición usado por las capturas con
+selector de zoom nativo: Added<Sprite> se visitaba una sola vez. Si faltaba
+el layout del atlas o la imagen directa requerida, el sistema continuaba
+sin volver a procesar esa fuente al llegar el asset. La regresión aislada
+falla en el control: el atlas llega en el segundo Update y el transform
+permanece (0,5; 0,5; 7), en lugar de (4; 0; 7).
+
+El sistema conserva pendientes por identidad completa de Entity y reintenta
+sólo las fuentes nuevas o pendientes. Retira la entrada tras ajustar la
+posición, descartar una geometría no admitida o perder la pertenencia a la
+query. Conserva las reglas Floor/Ceil, el tamaño visible, el ancla y Z;
+fuera de la captura seleccionada retorna antes del recorrido. La firma de
+query cambia; no se afirma que el coste activo sea idéntico por ese retorno.
+No se cambia el decodificador, la selección de imágenes ni las reglas
+interactivas de zoom.
+
+La prueba también cubre una imagen directa tardía en Out2x clamped, estabilidad
+tras mover cámara/reemplazar atlas y la baja de una fuente pendiente después
+de vencer mensajes de cambio. Se ejecuta en un proceso hijo con entorno
+propio. No certifica otros tiempos de llegada de cámara ni inspecciona el
+tamaño interno del conjunto pendiente. El oracle acotado conserva la política
+de posición previamente contrastada con Draw nativo; esta etapa corrige el
+reintento ECS, sin acreditar lectura o composición universal.
+
+GPU Kale pausada, centro 128,128, 1280×720, settle 180, CLEAN=0. Se toman
+28 capturas nuevas, siete escalas solicitadas y seis efectivas (.125 se
+limita a .25). Las **14/14** comparaciones control/candidata conservan PNG
+y stream completo del sorter, sin omitir campos ni reordenar listas. Las
+cuatro comparaciones Main In2x/Out2x conservan todos los inputs, **265/368
+imágenes CPU por posición y bytes**, cobertura y oclusión. El orden nativo
+1614/1586 y el píxel de copas (32,139) = (32,80,4) permanecen iguales.
+[Raster](evidence/late-native-sprite-rounding-raster-20261002.csv),
+[inputs](evidence/late-native-sprite-rounding-sprite-inputs-20261002.csv)
+y [children](evidence/late-native-sprite-rounding-native-tree-children-20261002.csv).
+
+Al comparar carga/reconstrucción, Out4x conserva PNG pero cambia stream en
+ambas versiones; Out8x mantiene **27 píxeles/7 bloques** y stream distinto.
+Los inputs Main de In2x/Out2x también difieren entre esas dos vías en ambos
+binarios, con texturas y máscaras iguales. No reaparecen los 319 píxeles
+anteriores: **no se atribuye ni se cierra esa variación** mediante este arreglo.
+
+Dos ABBA activas aisladas, escala 2, warmup 120, 40 frames/run, colectores
+básico y Main en ambos binarios. Primera tanda: fijo **39,6324 → 40,3824
+ms**, **68/80 → 70/80** fuera de 33,33 ms; pan **42,6684 → 43,0940 ms**,
+**78/80 → 77/80**. La simulación sube +0,4314/+0,2729 ms con el mismo
+core; dos candidatas cubren un tick posterior. Se conserva la diferencia
+observada, sin descartarla ni atribuirla íntegramente al cambio.
+[Fijo inicial](evidence/late-native-sprite-rounding-steady-20261002.csv)
+y [pan inicial](evidence/late-native-sprite-rounding-pan-settled-20261002.csv).
+
+La repetición da fijo **40,1278 → 40,3636 ms**, 24,920 → 24,775 FPS,
+**68/80 → 71/80**, máximo 54,326 → 54,783 ms; pan **42,6827 → 42,6696
+ms**, 23,429 → 23,436 FPS, **76/80 → 79/80**, máximo 65,192 → 63,228.
+La simulación vuelve a subir +0,1971/+0,2479 ms; una candidata fija y un
+control pan tienen ventana desplazada un tick. El core release sigue fresco
+con SHA 754dc09a. Estas tandas **no demuestran una mejora ni equivalencia
+exacta de rendimiento**. Se conserva el arreglo de captura por su regresión
+reproducible; 30 FPS por frame y 37 ticks/s siguen pendientes.
+[Fijo repetido](evidence/late-native-sprite-rounding-confirm-steady-20261002.csv)
+y [pan repetido](evidence/late-native-sprite-rounding-confirm-pan-settled-20261002.csv).
+
+Gates finales: **3037 core/6 ignoradas, 1695 cliente/2 ignoradas**, ambos
+Clippy estrictos, formato, docs y diff. La primera suite cliente completa
+falla por ENOSPC al copiar el ejecutable de paletas; se preservan sólo dos
+cachés antiguos inactivos mediante partes verificadas en bytes/modo/mtime,
+se recupera espacio y se repite la suite completa sin omitir pruebas. Se
+conservan el fallo y los manifiestos recuperables. Release aislada **52,974
+s**, ejecutable readonly 187371512 bytes SHA
+f8e6ae118c8f12454b3033e6192f6132b97da224993c96e04ec5352009d8a6ce.
+No se acredita una mejora de compilación por esta única corrida.
+
+Los once CSV públicos conservan **1328 filas**. Regresión previa/posterior,
+fuentes, binarios, capturas, drivers, dos tandas, gates y archivos recuperables
+quedan en target/performance/late-native-sprite-rounding-20261002. Se cierra
+sólo el reintento de assets cubierto. La siguiente etapa investiga la primera
+divergencia reproducible Out8x entre carga y reconstrucción, antes de retomar
+el lookup de máscaras; F08/F31 y jugabilidad permanecen abiertos.

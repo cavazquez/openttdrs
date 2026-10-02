@@ -1045,13 +1045,69 @@ cuatro efectos. Siguen abiertos emisión, RNG/callbacks, ticks agrupados,
 límite de efectos, sprites NewGRF, renderer completo y viajes completos.
 FPS sigue pausado; #326/#329 siguen abiertos.
 
+## #329-EFFECT-POOL-RNG — continuar decisiones cuando no hay espacio
+
+`ShowVisualEffect` recorre la cadena y decide emisión antes de llamar a
+`CreateEffectVehicleRel`. La falta de espacio hace que `CreateEffectVehicle`
+retorne nullptr; no evita las llamadas a Chance16 ni el recorrido siguiente.
+El cliente cortaba el loop de vehículos al llegar a 48 efectos, antes de
+leer el modelo y de consumir RNG. El límite debe aplicarse a crear entidades,
+una vez terminada la decisión; el estado global no puede depender de ese
+corte visual. El primer fallo usa seed 1, Diesel, espacio libre cero, humo 1,
+velocidad 24: el port queda en `[1, 1]`, frente a
+`[4230244526, 536870911]` nativos, aun con cero creaciones.
+
+El oracle ejecuta los cuerpos nativos completos de `ShowVisualEffect`,
+`CreateEffectVehicle/Rel`, `Randomizer::Next`/`SetSeed` y Chance16/Chance16I.
+Compila también el dispatcher nativo; el corpus sólo selecciona modelos
+estándar Steam/Diesel/Electric. Son **1.944 filas**: seeds 1/17, capacidad
+libre 0/1/48, 1/4/16 cabezas, cadenas de 1/4 unidades, contador 0/1/4,
+smoke 0/1/2 y velocidad 24/160 con máximo 160, potencia 2048 y peso 1024.
+Regeneración y prototipo coinciden byte a byte; paleta y cadencia anteriores
+siguen iguales. La disponibilidad del pool, terreno ordinario alimentado,
+flags sin reversa y los sinks se adaptan: no se certifica el pool global ni
+sus límites reales. El corpus recoge el sink de sonido, pero no verifica
+la política de sonido del cliente ni callbacks avanzados.
+
+La regresión ECS compara creaciones y las dos palabras finales del RNG global
+en los **1.944 escenarios**, con frames cargados y sonido desactivado. El
+fallo previo, los fuentes y el estado inicial se conservan. El cierre exige
+seguir consumiendo exactamente las decisiones del corpus cuando el espacio
+está agotado, y respetar la capacidad disponible al crear entidades. Se
+mantiene el límite visual de 48; su diferencia con el pool nativo sigue abierta.
+
+```bash
+python3 scripts/oracle_vehicle_effect_pool_loop.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/vehicle-effect-pool-loop-fresh --check
+cargo test -p openttdrs-client --bin openttdrs-client effect_pool_capacity_preserves_native
+```
+
+Validación general: **3.066 core / 1.704 client**, sin fallos, 6/2 ignorados;
+ambos Clippy estrictos, formato, documentación y diff pasan. Client tests usa
+`CARGO_INCREMENTAL=0`, sin cambiar la configuración del proyecto.
+
+Release reconstruida en **53.54 s**, core `fresh:true`,
+client SHA-256 `83da237554493eb20fa37a02278a4fcc54bfee2d8bbd1bb743868fc09e591768`. Los
+[controles congelados](evidence/vehicle-effect-pool-rng-control-raster-20261002.csv)
+en seis escalas y `.125` limitada a `.25` dan PNG, cámara principal y
+orden completo idénticos. En `.5`/`2` coinciden todas las entradas de sprites,
+**265/368 buffers CPU**, cobertura y oclusión. Kale pausado no certifica un
+pool de efectos agotado ni el renderer completo de OpenTTD.
+
+Evidencia privada en `target/parity/vehicle-effect-pool-rng-20261002/`.
+Siguen abiertos callbacks/writeback al agotarse el espacio, sonido por consist,
+emisión en ticks agrupados, terreno/flags restantes, pool nativo, NewGRF,
+viaje completo y renderer global. FPS sigue pausado; #326/#329 siguen abiertos.
+
 ## Alcance pendiente
 
 - La emisión está ligada a `Update`: agrupar ticks puede omitir decisiones de
   emisión, RNG y writeback de callbacks. Repetir una edad sobre la posición
   final no recupera el estado intermedio de cada tick.
-- El límite de 48 efectos corta el recorrido de vehículos; debe comprobarse
-  contra la asignación del pool nativo y su orden de RNG/callbacks.
+- El límite visual de 48 conserva ya las decisiones/RNG del corpus estándar
+  al agotarse el espacio. Quedan el pool nativo real, callbacks avanzados,
+  writeback y sonido por consist, además de los ticks agrupados.
 - Hay ocho orientaciones de sprites, pero queda por medir el instante de
   cambio de dirección y posición por frame en giros, paradas y recorridos
   completos, especialmente tráfico y cadenas articuladas.

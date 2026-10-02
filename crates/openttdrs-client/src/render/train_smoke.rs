@@ -977,9 +977,6 @@ fn spawn_train_smoke(
     let head_states = visual_effect_head_states(map, &state.vehicles, &fleet, engine_catalog);
     let mut visual_sound_events = Vec::new();
     for slot in visual_slots {
-        if active_count >= MAX_TRAIN_SMOKE_EFFECTS {
-            break;
-        }
         let head = head_states[slot];
         if !head.allows_visual_effect(prefs.smoke_amount) {
             continue;
@@ -1112,6 +1109,11 @@ fn spawn_train_smoke(
         let Some(set_kind) = set_kind else {
             continue;
         };
+        // Native allocation can fail after the emission decision. Continue
+        // evaluating later units so the visual cap does not skip RNG draws.
+        if active_count >= MAX_TRAIN_SMOKE_EFFECTS {
+            continue;
+        }
         let pose = extrapolate_vehicle_pose(vehicle, sim_clock.tick_alpha);
         let origin = train_smoke_world_position(
             vehicle,
@@ -2462,6 +2464,127 @@ mod tests {
             count += 1;
         }
         assert_eq!(count, 97);
+    }
+
+    #[test]
+    fn effect_pool_capacity_preserves_native_emission_rng_and_creations() {
+        use crate::render::AtlasSprite;
+        use bevy::ecs::system::RunSystemOnce;
+
+        let make_frame = |index| AtlasSprite {
+            image: Handle::default(),
+            atlas: TextureAtlas {
+                layout: Handle::default(),
+                index,
+            },
+            size: Vec2::splat(16.0),
+        };
+        let frames = EffectVehicleFrames {
+            steam: (0..5).map(make_frame).collect(),
+            diesel: (100..106).map(make_frame).collect(),
+            electric_spark: (200..206).map(make_frame).collect(),
+            explosion_large: Vec::new(),
+            breakdown: Vec::new(),
+            aircraft_smoke: Vec::new(),
+        };
+        let fixture = include_str!("../../tests/fixtures/native-vehicle-effect-pool-loop.csv");
+        let mut count = 0;
+        for line in fixture.lines().skip(1) {
+            let fields: Vec<u32> = line
+                .split(',')
+                .map(|value| value.parse().expect("native numeric column"))
+                .collect();
+            let [
+                seed,
+                model,
+                free,
+                heads,
+                chain,
+                counter,
+                amount,
+                speed,
+                _,
+                created,
+                _,
+                rng0,
+                rng1,
+                _,
+            ] = fields[..]
+            else {
+                panic!("native pool row must have fourteen columns");
+            };
+            let mut state = GameState::from_map(Map::new_flat(4, 4, 0));
+            state.random = openttdrs_core::linkgraph_parity::Randomizer::new(seed);
+            let mut engine = openttdrs_core::engine_by_id(ENGINE_TRAIN_KIRBY)
+                .expect("native base engine")
+                .clone();
+            engine.visual_effect = u8::try_from((model << 4) | 8).expect("native standard effect");
+            state.engine_catalog = vec![engine];
+            for slot in 0..heads * chain {
+                let mut vehicle = running_train(ENGINE_TRAIN_KIRBY);
+                vehicle.id = slot + 1;
+                vehicle.prev_unit = (slot % chain != 0).then_some(slot);
+                vehicle.next_unit = (slot % chain != chain - 1).then_some(slot + 2);
+                vehicle.cur_speed = u16::try_from(speed).expect("native speed");
+                vehicle.cached_max_speed = 160;
+                vehicle.cached_power_hp = 2048;
+                vehicle.cached_weight_t = 1024;
+                vehicle.newgrf_tick_counter = u8::try_from(counter).expect("native counter");
+                state.vehicles.push(vehicle);
+            }
+            let mut world = World::new();
+            world.insert_resource(SimWorld {
+                state,
+                loaded_file: false,
+                ottdmap_extras: None,
+            });
+            world.insert_resource(frames.clone());
+            world.insert_resource(ClientPreferences {
+                smoke_amount: u8::try_from(amount).expect("native smoke amount"),
+                ..default()
+            });
+            world.insert_resource(SimHudControls {
+                sound_vehicle: false,
+                ..default()
+            });
+            world.init_resource::<SimClock>();
+            world.init_resource::<TrainSmokeSpawnClock>();
+            world.init_resource::<TrainSmokeSortSequence>();
+            world.init_resource::<Messages<PlayWorldSfx>>();
+            let occupied =
+                MAX_TRAIN_SMOKE_EFFECTS - usize::try_from(free).expect("native free slots");
+            for ordinal in 0..occupied {
+                world.spawn(TrainSmokeEffect {
+                    started_tick: 0,
+                    origin: TrainSmokeWorldPosition {
+                        x: 16.0,
+                        y: 16.0,
+                        z: 10.0,
+                        source_tile: TileCoord::new(1, 1),
+                    },
+                    set: TrainSmokeSet::Steam,
+                    sort_ordinal: u8::try_from(ordinal).expect("small occupied pool"),
+                });
+            }
+            world
+                .run_system_once(spawn_train_smoke)
+                .expect("native pool emission");
+            assert_eq!(
+                world.resource::<SimWorld>().state.random.state,
+                [rng0, rng1],
+                "native RNG with limited allocation: {line}"
+            );
+            assert_eq!(
+                world
+                    .query_filtered::<Entity, With<TrainSmokeEffect>>()
+                    .iter(&world)
+                    .count(),
+                occupied + usize::try_from(created).expect("native creations"),
+                "native creations with limited allocation: {line}"
+            );
+            count += 1;
+        }
+        assert_eq!(count, 1944);
     }
 
     #[test]

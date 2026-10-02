@@ -337,6 +337,7 @@ pub(crate) fn update_tile_info_text(
     asset_status: Option<Res<ClientAssetStatus>>,
     music: Option<Res<MusicState>>,
     run_state: Res<State<SimRunState>>,
+    hud_visibility: Option<Res<HudVisibility>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<(&Transform, &Projection), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut text_q: Query<
@@ -345,6 +346,12 @@ pub(crate) fn update_tile_info_text(
     >,
     mut cache: Local<Option<TileInfoHudKey>>,
 ) {
+    // El HUD técnico está oculto por defecto. Evitar su resumen de flota y
+    // cadenas mientras no se dibuja; al mostrarlo se lee el estado actual.
+    // Sin recurso de visibilidad se conserva el comportamiento del setup.
+    if hud_visibility.is_some_and(|visibility| !visibility.visible) {
+        return;
+    }
     let Ok((mut text, mut text_transform)) = text_q.single_mut() else {
         return;
     };
@@ -927,6 +934,98 @@ mod tests {
         world.insert_resource(OrderEditState::default());
         crate::state::insert_test_sim_run_state(&mut world);
         world.run_system_once(update_tile_info_text).unwrap();
+    }
+
+    #[test]
+    fn hidden_hud_preserves_text_and_pose_then_refreshes_current_state_when_shown() {
+        let mut app = App::new();
+        app.insert_resource(SelectedTileInfo::default());
+        app.insert_resource(SimWorld::default());
+        app.insert_resource(SimHudControls::default());
+        app.insert_resource(ClientPreferences::default());
+        app.insert_resource(StationBuildState::default());
+        app.insert_resource(HudBuildFeedback::default());
+        app.insert_resource(UiToolState::default());
+        app.insert_resource(OrderEditState::default());
+        app.insert_resource(super::HudVisibility { visible: false });
+        crate::state::insert_test_sim_run_state(app.world_mut());
+        app.world_mut().spawn((
+            Window {
+                resolution: WindowResolution::new(1280, 720),
+                ..default()
+            },
+            PrimaryWindow,
+        ));
+        let camera = app
+            .world_mut()
+            .spawn((
+                PrimaryGameCamera,
+                Transform::default(),
+                Projection::Orthographic(OrthographicProjection::default_2d()),
+            ))
+            .id();
+        let text_entity = app
+            .world_mut()
+            .spawn((TileInfoText, Text2d::new("pending"), Transform::default()))
+            .id();
+        app.add_systems(Update, update_tile_info_text);
+        app.world_mut().clear_trackers();
+        app.update();
+        assert_eq!(hud_text(app.world_mut()), "pending");
+        assert_eq!(
+            *app.world().get::<Transform>(text_entity).unwrap(),
+            Transform::default()
+        );
+
+        app.world_mut()
+            .resource_mut::<super::HudVisibility>()
+            .visible = true;
+        app.update();
+        let original_text = hud_text(app.world_mut());
+        let original_pose = *app.world().get::<Transform>(text_entity).unwrap();
+        assert_ne!(original_text, "pending");
+
+        app.world_mut()
+            .resource_mut::<super::HudVisibility>()
+            .visible = false;
+        let origin = TileCoord::new(0, 0);
+        let mut vehicle = Vehicle::new(82, openttdrs_core::VehicleKind::Truck, origin, origin);
+        vehicle.running = true;
+        app.world_mut().resource_mut::<SimWorld>().state.vehicles = vec![vehicle];
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.world_mut()
+            .get_mut::<Transform>(camera)
+            .unwrap()
+            .translation = Vec3::new(30.0, 40.0, 0.0);
+        app.world_mut().clear_trackers();
+        app.update();
+        assert_eq!(hud_text(app.world_mut()), original_text);
+        assert_eq!(
+            *app.world().get::<Transform>(text_entity).unwrap(),
+            original_pose
+        );
+        let text_ref = app.world().entity(text_entity);
+        assert!(!text_ref.get_ref::<Text2d>().unwrap().is_changed());
+        assert!(!text_ref.get_ref::<Transform>().unwrap().is_changed());
+
+        app.world_mut()
+            .resource_mut::<super::HudVisibility>()
+            .visible = true;
+        app.update();
+        let expected_alert = localized_vehicle_hud_alert_line(
+            app.world().resource::<ClientPreferences>().locale(),
+            &app.world().resource::<SimWorld>().state,
+        );
+        assert!(!expected_alert.is_empty());
+        assert!(hud_text(app.world_mut()).contains(&expected_alert));
+        assert_ne!(hud_text(app.world_mut()), original_text);
+        assert_eq!(
+            app.world()
+                .get::<Transform>(text_entity)
+                .unwrap()
+                .translation,
+            original_pose.translation + Vec3::new(30.0, 40.0, 0.0)
+        );
     }
 
     #[test]

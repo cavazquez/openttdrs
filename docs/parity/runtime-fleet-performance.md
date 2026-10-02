@@ -259,6 +259,12 @@ en otro thread. Sus 480 frames están instrumentados y no sustituyen las ABBA
 de FPS retenidas. El HUD oculto aún analiza la flota; será la siguiente tarea
 acotada antes de medir de nuevo sin perf.
 
+La etapa 52 evita preparar el HUD técnico oculto y exige refresco inmediato
+al mostrarlo. Dos ABBA conservan una mejora pequeña: segunda tanda ~24,45 FPS
+fijo/~21,58 pan; 68/80 y 78/80 frames candidatos exceden 33,33 ms.
+Seis zooms e inputs/máscaras In2x/Out2x exactos. Continúa el coste ECS
+diferido de chunks; cadencia, picos, 30 FPS y jugabilidad permanecen abiertos.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

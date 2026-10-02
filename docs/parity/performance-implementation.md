@@ -3966,3 +3966,53 @@ en `target/performance/current-client-residual-20261002`. Fuentes del juego
 sin cambios; se reutilizan los gates 50 y se ejecutan docs/diff.
 Se cierra sólo la renovación de este perfil. F07/F24/F31, 30 FPS y
 jugabilidad siguen abiertos; continúa la corrección del trabajo del HUD oculto.
+
+## Etapa 52 — Evitar preparar el HUD técnico oculto (F24)
+
+update_tile_info_text retorna antes de consultar texto/cámara o preparar
+resúmenes si HudVisibility.visible=false. Al mostrarlo vuelve a leer todos
+los datos actuales. Sin ese recurso conserva el comportamiento anterior,
+como setup_tile_info_ui. La regresión usa un sistema persistente: ocultar,
+mostrar, ocultar y cambiar flota/idioma/cámara, y volver a mostrar. Exige texto
+y pose intactos sin flags Changed mientras está oculto, y alerta/pose actuales
+en el primer frame visible. Las pruebas existentes conservan el HUD visible.
+
+Dos tandas ABBA, GPU real, Kale activa y escala 2, sin perf ni compilación
+concurrentes; ambos clientes usan colector básico y detalle Main. Fijo,
+warmup 120: frame combinado **41,6865 → 41,2274 ms** y
+**41,6117 → 40,9046 ms**; FPS 23,989 → 24,256 y 24,032 → 24,447.
+Update baja 17,2377 → 17,1049 y 17,1677 → 16,9519 ms. También varía la fase
+de simulación aunque el core no cambió; no se atribuye toda la reducción del
+frame al HUD. Primera candidata 1 cubre 3703194–3703233, los otros runs fijos
+3703193–3703232. Sobre 33,33 ms: 69/80 → 66/80 y 68/80 → 68/80.
+[Primera fija](evidence/hidden-hud-work-steady-20261002.csv),
+[segunda fija](evidence/hidden-hud-work-repeat-steady-20261002.csv).
+
+Pan, warmup 30: **47,3034 → 46,6833 ms** y **47,2270 → 46,3362 ms**;
+FPS 21,140 → 21,421 y 21,174 → 21,581. Los ocho runs cubren
+3703103–3703142; sobre 33,33 ms permanece 79/80 y 78/80 en cada pareja.
+Máximos candidatos 130,337/128,645 y 128,952/129,209 ms. La mejora pequeña
+no elimina picos ni acredita 30 FPS o la cadencia nativa. TPS de la segunda
+tanda: fijo 24,206/23,841 → 24,469/24,413 y pan 22,166/22,178 →
+22,683/22,551; el intervalo de TPS excluye el primer frame de cada run.
+[Primera pan](evidence/hidden-hud-work-pan-20261002.csv),
+[segunda pan](evidence/hidden-hud-work-repeat-pan-20261002.csv).
+Los cuatro CSV de fases asociados conservan 640 intervalos completos Main,
+con el mismo frame/tick y suma exacta dentro de 0,001 ms.
+
+Doce capturas: seis PNG y streams completos exactos, cero píxeles/bloques
+distintos; In2x/Out2x conservan entradas, 272/384 imágenes CPU y ambas máscaras.
+[Oracle de regresión](evidence/hidden-hud-work-raster-20261002.csv).
+Esto conserva el render anterior; no cierra la paridad nativa ni certifica
+por captura el camino interactivo señalado en 49/50.
+
+Gates: **1684 tests cliente/2 ignorados**, Clippy estricto core/cliente,
+formato, comparador, docs y diff. Core sin cambios, suite anterior reutilizada.
+Release 53,81 s de pared/53,76 Cargo; core fresh 6240adc8. Cliente readonly
+SHA e6aa215cdbf5849b7b76e15ccaeb5a0701a8163a3785e0f3b5eb0aa89a53b4d6,
+187207320 bytes. No se atribuye una mejora de compilación.
+Artefactos y hashes: `target/performance/hidden-hud-work-20261002`.
+
+Se cierra sólo el trabajo del HUD oculto. F24 visible, F07/F17/F31, 30 FPS
+y jugabilidad siguen abiertos. Continúa la atribución del trabajo ECS
+diferido, especialmente rematerialización de chunks, antes de elegir su cambio.

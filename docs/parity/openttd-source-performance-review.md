@@ -592,6 +592,13 @@ pausada. El HUD técnico arranca oculto y aun así prepara su texto cada frame.
 Se corregirá primero ese trabajo, conservando el refresco inmediato al
 mostrarlo; el porcentaje no acredita una ganancia de FPS.
 
+La [etapa 52](performance-implementation.md#etapa-52--evitar-preparar-el-hud-técnico-oculto-f24)
+cierra ese subconjunto: el HUD oculto retorna antes de preparar datos y se
+refresca al mostrarlo, con regresión de texto/pose/flags y seis zooms exactos.
+Dos ABBA dan una mejora global pequeña; la segunda conserva ~24,45 FPS fijo
+y ~21,58 pan con muchos frames fuera del presupuesto. El HUD visible y el
+objetivo de 30 FPS siguen pendientes; no se atribuye todo el ahorro al HUD.
+
 Fuentes: [Rust: `display/mod.rs`, L328](https://github.com/cavazquez/openttdrs/blob/8994755781092e2e7a6baf463a2126d9125fbebb/crates/openttdrs-client/src/ui/hud/display/mod.rs#L328);
 [OpenTTD: `src/window.cpp`, L3237](https://github.com/OpenTTD/OpenTTD/blob/14ec60f248547d4d062a1160f0fc26d742319888/src/window.cpp#L3237).
 

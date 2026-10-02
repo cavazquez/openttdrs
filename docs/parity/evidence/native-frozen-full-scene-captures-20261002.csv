@@ -1,0 +1,13 @@
+kind,scale,freeze,clean,seconds,png_sha256,virtual_left,virtual_top,virtual_width,virtual_height,native_zoom,tick,pause,pause_after_raster,display,transparency,invisibility,vehicles,hidden,stations,visual_hash,state_verified
+frozen,0.25,1,0,0.667,19a5e1704155af8f1f751c3014966e93e26bc36ef4a0ed3962fcd725f97bca30,-640,16040,5120,2880,0,3703074,67,65,239,0,0,3505,328,245,14730810999729983964,True
+frozen,0.5,1,0,0.643,4c331822037c52973404d785c990eb2ac234663dd689304d6a830db3da575c8a,-1280,15680,5120,2880,1,3703074,67,65,239,0,0,3505,328,245,14730810999729983964,True
+frozen,1,1,0,0.642,b8d9ded21dda57e92b9e29c5d1a305519f8c1eb762848c7ecf37f358cc61232c,-2560,14960,5120,2880,2,3703074,67,65,239,0,0,3505,328,245,14730810999729983964,True
+frozen,2,1,0,0.693,208ad50ce7f2b9cefac7df61916a096cefbca144a8f418faaee204d1c4998a94,-5120,13520,5120,2880,3,3703074,67,65,239,0,0,3505,328,245,14730810999729983964,True
+frozen,4,1,0,0.819,ce4e97b18ad81774a2ae6a9ee2eb5e975e415264f6be3ce68deee7ecdec6a5e8,-10240,10640,5120,2880,4,3703074,67,65,239,0,0,3505,328,245,14730810999729983964,True
+frozen,8,1,0,0.934,89499a11c4dfdd89b5927b711abb3b6b1429692bae59164216fbf4019a8c9bd6,-17736,6244,5120,2880,5,3703074,67,65,239,0,0,3505,328,245,14730810999729983964,True
+frozen-repeat,0.5,1,0,0.643,4c331822037c52973404d785c990eb2ac234663dd689304d6a830db3da575c8a,-1280,15680,5120,2880,1,3703074,67,65,239,0,0,3505,328,245,14730810999729983964,True
+frozen-repeat,2,1,0,0.698,208ad50ce7f2b9cefac7df61916a096cefbca144a8f418faaee204d1c4998a94,-5120,13520,5120,2880,3,3703074,67,65,239,0,0,3505,328,245,14730810999729983964,True
+unfrozen-current,0.5,0,0,0.64,4c331822037c52973404d785c990eb2ac234663dd689304d6a830db3da575c8a,-1280,15680,5120,2880,1,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,False
+unfrozen-current,2,0,0,0.696,208ad50ce7f2b9cefac7df61916a096cefbca144a8f418faaee204d1c4998a94,-5120,13520,5120,2880,3,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,False
+unfrozen-before,0.5,0,0,0.64,4c331822037c52973404d785c990eb2ac234663dd689304d6a830db3da575c8a,-1280,15680,5120,2880,1,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,False
+unfrozen-before,2,0,0,0.7,208ad50ce7f2b9cefac7df61916a096cefbca144a8f418faaee204d1c4998a94,-5120,13520,5120,2880,3,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,not_traced,False

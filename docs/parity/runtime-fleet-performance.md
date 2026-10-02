@@ -232,6 +232,11 @@ candidato retirado 31 y pierde 114/44 coincidencias nativas en Out2x/Out4x.
 También se retira: fuentes y binario vuelven exactamente a 45. Se conserva
 la sonda para seguir aislando el defecto, sin nuevo benchmark ni cierre.
 
+La etapa 47 pausa el nativo sin CLEAN y verifica tres muestras del tick y
+campos visuales por captura. Los seis PNG y dos repeticiones son exactos
+contra la referencia histórica; las pérdidas 114/44 siguen presentes.
+Mejora la referencia, sin cambiar el cliente ni acreditar FPS nuevos.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

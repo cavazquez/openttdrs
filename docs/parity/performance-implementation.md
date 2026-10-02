@@ -3709,3 +3709,66 @@ Se cierra la evaluación como retirada. F08/F31, muestreo/composición/orden
 nativo, cadencia, importación y jugabilidad siguen abiertos. El siguiente
 paso obtiene una referencia nativa pausada sin activar CLEAN ni ocultar los
 vehículos, con metadatos de estado, antes de atribuir las pérdidas restantes.
+
+## Etapa 47 — Referencia nativa pausada con capas conservadas (F08/F31)
+
+El exportador permite `OPENTTDRS_WORLD_SCREENSHOT_FREEZE=1` independiente de
+CLEAN. Pausa justo después de cargar el SAV solicitado, antes de los callbacks
+que estabilizan la cámara. CLEAN=0 mantiene etiquetas, vehículos y opciones
+normales del viewport. El wrapper conserva FREEZE=0 por defecto; este cambio
+no altera el cliente ni su compositor.
+
+La referencia registra tres fases: after_load, before_raster_queue y
+after_raster. Incluye tick, flags de pausa/display/transparencia/invisibilidad,
+conteos de vehículos/ocultos/estaciones y una huella FNV-1a de ID, tipo,
+posición XYZ, dirección y vehstatus de cada entrada del pool nativo. **La
+huella no es el hash canónico del juego**, no incluye todos los campos del
+vehículo ni certifica RNG, importación o todas las animaciones/UI.
+
+[El verificador](../../scripts/check_frozen_screenshot_state.py) rechaza fases
+faltantes/duplicadas/fuera de orden, campos inválidos, CLEAN=1, pérdida de
+pausa normal, comandos durante pausa o cambios en los campos registrados.
+La primera captura conserva un rechazo por comparar todos los bits de pausa:
+67→65 es la limpieza nativa del bit SaveLoad, con Normal siempre activo.
+Se admite únicamente conservar la máscara inicial o limpiar ese bit; no se
+omite el resto del control de estado. Se añaden seis regresiones del parser.
+
+En ocho capturas pausadas —seis zooms más repeticiones In2x/Out2x— las tres
+fases mantienen tick **3703074**, display=239, transparencia/invisibilidad=0,
+**3505 entradas del pool**, 328 con Hidden y 245 estaciones. La huella es
+14730810999729983964 en todas las fases/runs. El pool nativo incluye entradas
+auxiliares: no se equipara este total con las 3293 unidades importadas del
+fixture. Las dos repeticiones son byte-idénticas. Cuatro controles FREEZE=0
+comparan el ejecutable instrumentado con el original en In2x/Out2x y también
+son exactos. [Doce capturas y metadatos](evidence/native-frozen-full-scene-captures-20261002.csv).
+
+**Los seis PNG pausados son byte-idénticos a los nativos históricos de 31.**
+La comparación con el candidato retirado 46 repite exactamente sus ganancias,
+pérdidas y listas de píxeles: In2x 2618/0/846, normal 331/0/15, Out2x
+147/**114**/807 y Out4x 265/**44**/1098 (gana/pierde/ninguno). La alineación
+se deriva de la cámara; Out8x conserva desplazamiento fraccionario por
+clamping y no cuenta coincidencias exactas.
+[Seis comparaciones](evidence/native-frozen-full-scene-raster-20261002.csv).
+Congelar el estado no elimina las pérdidas: el candidato sigue retirado.
+Esta coincidencia de capturas no certifica todo el orden, importación,
+composición o gameplay del port.
+
+Se instrumenta temporalmente el checkout nativo existente, preservando sus
+fuentes y binario antes del cambio. El build CMake completo tarda 279,85 s:
+no es una mejora de compilación del cliente. El ejecutable del ensayo es
+2898d5abfe6a143f85bfc2d378a90426a64ced9a53b9ed80568b32abff9a9720;
+el original fdae5e3c386733f17a53850b415ee43966ee66ee2dedc45a7e84b4e051379a5a
+queda restaurado junto con la fuente byte a byte antes de validar. Sólo se
+publican el parche del exportador, herramientas, regresiones y evidencia;
+reference/ no se añade. Runtime aislado, fuentes readonly, ejecutables,
+rechazo inicial, PNG, logs y drivers permanecen en
+`target/performance/native-frozen-full-scene-20261002`.
+
+Gates: seis tests del verificador, cinco contratos de fuente del exportador,
+las doce capturas/control reales, comparación de seis zooms, sintaxis shell,
+formato, docs y diff. Las suites core/cliente anteriores se reutilizan por
+mantener las fuentes del juego sin cambios. No hay benchmark activo nuevo
+ni avance acreditado hacia 30 FPS. Se cierra sólo el sub-issue de referencia
+pausada con campos registrados estables. F08/F31 siguen abiertos; el siguiente
+paso debe aislar muestreo y oclusión de vidrio frente al blitter nativo en
+Out2x/Out4x, donde separar Z no alcanza.

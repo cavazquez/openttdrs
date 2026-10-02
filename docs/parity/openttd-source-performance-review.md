@@ -289,6 +289,13 @@ texturada y controles pasan, pero los seis PNG repiten bit a bit el candidato
 el programa vuelve exactamente a 45. Falta una referencia nativa pausada
 con vehículos y metadatos para aislar los límites de la comparación de escena.
 
+La [etapa 47](performance-implementation.md#etapa-47--referencia-nativa-pausada-con-capas-conservadas-f08f31)
+obtiene esa referencia en seis zooms y dos repeticiones: tick/pose/flags
+registrados estables, CLEAN=0 y todos los PNG idénticos a los históricos.
+Las pérdidas 114/44 se mantienen; no se atribuyen a una carrera entre capturas
+ni se acepta el candidato. Faltan muestreo/oclusión nativos y el contrato de
+importación/compositor completo.
+
 ### F09 — Var 62 usa crashed para el bit de Hidden
 
 P2 · NewGRF · Evidencia: **Fuente** · Alcance estimado: medio.

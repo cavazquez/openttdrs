@@ -12,6 +12,9 @@
 #include "map_func.h"
 #include "openttd.h"
 #include "screenshot.h"
+#include "station_base.h"
+#include "timer/timer_game_tick.h"
+#include "vehicle_base.h"
 #include "transparency.h"
 #include "viewport_func.h"
 #include "video/video_driver.hpp"
@@ -124,6 +127,37 @@ bool EnvEnabled(const char *name)
 	return value != "0" && value != "false" && value != "no" && value != "off";
 }
 
+/** Records tick and vehicle presentation fields while preserving normal screenshot layers. */
+void LogFrozenWorldScreenshotState(const char *phase)
+{
+	if (!EnvEnabled("OPENTTDRS_WORLD_SCREENSHOT_FREEZE")) return;
+	uint64_t visual_hash = 14695981039346656037ULL;
+	uint32_t vehicles = 0;
+	uint32_t hidden = 0;
+	for (const Vehicle *v : Vehicle::Iterate()) {
+		vehicles++;
+		if (v->vehstatus.Test(VehState::Hidden)) hidden++;
+		for (uint32_t value : {v->index.base(), static_cast<uint32_t>(v->type),
+				static_cast<uint32_t>(v->x_pos), static_cast<uint32_t>(v->y_pos),
+				static_cast<uint32_t>(v->z_pos), static_cast<uint32_t>(v->direction),
+				static_cast<uint32_t>(v->vehstatus.base())}) {
+			for (uint32_t byte = 0; byte < 4; byte++) {
+				visual_hash ^= (value >> (byte * 8)) & 0xffU;
+				visual_hash *= 1099511628211ULL;
+			}
+		}
+	}
+	uint32_t stations = 0;
+	for ([[maybe_unused]] const Station *station : Station::Iterate()) stations++;
+	std::fprintf(stderr,
+		"openttdrs frozen-state: phase=%s tick=%llu pause=%u display=%u transparency=%u invisibility=%u vehicles=%u hidden=%u stations=%u visual_hash=%llu clean=%d\n",
+		phase, static_cast<unsigned long long>(TimerGameTick::counter),
+		static_cast<unsigned>(_pause_mode.base()), static_cast<unsigned>(_display_opt),
+		static_cast<unsigned>(_transparency_opt), static_cast<unsigned>(_invisibility_opt),
+		vehicles, hidden, stations, static_cast<unsigned long long>(visual_hash),
+		EnvEnabled("OPENTTDRS_WORLD_SCREENSHOT_CLEAN"));
+}
+
 int WorldScreenshotMinCall()
 {
 	const char *raw = std::getenv("OPENTTDRS_WORLD_SCREENSHOT_MIN_CALL");
@@ -209,6 +243,9 @@ bool OpenttdrsMaybeCaptureWorldScreenshot()
 	call_count++;
 	if (call_count < WorldScreenshotMinCall()) return true;
 
+	if (EnvEnabled("OPENTTDRS_WORLD_SCREENSHOT_FREEZE")) _pause_mode.Set(PauseMode::Normal);
+	LogFrozenWorldScreenshotState("after_load");
+
 	if (EnvEnabled("OPENTTDRS_WORLD_SCREENSHOT_CLEAN")) {
 		PrepareCleanWorldScreenshot();
 	}
@@ -267,6 +304,7 @@ bool OpenttdrsMaybeCaptureWorldScreenshot()
 		 * The normal setting therefore has an empty screenshot format, which makes
 		 * the screenshot provider lookup fail. PNG is built into our reference
 		 * configuration and gives the comparison script a deterministic artifact. */
+		LogFrozenWorldScreenshotState("before_raster_queue");
 		_screenshot_format_name = "png";
 		/* MakeScreenshot only reports that its work was queued. Give each
 		 * request a fresh internal name so that a failed queued raster cannot
@@ -291,6 +329,7 @@ bool OpenttdrsMaybeCaptureWorldScreenshot()
 		 * esta captura. Si el raster falló no existe un archivo con el nombre
 		 * nuevo: abortar es preferible a copiar una referencia obsoleta. */
 		VideoDriver::GetInstance()->QueueOnMainThread([target] {
+			LogFrozenWorldScreenshotState("after_raster");
 			if (!OpenttdrsWorldScreenshotFinishSortTrace()) {
 				std::fprintf(stderr, "openttdrs world-screenshot: la traza del sorter quedó incompleta\n");
 				_exit_game = true;

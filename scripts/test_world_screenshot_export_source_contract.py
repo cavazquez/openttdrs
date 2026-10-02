@@ -20,6 +20,24 @@ def compact(text: str) -> str:
 
 
 class WorldScreenshotExportSourceContractTest(unittest.TestCase):
+    def test_freeze_keeps_normal_layers_and_records_state_across_queued_raster(self) -> None:
+        source = SOURCE.read_text(encoding="utf-8")
+        compact_source = compact(source)
+        self.assertIn(
+            'if(EnvEnabled("OPENTTDRS_WORLD_SCREENSHOT_FREEZE"))_pause_mode.Set(PauseMode::Normal);',
+            compact_source,
+        )
+        hide_vehicles = source.split("bool OpenttdrsWorldScreenshotHideVehicles()", 1)[1].split("}", 1)[0]
+        self.assertIn('EnvEnabled("OPENTTDRS_WORLD_SCREENSHOT_CLEAN")', hide_vehicles)
+        self.assertNotIn("FREEZE", hide_vehicles)
+        self.assertLess(source.index('LogFrozenWorldScreenshotState("after_load")'),
+                        source.index('EnvEnabled("OPENTTDRS_WORLD_SCREENSHOT_CLEAN")',
+                                     source.index("bool OpenttdrsMaybeCaptureWorldScreenshot()")))
+        self.assertLess(source.index('LogFrozenWorldScreenshotState("before_raster_queue")'),
+                        source.index("MakeScreenshotAtZoom(zoom, screenshot_name, width, height)"))
+        self.assertLess(source.index("MakeScreenshotAtZoom(zoom, screenshot_name, width, height)"),
+                        source.index('LogFrozenWorldScreenshotState("after_raster")'))
+
     def test_capture_waits_for_requested_save_and_preserves_requested_center(self) -> None:
         source = compact(SOURCE.read_text(encoding="utf-8"))
 

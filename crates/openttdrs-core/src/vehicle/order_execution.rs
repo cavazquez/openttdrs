@@ -326,7 +326,9 @@ impl super::model::Vehicle {
         self.mark_train_station_departure_hold();
         self.path.clear();
         self.depart_turn = 0;
-        self.progress = 255;
+        if !self.retains_station_movement_fractions() {
+            self.progress = 255;
+        }
         self.mark_station_departure();
         self.advance_to_next_order();
     }
@@ -373,7 +375,9 @@ impl super::model::Vehicle {
         self.mark_train_station_departure_hold();
         self.path.clear();
         self.depart_turn = 0;
-        self.progress = 255;
+        if !self.retains_station_movement_fractions() {
+            self.progress = 255;
+        }
         self.mark_station_departure();
         self.advance_to_next_order();
     }
@@ -545,15 +549,10 @@ impl super::model::Vehicle {
 
     pub(super) fn do_advance_after_arrival(&mut self, pass_through: bool) {
         self.mark_train_station_departure_hold();
-        if self.kind == super::model::VehicleKind::Train {
-            // `TrainLocoHandler` conserva en `progress` la distancia que
-            // sobró al entrar a la plataforma. Cambiarla a 255 al cerrar
-            // BeginLoading haría que una salida/reversa posterior pierda ese
-            // remanente que OpenTTD deja visible hasta el siguiente handler.
-        } else if pass_through {
-            self.progress = 0;
-        } else {
-            self.progress = 255;
+        // Native LeaveStation keeps the handler's movement fractions.
+        // Synthetic movement retains its endpoint normalization.
+        if !self.retains_station_movement_fractions() {
+            self.progress = if pass_through { 0 } else { 255 };
         }
         self.mark_station_departure();
         self.advance_to_next_order();
@@ -577,6 +576,91 @@ mod tests {
     use crate::map::{Map, TileKind};
     use crate::vehicle::order::OrderConditionKind;
     use crate::{Command, GameState, TileCoord, Vehicle, VehicleKind, VehicleOrder, apply_command};
+
+    #[test]
+    fn station_departure_paths_keep_native_movement_fractions() {
+        use crate::vehicle::{OrderLoadType, OrderNonStop, OrderUnloadType};
+
+        let mut cases = 0;
+        for kind in [VehicleKind::Train, VehicleKind::Bus, VehicleKind::Truck] {
+            for line in
+                include_str!("../../tests/fixtures/parity/native-station-departure-remainder.csv")
+                    .lines()
+                    .skip(1)
+            {
+                let fields: Vec<u16> = line
+                    .split(',')
+                    .map(|field| field.parse().expect("native numeric field"))
+                    .collect();
+                let native_train = fields[0] == 0;
+                if (kind == VehicleKind::Train) != native_train {
+                    continue;
+                }
+                assert_eq!(fields[11], 4, "native OT_LEAVESTATION");
+                assert_eq!(fields[12], 0, "native station registration removed");
+                for phase in 0..4 {
+                    let at = TileCoord::new(0, 0);
+                    let mut v = Vehicle::new(1, kind, at, at);
+                    v.running = true;
+                    v.awaiting_load_window = true;
+                    v.crashed = fields[1] != 0;
+                    let mut order = VehicleOrder::station(at);
+                    if let VehicleOrder::Station {
+                        load_type,
+                        unload_type,
+                        non_stop,
+                        ..
+                    } = &mut order
+                    {
+                        *load_type = if fields[3] == 0 {
+                            OrderLoadType::LoadIfPossible
+                        } else {
+                            OrderLoadType::NoLoad
+                        };
+                        *unload_type = if fields[4] == 0 {
+                            OrderUnloadType::UnloadIfPossible
+                        } else {
+                            OrderUnloadType::NoUnload
+                        };
+                        *non_stop = if fields[2] == 0 {
+                            OrderNonStop::StopAtIntermediate
+                        } else {
+                            OrderNonStop::NonStopDestination
+                        };
+                    }
+                    v.orders = vec![order, VehicleOrder::station(TileCoord::new(0, 1))];
+                    v.cur_speed = 0;
+                    v.progress = u8::try_from(fields[6]).expect("native input progress");
+                    v.subspeed = u8::try_from(fields[7]).expect("native input subspeed");
+                    v.rail_pixel = 4;
+                    if !native_train {
+                        v.road_pos_valid = true;
+                        v.road_state = crate::road_movement::rvsb::RVSB_IN_ROAD_STOP
+                            | crate::road_movement::rvsb::RVSB_ENTERED_STOP;
+                        v.frame = 20;
+                        v.road_x = 5;
+                        v.road_y = 6;
+                        v.direction = crate::vehicle::DIR_SE;
+                    }
+                    match phase {
+                        0 => v.advance_after_loading(),
+                        1 => v.advance_after_consist_loading(),
+                        2 => v.advance_after_unloading(),
+                        _ => v.finish_arrival_after_load_window(),
+                    }
+                    assert_eq!(
+                        (v.cur_speed, u16::from(v.progress), u16::from(v.subspeed)),
+                        (fields[8], fields[9], fields[10]),
+                        "{line}, {kind:?}, phase={phase}"
+                    );
+                    assert_eq!(v.current_order, 1, "completed service at {line}");
+                    assert!(!v.awaiting_load_window, "completed service at {line}");
+                    cases += 1;
+                }
+            }
+        }
+        assert_eq!(cases, 8064);
+    }
 
     fn depot_map() -> Map {
         let mut state = GameState::new(12, 12);

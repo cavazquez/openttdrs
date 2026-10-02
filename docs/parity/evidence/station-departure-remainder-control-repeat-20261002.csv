@@ -1,0 +1,7 @@
+comparison,different_pixels,different_4x4_blocks,main_camera_equal,complete_sort_equal,complete_inputs_equal,cpu_bytes_equal,cpu_images_compared,sprites_equal,cameras_equal,assets_equal,coverage_equal,occlusion_equal,different_input_fields,different_mesh_fields
+original-before-after,0,0,True,True,False,True,265,True,True,True,True,True,17703,17703
+same-after-binary,0,0,True,True,True,True,265,True,True,True,True,True,0,0
+before-versus-after-repeat,0,0,True,True,False,True,265,True,True,True,True,True,17703,17703
+existing-same-before-binary-original,0,0,True,True,True,True,265,True,True,True,True,True,0,0
+existing-same-before-binary-repeat,0,0,True,True,False,True,265,True,True,True,True,True,17703,17703
+current-after-versus-prior-before-binary-repeat,0,0,True,True,True,True,265,True,True,True,True,True,0,0

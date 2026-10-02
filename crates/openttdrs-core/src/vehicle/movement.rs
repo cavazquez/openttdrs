@@ -1799,14 +1799,18 @@ impl super::model::Vehicle {
         }
     }
 
+    pub(super) fn retains_station_movement_fractions(&self) -> bool {
+        self.kind == super::model::VehicleKind::Train
+            || self.road_pos_valid
+                && matches!(
+                    self.kind,
+                    super::model::VehicleKind::Bus | super::model::VehicleKind::Truck
+                )
+                && crate::road_movement::rvsb::is_bay_road_state(self.road_state)
+    }
+
     fn hold_station_movement(&mut self) {
-        let physical_bay = self.road_pos_valid
-            && matches!(
-                self.kind,
-                super::model::VehicleKind::Bus | super::model::VehicleKind::Truck
-            )
-            && crate::road_movement::rvsb::is_bay_road_state(self.road_state);
-        if self.kind == super::model::VehicleKind::Train || physical_bay {
+        if self.retains_station_movement_fractions() {
             // BeginLoading stops speed; the loading guards return before
             // movement and retain both progress and subspeed.
             self.cur_speed = 0;

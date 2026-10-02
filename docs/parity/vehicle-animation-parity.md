@@ -757,6 +757,70 @@ subpaso bloqueado y la presentación detenida. Siguen pendientes tick completo,
 salida/continuación de servicio, tráfico, cadenas articuladas y viaje completo.
 FPS sigue pausado; #326/#329 permanecen abiertos.
 
+## #326-STATION-DEPARTURE-REMAINDER — cerrar servicio sin perder fracciones
+
+`Vehicle::LeaveStation` no sobrescribe progreso ni subspeed al terminar el
+servicio. El port conservaba el remanente al cerrar una llegada ferroviaria,
+pero forzaba `255` tras carga, carga del consist y descarga, y en llegada vial.
+El primer fallo: tren recién cargado, progreso `0`; el port queda en `255`.
+
+El criterio compartido de movimiento físico identifica trenes y buses/camiones
+con posición válida en bahía. Las cuatro vías de cierre conservan sus
+fracciones; el fallback sintético mantiene su normalización de endpoint.
+La selección y el avance de órdenes existentes siguen ejecutándose.
+
+El oracle compila **todo `LeaveStation` sin modificar**, junto con enums
+nativos de vehículo/órdenes. Adapta almacenamiento, flags, predicados de
+órdenes, reloj y efectos externos; el pago es nulo. Enumera train/road,
+32 combinaciones de flags de crash/non-stop/no-load/no-unload/can-leave y
+21 pares de progreso/subspeed: **1.344 filas**. No certifica los efectos
+de esas dependencias, política real de carga, horario, callbacks/RNG, mundo,
+movimiento posterior ni renderer nativo. La reparación inicial del adapter
+`StationID` queda conservada; no cambia el cuerpo nativo ni la fixture.
+
+La regresión consume los valores nativos en las cuatro APIs del port, con
+flags de orden/crash correspondientes y train/bus/truck: **8.064 estados**.
+Comprueba velocidad, progreso y subspeed exactos, y que las APIs realmente
+cierren la ventana y avancen de orden. El predicado can-leave del oracle es
+un input externo adaptado; no se equipara a la política de carga del port.
+La prueba falla antes del arreglo. La fixture se reproduce byte a byte y
+coincide con el prototipo. Pasan además las regresiones de pausas/entrada/
+salida de bahías, entrega de carbón y ciclo de guardado/carga.
+
+```bash
+python3 scripts/oracle_station_departure_remainder.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/station-departure-fresh --check
+cargo test -p openttdrs-core --lib station_departure_paths_keep_native_movement_fractions
+```
+
+Validación general: **3.059 core / 1.701 client**, sin fallos, 6/2 ignorados;
+ambos Clippy estrictos, formato, documentación y diff pasan. Client tests usa
+`CARGO_INCREMENTAL=0`, sin cambiar la configuración del proyecto.
+
+Release reconstruida en **79.47 s**, core `fresh:false`,
+client SHA-256 `83a538a3b547b65b97252cbc4688690d092f80250302a4b5dd3eb3554c405e1a`. Los
+[controles congelados](evidence/station-departure-remainder-control-raster-20261002.csv)
+en seis escalas y `.125` limitada a `.25` dan PNG, cámara principal y
+orden de composición completos idénticos. En `.5`/`2` coinciden
+**265/368 buffers CPU**, cobertura y oclusión; en `2`, también los inputs
+completos. En `.5` hay **17.703 campos distintos de meshes**, conservando
+orden de consulta y aliases; sprites/cámaras/assets coinciden. La repetición
+del corregido se repite idéntica. Los
+[controles conservados y cruzados](evidence/station-departure-remainder-control-repeat-20261002.csv)
+identifican ambas variantes en capturas del mismo binario anterior, SHA-256
+`30dc1bda7778ff3c85f24fdd44345a2b292f3e2abee1aba88b3367adb6580031`;
+la segunda variante anterior coincide completamente con el corregido actual.
+Se conservan los originales y diffs completos sin filtrar. Es variación previa
+de consulta; la brecha del renderer global permanece abierta. Kale pausado
+no certifica una salida real con servicio ni el renderer completo de OpenTTD.
+
+Evidencia en `target/parity/station-departure-remainder-20261002/` y
+`target/parity/station-departure-remainder-prototype-20261002/`. El cierre es
+sólo de fracciones al completar servicio. Siguen abiertos espera/full-load,
+horarios, decisiones de carga, callbacks, tick de salida y viaje completo.
+FPS sigue pausado; #326/#329 permanecen abiertos.
+
 ## Alcance pendiente
 
 - La emisión está ligada a `Update`: agrupar ticks puede omitir decisiones de

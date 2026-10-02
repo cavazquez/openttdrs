@@ -137,6 +137,15 @@ bytes y máscaras In2x/Out2x son exactos. Es conservación del port, no cierre
 de paridad nativa. Las cifras y limitaciones completas están en la etapa 32;
 cadencia y 30 FPS siguen abiertos.
 
+La etapa 33 usa las tablas de entidades de Bevy en el viewport y conserva los
+desempates, intervalos y transforms. En fijo, sort baja 4,41 → 4,10 ms y children
+1,10 → 0,82; la reducción aparece también en pan. El frame combinado permanece
+prácticamente igual: 43,4041 → 43,4786 ms fijo y 49,2658 → 49,3463 en movimiento.
+Se conserva el pico de 102 ms del primer candidato; no se acredita una ganancia
+global de FPS. Doce PNG y seis streams completos son exactos; In2x/Out2x
+conservan todas las entradas, bytes CPU y máscaras. Evidencia y alcance en la
+etapa 33; trabajo residual del frame, cadencia y 30 FPS siguen abiertos.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

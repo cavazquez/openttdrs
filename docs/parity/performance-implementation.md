@@ -2343,3 +2343,86 @@ todos los targets, formato, diff, frescura de docs y tres tests del comparador.
 Cierra sólo la búsqueda completa innecesaria para estos proxies estables.
 F08/F31 completos, muestreo/composición nativos, variaciones históricas,
 cadencia y 30 FPS siguen abiertos.
+
+## Etapa 33 — Tablas de entidades en el viewport (F18/F31)
+
+Se sustituyen cuatro índices con claves exclusivamente Entity por las tablas
+EntityHashMap/EntityHashSet de Bevy: estados de parents, ventanas de profundidad,
+children independientes y agrupación temporal de children. Los tres primeros
+se usan sólo para inserción y consulta. La agrupación recorre sus grupos en
+orden arbitrario, pero sólo escribe transforms de children distintos: no crea
+entidades ni Commands. Cada grupo conserva exactamente el sort por source_depth
+y Entity::to_bits, la fórmula de intervalo, fallback y guardia f32 anteriores.
+Los mapas de claves compuestas y la limpieza de proxies quedan fuera del cambio.
+
+El contrato nativo sigue siendo `ViewportDrawParentSprites` de OpenTTD
+14ec60f248: dibuja cada parent y después su cadena de children, antes de pasar
+al siguiente parent. La tabla acelera búsquedas internas del port sin cambiar
+ese contrato ni acreditar por sí sola su paridad completa. La regresión nueva
+intercala grupos, cambia la profundidad del parent y cubre intervalo estrecho,
+fallback del último parent, child independiente y parent inválido; conserva
+también los bits XY. Pasan las 26 pruebas del módulo.
+
+GPU real, Kale activa, 1280×720, escala 2, ABBA sin perf, trazas o compilación
+concurrentes, 40 muestras/run. Fijo, warmup 120: sort
+4,4219 / 4,3932 → 4,1765 / 4,0173 ms; children
+1,0943 / 1,1074 → 0,8454 / 0,7917 ms. Frame
+43,4028 / 43,4054 → 44,3369 / 42,6202 ms; FPS
+23,040 / 23,039 → 22,555 / 23,463. p95
+56,8860 / 57,1907 → 56,9709 / 57,1753; máximos/p99
+60,5302 / 59,6293 → 102,1578 / 57,6853. TPS
+23,056 / 23,040 → 22,534 / 23,475. Los cuatro runs cubren
+3703193–3703232. 76/80 frames anteriores y 72/80 posteriores superan
+33,33 ms. Se conserva el pico de 102,1578 ms, sin atribuirle una causa probada.
+[160 muestras fijas](evidence/viewport-entity-lookups-steady-20261001.csv).
+
+Pan, warmup 30: sort
+4,2887 / 4,2144 → 4,0213 / 3,9527 ms; children
+1,1293 / 1,1424 → 0,8224 / 0,7910 ms. Frame
+49,5200 / 49,0116 → 50,0619 / 48,6307 ms; FPS
+20,194 / 20,403 → 19,975 / 20,563. p95
+64,1869 / 61,4702 → 66,6261 / 61,1651; máximos/p99
+131,9280 / 129,2325 → 131,7661 / 127,9329. TPS
+21,094 / 21,297 → 20,848 / 21,460. Los cuatro runs cubren
+3703103–3703142. Los 80 frames de cada versión exceden el presupuesto.
+[160 muestras en movimiento](evidence/viewport-entity-lookups-pan-20261001.csv).
+
+Las fases afectadas mejoran en las cuatro parejas, pero **no se acredita una
+ganancia global de FPS**: el frame medio combinado fijo es 43,4041 → 43,4786 ms
+y el de pan 49,2658 → 49,3463. El resto del frame conserva variación; sumar
+timers no constituye una atribución completa del hilo de render o GPU. Sigue
+pendiente localizar ese trabajo y reducir los picos, junto con la cadencia.
+
+Doce capturas congeladas, seis escalas .25/.5/1/2/4/8, centro 128,128,
+settle 180 y CLEAN=0: cero píxeles y bloques 4×4 diferentes, PNG exactos.
+Los seis streams completos del sorter coinciden tras renumeración biyectiva
+de entidades, sin omitir campos ni alterar su orden. In2x/Out2x conservan
+todas las entradas de sprites, meshes y cámaras, bytes CPU de las 272/384
+imágenes y ambas máscaras. No cambia la tolerancia; esto acredita conservación
+del port anterior en esta fixture, no importación SAV ni raster nativos completos.
+[Seis zooms, entradas y hashes](evidence/viewport-entity-lookups-raster-20261001.csv).
+
+Artefactos: `target/performance/viewport-entity-lookups-20261001`.
+Cliente anterior SHA256
+`531c7acbe43439a265a2fa2453f86d70a1458d748424d89488f5832314d49182`;
+posterior `3ac2ff2cf93f4e89bf8ee88eee8bed2e19bb3cf9e4513b398f2d4d925b96f63d`,
+conservado readonly en /tmp y enlazado desde el directorio de artefactos.
+Cargo identifica fresh la misma biblioteca core del cliente que en la etapa
+32, SHA256 `09d42185d59accd956373a9f95e5e36de6132065ba7cfcee5528da0dfd8734e0`.
+No cambia el core ni se atribuye otro replay de las 61 fases aisladas. Release
+tarda 53,61 s; no acredita una mejora de compilación.
+
+Los cuatro JSON nuevos se comparan completos antes de comprimirse y verificarse
+por SHA256; las imágenes se deduplican sólo tras igualdad de bytes, entre
+artefactos readonly, recuperando 119.811.600 bytes. Ante 158 MiB libres en home,
+doce trazas válidas propias de las etapas 30/31 se preservan como gzip readonly
+en `/tmp/openttdrs-preserved-input-traces-stage33`, verificando los bytes
+originales antes de quitar sus copias sin comprimir. Conservan enlaces .gz y
+el manifiesto `preserved-prior-traces.csv`; se recuperan 352.883.180 bytes en
+home. Los tests usan TMPDIR propio en /tmp. No se retiran archivos ajenos.
+
+Validación: 3.035 tests core/seis ignorados, 1.673 cliente/dos; Clippy de
+ambos para todos los targets, formato, diff, frescura de docs y tres tests del
+comparador de entradas. Esta etapa acota la optimización a estas búsquedas;
+F18/F31 completos, variaciones históricas, paridad nativa, cadencia y 30 FPS
+siguen abiertos.

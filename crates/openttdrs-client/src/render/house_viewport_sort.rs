@@ -7,12 +7,13 @@
 //! el sorter. Otras familias se incorporan cuando ya tengan el mismo contrato
 //! de parent y children; no se inventa geometría desde el atlas.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 
 use bevy::asset::{AssetEvent, AssetId};
 use bevy::ecs::change_detection::{DetectChanges, Mut};
+use bevy::ecs::entity::{EntityHashMap, EntityHashSet};
 use bevy::ecs::message::{MessageCursor, Messages};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -133,10 +134,10 @@ pub(crate) struct ViewportSortableSegmentProxy {
 /// siguiente parent del stream de OpenTTD.
 #[derive(Resource, Default)]
 pub(crate) struct ViewportSortableChildDepthWindows {
-    next_parent_depth: HashMap<Entity, f32>,
+    next_parent_depth: EntityHashMap<f32>,
     /// Children promovidos a parents locales de una banda nativa. No deben
     /// volver a entrar en la ventana del parent ECS original durante el sync.
-    independent_children: HashSet<Entity>,
+    independent_children: EntityHashSet,
     /// Sonda de tests para distinguir el fast path de una ejecución real del sorter.
     #[cfg(test)]
     pub(crate) sort_runs: usize,
@@ -899,7 +900,7 @@ fn segment_proxy_depths_for_band(
     band: i64,
     candidates: &[ViewportSegmentProxyCandidate],
     global_sorted_parents: &[(Entity, ViewportSortableParent, f32)],
-    parent_states: &HashMap<Entity, ViewportParentSortState>,
+    parent_states: &EntityHashMap<ViewportParentSortState>,
 ) -> Vec<f32> {
     // El sorter nativo recibe los parents en el barrido de
     // `ViewportAddLandscape`, no en el orden ya resultante del sorter global.
@@ -1031,7 +1032,7 @@ fn export_viewport_sort_trace(
     sorted_depths: &[f32],
     scope: Option<TileViewportBounds>,
     precise_scope: Option<DiagonalViewportSortScope>,
-    parent_states: &HashMap<Entity, ViewportParentSortState>,
+    parent_states: &EntityHashMap<ViewportParentSortState>,
     local_proxies: &[ViewportSegmentProxyTrace],
     last_signature: &mut Option<u64>,
 ) {
@@ -1151,7 +1152,7 @@ fn viewport_sort_trace_signature(
     sorted_depths: &[f32],
     scope: Option<TileViewportBounds>,
     precise_scope: Option<DiagonalViewportSortScope>,
-    parent_states: &HashMap<Entity, ViewportParentSortState>,
+    parent_states: &EntityHashMap<ViewportParentSortState>,
     local_proxies: &[ViewportSegmentProxyTrace],
     path: &Path,
 ) -> u64 {
@@ -1414,7 +1415,7 @@ pub(crate) fn sort_viewport_sortable_parents(
     // consist; en una partida normal el stream permanece sin cambios.
     let clean_capture = crate::bevy_app::clean_map_capture_requested();
     let mut input = Vec::new();
-    let mut parent_states = HashMap::new();
+    let mut parent_states = EntityHashMap::new();
     for (entity, parent, mut visibility, transform, sprite, _chunk, segmented_source) in
         &mut parents
     {
@@ -2022,7 +2023,7 @@ pub(crate) fn sync_viewport_sortable_children(
     child_depth_windows: Res<ViewportSortableChildDepthWindows>,
 ) {
     let _measurement = crate::performance::measure(crate::performance::Phase::Children);
-    let mut children_by_parent: HashMap<Entity, Vec<(Entity, f32)>> = HashMap::new();
+    let mut children_by_parent: EntityHashMap<Vec<(Entity, f32)>> = EntityHashMap::new();
     for (entity, child) in &children {
         if child_depth_windows.independent_children.contains(&entity) {
             continue;
@@ -2633,7 +2634,7 @@ mod tests {
             can_promote_child: false,
             screen_band_range: Some((0, 1)),
         };
-        let parent_states = HashMap::from([(low_entity, state), (high_entity, state)]);
+        let parent_states = EntityHashMap::from_iter([(low_entity, state), (high_entity, state)]);
         let candidate = ViewportSegmentProxyCandidate {
             candidate: ViewportPromotionCandidate {
                 original_parent: low_entity,
@@ -2677,7 +2678,7 @@ mod tests {
         let input = [(entity, parent, 1.0)];
         let order = [0];
         let sorted_depths = [1.0];
-        let parent_states = HashMap::new();
+        let parent_states = EntityHashMap::new();
         let path = std::path::Path::new("/tmp/viewport-sort-signature-test.json");
         let without_proxy = viewport_sort_trace_signature(
             &input,
@@ -3283,6 +3284,109 @@ mod tests {
             foundation_depth < ground_depth && ground_depth < building_depth,
             "el child debe quedar dentro de la secuencia foundation → ground → building; got {foundation_depth}, {ground_depth}, {building_depth}"
         );
+    }
+
+    #[test]
+    fn interleaved_child_groups_preserve_parent_windows_and_unowned_poses() {
+        let mut world = World::new();
+        world.init_resource::<ViewportSortableChildDepthWindows>();
+        let mut spawn_parent = |source_depth, depth| {
+            world
+                .spawn((
+                    ViewportSortableParent {
+                        sprite_id: 1432,
+                        bounds: ParentSpriteBounds::new(0, 0, 0, 15, 15, 15),
+                        insertion_key: 0,
+                        source_depth,
+                    },
+                    Transform::from_xyz(0.0, 0.0, depth),
+                ))
+                .id()
+        };
+        let first = spawn_parent(1.0, 3.0);
+        let last = spawn_parent(2.0, 4.0);
+        let mut spawn_child = |parent, source_depth, x, z| {
+            world
+                .spawn((
+                    ViewportSortableChild {
+                        parent,
+                        source_depth,
+                    },
+                    Transform::from_xyz(x, -x, z),
+                ))
+                .id()
+        };
+        let high = spawn_child(first, 1.000_15, 10.0, 10.0);
+        let fallback = spawn_child(last, 2.000_2, 20.0, 20.0);
+        let low = spawn_child(first, 1.000_05, 30.0, 30.0);
+        let independent = spawn_child(first, 1.000_3, 40.0, 40.0);
+        let orphan = spawn_child(Entity::PLACEHOLDER, 0.0, 50.0, 50.0);
+        world
+            .resource_mut::<ViewportSortableChildDepthWindows>()
+            .independent_children
+            .insert(independent);
+        let mut schedule = Schedule::default();
+        schedule.add_systems(sync_viewport_sortable_children);
+        for parent_depth in [3.0, 3.5] {
+            world
+                .get_mut::<Transform>(first)
+                .expect("fixture pose")
+                .translation
+                .z = parent_depth;
+            let upper = parent_depth + 0.000_006;
+            world
+                .resource_mut::<ViewportSortableChildDepthWindows>()
+                .next_parent_depth
+                .insert(first, upper);
+            schedule.run(&mut world);
+            let low_depth = world
+                .get::<Transform>(low)
+                .expect("fixture pose")
+                .translation
+                .z;
+            let high_depth = world
+                .get::<Transform>(high)
+                .expect("fixture pose")
+                .translation
+                .z;
+            assert!(parent_depth < low_depth && low_depth < high_depth && high_depth < upper);
+            assert_eq!(
+                world
+                    .get::<Transform>(fallback)
+                    .expect("fixture pose")
+                    .translation
+                    .z
+                    .to_bits(),
+                (2.000_2_f32 + (4.0 - 2.0)).to_bits()
+            );
+            for (entity, x) in [
+                (high, 10.0_f32),
+                (fallback, 20.0),
+                (low, 30.0),
+                (independent, 40.0),
+                (orphan, 50.0),
+            ] {
+                let pose = world.get::<Transform>(entity).expect("fixture pose");
+                assert_eq!(pose.translation.x.to_bits(), x.to_bits());
+                assert_eq!(pose.translation.y.to_bits(), (-x).to_bits());
+            }
+            assert_eq!(
+                world
+                    .get::<Transform>(independent)
+                    .expect("fixture pose")
+                    .translation
+                    .z,
+                40.0
+            );
+            assert_eq!(
+                world
+                    .get::<Transform>(orphan)
+                    .expect("fixture pose")
+                    .translation
+                    .z,
+                50.0
+            );
+        }
     }
 
     #[test]

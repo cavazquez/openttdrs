@@ -989,6 +989,62 @@ terminarlas. Siguen abiertos duración real, lateness no nulo, tiempo de carga,
 TravelEarly, depósito, consist/política de carga, callbacks/RNG, viaje completo
 y renderer nativo. FPS sigue pausado; #326/#329 siguen abiertos.
 
+## #329-ELECTRIC-SPARK-PALETTE — conservar los colores del sprite
+
+`CreateEffectVehicle` establece únicamente Unclickable; `VehicleSpriteSeq::Set`
+asigna paleta cero y `DoDrawVehicle` envía `PAL_NONE` sin sombra. El cliente
+multiplicaba las chispas por RGB `(0.85, 0.92, 1.0)` tanto al crearlas como al
+cambiar de frame. Se elimina ese tinte añadido: el atlas conserva sus colores
+con el multiplicador blanco, como los demás efectos.
+
+El nuevo oracle compila sin cambiar esos cuerpos nativos completos, el lookup
+de transparencia y los init/tick de F1/F2/F3/FA. Extrae también los enums
+nativos y sus bindings de procedimientos. Son **388 filas**, edades 0..96,
+con sprite, frame, vida, posición, actualizaciones, paleta, sombra y flags.
+Una regeneración independiente coincide byte a byte, y el corpus de cadencia
+anterior de 388 filas sigue intacto. El enum de efectos se compacta en el
+adapter; el mapeo F1/F2/F3/FA ya lo verifica el oracle padre. Asignación siempre
+disponible, storage, bounds y sinks de viewport/dibujo están adaptados: no se
+certifica el pool, la decodificación ni el blitter/raster nativo completo.
+
+Dos regresiones ECS comprueban el color blanco durante los **388 estados** y
+la eliminación correspondiente. La segunda aísla los **97 estados F3** de la
+creación para comprobar el tinte al cambiar de frame; la chispa muestra seis
+frames y desaparece en tick 17. Los fallos previos y sus fuentes se conservan
+como evidencia diferencial. Paleta cero significa ausencia de remapeo en el
+sink nativo; la equivalencia con el multiplicador blanco se limita al color
+del sprite ya decodificado por nuestro atlas.
+
+```bash
+python3 scripts/oracle_vehicle_effect_palette.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/vehicle-effect-palette-fresh --check
+cargo test -p openttdrs-client --bin openttdrs-client keep_native_unmodified_palette
+```
+
+Validación general: **3.066 core / 1.703 client**, sin fallos, 6/2 ignorados;
+ambos Clippy estrictos, formato, documentación y diff pasan. Client tests usa
+`CARGO_INCREMENTAL=0`, sin cambiar la configuración del proyecto.
+
+Release reconstruida en **80.88 s**, core `fresh:true`,
+client SHA-256 `dfb16f57ab515e2d1957949f01533587a3f741b29b0c50e81e6691925dd56e3d`. Los
+[controles congelados](evidence/vehicle-effect-palette-control-raster-20261002.csv)
+en seis escalas y `.125` limitada a `.25` dan PNG, cámara principal y
+orden completo idénticos. En `.5`/`2` coinciden **265/368 buffers CPU**,
+cobertura y oclusión; las entradas completas difieren en un único campo: el
+color de una chispa, de RGB azul a blanco. El CSV conserva ese `False`. Los
+[20 controles de repetición](evidence/vehicle-effect-palette-repeat-control-20261002.csv)
+dan entradas completas idénticas con el mismo binario, y el cliente previo
+coincide con su captura de la etapa anterior. Se conservan todos los diffs
+de campos, sin ordenar queries ni ocultar el cambio de color. El PNG pausado
+no certifica el raster nativo de la chispa ni el renderer completo de OpenTTD.
+
+Evidencia privada en `target/parity/vehicle-effect-palette-20261002/`.
+El cierre cubre el tinte adicional y los estados de sprite/entidad de estos
+cuatro efectos. Siguen abiertos emisión, RNG/callbacks, ticks agrupados,
+límite de efectos, sprites NewGRF, renderer completo y viajes completos.
+FPS sigue pausado; #326/#329 siguen abiertos.
+
 ## Alcance pendiente
 
 - La emisión está ligada a `Update`: agrupar ticks puede omitir decisiones de

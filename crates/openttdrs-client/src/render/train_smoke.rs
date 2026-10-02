@@ -796,10 +796,7 @@ fn spawn_train_smoke_effect(
         return false;
     };
     let parent = train_smoke_parent(origin, set, sort_ordinal, map_width);
-    let mut sprite = atlas.sprite();
-    if matches!(set, TrainSmokeSet::Electric) {
-        sprite.color = Color::srgb(0.85, 0.92, 1.0);
-    }
+    let sprite = atlas.sprite();
     commands.spawn((
         MapVisualLayer,
         MapDynamicVisual,
@@ -1188,9 +1185,6 @@ fn animate_train_smoke(
             .is_some_and(|atlas| atlas.matches(&sprite));
         if frame_changed {
             apply_effect_frame(&mut sprite, &effect_set, state.frame);
-            if matches!(smoke.set, TrainSmokeSet::Electric) {
-                sprite.color = Color::srgb(0.85, 0.92, 1.0);
-            }
         }
         let position = TrainSmokeWorldPosition {
             z: smoke.origin.z + f32::from(state.rise),
@@ -2297,6 +2291,172 @@ mod tests {
                         16,
                         10 + i32::try_from(rise).expect("native rise"),
                     )
+                );
+            }
+            count += 1;
+        }
+        assert_eq!(count, 97);
+    }
+
+    fn native_palette_effect_world(effect_type: u8) -> (World, Entity) {
+        use crate::render::AtlasSprite;
+        use bevy::ecs::system::RunSystemOnce;
+
+        let make_frame = |index| AtlasSprite {
+            image: Handle::default(),
+            atlas: TextureAtlas {
+                layout: Handle::default(),
+                index,
+            },
+            size: Vec2::splat(16.0),
+        };
+        let mut world = World::new();
+        world.insert_resource(SimWorld {
+            state: GameState::from_map(Map::new_flat(4, 4, 0)),
+            loaded_file: false,
+            ottdmap_extras: None,
+        });
+        world.insert_resource(EffectVehicleFrames {
+            steam: (0..5).map(make_frame).collect(),
+            diesel: (100..106).map(make_frame).collect(),
+            electric_spark: (200..206).map(make_frame).collect(),
+            explosion_large: Vec::new(),
+            breakdown: Vec::new(),
+            aircraft_smoke: (300..305).map(make_frame).collect(),
+        });
+        world
+            .run_system_once(
+                move |mut commands: Commands, frames: Res<EffectVehicleFrames>| {
+                    assert!(spawn_train_smoke_effect(
+                        &mut commands,
+                        &frames,
+                        0,
+                        advanced_effect_set(effect_type).expect("native supported dispatch"),
+                        TrainSmokeWorldPosition {
+                            x: 16.0,
+                            y: 16.0,
+                            z: 10.0,
+                            source_tile: TileCoord::new(1, 1),
+                        },
+                        0,
+                        4,
+                    ));
+                },
+            )
+            .expect("spawn native palette effect");
+        let entity = world
+            .query_filtered::<Entity, With<TrainSmokeEffect>>()
+            .single(&world)
+            .expect("one native effect");
+        (world, entity)
+    }
+
+    #[test]
+    fn effect_sprites_keep_native_unmodified_palette_for_complete_lifetimes() {
+        use bevy::ecs::system::RunSystemOnce;
+
+        let fixture = include_str!("../../tests/fixtures/native-vehicle-effect-palette.csv");
+        let mut count = 0;
+        for (effect_type, atlas_start, native_start) in [
+            (0xF1, 0, 3079),
+            (0xF2, 100, 3073),
+            (0xF3, 200, 3084),
+            (0xFA, 300, 2040),
+        ] {
+            let (mut world, entity) = native_palette_effect_world(effect_type);
+            for line in fixture.lines().skip(1) {
+                let values: Vec<i64> = line
+                    .split(',')
+                    .map(|value| value.parse().expect("native numeric column"))
+                    .collect();
+                let [
+                    kind,
+                    tick,
+                    alive,
+                    sprite_id,
+                    frame,
+                    _,
+                    _,
+                    palette,
+                    shadow,
+                    flags,
+                    _,
+                    _,
+                    _,
+                ] = values[..]
+                else {
+                    panic!("native palette row must have thirteen columns");
+                };
+                if kind != i64::from(effect_type) {
+                    continue;
+                }
+                world.resource_mut::<SimWorld>().state.tick =
+                    GameTick::new(u64::try_from(tick).expect("native tick"));
+                world
+                    .run_system_once(animate_train_smoke)
+                    .expect("animate native palette effect");
+                if alive == 0 {
+                    assert!(
+                        world.get_entity(entity).is_err(),
+                        "native deletion tick {tick}"
+                    );
+                } else {
+                    assert_eq!((palette, shadow, flags), (0, 0, 4));
+                    assert_eq!(sprite_id, native_start + frame);
+                    let sprite = world.get::<Sprite>(entity).expect("live effect sprite");
+                    assert_eq!(
+                        sprite.texture_atlas.as_ref().expect("effect atlas").index,
+                        atlas_start + usize::try_from(frame).expect("native frame")
+                    );
+                    assert_eq!(
+                        sprite.color,
+                        Color::WHITE,
+                        "native palette zero, effect {effect_type:#x}, tick {tick}"
+                    );
+                }
+                count += 1;
+            }
+        }
+        assert_eq!(count, 388);
+    }
+
+    #[test]
+    fn electric_spark_frame_changes_keep_native_unmodified_palette() {
+        use bevy::ecs::system::RunSystemOnce;
+
+        let (mut world, entity) = native_palette_effect_world(0xF3);
+        // Isolate animation from the creation regression above.
+        world.get_mut::<Sprite>(entity).expect("new spark").color = Color::WHITE;
+        let fixture = include_str!("../../tests/fixtures/native-vehicle-effect-palette.csv");
+        let mut count = 0;
+        for line in fixture
+            .lines()
+            .skip(1)
+            .filter(|line| line.starts_with("243,"))
+        {
+            let values: Vec<i64> = line
+                .split(',')
+                .map(|value| value.parse().expect("native numeric column"))
+                .collect();
+            let [_, tick, alive, _, frame, _, _, palette, shadow, _, _, _, _] = values[..] else {
+                panic!("native palette row must have thirteen columns");
+            };
+            world.resource_mut::<SimWorld>().state.tick =
+                GameTick::new(u64::try_from(tick).expect("native tick"));
+            world
+                .run_system_once(animate_train_smoke)
+                .expect("animate electric spark");
+            if alive != 0 {
+                assert_eq!((palette, shadow), (0, 0));
+                let sprite = world.get::<Sprite>(entity).expect("live electric spark");
+                assert_eq!(
+                    sprite.texture_atlas.as_ref().expect("electric atlas").index,
+                    200 + usize::try_from(frame).expect("native frame")
+                );
+                assert_eq!(
+                    sprite.color,
+                    Color::WHITE,
+                    "native spark palette at tick {tick}"
                 );
             }
             count += 1;

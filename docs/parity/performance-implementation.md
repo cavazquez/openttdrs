@@ -4892,3 +4892,94 @@ quedan en target/performance/late-native-sprite-rounding-20261002. Se cierra
 sólo el reintento de assets cubierto. La siguiente etapa investiga la primera
 divergencia reproducible Out8x entre carga y reconstrucción, antes de retomar
 el lookup de máscaras; F08/F31 y jugabilidad permanecen abiertos.
+
+## Etapa 66 — Cuadro de chimenea coherente al reconstruir en pausa (F28/F31)
+
+La divergencia reproducible Out8x queda localizada en dos chimeneas de
+Kale, tiles (168,53)/(168,54). El spawn elegía la fase calculada para tick
+cero; el sistema de animación elegía `(tick / 8 + phase) % 8`. Al reconstruir
+pausado no se ejecutaba ese sistema y quedaban frames distintos al snapshot
+cargado en tick 3703074. Las dos fuentes pasaban de atlas 1173/974 a
+1509/1376; una cambiaba además su altura y su centro Y medio píxel.
+La regresión de reconstrucción sin animación falla en el control y pasa con
+el tick actual suministrado al spawn. Se conservan fase, bounds, source_depth
+y Z ordenada; no se cambian la simulación ni el compositor.
+
+El oracle extrae sin modificar IncrementSprite y ChimneySmokeTick del original
+14ec60f2. Ejecuta 520 filas: ocho fases, ticks 0–64, desde el límite de ciclo
+con progress=7. La prueba Rust y la segunda generación independiente coinciden
+con la fixture. Este alcance comprueba el período de ocho ticks y el wrap;
+no valida inicialización RNG, importación SAV, progreso inicial aleatorio,
+paletas ni ciclo de vida completo. El port conserva su fase por wang_hash y
+reloj global; las otras brechas de efectos, incluido cobre, siguen abiertas.
+
+En las cuatro capturas Out8x con inputs Main y bins, carga/reconstrucción
+pasa de **27 píxeles/7 bloques a cero**, y la oclusión de un píxel a cero.
+El PNG cargado queda idéntico; el reconstruido corregido coincide con él.
+Las dos fuentes recuperan atlas, tamaños, XY y Z del snapshot cargado.
+El comparador completo de Main sigue dando falso entre carga/reconstrucción:
+se conservan órdenes distintos y 210 posiciones diferentes en la tabla de
+488 imágenes, aunque el atlas principal coincide. Comparar el multiset de
+contenido sólo ayuda al diagnóstico; no sustituye la comparación de listas,
+identidades relacionadas y bytes por posición.
+[Inputs Out8x](evidence/chimney-smoke-snapshot-out8-input-comparison-20261002.csv)
+y [fuentes de humo](evidence/chimney-smoke-snapshot-out8-smoke-source-comparison-20261002.csv).
+
+Se toman 28 capturas, siete escalas solicitadas y seis efectivas. **12/14**
+comparaciones control/candidata conservan PNG y sorter exactos. La variación
+Out8x reconstruida es la corrección descrita. La otra es un **fallo nuevo
+Out2x reconstruido: 565 píxeles/175 bloques**, PNG c0877bb2 frente a 732beff6,
+con cobertura idéntica y oclusión distinta. No hay fuentes de chimenea en el
+Main de ese caso. El stream de sprites y las 368 imágenes CPU coinciden;
+el Main completo difiere en 5564 filas de meshes y dos cámaras. El diagnóstico
+que incluye todos los duplicados conserva el multiset de metadata y fuentes
+relacionadas de las 43209 filas de cada tipo y las seis cámaras. Ese
+multiset no certifica el orden ni una correspondencia biyectiva de alias.
+**La comprobación visual Out2x inicial no pasa y su causa sigue sin probarse.**
+[Raster completo](evidence/chimney-smoke-snapshot-raster-20261002.csv),
+[inputs](evidence/chimney-smoke-snapshot-sprite-inputs-20261002.csv)
+y [copas](evidence/chimney-smoke-snapshot-native-tree-children-20261002.csv).
+
+Doce repeticiones Out2x full ABBA, seis por binario, conservan PNG, sorter,
+Main completo, 368 imágenes por bytes/posición y ambas máscaras frente al
+control inicial. Cuatro incluyen bins idénticos, con frames 180/181; ocho
+usan la instrumentación original sin esos bins. **No se omite ni se cierra
+el fallo inicial**, ni se demuestra que sea anterior al cambio del humo.
+Tampoco reaparecen los 319 píxeles Out4x históricos, que siguen pendientes.
+Se conserva la corrección de spawn por su regresión y el snapshot Out8x
+contrastado, con aceptación limitada a esas fuentes; el render general y
+la caché retirada de 63 no quedan aprobados por esta etapa.
+[Repeticiones con bins](evidence/chimney-smoke-snapshot-out2-repeats-20261002.csv),
+[sin bins](evidence/chimney-smoke-snapshot-out2-unprepared-repeats-20261002.csv)
+y [todos los inputs](evidence/chimney-smoke-snapshot-out2-all-final-input-comparison-20261002.csv).
+
+ABBA activa aislada, escala 2, warmup 120, 40 frames/run, básico y Main en
+ambas versiones, sin compilaciones/análisis simultáneos. Fijo **40,2979 →
+40,1967 ms**, 24,815 → 24,878 FPS, **73/80 → 70/80** sobre 33,33 ms,
+máximo 54,492 → 54,270. Pan **42,8680 → 42,4873 ms**, 23,327 → 23,536 FPS,
+**76/80 → 78/80**, máximo 64,184 → 62,608. La simulación cambia
+−0,1952/−0,3913 ms con el core idéntico; un control pan cubre un tick posterior.
+No se atribuye el descenso del frame a este cambio ni se certifica coste
+idéntico. **30 FPS por frame y 37 ticks/s siguen sin cumplirse.**
+[Fijo](evidence/chimney-smoke-snapshot-steady-20261002.csv),
+[fases fijas](evidence/chimney-smoke-snapshot-steady-phases-20261002.csv),
+[pan](evidence/chimney-smoke-snapshot-pan-settled-20261002.csv)
+y [fases pan](evidence/chimney-smoke-snapshot-pan-settled-phases-20261002.csv).
+
+Gates Rust: **3037 core/6 ignoradas, 1697 cliente/2 ignoradas**, ambos Clippy
+estrictos y formato. La primera suite cliente falla por ENOSPC en dos pruebas;
+se preservan sus logs, un caché antiguo inactivo en 93 partes verificadas
+(1084 archivos, bytes/modo/mtime; 630882958 bytes archivados), y la suite
+completa pasa tras recuperar espacio, sin omitir pruebas. Docs y diff se
+comprueban después de documentar. Release aislada **52,941 s**, core fresco
+SHA 754dc09a; binario readonly 187369800 bytes SHA
+b48c9d05c62369927a4e9beb5947da5cbabf1feef69760327a07225f31392673.
+No acredita una mejora de compilación.
+
+Los doce CSV públicos conservan **725 filas**, además de la fixture nativa
+de 520. Fuentes, binarios, fallos, capturas, drivers, bytes, oracles y gates
+quedan en target/performance/out8-redraw-inputs-20261002, con manifiesto.
+Se cierra sólo la selección del cuadro al reconstruir estas chimeneas.
+Continúan el fallo Out2x, Out4x intermitente, lectura/composición universal,
+FPS y jugabilidad. El siguiente sub-issue mide la amplificación del remap de
+campos a chunks completos antes de proponer una actualización retenida.

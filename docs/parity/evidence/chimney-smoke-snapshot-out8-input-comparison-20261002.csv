@@ -1,0 +1,5 @@
+comparison,different_pixels,different_4x4_blocks,coverage_different_pixels,occlusion_different_pixels,complete_main_inputs_equal,cpu_images_compared_by_table_position,cpu_images_different_by_table_position,atlas_zero_bytes_equal
+before-load-redraw,27,7,0,1,False,488,210,True
+after-load-redraw,0,0,0,0,False,488,210,True
+loaded-before-after,0,0,0,0,False,488,0,True
+redraw-before-after,27,7,0,1,False,488,0,True

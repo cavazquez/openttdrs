@@ -1,0 +1,14 @@
+capture,complete_main_equal,cpu_image_bytes_equal_by_table_position,cpu_images_compared,all_sprite_metadata_and_linked_source_multiset_equal_DIAGNOSTIC_ONLY,all_mesh_metadata_and_linked_source_multiset_equal_DIAGNOSTIC_ONLY,all_camera_metadata_multiset_equal_DIAGNOSTIC_ONLY,sprite_count,mesh_count,camera_count,raw_mask_order_sha256,mask_request_frame,mask_extracted_frame
+zoom-2-after-redraw,False,True,368,True,True,True,43209,43209,6,,,
+out2-repeat-before-1,True,True,368,True,True,True,43209,43209,6,8be20585a54b885ff31a977e80c11e503aab05a2741c79098ede4502c7d0fabe,180,181
+out2-repeat-after-1,True,True,368,True,True,True,43209,43209,6,8be20585a54b885ff31a977e80c11e503aab05a2741c79098ede4502c7d0fabe,180,181
+out2-repeat-after-2,True,True,368,True,True,True,43209,43209,6,8be20585a54b885ff31a977e80c11e503aab05a2741c79098ede4502c7d0fabe,180,181
+out2-repeat-before-2,True,True,368,True,True,True,43209,43209,6,8be20585a54b885ff31a977e80c11e503aab05a2741c79098ede4502c7d0fabe,180,181
+out2-repeat-before-3,True,True,368,True,True,True,43209,43209,6,,,
+out2-repeat-after-3,True,True,368,True,True,True,43209,43209,6,,,
+out2-repeat-after-4,True,True,368,True,True,True,43209,43209,6,,,
+out2-repeat-before-4,True,True,368,True,True,True,43209,43209,6,,,
+out2-repeat-before-5,True,True,368,True,True,True,43209,43209,6,,,
+out2-repeat-after-5,True,True,368,True,True,True,43209,43209,6,,,
+out2-repeat-after-6,True,True,368,True,True,True,43209,43209,6,,,
+out2-repeat-before-6,True,True,368,True,True,True,43209,43209,6,,,

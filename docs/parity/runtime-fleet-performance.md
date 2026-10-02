@@ -420,3 +420,13 @@ activas no acreditan mejora ni coste idéntico: la repetición da +0,24 ms fijo
 y −0,01 pan, con ventanas y simulación variables. Se conserva el arreglo
 acotado; no explica los 319 píxeles ni los 27 de Out8x. La siguiente etapa
 aísla la divergencia reproducible Out8x. FPS y jugabilidad siguen abiertos.
+
+La [etapa 66](performance-implementation.md#etapa-66--cuadro-de-chimenea-coherente-al-reconstruir-en-pausa-f28f31)
+reproduce el reinicio del humo al reconstruir pausado y conserva el cuadro
+correspondiente al tick actual: Out8x 27 píxeles/7 bloques → cero. Un oracle
+nativo de 520 estados comprueba sólo período/wrap. La primera Out2x full
+candidata difiere en 565 píxeles; doce repeticiones completas son exactas,
+pero el fallo se conserva abierto y no se certifica el renderer general.
+ABBA fija 40,2979 → 40,1967 ms y pan 42,8680 → 42,4873, con simulación
+variable; no se atribuye ganancia. Se continúa con la amplificación del remap
+por campos. 30 FPS por frame, ticks/s y jugabilidad siguen pendientes.

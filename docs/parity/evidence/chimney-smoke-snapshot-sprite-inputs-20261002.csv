@@ -1,0 +1,9 @@
+scale,comparison,complete_sprite_inputs_equal,cpu_image_bytes_equal,cpu_images_compared,coverage_equal,occlusion_equal
+.5,default-change,True,True,265,True,True
+.5,redraw-change,True,True,265,True,True
+.5,control-redraw,False,True,265,True,True
+.5,candidate-redraw,False,True,265,True,True
+2,default-change,True,True,368,True,True
+2,redraw-change,False,True,368,True,False
+2,control-redraw,False,True,368,True,True
+2,candidate-redraw,False,True,368,True,False

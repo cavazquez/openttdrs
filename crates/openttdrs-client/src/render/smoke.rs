@@ -212,11 +212,15 @@ pub(crate) fn spawn_chimney_smoke(
     assets: &WorldAssets,
     map_width: u32,
     ctx: &TileRenderContext,
+    tick: u64,
 ) {
     let phase = wang_hash(ctx.tx, ctx.ty, 0x5740) as usize % CHIMNEY_SMOKE_FRAMES;
+    // A chunk can be rebuilt while animation is paused. Match the same
+    // snapshot as animate_chimney_smoke instead of restarting at tick zero.
+    let frame = smoke_frame_index(tick, phase);
     let position = chimney_smoke_position(ctx);
     let parent = smoke_parent(position, map_width, CHIMNEY_SMOKE_SORT_SPRITE_ID);
-    let translation = smoke_translation(position, CHIMNEY_SMOKE_META[phase], parent.source_depth);
+    let translation = smoke_translation(position, CHIMNEY_SMOKE_META[frame], parent.source_depth);
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
@@ -225,7 +229,7 @@ pub(crate) fn spawn_chimney_smoke(
             map_width,
             phase,
         },
-        assets.chimney_smoke[phase].sprite_colored(Color::WHITE),
+        assets.chimney_smoke[frame].sprite_colored(Color::WHITE),
         Transform::from_translation(translation),
         if industry_effects_hidden() {
             Visibility::Hidden
@@ -464,6 +468,27 @@ mod tests {
     }
 
     #[test]
+    fn chimney_frame_cadence_matches_the_native_cycle_boundary() {
+        let fixture = include_str!("../../tests/fixtures/native-chimney-cadence.csv");
+        let mut rows = 0;
+        for line in fixture.lines().skip(1) {
+            let fields: Vec<_> = line.split(',').collect();
+            let phase: usize = fields[0].parse().expect("native phase");
+            let tick: u64 = fields[1].parse().expect("native tick");
+            let sprite_id: usize = fields[2].parse().expect("native sprite");
+            let frame: usize = fields[3].parse().expect("native frame");
+            assert_eq!(sprite_id, 3701 + frame);
+            assert_eq!(
+                smoke_frame_index(tick, phase),
+                frame,
+                "phase={phase}, tick={tick}"
+            );
+            rows += 1;
+        }
+        assert_eq!(rows, 520);
+    }
+
+    #[test]
     fn copper_smoke_replays_the_rise_and_restart_of_smoke_tick() {
         assert_eq!(copper_smoke_state(0, 0).frame, 0);
         assert_eq!(
@@ -604,6 +629,64 @@ mod tests {
             world.get::<Transform>(e).unwrap().translation.z,
             sorted_depth,
             "el frame nuevo no debe devolver el efecto a source_depth"
+        );
+    }
+
+    #[test]
+    fn reconstructed_chimney_starts_at_the_current_tick_without_animation() {
+        use bevy::app::ScheduleRunnerPlugin;
+        use bevy::asset::AssetPlugin;
+        use bevy::image::ImagePlugin;
+
+        let directory = tempfile::tempdir().expect("test assets");
+        crate::render::assets::stub_opengfx_tiles_for_tests(directory.path());
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins.set(ScheduleRunnerPlugin::run_once()));
+        app.add_plugins(AssetPlugin {
+            file_path: directory.path().to_str().expect("asset path").into(),
+            ..default()
+        });
+        app.add_plugins(ImagePlugin::default());
+        app.init_asset::<TextureAtlasLayout>();
+        app.update();
+        let atlas = app.world_mut().resource_scope(
+            |world, mut layouts: Mut<Assets<TextureAtlasLayout>>| {
+                crate::render::TileAtlas::build(world.resource::<AssetServer>(), &mut layouts)
+            },
+        );
+        let assets =
+            WorldAssets::load(&atlas, &mut app.world_mut().resource_mut::<Assets<Image>>());
+        app.insert_resource(assets);
+        app.insert_resource(sim_at_tick(3_703_074));
+        app.world_mut()
+            .run_system_once(
+                |mut commands: Commands, assets: Res<WorldAssets>, sim: Res<SimWorld>| {
+                    let ctx = smoke_ctx(168, 53, 1, 0);
+                    spawn_chimney_smoke(&mut commands, &assets, 256, &ctx, sim.state.tick.get());
+                },
+            )
+            .expect("reconstruct smoke");
+
+        // A paused redraw never runs animate_chimney_smoke. Its newly
+        // spawned geometry must already describe this simulation snapshot.
+        let tick = app.world().resource::<SimWorld>().state.tick.get();
+        let assets = app.world().resource::<WorldAssets>().clone();
+        let mut query =
+            app.world_mut()
+                .query::<(&ChimneySmoke, &Sprite, &Transform, &ViewportSortableParent)>();
+        let (smoke, sprite, transform, parent) = query.single(app.world()).expect("one chimney");
+        let frame = smoke_frame_index(tick, smoke.phase);
+        assert!(
+            assets.chimney_smoke[frame].matches(sprite),
+            "paused reconstruction must use the current tick, not tick zero"
+        );
+        assert_eq!(
+            transform.translation,
+            smoke_translation(
+                smoke.position,
+                CHIMNEY_SMOKE_META[frame],
+                parent.source_depth
+            )
         );
     }
 }

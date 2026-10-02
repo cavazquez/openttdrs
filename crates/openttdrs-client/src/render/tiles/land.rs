@@ -1499,6 +1499,7 @@ pub(crate) fn spawn_industry_tile(
         foundation_newgrf,
         action5_sprites,
         newgrf_stack,
+        0,
     );
 }
 
@@ -1524,6 +1525,7 @@ pub(crate) fn spawn_industry_tile_with_world(
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    tick: u64,
 ) {
     let map_dims = map.dimensions();
     let map_width = map_dims.0;
@@ -1632,7 +1634,7 @@ pub(crate) fn spawn_industry_tile_with_world(
     let industries_transparent = is_transparent(TransparencyOption::Industries);
     // Chimenea de la central terminada: penacho de humo animado encima.
     if !industries_hidden && gfx == crate::render::GFX_POWERPLANT_CHIMNEY && m1 & 0x80 != 0 {
-        crate::render::spawn_chimney_smoke(commands, assets, map.dimensions().0, ctx);
+        crate::render::spawn_chimney_smoke(commands, assets, map.dimensions().0, ctx, tick);
     }
     // Chimenea mina de cobre terminada: humo `EV_COPPER_MINE_SMOKE`.
     if !industries_hidden && gfx == crate::render::GFX_COPPER_MINE_CHIMNEY && m1 & 0x80 != 0 {

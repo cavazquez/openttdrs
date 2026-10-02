@@ -502,6 +502,7 @@ pub(super) fn spawn_map_tiles_in_bounds(
                     &sim.state.runtime.foundation_newgrf_sprites,
                     Some(action5_sprites),
                     &sim.state.newgrf_stack,
+                    sim.state.tick.get(),
                 );
             }
             _ => {}

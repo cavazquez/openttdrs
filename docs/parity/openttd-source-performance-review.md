@@ -762,6 +762,14 @@ completo cambia como corresponde. 3037 core y 1688 cliente pasan. La ABBA
 mantiene ~24,89 FPS fijo/~23,42 pan, sin mejora atribuida. F28 completo,
 overrides y listas animadas generales continúan abiertos.
 
+La [etapa 66](performance-implementation.md#etapa-66--cuadro-de-chimenea-coherente-al-reconstruir-en-pausa-f28f31)
+corrige el cuadro inicial de dos chimeneas al reconstruir pausado: spawn y
+animación usan el mismo tick, eliminando 27 píxeles Out8x. El oracle de
+ChimneySmokeTick conserva 520 estados desde un límite de ciclo; RNG inicial,
+importación y vida completa no quedan cubiertos. La primera Out2x full falla
+con 565 píxeles aunque doce repeticiones sean exactas: el fallo permanece
+abierto. No se atribuye ganancia de FPS; F28/F31 generales continúan abiertos.
+
 ### F29 — Preview y ejecución deben compartir reglas sin efectos secundarios
 
 P3 · Comandos · Evidencia: **Fuente** · Alcance estimado: medio.

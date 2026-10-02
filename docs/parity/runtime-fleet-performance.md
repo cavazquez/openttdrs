@@ -269,7 +269,9 @@ La etapa 53 mide la cola propia del remapeo: fijo retira 160839 visuales en
 40 remapeos y aplica comandos en 2,60/2,65 ms medios, además de prepararlos.
 Pan aplica en 2,88/2,90 ms, con picos 8,05/8,51. La sonda conserva seis zooms
 y dos off/on exactos. Es diagnóstico; las cifras sin sonda siguen siendo 52.
-Continúa una prueba de bajas agrupadas con el mismo orden.
+La [etapa 54](performance-implementation.md#etapa-54--bajas-agrupadas-variante-retirada-f17f31)
+retira ese ensayo: no reduce aplicación ni frame. Producción conserva 53;
+continúa reducir el alcance del redibujado por tesela.
 
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y

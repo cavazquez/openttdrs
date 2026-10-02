@@ -456,8 +456,9 @@ La [etapa 53](performance-implementation.md#etapa-53--medir-la-cola-diferida-del
 separa preparación y aplicación de la cola propia. En la ventana fija retira
 160839 visuales en 40 remapeos; aplicarlos suma 2,60/2,65 ms medios que
 Phase::Remap no registraba. Conserva seis zooms y dos off/on exactos.
-Se ensayarán bajas agrupadas conservando el orden; la medición no acredita
-una mejora de FPS ni elimina la necesidad de validar granularidad y raster.
+La [etapa 54](performance-implementation.md#etapa-54--bajas-agrupadas-variante-retirada-f17f31)
+ensaya ese agrupado y lo retira: aplicación y frames no mejoran. Producción
+conserva 53; continúa la granularidad del redibujado con oracle raster.
 
 ### F18 — El sort ya tiene caché y no es un Z plano
 

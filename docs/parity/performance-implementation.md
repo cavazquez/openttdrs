@@ -4065,3 +4065,56 @@ No se atribuye una mejora de compilación o FPS a este mantenimiento.
 Se cierra sólo la atribución de esta cola. Continúa una prueba de bajas
 agrupadas, conservando su orden, antes de cambiar la granularidad de chunks.
 F07/F17/F31, 30 FPS y jugabilidad siguen abiertos.
+
+## Etapa 54 — Bajas agrupadas: variante retirada (F17/F31)
+
+Se agrupan únicamente las bajas directas de chunks incrementales. La variante
+conserva EntityCommand::despawn, el handler warn y world.flush tras cada baja,
+como CommandQueue de Bevy 0.19.1. Su diferencial cubre cascada de hijos,
+entidades ya retiradas, observadores con comandos diferidos, creación posterior
+y las mismas entidades/generaciones. Pasa, pero agrupar no evita el trabajo
+interno de despawn. Fuentes y binario candidatos quedan preservados; la
+producción vuelve a 53, byte por byte, sin una nueva ruta de bajas.
+
+ABBA sin perf ni sonda de comandos, GPU real, Kale activa, escala 2,
+40 frames/run y colectores básico/Main en ambas versiones. Fijo warmup 120:
+**40,8141 → 40,8976 ms**, 24,501 → 24,451 FPS; 67/80 fuera de 33,33 ms
+para ambas. Update 16,8117 → 16,9484 ms. Todos cubren 3703193–3703232.
+Pan warmup 30: **46,5574 → 47,1633 ms**, 21,479 → 21,203 FPS;
+78/80 → 79/80 fuera de presupuesto, picos candidatos 129,750/128,572 ms.
+Todos cubren 3703103–3703142. No hay mejora sostenida que justifique retenerla.
+[Frames fijos](evidence/batched-remap-despawn-steady-20261002.csv),
+[frames pan](evidence/batched-remap-despawn-pan-20261002.csv); los dos CSV
+asociados de fases conservan 320 intervalos completos de Main.
+
+Cuatro runs adicionales con marcas: fijo 40 remapeos y 160839 bajas en
+ambos, preparación 2,5425 → 2,6241 ms y aplicación **2,6575 → 2,6719 ms**.
+Pan selecciona 39 registros en ambos; aplicación 2,9294 → 2,9478 ms,
+pero la candidata empieza un tick después y retira 171821 frente a 174289
+visuales. Esa pareja no representa idéntico trabajo por tick y no permite
+atribuir su diferencia al agrupado. Sin rebuilds completos.
+[447 registros, incluido warmup](evidence/batched-remap-despawn-commands-20261002.csv),
+[160 frames instrumentados](evidence/batched-remap-despawn-trace-frames-20261002.csv),
+[160 intervalos Main](evidence/batched-remap-despawn-trace-phases-20261002.csv).
+
+Doce capturas: seis PNG y streams completos exactos; In2x/Out2x conserva
+entradas completas, 272/384 imágenes CPU y ambas máscaras.
+[Oracle de regresión](evidence/batched-remap-despawn-raster-20261002.csv).
+Conserva el renderer anterior, sin acreditar paridad nativa general.
+
+Gates candidatos: **1686 tests cliente/2 ignorados**, Clippy estricto
+core/cliente, formato, docs y diff. Se corrige el import inicial de un módulo
+privado de Bevy; fuente y diagnóstico conservados. Core sin cambios, suite
+anterior reutilizada. Release 53,951 s de pared/53,91 Cargo; core fresh
+6240adc8. Candidata 187269616 bytes, SHA
+34db832654a59c9b20144e395ee8046355e981b507f5c7c8552ca664bc885154.
+Fuente y release activo restaurados exactos a adcbd9cd de 53. Artefactos,
+drivers, hashes y decisión: target/performance/batched-remap-despawn-20261002.
+Cuatro snapshots propios inactivos se conservan como gzip, con recuperación
+completa verificada; se recuperan 498188524 bytes en total. No se atribuye
+una mejora de FPS o compilación a esa conservación.
+
+Se cierra sólo este ensayo fallido. Continúa la reducción del alcance del
+redibujado: una tesela alterada no debería retirar todos los productores de
+un chunk cuando sus vecinos no cambiaron. F07/F17/F31, 30 FPS y jugabilidad
+siguen abiertos; ningún umbral ni golden cambia.

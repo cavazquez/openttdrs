@@ -220,6 +220,12 @@ control que separa Z recortaría sprites negativos y no se instala. Falta la
 corrección de rango completo y el oracle de escena antes de validarla en
 seis zooms. Estas sondas no son mejoras de FPS ni cierres de F08.
 
+La etapa 45 captura la secuencia de bins AlphaMask2d en el mismo frame que
+los sprites: la pareja entra parent→child en In2x y al revés en Out2x. Sus
+48 píxeles de solapamiento visibles cambian de máscara en el fallo 42; 40
+también cambian en el PNG. El diagnóstico conserva seis zooms y la comparación
+off/on exacta. Falta una corrección y el oracle de escena; no mejora aún FPS.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

@@ -276,6 +276,12 @@ parent→child coincide con el blitter en los 13.728. El control sin offset
 separa Z, pero recortaría sprites negativos y no se instala. Falta una
 corrección de rango completo y el oracle de escena; F08 permanece abierto.
 
+La [etapa 45](performance-implementation.md#etapa-45--orden-de-bins-y-localización-del-solapamiento-f08f31)
+registra bins en el frame de captura sin alterar seis zooms ni las entradas.
+La misma pareja entra parent→child en In2x y child→parent en Out2x. Se localizan
+48 cambios de máscara y 40 del PNG histórico en su solapamiento visible; falta
+el registro de bins del fallo y no se atribuyen todos sus 204 píxeles.
+
 ### F09 — Var 62 usa crashed para el bit de Hidden
 
 P2 · NewGRF · Evidencia: **Fuente** · Alcance estimado: medio.
@@ -678,6 +684,10 @@ de raster/importación. El programa conserva las cifras de la etapa 41.
 La etapa 44 compara lecturas GPU texturadas con Draw original para una
 pareja capturada. No mide rendimiento del frame; conserva la producción
 y cifras 41 mientras descarta instalar el offset cero por su recorte de Z.
+
+La etapa 45 añade trazas de bins CPU vinculadas a extracción por FrameCount.
+No son timestamps GPU ni una nueva mejora de frame. Las comparaciones off/on
+son exactas y las cifras activas siguen siendo las de la etapa 41.
 
 ### F32 — Separar contratos facilita optimizar sin romper paridad
 

@@ -28,7 +28,7 @@ use bevy::render::render_resource::{
 use bevy::render::renderer::{RenderContext, RenderDevice, ViewQuery};
 use bevy::render::texture::GpuImage;
 use bevy::render::view::{ExtractedView, ViewTarget};
-use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
+use bevy::render::{ExtractSchedule, Render, RenderApp, RenderStartup, RenderSystems};
 use bevy::shader::Shader;
 use bevy::sprite::{Anchor, SpriteAlphaMode, SpriteMesh};
 use bevy::window::PrimaryWindow;
@@ -38,6 +38,7 @@ use openttdrs_core::newgrf_sprites::{
 
 use crate::render::{MapDynamicVisual, MapTileChunk, MapVisualLayer};
 
+mod draw_order_trace;
 mod sprite_trace;
 pub(crate) use sprite_trace::MapSpriteTraceRequest;
 #[cfg(test)]
@@ -147,6 +148,18 @@ impl Plugin for RailGlassCompositorPlugin {
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
         };
+
+        if std::env::var_os("OPENTTDRS_MAP_SPRITE_TRACE_MASK_ORDER").is_some() {
+            render_app
+                .init_resource::<draw_order_trace::PendingDrawOrderRequests>()
+                .add_systems(ExtractSchedule, draw_order_trace::extract_requests)
+                .add_systems(
+                    Render,
+                    draw_order_trace::export_requested_draw_order
+                        .after(RenderSystems::PrepareBindGroups)
+                        .before(RenderSystems::Render),
+                );
+        }
 
         render_app
             .add_systems(RenderStartup, init_rail_glass_pipeline)

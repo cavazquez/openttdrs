@@ -1,0 +1,5 @@
+scale,role,bin_index,index_within_bin,world_z_bits,source_entity,proxy_entity,source_parent_reference,material_bind_group,pipeline,input_frame,extracted_frame
+.5,parent,74,5,1075726681,4294895460,8589926304,,Some(BindGroupId(280)),CachedRenderPipelineId(6),180,181
+.5,child,103,2,1075726728,4294895459,8589858532,4294895460,Some(BindGroupId(373)),CachedRenderPipelineId(6),180,181
+2,child,809,2,1075726728,4294895459,4294877385,4294895460,Some(BindGroupId(1374)),CachedRenderPipelineId(6),180,181
+2,parent,813,2,1075726681,4294895460,8589890146,,Some(BindGroupId(1380)),CachedRenderPipelineId(6),180,181

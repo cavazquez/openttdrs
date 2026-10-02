@@ -205,6 +205,13 @@ pub(super) fn export_requested_sprite_trace(world: &mut World) {
         error!("map sprite trace {}: {error}", path.display());
         return;
     }
+    if std::env::var_os("OPENTTDRS_MAP_SPRITE_TRACE_MASK_ORDER").is_some() {
+        if let Some(frame) = world.get_resource::<bevy::diagnostic::FrameCount>() {
+            super::draw_order_trace::request(path.with_extension("mask-order.json"), frame.0);
+        } else {
+            error!("mask draw order requires FrameCount to identify the captured frame");
+        }
+    }
     if let Some(targets) = world.get_resource::<RailGlassPostProcessAssets>().cloned() {
         world
             .spawn(Screenshot::image(targets.mask))

@@ -3542,3 +3542,86 @@ sonda 43 sin cambios de resultados, tres self-tests del comparador, formato,
 docs y diff. Core/cliente y el binario permanecen idénticos a la etapa 41;
 sus suites previas (3.035 core, 1.682 cliente, 32 viewport) no se presentan
 como reejecutadas. No hay nueva medición de FPS.
+
+## Etapa 45 — Orden de bins y localización del solapamiento (F08/F31)
+
+Se añade un diagnóstico opt-in a la traza de sprites. Con
+OPENTTDRS_MAP_SPRITE_TRACE_MASK_ORDER presente, captura los bins AlphaMask2d
+de la cámara -101 después de PrepareBindGroups y antes de Render. Conserva
+el orden de bins y entidades, claves de pipeline/material y bits de la
+matriz de cada instancia. Identifica los mundos por main_entity y las vistas
+por sus IDs main/render. Es una lectura de las fases CPU preparadas; no
+certifica ejecución de draw calls ni orden entre fragmentos de una instancia.
+
+La solicitud se publica después de capturar las entradas, fuera del ECS
+principal, y se recoge en ExtractSchedule. Esto evita que un render del
+frame anterior consuma la solicitud siguiente durante pipelined rendering.
+FrameCount existente identifica la captura: PostUpdate 180 debe corresponder
+a extracción 181, tras Last. Se rechazan frames que no coincidan, falta del
+contador y errores de locks. El archivo mask-order.json usa create_new y
+flush; no sobrescribe un diagnóstico anterior. La resource adicional sólo
+vive en RenderApp y sólo se registra con el flag opt-in.
+
+Bevy 0.19.1 queue_material2d_meshes agrupa Mask por pipeline, draw function,
+mesh y material; AlphaMask2dBinKey no contiene Z. El render Direct y Dynamic
+Uniforms recorre la secuencia de batchable_meshes. La captura In2x contiene
+216 bins/674 instancias; Out2x, 853/9.878. Todas sus instancias enlazan con
+los proxies de la traza del mismo frame y conservan cada bit de transformación.
+No hay bins multidrawable, unbatchable ni non-mesh en estas capturas.
+
+La pareja texturada 44 conserva los mismos Z y referencia parent/child:
+In2x coloca parent en bin 74 y child en 103; Out2x coloca child en 809 y
+parent en 813. [Cuatro filas de la pareja](evidence/mask-bin-order-pair-20261002.csv).
+El zoom cambia el conjunto visible y la secuencia de materiales, aunque no
+cambie la simulación ni la profundidad de esos sprites. La lectura GPU 44
+demostró que invertir estos planos empatados cambia su ganador. Este registro
+de bins corresponde a capturas correctas actuales; no existe un registro
+equivalente de bins para el fallo histórico 42.
+
+También se proyecta el solapamiento 44 usando XY (34,-3926), cámara
+(0,-4104), escala 0,5, anchor central y 1280×720. El rectángulo 132×104
+empieza en (642,-48), sin buscar un ajuste de imagen. De sus 68 píxeles,
+48 quedan dentro del viewport. En la captura fallida 42 esos 48 pasan de
+(248,0,0,255) a negro en oclusión; la cobertura conserva sus bytes. Cuarenta
+cambian también en el PNG final, entre los 204 del fallo. Ocho conservan
+RGB 173/156/107 pese al cambio de máscara; no se infiere la causa de esos
+ocho sin medir la composición. [48 lecturas por coordenada](evidence/mask-bin-order-screen-overlap-20261002.csv).
+Se localiza así parte de la diferencia en un solapamiento real; no se atribuye
+todo el fallo ni se afirma su orden efectivo histórico sin la traza faltante.
+
+Control y candidato conservan PNG y stream completo del sorter en los seis
+zooms soportados. In2x/Out2x conservan además todos los campos ordenados de
+sprites, proxies, cámaras y assets, 272/384 imágenes CPU y ambas máscaras:
+[seis comparaciones](evidence/mask-bin-order-raster-20261002.csv).
+Activar la traza sobre el mismo binario vuelve a conservar exactamente esos
+datos y píxeles en ambos zooms:
+[dos comparaciones off/on](evidence/mask-bin-order-enabled-raster-20261002.csv).
+Los IDs se renumeran por biyección; no se ignoran campos ni se comparan sólo
+multiconjuntos. Estos runs son regresiones del diagnóstico, no certificación
+de raster nativo, importación ni escenarios activos de muchos vehículos.
+
+Binario control 41d26421c0e79fbf55a43619726c3aef7d2362efe90499ffbaa57d1a1516039c;
+candidato e4900c927783092231ff313f3118bcf794979bbf89cd2a5a55cfce886741d340,
+187.232.376 bytes. Release tarda 53,41 s total / Cargo 53,22; core 6240adc8
+se reutiliza fresh y bit-idéntico. No se acredita reducción de compilación.
+Fuentes, ejecutables readonly, HTML/JSON de build, capturas, datos, traza inicial
+y logs están en `target/performance/mask-bin-order-20261002`. El Clippy inicial
+rechazó dos expect; se conserva y se corrigió el manejo de locks sin panics.
+
+Se recuperó espacio de la caché cliente inactiva 1pvk2584qwjxa, escrita por
+última vez el 30/09. Sus 1.324 archivos, bytes, permisos y fechas en nanosegundos
+se verificaron contra un tar.gz de 1.471.388.000 bytes antes de retirar el
+directorio recuperable. El manifiesto y archivo permanecen junto a esta etapa;
+la caché activa no se modifica. No es una mejora de velocidad de compilación.
+
+Gates: formato, Clippy core/cliente all-targets, 1.682 tests cliente/dos ignorados,
+docs, diff y tres self-tests del comparador. Las suites core 3.035/seis ignorados
+son evidencia previa sobre el core idéntico; no se reejecutan aquí. El código
+normal de máscaras conserva proyección, profundidad, shader y agrupación.
+No hay nueva medición de FPS; siguen ~24,3 fijo/~21,4 pan de la etapa 41.
+
+Se cierra sólo el registro alineado de bins y la localización de los 48/40
+píxeles descritos. F08/F31 permanecen abiertos. El siguiente candidato debe
+separar profundidades world distintas sin recortar el dominio original ni
+alterar empates world verdaderos, y comprobar el resultado con GPU, nativo y
+seis zooms. Cadencia, importación y el objetivo de jugabilidad siguen pendientes.

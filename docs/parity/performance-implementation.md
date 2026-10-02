@@ -2655,3 +2655,123 @@ Clippy en todos los targets de ambos, formato, tres self-tests del comparador,
 frescura de docs y diff sin errores.
 F31 completo, atribución interna de PostUpdate, variaciones históricas,
 paridad nativa, cadencia y 30 FPS siguen abiertos.
+
+
+## Etapa 36 — No invalidar poses estables de proxies (F18/F31)
+
+El sorter ocultaba todos los proxies segmentados antes de calcular la vista y
+luego reescribía Visibility::Inherited, Transform y Anchor de los reutilizados.
+Ahora sólo oculta los retirados antes de encolar el mismo despawn. Conserva
+esa frontera también en la salida temprana de input vacío. Los usados sólo
+cambian visibilidad cuando difiere, y pose/ancla cuando difieren sus bits.
+La Z del parent original de una promoción se actualiza sólo si sus bits cambian.
+No altera EPSILON, intervalos, desempates, candidates, orden de queries ni
+órdenes de creación/borrado. Sprite conserva por ahora su escritura anterior.
+Las comparaciones de floats son por bits para conservar -0 y otros cambios
+que PartialEq puede tratar como iguales.
+
+Una regresión de una fuente que cruza varias bandas ejecuta el sorter real.
+Repetir un sort forzado conserva poses/anclas/visibilidad y produce cero
+Changed<Transform/Anchor/Visibility> en los proxies. Modificar externamente
+escala, ancla con -0 y visibilidad sigue reparándose. Al mover la fuente fuera
+de la vista, los proxies quedan Hidden antes del borrado diferido. Se repite
+la retirada con input vacío y se exige el mismo contrato antes de apply_deferred.
+Pasan las 27 regresiones de viewport. La fixture inicial, sin otro parent,
+expuso un bug anterior: la lista global vacía descarta también candidates
+segmentados que sí alcanzan la pantalla. Esta etapa conserva ese comportamiento;
+su corrección semántica queda como el siguiente sub-issue de F08/F18.
+
+Oracle de fuente: OpenTTD 14ec60f248, viewport.cpp::ViewportSortParentSprites
+L1596 deja intacta una lista de menos de dos parents y ViewportDrawParentSprites
+L1716 dibuja cada parent y sus children. La optimización de flags ECS conserva
+ese contrato del port; no cambia el algoritmo puro ni certifica todas las
+composiciones nativas.
+
+GPU real, Kale congelada, centro 128,128, 1280×720, clean=0, settle=180:
+**doce PNG en seis zooms exactos**, cero píxeles/bloques 4×4 y seis streams
+completos de sort idénticos bajo renombrado biyectivo de identidades.
+In2x/Out2x mantienen todas las entradas ordenadas, referencias, bytes CPU de
+272/384 imágenes y ambas máscaras. Los controles son los del binario inmutable
+de la etapa 35, sin colector; no se cambia tolerancia ni se permite permutar
+filas. Es conservación del port, sin cierre de paridad nativa ni de las
+variaciones históricas.
+[Seis parejas](evidence/viewport-proxy-change-flags-raster-20261001.csv).
+
+Dos tandas independientes ABBA, mismos ejecutables antes/después, Kale activa,
+GPU, escala 2, 40 muestras/run. El colector básico y el detalle del Main están
+activos en **ambas versiones**, sin perf, trazas ni compilaciones concurrentes.
+Fijo usa warmup 120; pan warmup 30. Se conservan todas las muestras, incluidos
+el pico y el run desplazado de la primera tanda.
+
+Primera tanda fija: frame anterior 42,6429 / 45,1938 ms, posterior
+42,8535 / 42,3951; FPS 23,451 / 22,127 frente a 23,335 / 23,588.
+p95 56,3787 / 64,0253 frente a 56,2517 / 55,7843; máximos/p99
+57,7510 / 74,1540 frente a 59,2132 / 57,8946. TPS
+23,438 / 22,092 frente a 23,345 / 23,591. Ticks
+3703193–3703232 en los cuatro runs; 73/80 frames por versión superan
+33,33 ms. PostUpdate 6,9214 / 7,4748 → 6,9420 / 6,7884.
+Frame combinado 43,9184 → 42,6243 ms; el control 2 aumenta también en
+simulación y Update. No se atribuye ese cambio al candidato.
+[160 muestras](evidence/viewport-proxy-change-flags-steady-20261001.csv),
+[160 registros por schedule](evidence/viewport-proxy-change-flags-steady-phases-20261001.csv).
+
+Primera tanda pan: frame 48,3273 / 48,4615 → 48,2650 / 48,2147;
+FPS 20,692 / 20,635 → 20,719 / 20,741. p95
+61,7309 / 61,3367 → 61,6340 / 61,9782; máximos/p99
+131,8243 / 133,9969 → 128,2967 / 128,8929. TPS
+21,651 / 21,613 → 21,639 / 21,670. El segundo posterior cubre
+3703104–3703143, los otros 3703103–3703142; no se declara estado activo
+idéntico entre esos runs. Superan 33,33 ms 80/80 anteriores y 79/80
+posteriores. PostUpdate 7,9914 / 8,1045 → 8,1045 / 7,9954; combinado
+8,0480 → 8,0499, sin reducción. Frame combinado 48,3944 → 48,2399.
+[160 muestras](evidence/viewport-proxy-change-flags-pan-20261001.csv),
+[160 por schedule](evidence/viewport-proxy-change-flags-pan-phases-20261001.csv).
+
+Se repite porque el pico y la diferencia de tick impiden una conclusión clara.
+Segunda tanda fija: frame 42,9109 / 42,8949 → 42,6459 / 42,7474;
+FPS 23,304 / 23,313 → 23,449 / 23,393. p95
+57,1525 / 57,2036 → 56,2162 / 56,2994; máximos/p99
+59,8143 / 59,3402 → 57,4272 / 59,6478. TPS
+23,302 / 23,308 → 23,445 / 23,402. Todos cubren
+3703193–3703232; 75/80 frente a 74/80 frames sobre el presupuesto.
+PostUpdate 6,8834 / 6,9234 → 6,9065 / 6,8648; combinado
+6,9034 → 6,8856 ms. Frame combinado 42,9029 → 42,6966.
+[160 muestras de repetición](evidence/viewport-proxy-change-flags-repeat-steady-20261001.csv),
+[160 por schedule](evidence/viewport-proxy-change-flags-repeat-steady-phases-20261001.csv).
+
+Segunda tanda pan: frame 48,3485 / 48,4904 → 48,0353 / 48,1581;
+FPS 20,683 / 20,623 → 20,818 / 20,765. p95
+60,5994 / 60,5617 → 61,3777 / 61,5183; máximos/p99
+130,0980 / 128,6909 → 130,0987 / 130,9486. TPS
+21,621 / 21,536 → 21,772 / 21,722. Todos cubren
+3703103–3703142 y los 80 frames por versión exceden 33,33 ms.
+PostUpdate 8,0828 / 8,1561 → 8,0266 / 7,9075; combinado
+8,1194 → 7,9670 ms. Frame combinado 48,4194 → 48,0967.
+También baja el tiempo de simulación, cuyo código no se modifica.
+[160 muestras de repetición](evidence/viewport-proxy-change-flags-repeat-pan-20261001.csv),
+[160 por schedule](evidence/viewport-proxy-change-flags-repeat-pan-phases-20261001.csv).
+
+Los registros detallados conservan alineación frame/tick con el básico y suma
+de intervalos dentro de 0,001 ms. Main es el ciclo actual y frame_ms el
+intervalo previo: su resta por fila no mide GPU. Se conserva la reducción de
+invalidaciones innecesarias probada por la regresión, **sin acreditar una
+mejora global clara de FPS ni una reducción uniforme de PostUpdate**.
+El resultado continúa alrededor de 23 FPS fijo y 20–21 en pan.
+
+Control 15cfe887 de la etapa 35 y candidato
+d1c5847e08d83f71960e2f63ce976185bb6fed888a7cc0b000c88382f54d35db
+son inmutables bajo target/performance/viewport-proxy-change-flags-20261001,
+con ejecutables en /tmp y copias exactas del sorter antes/después.
+Cargo confirma fresh la misma biblioteca core del cliente 09d42185; no cambia
+el núcleo ni se atribuye otro replay de las 61 fases. Release incremental
+53,27 s total / unidad cliente 53,11, dependencias frescas, sin desglose
+frontend/codegen/link. Se conserva el reporte y no se acredita mejora de
+compilación. Traces completos gzip y sus bytes CPU se verifican antes de
+archivar y deduplicar.
+
+Validación: 3.035 tests core/seis ignorados y 1.676 del cliente/dos ignorados;
+27 regresiones de viewport, Clippy de todos los targets de ambos crates,
+formato, tres self-tests del comparador, frescura de docs y diff sin errores.
+Se cierra sólo el sub-issue de flags de poses reutilizadas, con reparación y
+retiro diferido. F08/F18/F31 completos, fuente segmentada sin parents globales,
+empates f32, variaciones históricas, cadencia y 30 FPS siguen abiertos.

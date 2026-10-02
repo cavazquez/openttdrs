@@ -403,6 +403,13 @@ P2 · Render · Evidencia: **Fuente** · Alcance estimado: medio.
 Fuentes: [Rust: `render/house_viewport_sort.rs`, L1241](https://github.com/cavazquez/openttdrs/blob/8994755781092e2e7a6baf463a2126d9125fbebb/crates/openttdrs-client/src/render/house_viewport_sort.rs#L1241);
 [OpenTTD: `src/viewport.cpp`, L1596](https://github.com/OpenTTD/OpenTTD/blob/14ec60f248547d4d062a1160f0fc26d742319888/src/viewport.cpp#L1596).
 
+La [etapa 36](performance-implementation.md#etapa-36--no-invalidar-poses-estables-de-proxies-f18f31)
+evita invalidaciones falsas de pose/ancla/visibilidad y conserva reparación y
+borrado diferido. Seis zooms y entradas completas coinciden; las dos tandas de
+tiempos no acreditan ganancia clara de FPS. Queda pendiente el caso reproducible
+de fuentes segmentadas sin parents globales: la salida temprana descarta
+candidates locales visibles. No se cierra F18 ni el contrato nativo completo.
+
 ### F19 — El guardado bloquea UI y codifica dos veces el JSON
 
 P2 · Persistencia · Evidencia: **Fuente** · Alcance estimado: medio.

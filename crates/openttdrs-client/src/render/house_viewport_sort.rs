@@ -843,6 +843,12 @@ struct ViewportSegmentProxyCandidate {
     chunk: Option<crate::render::MapTileChunk>,
 }
 
+fn transforms_have_same_bits(left: &Transform, right: &Transform) -> bool {
+    left.translation.to_array().map(f32::to_bits) == right.translation.to_array().map(f32::to_bits)
+        && left.rotation.to_array().map(f32::to_bits) == right.rotation.to_array().map(f32::to_bits)
+        && left.scale.to_array().map(f32::to_bits) == right.scale.to_array().map(f32::to_bits)
+}
+
 /// Fila de diagnóstico para una copia que se ordena dentro de una banda
 /// nativa, pero que no participa del sorter global.
 ///
@@ -1371,11 +1377,8 @@ pub(crate) fn sort_viewport_sortable_parents(
     }
 
     let mut existing_segment_proxies = HashMap::new();
-    for (entity, proxy, _, mut visibility, _, _, _, _) in &mut segment_proxies {
+    for (entity, proxy, _, _, _, _, _, _) in &mut segment_proxies {
         existing_segment_proxies.insert((proxy.source_child, proxy.band), entity);
-        if *visibility != Visibility::Hidden {
-            *visibility = Visibility::Hidden;
-        }
     }
 
     // Una fuente segmentada puede haber quedado recortada por la pasada
@@ -1837,6 +1840,10 @@ pub(crate) fn sort_viewport_sortable_parents(
     child_depth_windows.next_parent_depth.clear();
     if input.is_empty() {
         for proxy_entity in existing_segment_proxies.into_values() {
+            if let Ok((_, _, _, mut visibility, _, _, _, _)) = segment_proxies.get_mut(proxy_entity)
+            {
+                visibility.set_if_neq(Visibility::Hidden);
+            }
             commands.entity(proxy_entity).despawn();
         }
         return;
@@ -1898,7 +1905,9 @@ pub(crate) fn sort_viewport_sortable_parents(
                 .next_parent_depth
                 .insert(original_parent, next_parent_depth);
         }
-        if let Ok((_, _, _, mut transform, _, _, _)) = parents.get_mut(original_parent) {
+        if let Ok((_, _, _, mut transform, _, _, _)) = parents.get_mut(original_parent)
+            && transform.translation.z.to_bits() != sorted_depths[promoted_index].to_bits()
+        {
             transform.translation.z = sorted_depths[promoted_index];
         }
     }
@@ -1970,10 +1979,16 @@ pub(crate) fn sort_viewport_sortable_parents(
                     band: proxy_candidate.band,
                 });
                 parent.set_if_neq(candidate.promoted_parent);
-                *visibility = Visibility::Inherited;
-                *transform = proxy_transform;
+                visibility.set_if_neq(Visibility::Inherited);
+                if !transforms_have_same_bits(&transform, &proxy_transform) {
+                    *transform = proxy_transform;
+                }
                 *sprite = proxy_candidate.sprite;
-                *anchor = proxy_candidate.anchor;
+                if anchor.0.to_array().map(f32::to_bits)
+                    != proxy_candidate.anchor.0.to_array().map(f32::to_bits)
+                {
+                    *anchor = proxy_candidate.anchor;
+                }
             } else {
                 let mut entity = commands.spawn((
                     crate::render::MapVisualLayer,
@@ -2004,6 +2019,11 @@ pub(crate) fn sort_viewport_sortable_parents(
         &mut previous_trace_signature,
     );
     for proxy_entity in existing_segment_proxies.into_values() {
+        // Only retired proxies need hiding before deferred despawn. Reused
+        // proxies keep their final visibility without a temporary dirty flag.
+        if let Ok((_, _, _, mut visibility, _, _, _, _)) = segment_proxies.get_mut(proxy_entity) {
+            visibility.set_if_neq(Visibility::Hidden);
+        }
         commands.entity(proxy_entity).despawn();
     }
 }
@@ -2123,6 +2143,181 @@ mod tests {
             }),
         ));
         world
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn repeated_segment_sort_keeps_pose_flags_and_repairs_external_changes() {
+        let mut world = viewport_scope_test_world(128, 128);
+        let ordinary = world
+            .spawn((
+                ViewportSortableParent {
+                    sprite_id: 1422,
+                    bounds: ParentSpriteBounds::new(0, 0, 0, 15, 15, 31),
+                    insertion_key: viewport_insertion_key(4, 4, 0),
+                    source_depth: 3.0,
+                },
+                Sprite::sized(Vec2::ONE),
+                Transform::from_xyz(200.0, 200.0, 3.0),
+            ))
+            .id();
+        let sprite = Sprite {
+            custom_size: Some(Vec2::new(100.0, 300.0)),
+            rect: Some(Rect::from_corners(Vec2::ZERO, Vec2::new(100.0, 300.0))),
+            ..Default::default()
+        };
+        let transform = Transform::from_xyz(-0.0, 0.0, 2.0);
+        let source = world
+            .spawn((
+                ViewportSortableParent {
+                    sprite_id: 5473,
+                    bounds: ParentSpriteBounds::new(0, 0, 0, 15, 15, 31),
+                    insertion_key: viewport_insertion_key(5, 5, 0),
+                    source_depth: 2.0,
+                },
+                ViewportSortableSegmentedSource {
+                    sprite: sprite.clone(),
+                    transform,
+                },
+                sprite,
+                transform,
+                Anchor::CENTER,
+            ))
+            .id();
+        let mut schedule = Schedule::default();
+        schedule.add_systems(sort_viewport_sortable_parents);
+        schedule.run(&mut world);
+        schedule.run(&mut world);
+        let mut proxies = world.query_filtered::<
+            (Entity, &Transform, &Anchor, &Visibility),
+            With<ViewportSortableSegmentProxy>,
+        >();
+        let expected: Vec<_> = proxies
+            .iter(&world)
+            .map(|(entity, transform, anchor, visibility)| {
+                (entity, *transform, *anchor, *visibility)
+            })
+            .collect();
+        assert!(expected.len() > 1, "source must span native draw bands");
+        world.clear_trackers();
+        world
+            .entity_mut(source)
+            .get_mut::<ViewportSortableParent>()
+            .unwrap()
+            .set_changed();
+        schedule.run(&mut world);
+        for (entity, transform, anchor, visibility) in &expected {
+            let current = world.entity(*entity);
+            assert!(transforms_have_same_bits(
+                current.get::<Transform>().unwrap(),
+                transform
+            ));
+            assert_eq!(
+                current
+                    .get::<Anchor>()
+                    .unwrap()
+                    .0
+                    .to_array()
+                    .map(f32::to_bits),
+                anchor.0.to_array().map(f32::to_bits)
+            );
+            assert_eq!(current.get::<Visibility>().unwrap(), visibility);
+        }
+        assert_eq!(
+            world
+                .query_filtered::<(), (
+                    With<ViewportSortableSegmentProxy>,
+                    Or<(Changed<Transform>, Changed<Anchor>, Changed<Visibility>)>,
+                )>()
+                .iter(&world)
+                .count(),
+            0,
+            "unchanged poses must not dirty propagation or visibility"
+        );
+
+        let (entity, expected_transform, expected_anchor, expected_visibility) = expected[0];
+        world.clear_trackers();
+        {
+            let mut proxy = world.entity_mut(entity);
+            proxy.get_mut::<Transform>().unwrap().scale = Vec3::splat(4.0);
+            proxy.get_mut::<Anchor>().unwrap().0.x = -0.0;
+            *proxy.get_mut::<Visibility>().unwrap() = Visibility::Hidden;
+        }
+        world
+            .entity_mut(source)
+            .get_mut::<ViewportSortableParent>()
+            .unwrap()
+            .set_changed();
+        schedule.run(&mut world);
+        let current = world.entity(entity);
+        assert!(transforms_have_same_bits(
+            current.get::<Transform>().unwrap(),
+            &expected_transform
+        ));
+        assert_eq!(
+            current
+                .get::<Anchor>()
+                .unwrap()
+                .0
+                .to_array()
+                .map(f32::to_bits),
+            expected_anchor.0.to_array().map(f32::to_bits)
+        );
+        assert_eq!(current.get::<Visibility>().unwrap(), &expected_visibility);
+
+        world.clear_trackers();
+        world
+            .entity_mut(source)
+            .get_mut::<ViewportSortableSegmentedSource>()
+            .unwrap()
+            .transform
+            .translation
+            .x = 3_000.0;
+        world
+            .entity_mut(source)
+            .get_mut::<Transform>()
+            .unwrap()
+            .translation
+            .x = 3_000.0;
+        schedule.set_apply_final_deferred(false);
+        schedule.run(&mut world);
+        assert_eq!(proxies.iter(&world).count(), expected.len());
+        assert!(
+            proxies
+                .iter(&world)
+                .all(|(_, _, _, visibility)| *visibility == Visibility::Hidden)
+        );
+        schedule.apply_deferred(&mut world);
+        assert_eq!(proxies.iter(&world).count(), 0);
+
+        // Recreate the bands, then exercise the empty-input early return.
+        world
+            .entity_mut(source)
+            .get_mut::<ViewportSortableSegmentedSource>()
+            .unwrap()
+            .transform = transform;
+        *world.entity_mut(source).get_mut::<Transform>().unwrap() = transform;
+        schedule.set_apply_final_deferred(true);
+        schedule.run(&mut world);
+        schedule.run(&mut world);
+        assert_eq!(proxies.iter(&world).count(), expected.len());
+        world.clear_trackers();
+        world.despawn(source);
+        world.despawn(ordinary);
+        schedule.set_apply_final_deferred(false);
+        schedule.run(&mut world);
+        assert_eq!(proxies.iter(&world).count(), expected.len());
+        assert!(
+            proxies
+                .iter(&world)
+                .all(|(_, _, _, visibility)| *visibility == Visibility::Hidden)
+        );
+        schedule.apply_deferred(&mut world);
+        assert_eq!(
+            proxies.iter(&world).count(),
+            0,
+            "retired proxies must leave"
+        );
     }
 
     #[test]

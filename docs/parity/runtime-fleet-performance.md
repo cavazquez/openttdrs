@@ -164,6 +164,14 @@ en unos 23,3–23,6 FPS fijo / 20,7 en pan; PostUpdate ocupa 6,8–7,0 / 8,0 ms.
 No se atribuye una ganancia de FPS ni el coste total del colector. Evidencia y
 límites en la etapa 35; F31, cadencia, paridad nativa y 30 FPS siguen abiertos.
 
+La etapa 36 evita marcar pose/ancla/visibilidad de proxies reutilizados cuando
+sus bits no cambian y conserva ocultación previa al borrado diferido. Seis
+zooms y entradas/bytes/máscaras In2x/Out2x son exactos. Dos tandas ABBA no
+acreditan mejora clara de FPS ni reducción uniforme de PostUpdate; se retiene
+la reducción de invalidaciones cubierta por la regresión. Las cifras y el
+run desplazado de la primera tanda se conservan en la etapa 36. El siguiente
+sub-issue es la escena de fuentes segmentadas sin parents globales.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

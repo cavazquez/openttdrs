@@ -6,8 +6,8 @@ use bevy::prelude::*;
 use crate::iso::overlay_pos;
 use crate::render::AtlasSprite;
 use crate::sprites::{
-    BREAKDOWN_SMOKE_META, DIESEL_SMOKE_META, ELECTRIC_SPARK_META, EXPLOSION_LARGE_META,
-    STEAM_SMOKE_META,
+    BREAKDOWN_SMOKE_META, COPPER_MINE_SMOKE_META, DIESEL_SMOKE_META, ELECTRIC_SPARK_META,
+    EXPLOSION_LARGE_META, STEAM_SMOKE_META,
 };
 
 /// Frames del atlas para efectos efímeros de vehículos y desastres.
@@ -18,6 +18,8 @@ pub(crate) struct EffectVehicleFrames {
     pub(crate) electric_spark: Vec<AtlasSprite>,
     pub(crate) explosion_large: Vec<AtlasSprite>,
     pub(crate) breakdown: Vec<AtlasSprite>,
+    /// CB160 `0xFA`: `EV_BREAKDOWN_SMOKE_AIRCRAFT` uses `SPR_SMOKE_0..4`.
+    pub(crate) aircraft_smoke: Vec<AtlasSprite>,
 }
 
 impl EffectVehicleFrames {
@@ -29,6 +31,7 @@ impl EffectVehicleFrames {
             electric_spark: assets.electric_spark.clone(),
             explosion_large: assets.explosion_large.clone(),
             breakdown: assets.breakdown_smoke.clone(),
+            aircraft_smoke: assets.copper_mine_smoke.clone(),
         }
     }
 
@@ -45,6 +48,14 @@ pub(crate) struct EffectSpriteSet<'a> {
 }
 
 impl EffectVehicleFrames {
+    #[must_use]
+    pub(crate) fn aircraft_smoke_set(&self) -> EffectSpriteSet<'_> {
+        EffectSpriteSet {
+            frames: &self.aircraft_smoke,
+            meta: &COPPER_MINE_SMOKE_META,
+        }
+    }
+
     #[must_use]
     pub(crate) fn steam_set(&self) -> EffectSpriteSet<'_> {
         EffectSpriteSet {

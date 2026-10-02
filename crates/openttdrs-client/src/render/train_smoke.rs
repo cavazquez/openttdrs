@@ -85,7 +85,7 @@ enum TrainSmokeSet {
     Steam,
     Diesel,
     Electric,
-    Breakdown,
+    AircraftSmoke,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,11 +99,11 @@ fn sprite_set<'a>(frames: &'a EffectVehicleFrames, kind: TrainSmokeSet) -> Effec
         TrainSmokeSet::Steam => frames.steam_set(),
         TrainSmokeSet::Diesel => frames.diesel_set(),
         TrainSmokeSet::Electric => frames.electric_set(),
-        TrainSmokeSet::Breakdown => frames.breakdown_set(),
+        TrainSmokeSet::AircraftSmoke => frames.aircraft_smoke_set(),
     }
 }
 
-/// Estado exacto de `SteamSmokeTick`, `DieselSmokeTick` y `ElectricSparkTick`.
+/// Estado de `SteamSmokeTick`, `DieselSmokeTick`, `ElectricSparkTick` y `SmokeTick`.
 /// `None` equivale al `Delete()` del EffectVehicle de OpenTTD.
 #[must_use]
 fn effect_tick_state(kind: TrainSmokeSet, age_ticks: u64) -> Option<EffectTickState> {
@@ -125,7 +125,22 @@ fn effect_tick_state(kind: TrainSmokeSet, age_ticks: u64) -> Option<EffectTickSt
                 }
             }
         }
-        TrainSmokeSet::Diesel | TrainSmokeSet::Breakdown => {
+        TrainSmokeSet::AircraftSmoke => {
+            let mut progress = 12_u8;
+            for _ in 0..age_ticks.min(96) {
+                progress = progress.wrapping_add(1);
+                if progress & 3 == 0 {
+                    rise = rise.saturating_add(1);
+                }
+                if progress & 0x0F == 4 {
+                    frame += 1;
+                    if frame >= 5 {
+                        return None;
+                    }
+                }
+            }
+        }
+        TrainSmokeSet::Diesel => {
             let mut progress = 0_u8;
             for _ in 0..age_ticks.min(64) {
                 progress = progress.wrapping_add(1);
@@ -418,7 +433,7 @@ fn advanced_effect_set(effect_type: u8) -> Option<TrainSmokeSet> {
         0xF1 => Some(TrainSmokeSet::Steam),
         0xF2 => Some(TrainSmokeSet::Diesel),
         0xF3 => Some(TrainSmokeSet::Electric),
-        0xFA => Some(TrainSmokeSet::Breakdown),
+        0xFA => Some(TrainSmokeSet::AircraftSmoke),
         _ => None,
     }
 }
@@ -700,7 +715,7 @@ fn train_smoke_sort_sprite_id(set: TrainSmokeSet) -> u32 {
             TrainSmokeSet::Steam => 0,
             TrainSmokeSet::Diesel => 1,
             TrainSmokeSet::Electric => 2,
-            TrainSmokeSet::Breakdown => 3,
+            TrainSmokeSet::AircraftSmoke => 3,
         }
 }
 
@@ -1988,6 +2003,7 @@ mod tests {
             electric_spark: Vec::new(),
             explosion_large: Vec::new(),
             breakdown: Vec::new(),
+            aircraft_smoke: Vec::new(),
         };
         let pose = openttdrs_core::VehiclePose::from_vehicle(&vehicle);
         let (anchor, base_z, tx, ty) = vehicle_draw_anchor_from_pose(&vehicle, &state.map, pose);
@@ -2101,6 +2117,7 @@ mod tests {
                         electric_spark: Vec::new(),
                         explosion_large: Vec::new(),
                         breakdown: Vec::new(),
+                        aircraft_smoke: Vec::new(),
                     }
                     .steam_set(),
                     parent.source_depth,
@@ -2152,6 +2169,139 @@ mod tests {
             Some(EffectTickState { frame: 4, rise: 7 })
         );
         assert_eq!(effect_tick_state(TrainSmokeSet::Steam, 72), None);
+    }
+
+    #[test]
+    fn advanced_effect_lifetimes_match_native_dispatch_and_ticks() {
+        let fixture = include_str!("../../tests/fixtures/native-vehicle-effect-cadence.csv");
+        let mut count = 0;
+        for line in fixture.lines().skip(1) {
+            let values: Vec<i64> = line
+                .split(',')
+                .map(|value| value.parse().expect("native numeric column"))
+                .collect();
+            let [effect_type, tick, alive, _, frame, rise, _] = values[..] else {
+                panic!("native effect row must have seven columns");
+            };
+            let kind = advanced_effect_set(u8::try_from(effect_type).expect("native effect byte"))
+                .expect("native supported effect");
+            let actual =
+                effect_tick_state(kind, u64::try_from(tick).expect("native nonnegative tick"));
+            let expected = (alive != 0).then(|| EffectTickState {
+                frame: usize::try_from(frame).expect("native live frame"),
+                rise: u8::try_from(rise).expect("native live rise"),
+            });
+            assert_eq!(actual, expected, "type {effect_type:#x}, tick {tick}");
+            count += 1;
+        }
+        assert_eq!(count, 4 * 97);
+    }
+
+    #[test]
+    fn cb160_fa_sprite_and_entity_follow_native_complete_lifetime() {
+        use crate::render::AtlasSprite;
+        use bevy::ecs::system::RunSystemOnce;
+
+        let make_frame = |index| AtlasSprite {
+            image: Handle::default(),
+            atlas: TextureAtlas {
+                layout: Handle::default(),
+                index,
+            },
+            size: Vec2::splat(16.0),
+        };
+        let frames = EffectVehicleFrames {
+            steam: vec![make_frame(0)],
+            diesel: Vec::new(),
+            electric_spark: Vec::new(),
+            explosion_large: Vec::new(),
+            breakdown: (0..4).map(make_frame).collect(),
+            aircraft_smoke: (100..105).map(make_frame).collect(),
+        };
+        let mut world = World::new();
+        world.insert_resource(SimWorld {
+            state: GameState::from_map(Map::new_flat(4, 4, 0)),
+            loaded_file: false,
+            ottdmap_extras: None,
+        });
+        world.insert_resource(frames);
+        world
+            .run_system_once(|mut commands: Commands, frames: Res<EffectVehicleFrames>| {
+                assert!(spawn_train_smoke_effect(
+                    &mut commands,
+                    &frames,
+                    0,
+                    advanced_effect_set(0xFA).expect("native FA dispatch"),
+                    TrainSmokeWorldPosition {
+                        x: 16.0,
+                        y: 16.0,
+                        z: 10.0,
+                        source_tile: TileCoord::new(1, 1),
+                    },
+                    0,
+                    4,
+                ));
+            })
+            .expect("spawn FA system");
+        let entity = world
+            .query_filtered::<Entity, With<TrainSmokeEffect>>()
+            .single(&world)
+            .expect("one native effect");
+        let fixture = include_str!("../../tests/fixtures/native-vehicle-effect-cadence.csv");
+        let mut count = 0;
+        for line in fixture
+            .lines()
+            .skip(1)
+            .filter(|line| line.starts_with("250,"))
+        {
+            let values: Vec<i64> = line
+                .split(',')
+                .map(|value| value.parse().expect("native numeric column"))
+                .collect();
+            let [_, tick, alive, sprite_id, frame, rise, _] = values[..] else {
+                panic!("native effect row must have seven columns");
+            };
+            world.resource_mut::<SimWorld>().state.tick =
+                GameTick::new(u64::try_from(tick).expect("native tick"));
+            world
+                .run_system_once(animate_train_smoke)
+                .expect("animate FA system");
+            if alive == 0 {
+                assert!(
+                    world.get_entity(entity).is_err(),
+                    "native deletion tick {tick}"
+                );
+            } else {
+                assert_eq!(sprite_id, 2040 + frame);
+                let sprite = world.get::<Sprite>(entity).expect("live FA sprite");
+                assert_eq!(
+                    sprite
+                        .texture_atlas
+                        .as_ref()
+                        .expect("native frame atlas")
+                        .index,
+                    100 + usize::try_from(frame).expect("native frame"),
+                    "native FA texture at tick {tick}"
+                );
+                assert_eq!(sprite.color, Color::WHITE);
+                let parent = world
+                    .get::<ViewportSortableParent>(entity)
+                    .expect("live FA parent");
+                assert_eq!(
+                    parent.bounds,
+                    ParentSpriteBounds::new(
+                        16,
+                        16,
+                        10 + i32::try_from(rise).expect("native rise"),
+                        16,
+                        16,
+                        10 + i32::try_from(rise).expect("native rise"),
+                    )
+                );
+            }
+            count += 1;
+        }
+        assert_eq!(count, 97);
     }
 
     #[test]

@@ -372,6 +372,12 @@ la evidencia independiente se mantienen en
 Las afirmaciones anteriores de posición exacta quedan reemplazadas por ese
 alcance; #326/#329 siguen abiertos.
 
+Actualización de animaciones de vehículos (2026-10-02): el ciclo CB160 `FA`,
+las pruebas diferenciales y las brechas restantes se mantienen en
+[movimiento y animaciones](parity/vehicle-animation-parity.md). El alcance
+de esta etapa es el ciclo y conjunto de sprites del efecto; no cierra
+#326/#329 ni certifica recorridos o emisión completa.
+
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía
 no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
@@ -1807,7 +1813,7 @@ aproximadas (Fases 2–3 del roadmap estructural).
 | Frenado por curva Original | `set_direction_with_curve_penalty` (`ACCEL_SLOWDOWN`); **omitido si Realistic** | `train_cmd.cpp:3147-3152`, `:3564-3568` (solo `AM_ORIGINAL`) | 3 · validado (Rail 3B) | `train_loses_speed_on_direction_change`, chequeo `train_no_curve_braking` | Bajo |
 | Pendiente → velocidad | `slope_pixel_z` + `vehicle.rs::sync_train_slope_speed` (`z_pos`, progreso y cruce) | `ground_vehicle.hpp` (`UpdateInclination`), `train_cmd.cpp:3140-3152` | 2 · probado | `slope_pixel_z_combines_tile_z_and_partial`, `train_applies_z_change_while_progressing_on_inclined_tile`, climb/descend | Medio: sin bits GoingUp/Down ni paso por píxel de mapa |
 | Paso sub-tesela rail | `progress` = remanente `DoUpdateSpeed`; `rail_pixel` 0..15; 2× loco/tick; umbral 192/256 | `ground_vehicle.hpp` `DoUpdateSpeed`, `vehicle_base.h` `GetAdvanceDistance`, `Train::Tick` | 5 · equivalente (oráculo 40 ticks) | `pbs_openttd_oracle.rs`, `axial_and_corner_advance_distances_*`, `pbs_fixture_first_tick_*` | Bajo en el fixture; carretera sigue en modelo 0–255 |
-| Posición sub-tile / render | `(rail_pixel + progress/GetAdvanceDistance)/16` → visual 0..=255; track exacto de `anterior→actual→siguiente` | `vehicle.cpp:3359-3392` (`_vehicle_subcoord` por enterdir×track) | 4 · validado (proyección continua + empalmes) | `train_crosses_tile_boundary_without_visual_jump`, `train_render_follows_route_track_at_switch` | Bajo: curvas Bézier continuas, no secuencia discreta píxel a píxel del original |
+| Posición sub-tile / render | `(rail_pixel + progress/GetAdvanceDistance)/16` → visual 0..=255; track exacto de `anterior→actual→siguiente` | `vehicle.cpp:3359-3392` (`_vehicle_subcoord` por enterdir×track) | 4 · validado (proyección continua + empalmes) | `train_crosses_tile_boundary_without_visual_jump`, `train_render_follows_route_track_at_switch` | Parcial: segmentos de `_vehicle_subcoord` con extrapolación continua; falta comparar cada píxel y frame en recorridos completos |
 | Reversa | `vehicle.rs::apply_immediate_train_turnaround` (instantánea) + comando `turn_around_vehicle` | `train_cmd.cpp` (`ReverseTrainDirection`, con chequeos y coste) | 2 · probado | `train_reverses_immediately_when_next_tile_opposite`, `turn_around_vehicle_reverses_train_heading` | Medio |
 | Entrada/salida de estación | `station.rs::rail_station_stop_tile` + `resolve_order_destination` → plataforma; `vehicle_physically_at_station` en plataforma | `train_cmd.cpp:266-305` (`GetTrainStopLocation`), `station_cmd.cpp:3846-3881` (frenado sub-tile) | 3 · validado (Rail 3C) | `train_line_emits_rail_block_and_events`, `showcase_train_enters_rail_station_platform`, chequeo `train_platform_stop` | Bajo |
 | Carga/descarga | `sim_step.rs` + `cargo_packet.rs` (gradual por tick, packets) | `economy.cpp:1609` (`LoadUnloadVehicle`, gradual) | 2 · probado (Fase 2; `instant_loading` cerrado) | `train_loads_freight_from_rail_station_waiting_cargo`, golden `instant_loading=false` | Medio: velocidades MVP, no tablas NewGRF |
@@ -2272,7 +2278,7 @@ gaps frente a `_vehicle_subcoord` y `_tunnel_visibility_frame`.
 | Interpolación entre ticks | Sim ~37 Hz; render extrapola | `extrapolate_vehicle_pose` usa `rail_pixel` + remanente físico + `tick_alpha` | **Continua incluso entre píxeles** (`train_motion_remainder_advances_between_rail_pixels`) |
 | Sprite del tren | `dir` lógico | Capa según pose extrapolada | **Alineado** — `sprite_selection_uses_extrapolated_pose_for_train` |
 | CSV de render | — | Columnas `logical_subtile_*` / `extrap_subtile_*` añadidas | **Listo** para diff manual vs JSONL |
-| Track por pieza | Golden 3A (`vehicle_subcoord_matches_rust_copy`) | Reconstruye el track de la ruta y recorre recta/Bézier de borde a borde | **Alineado topológicamente** en empalmes; geometría curva continua propia |
+| Track por pieza | Golden 3A (`vehicle_subcoord_matches_rust_copy`) | Reconstruye el track de la ruta y recorre los segmentos nativos de `_vehicle_subcoord` | **Alineado topológicamente** en empalmes; extrapolación continua y cobertura de recorridos completos pendiente |
 | Ocultamiento en túnel | Constante `{12,8,8,12}` portada | `vehicle_hidden_in_tunnel` aplica el umbral al render | **Implementado** — `tunnel_hides_train_matches_visibility_frame`; falta diff visual externo amplio |
 
 ### Cómo reproducir

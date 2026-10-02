@@ -542,6 +542,7 @@ mod tests {
             electric_spark: Vec::new(),
             explosion_large: vec![weak_sprite(1)],
             breakdown: Vec::new(),
+            aircraft_smoke: Vec::new(),
         }
     }
 
@@ -716,6 +717,7 @@ mod tests {
             electric_spark: Vec::new(),
             explosion_large: Vec::new(),
             breakdown: Vec::new(),
+            aircraft_smoke: Vec::new(),
         };
         let mut world = World::new();
         world.init_resource::<ViewportSortableChildDepthWindows>();

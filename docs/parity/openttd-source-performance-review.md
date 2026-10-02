@@ -598,6 +598,13 @@ P2 · Verificación · Evidencia: **Fuente** · Alcance estimado: corto.
 Fuentes: [Rust: `src/performance.rs`, L25](https://github.com/cavazquez/openttdrs/blob/8994755781092e2e7a6baf463a2126d9125fbebb/crates/openttdrs-client/src/performance.rs#L25);
 [OpenTTD: `src/framerate_type.h`, L1](https://github.com/OpenTTD/OpenTTD/blob/14ec60f248547d4d062a1160f0fc26d742319888/src/framerate_type.h#L1).
 
+La [etapa 35](performance-implementation.md#etapa-35--conservar-la-escena-al-activar-el-colector-f31)
+elimina el registro temprano del colector en ECS y conserva la matriz de seis
+zooms, con entradas/bytes/máscaras en In2x/Out2x y tres repeticiones In2x.
+La medición actual sitúa PostUpdate alrededor de 6,9 ms fijo y 8,0 en pan;
+la atribución interna, el coste del diagnóstico completo y 30 FPS siguen
+pendientes. No cierra F31 ni acredita paridad por una captura.
+
 ### F32 — Separar contratos facilita optimizar sin romper paridad
 
 P3 · Mantenimiento · Evidencia: **Fuente** · Alcance estimado: medio.

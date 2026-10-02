@@ -156,6 +156,14 @@ También se documenta que el colector básico cambia capturas del mismo binario;
 conservar su forma ECS queda como siguiente sub-issue. Estas mediciones no
 acreditan FPS de una sesión sin colector ni cierran cadencia o 30 FPS.
 
+La etapa 35 conserva la escena al activar el colector: estado fuera de ECS y
+consultas retrasadas hasta el warmup. Seis zooms básico off/on son exactos;
+tres parejas In2x y el detalle In2x/Out2x conservan entradas, bytes y máscaras.
+El sub-issue de registro se cierra para esta matriz. La nueva medición sigue
+en unos 23,3–23,6 FPS fijo / 20,7 en pan; PostUpdate ocupa 6,8–7,0 / 8,0 ms.
+No se atribuye una ganancia de FPS ni el coste total del colector. Evidencia y
+límites en la etapa 35; F31, cadencia, paridad nativa y 30 FPS siguen abiertos.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

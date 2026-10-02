@@ -2553,3 +2553,105 @@ para todos los targets, formato, diff, frescura de docs y tres tests del
 comparador de entradas. Cierra sólo la captura de estos intervalos con el
 recurso existente; atribución fina de PostUpdate, colector básico, proxies
 variables, paridad nativa, cadencia y 30 FPS siguen abiertos.
+
+
+## Etapa 35 — Conservar la escena al activar el colector (F31)
+
+El colector básico ya no guarda FrameCapture como recurso ECS. Su estado se
+comparte mediante Arc/Mutex en sistemas exclusivos de First/Last y en las
+fronteras opcionales del Main. Las consultas de conteo se crean después del
+warmup; la consulta de cámara sólo existe cuando se solicita zoom o pan.
+Activar el diagnóstico no registra estos componentes antes de construir la
+escena. Mantiene los esquemas CSV, warmup, controles de cámara, ticks, errores
+de escritura, flush final y rechazo de destinos coincidentes del detalle.
+
+La regresión compara todo el registro de componentes contra una app con
+First/Last vacíos durante dos frames de warmup. No aparecen Sprite, SpriteMesh
+ni Projection. Después añade una escena pequeña y exige una fila final de
+15 columnas, tick cero y conteos 2/1 sin registrar otra cámara. La regresión de
+Main de la etapa 34 sigue cubriendo orden, schedule propio, ticks y aliases.
+El primer intento de esta prueba contaba registros internos que Bevy crea al
+ejecutar cualquier schedule; la comparación con una app sin colector separa
+ese comportamiento del diagnóstico. Los intentos y el resultado corregido
+se conservan junto a los artefactos.
+
+GPU real, mismo ejecutable, Kale congelada en tick 3703074, centro 128,128,
+1280×720, clean=0 y settle=180: **los seis zooms conservan PNG exactos, cero
+píxeles/bloques 4×4 distintos y todo el stream de sort**, con colector básico
+off/on. In2x/Out2x conservan además todas las entradas ordenadas y referencias
+bajo un renombrado biyectivo de identidades, bytes CPU de 272/384 imágenes y
+ambas máscaras. No se aceptan permutaciones por igualdad de multiconjuntos.
+Los hashes coinciden con los controles sin colector de la etapa 33, incluidos
+60da415e en In2x y 7e8cb274 en Out2x.
+[Seis zooms](evidence/collector-scene-shape-raster-20261001.csv).
+
+Otras dos parejas completas In2x suman tres repeticiones básico off/on:
+todas exactas, incluidas entradas, bytes y máscaras. El detalle off/on con
+el básico activo también conserva las dos parejas completas In2x/Out2x.
+[Repeticiones In2x](evidence/collector-scene-shape-in2-repeats-20261001.csv),
+[detalle](evidence/collector-scene-shape-detail-raster-20261001.csv).
+La variación histórica de 204 píxeles de la etapa 34 sigue registrada; estas
+capturas no cierran los empates de profundidad ni la paridad nativa general.
+El sub-issue de registro ECS del colector se cierra para esta matriz y la
+regresión de warmup, sin extenderlo a cualquier estado o plugin.
+
+Kale activa, GPU, escala 2, ABBA del mismo binario, básico siempre activo y
+detalle off/on, 40 muestras/run, sin perf, trazas o compilaciones concurrentes.
+Fijo, warmup 120: frame off 42,4241 / 42,8248 ms, on
+42,9238 / 42,6332; FPS 23,571 / 23,351 frente a 23,297 / 23,456.
+p95 off 56,4523 / 56,9531, on 56,4491 / 55,3251; máximos/p99
+58,2563 / 58,5612 frente a 60,0798 / 57,7220. TPS
+23,559 / 23,340 frente a 23,285 / 23,447. Ticks
+3703193–3703232 en los cuatro runs; 73/80 frames off y 76/80 on
+exceden 33,33 ms. Frame combinado 42,6245 → 42,7785 ms.
+[160 muestras](evidence/collector-scene-shape-steady-observer-20261001.csv).
+
+Main on ocupa 40,6453 / 40,3622 ms: fixed loop 14,3207 / 14,2548,
+Update 18,7400 / 18,6507 y **PostUpdate 6,9600 / 6,8432**.
+[80 registros por schedule](evidence/collector-scene-shape-steady-phases-20261001.csv).
+
+Pan, warmup 30: frame off 48,1801 / 48,3456, on
+48,2878 / 48,3906 ms; FPS 20,755 / 20,684 frente a 20,709 / 20,665.
+p95 60,5017 / 60,4193 frente a 61,6738 / 62,0035; máximos/p99
+126,9890 / 129,4264 frente a 128,2700 / 127,0399. TPS
+21,664 / 21,614 frente a 21,628 / 21,564. Ticks
+3703103–3703142 en los cuatro runs; los 80 frames por condición exceden
+33,33 ms. Frame combinado 48,2629 → 48,3392 ms. Main on
+43,0037 / 43,1353: fixed loop 14,8622 / 14,9659, Update
+19,4752 / 19,4345 y **PostUpdate 7,9612 / 8,0507**.
+[160 muestras](evidence/collector-scene-shape-pan-observer-20261001.csv),
+[80 por schedule](evidence/collector-scene-shape-pan-phases-20261001.csv).
+
+En cada escenario, los cuatro runs conservan exactamente las 40 tuplas de
+frame/tick/conteos de sprites y meshes. El detalle alinea sus muestras por
+frame/tick y mantiene la suma de intervalos dentro de 0,001 ms por redondeo.
+Esto mide el coste observado del detalle, incluido ruido; no el coste total
+del colector básico ni FPS de una sesión sin diagnóstico. La comparación
+raster congelada valida su conservación de escena en esta matriz. Main mide
+el ciclo actual y frame_ms el intervalo anterior: su resta por fila no mide
+GPU. Tampoco hay una ganancia de FPS atribuida a esta etapa.
+
+Binario final 15cfe88730e81acea388afceda328892512796c1187b150fafbca26dd0f6698d,
+conservado de forma inmutable en target/performance/collector-scene-shape-20261001
+mediante enlace a /tmp. Control publicado de la etapa 34: 6245fe03, con sus
+fuentes de performance preservadas. Cargo mantiene fresh la biblioteca core
+real del cliente 09d42185, sin cambios de núcleo; no se atribuye otro replay
+a las 61 fases aisladas. Release incremental: 53,47 s totales y unidad cliente
+53,31 s, dependencias frescas, sin separación frontend/codegen/link. No se
+acredita una mejora de compilación. El reporte HTML y el JSON de Cargo se
+conservan junto a las capturas y trazas gzip verificadas.
+
+Para completar el build se archivan 1.034 archivos de un único caché viejo del
+cliente del 30/09, fuera de los caches activos. Se verifican SHA y tamaño de
+todos los miembros antes de retirar el directorio exacto. El archivo
+recuperable /tmp/openttdrs-preserved-client-cache-2ylz474qere8v-20261001.tar.gz
+ocupa 734.267.985 bytes; el manifiesto conserva cada ruta y hash. También se
+retiran sólo los dos aliases de un ejecutable mutable de Cargo, comprobados
+por inode, bytes y copia inmutable existente. No se modifican archivos de
+usuario, snapshots, dependencias ni el oracle nativo.
+
+Validación: 3.035 tests core/seis ignorados y 1.675 del cliente/dos ignorados;
+Clippy en todos los targets de ambos, formato, tres self-tests del comparador,
+frescura de docs y diff sin errores.
+F31 completo, atribución interna de PostUpdate, variaciones históricas,
+paridad nativa, cadencia y 30 FPS siguen abiertos.

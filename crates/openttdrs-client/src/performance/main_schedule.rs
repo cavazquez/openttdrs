@@ -4,13 +4,14 @@
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bevy::app::MainScheduleOrder;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::prelude::*;
 
-use super::FrameCapture;
+use super::SharedFrameCapture;
 use crate::state::SimWorld;
 
 #[derive(ScheduleLabel, Debug, Clone, PartialEq, Eq, Hash)]
@@ -26,17 +27,22 @@ pub(super) struct MainScheduleCapture {
     start: Option<Instant>,
 }
 
-pub(super) fn install_from_env(app: &mut App) {
+pub(super) fn install_from_env(app: &mut App, capture: &SharedFrameCapture) {
     let Some(path) = std::env::var_os("OPENTTDRS_PERF_MAIN_OUT") else {
         return;
     };
-    if let Err(error) = install(app, Path::new(&path)) {
+    if let Err(error) = install(app, Path::new(&path), capture) {
         error!("Cannot create main schedule capture: {error}");
     }
 }
 
-fn install(app: &mut App, path: &Path) -> io::Result<()> {
-    ensure_distinct_output(&app.world().resource::<FrameCapture>().path, path)?;
+fn install(app: &mut App, path: &Path, capture: &SharedFrameCapture) -> io::Result<()> {
+    let normal_path = capture
+        .lock()
+        .map_err(|_| io::Error::other("frame capture lock is poisoned"))?
+        .path
+        .clone();
+    ensure_distinct_output(&normal_path, path)?;
     let original = app.world().resource::<MainScheduleOrder>().labels.clone();
     if original.is_empty() {
         return Err(io::Error::new(
@@ -52,49 +58,53 @@ fn install(app: &mut App, path: &Path) -> io::Result<()> {
     }
     writeln!(output)?;
     output.flush()?;
-    app.world_mut().resource_mut::<FrameCapture>().main_detail = Some(MainScheduleCapture {
+    capture
+        .lock()
+        .map_err(|_| io::Error::other("frame capture lock is poisoned"))?
+        .main_detail = Some(MainScheduleCapture {
         output,
         phases: vec![Duration::ZERO; original.len()],
         previous: None,
         start: None,
     });
-    app.add_systems(MainTimingStart, start_main);
+    let start_capture = Arc::clone(capture);
+    app.add_systems(MainTimingStart, move || start_main(&start_capture));
     let mut instrumented = Vec::with_capacity(original.len() * 2 + 1);
     instrumented.push(MainTimingStart.intern());
     let last = original.len() - 1;
     for (index, label) in original.into_iter().enumerate() {
+        let boundary_capture = Arc::clone(capture);
         instrumented.push(label);
         instrumented.push(MainTimingBoundary(index).intern());
-        app.add_systems(
-            MainTimingBoundary(index),
-            move |mut capture: ResMut<FrameCapture>,
-                  sim: Res<SimWorld>,
-                  mut exit: MessageWriter<AppExit>| {
-                let sample = capture.frame.saturating_sub(capture.warmup);
-                let flush = sample.is_multiple_of(60) || capture.limit == Some(sample);
-                let Some(detail) = capture.main_detail.as_mut() else {
-                    return;
-                };
-                let now = Instant::now();
-                if let Some(previous) = detail.previous.replace(now) {
-                    detail.phases[index] = now - previous;
-                }
-                if index != last {
-                    return;
-                }
-                if sample == 0 {
-                    return;
-                }
-                let total = detail.start.map_or(Duration::ZERO, |start| now - start);
-                if let Err(error) = detail.write_sample(sample, sim.state.tick.get(), total) {
-                    error!("Cannot write main schedule capture: {error}");
-                    exit.write(AppExit::error());
-                } else if flush && let Err(error) = detail.output.flush() {
-                    error!("Cannot flush main schedule capture: {error}");
-                    exit.write(AppExit::error());
-                }
-            },
-        );
+        app.add_systems(MainTimingBoundary(index), move |world: &mut World| {
+            let Ok(mut capture) = boundary_capture.lock() else {
+                return;
+            };
+            let sample = capture.frame.saturating_sub(capture.warmup);
+            let flush = sample.is_multiple_of(60) || capture.limit == Some(sample);
+            let Some(detail) = capture.main_detail.as_mut() else {
+                return;
+            };
+            let now = Instant::now();
+            if let Some(previous) = detail.previous.replace(now) {
+                detail.phases[index] = now - previous;
+            }
+            if index != last {
+                return;
+            }
+            if sample == 0 {
+                return;
+            }
+            let total = detail.start.map_or(Duration::ZERO, |start| now - start);
+            let tick = world.resource::<SimWorld>().state.tick.get();
+            if let Err(error) = detail.write_sample(sample, tick, total) {
+                error!("Cannot write main schedule capture: {error}");
+                world.write_message(AppExit::error());
+            } else if flush && let Err(error) = detail.output.flush() {
+                error!("Cannot flush main schedule capture: {error}");
+                world.write_message(AppExit::error());
+            }
+        });
     }
     app.world_mut().resource_mut::<MainScheduleOrder>().labels = instrumented;
     Ok(())
@@ -125,7 +135,10 @@ fn ensure_distinct_output(normal: &Path, detailed: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn start_main(mut capture: ResMut<FrameCapture>) {
+fn start_main(capture: &SharedFrameCapture) {
+    let Ok(mut capture) = capture.lock() else {
+        return;
+    };
     let Some(detail) = capture.main_detail.as_mut() else {
         return;
     };
@@ -153,7 +166,9 @@ impl MainScheduleCapture {
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;
+    use crate::performance::FrameCapture;
     use openttdrs_core::GameState;
+    use std::sync::Mutex;
 
     #[derive(ScheduleLabel, Debug, Clone, PartialEq, Eq, Hash)]
     struct CustomPhase;
@@ -179,7 +194,7 @@ mod tests {
                 visits.0.push(index);
             });
         }
-        app.insert_resource(FrameCapture {
+        let capture = Arc::new(Mutex::new(FrameCapture {
             output: BufWriter::new(File::create(&normal_path).expect("fixture output")),
             path: normal_path.clone(),
             main_detail: None,
@@ -192,19 +207,20 @@ mod tests {
             scale: None,
             pan: false,
             pan_origin: None,
-        });
+        }));
         app.insert_resource(SimWorld {
             state: GameState::new(4, 4),
             loaded_file: false,
             ottdmap_extras: None,
         });
-        app.add_systems(First, |mut capture: ResMut<FrameCapture>| {
-            capture.frame += 1;
+        let first_capture = Arc::clone(&capture);
+        app.add_systems(First, move || {
+            first_capture.lock().expect("fixture capture").frame += 1;
         });
         app.add_systems(Update, |mut sim: ResMut<SimWorld>| {
             sim.state.tick.advance();
         });
-        install(&mut app, &detail_path).expect("install capture");
+        install(&mut app, &detail_path, &capture).expect("install capture");
         let retained: Vec<_> = app
             .world()
             .resource::<MainScheduleOrder>()
@@ -236,15 +252,15 @@ mod tests {
             assert!((sum - total).abs() < 0.001);
         }
         let instrumented = app.world().resource::<MainScheduleOrder>().labels.clone();
-        assert!(install(&mut app, &normal_path).is_err());
+        assert!(install(&mut app, &normal_path, &capture).is_err());
         #[cfg(unix)]
         {
             let alias = folder.join("normal-alias.csv");
             std::fs::hard_link(&normal_path, &alias).expect("fixture alias");
-            assert!(install(&mut app, &alias).is_err());
+            assert!(install(&mut app, &alias, &capture).is_err());
         }
         let invalid_path = normal_path.join("cannot-be-created.csv");
-        assert!(install(&mut app, &invalid_path).is_err());
+        assert!(install(&mut app, &invalid_path, &capture).is_err());
         assert_eq!(
             app.world().resource::<MainScheduleOrder>().labels,
             instrumented

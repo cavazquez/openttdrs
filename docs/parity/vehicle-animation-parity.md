@@ -585,6 +585,64 @@ Evidencia privada en `target/parity/train-consist-fractional-render-20261002/`.
 Permanecen abiertos historial con teselas repetidas, depots, túneles/puentes,
 recorridos completos, callbacks y raster global. No se retomó el trabajo de FPS.
 
+## #326-TRAIN-REPEATED-HISTORY — dos piezas en la misma coordenada
+
+Un recorrido de seis unidades visita dos veces un cruce: primero sobre una
+recta de 16 píxeles, después sobre una pieza corta de 8. El lookup por
+coordenada confundía esas pasadas al proyectar los últimos vagones. La
+primera divergencia nativa en el cuarto vagón: esperaba píxel 8 de la
+recta y coordenadas `(71,72)`; el port producía píxel 0 de la otra pieza,
+coordenadas `(71,79)` y rumbo norte en vez de nordeste. También desplazaba
+el quinto vagón a otra tesela.
+
+El nuevo oracle conserva sin modificar tablas de entrada, `GetNewVehiclePos`,
+`CalcNextVehicleOffset`, `GetAdvanceDistance` y la expresión nativa de
+separación entre centros. Adapta ruta, almacenamiento y enumeración. Sus
+**240 poses físicas** cumplen todos los invariantes de separación. Las
+**4.800 poses de presentación** usan el mismo contrato hacia el candidato
+por píxel anterior al ajuste de entrada, con reloj compartido de la cabeza.
+No es `TrainController` completo, ni prueba speed/signals/traffic, depots,
+túneles, callbacks o renderer nativo.
+
+Antes fallan **24/240** poses físicas y **444/4.800** entre ticks. La
+proyección conserva ahora el índice de cada ocurrencia mientras coloca la
+cadena, reconstruyendo entrada/salida y span desde sus vecinos históricos.
+La referencia es interna; no cambia el formato de guardado ni la pose pública.
+Las coordenadas pasan con tolerancia `0.0001`, teselas/píxeles físicos y
+rumbos exactos, metadatos físicos de todas las unidades y de cada follower
+interpolado. La cabeza interpolada se comprueba por geometría y rumbo.
+Los corpus anteriores de 11.520 y 115.200 poses siguen pasando.
+
+```bash
+python3 scripts/oracle_train_consist_repeated_history.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/train-repeated-history-fresh --check
+python3 scripts/oracle_train_consist_repeated_history.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/train-repeated-history-render-fresh --render --check
+cargo test -p openttdrs-core --test native_train_consist_repeated_history
+```
+
+Validación general: **3.053 core / 1.701 client**, sin fallos, 6/2 ignorados;
+ambos Clippy estrictos, formato, documentación y diff pasan. Client tests
+usa `CARGO_INCREMENTAL=0` por el incidente de caché de la etapa anterior.
+Se conserva el primer fallo de sintaxis al reforzar el test de metadatos;
+la corrección no modifica valores del oracle.
+
+Release reconstruida en **78,20 s**, core `fresh:false`, client SHA-256
+`b6aea1f6f2554d41323fd0c430f7a7bc3fee1118b714fadc96b97cec4cb7d7e1`.
+Los [controles congelados](evidence/train-consist-repeated-history-control-raster-20261002.csv)
+en seis escalas y `.125` limitada a `.25` dan PNG, cámara principal y
+trazas completas de orden idénticos. En `.5`/`2` coinciden todas las entradas
+de sprites, **265/368 buffers CPU**, cobertura y oclusión. Kale congelado
+es un control de regresión; no certifica este recorrido repetido en el
+renderer completo de OpenTTD.
+
+Evidencia en `target/parity/train-consist-repeated-history-20261002/` y el
+prototipo previo `target/parity/train-consist-history-prototype-20261002/`.
+Permanecen abiertos otros recorridos, longitudes/callbacks, tráfico,
+reversa/depots, túneles/puentes y raster completo. FPS continúa pausado.
+
 ## Alcance pendiente
 
 - La emisión está ligada a `Update`: agrupar ticks puede omitir decisiones de

@@ -19,6 +19,14 @@ pub struct TrainUnitPose {
     pub curve_prev_direction: VehicleDirection,
 }
 
+/// An occurrence in the borrowed route, kept while walking the chain.
+/// Coordinates alone cannot distinguish earlier visits to a junction.
+#[derive(Clone, Copy)]
+struct ProjectionPosition {
+    pose: TrainUnitPose,
+    history_index: Option<usize>,
+}
+
 /// Poses de las unidades, ordenadas desde la cabeza hasta la cola.
 ///
 /// La cabeza conserva su cinemática autoritativa. Cada unidad siguiente se
@@ -53,13 +61,16 @@ pub(crate) fn consist_unit_poses_indexed(
         path_index: 0,
     };
     let (head_enter, head_exit) = route.directions_at(head.pos);
-    let mut prev_pose = TrainUnitPose {
-        tile: head.pos,
-        rail_pixel: head.rail_pixel.min(15),
-        direction: head_enter,
-        curve_prev_direction: head_exit,
+    let mut prev_pose = ProjectionPosition {
+        pose: TrainUnitPose {
+            tile: head.pos,
+            rail_pixel: head.rail_pixel.min(15),
+            direction: head_enter,
+            curve_prev_direction: head_exit,
+        },
+        history_index: None,
     };
-    poses.push(prev_pose);
+    poses.push(prev_pose.pose);
 
     let mut prev_length = head.unit_length.max(1);
     for &slot in slots.iter().skip(1) {
@@ -69,7 +80,7 @@ pub(crate) fn consist_unit_poses_indexed(
         let next_length = unit.unit_length.max(1);
         let offset = calc_next_vehicle_offset(prev_length, next_length, false);
         prev_pose = project_behind_unit(&route, &prev_pose, offset);
-        poses.push(prev_pose);
+        poses.push(prev_pose.pose);
         prev_length = next_length;
     }
     poses
@@ -120,11 +131,14 @@ pub fn consist_render_poses_indexed(
     let whole = pixel.floor();
     let fraction = pixel - whole;
     let (enter, exit) = route.directions_at(head_pose.pos);
-    let mut previous = TrainUnitPose {
-        tile: head_pose.pos,
-        rail_pixel: whole as u8,
-        direction: enter,
-        curve_prev_direction: exit,
+    let mut previous = ProjectionPosition {
+        pose: TrainUnitPose {
+            tile: head_pose.pos,
+            rail_pixel: whole as u8,
+            direction: enter,
+            curve_prev_direction: exit,
+        },
+        history_index: None,
     };
     let mut previous_length = head.unit_length.max(1);
     for (index, &slot) in slots.iter().enumerate().skip(1) {
@@ -135,10 +149,10 @@ pub fn consist_render_poses_indexed(
             calc_next_vehicle_offset(previous_length, next_length, false),
         );
         let pose = &mut poses[index];
-        pose.pos = previous.tile;
-        pose.progress_f = (f32::from(previous.rail_pixel) + fraction) * (255.0 / 16.0);
+        pose.pos = previous.pose.tile;
+        pose.progress_f = (f32::from(previous.pose.rail_pixel) + fraction) * (255.0 / 16.0);
         pose.sync_discrete_fields();
-        pose.train_route = Some((previous.direction, previous.curve_prev_direction));
+        pose.train_route = Some((previous.pose.direction, previous.pose.curve_prev_direction));
         previous_length = next_length;
     }
     poses
@@ -186,62 +200,75 @@ impl ProjectionRoute<'_> {
 /// recorrido de la cabeza.
 fn project_behind_unit(
     route: &ProjectionRoute<'_>,
-    from: &TrainUnitPose,
+    from: &ProjectionPosition,
     back_pixels: u16,
-) -> TrainUnitPose {
+) -> ProjectionPosition {
     let head = route.head;
-    let start_pixel = u16::from(from.rail_pixel.min(15));
+    let start_pixel = u16::from(from.pose.rail_pixel.min(15));
     if back_pixels == 0 {
         return *from;
     }
     if back_pixels <= start_pixel {
-        let (enter, exit) = route.directions_at(from.tile);
-        return TrainUnitPose {
-            tile: from.tile,
-            rail_pixel: u8::try_from(start_pixel - back_pixels).unwrap_or(0),
-            direction: enter,
-            curve_prev_direction: exit,
+        let (enter, exit) = from.history_index.map_or_else(
+            || route.directions_at(from.pose.tile),
+            |index| route_directions_at_history(route, index),
+        );
+        return ProjectionPosition {
+            pose: TrainUnitPose {
+                tile: from.pose.tile,
+                rail_pixel: u8::try_from(start_pixel - back_pixels).unwrap_or(0),
+                direction: enter,
+                curve_prev_direction: exit,
+            },
+            history_index: from.history_index,
         };
     }
-
-    // Cruzamos el borde trasero de la tesela de referencia: `into` píxeles
-    // dentro del historial relativo a `from.tile`.
     let mut into = back_pixels - start_pixel;
-    let mut history = if from.tile == route.pos {
-        0
-    } else {
-        route.history_index(from.tile).map_or(0, |i| i + 1)
-    };
+    let mut history = from.history_index.map_or_else(
+        || {
+            if from.pose.tile == route.pos {
+                0
+            } else {
+                route.history_index(from.pose.tile).map_or(0, |i| i + 1)
+            }
+        },
+        |index| index + 1,
+    );
     loop {
         let Some(tile) = route.history_tile(history) else {
-            // Preserve the straight fallback for history not yet recorded.
+            // Keep the existing synthetic straight fallback when history is absent.
             let extra = usize::from((into - 1) / 16);
             let tile = fallback_tile(route.pos, head.direction, history + extra + 1);
             let (enter, exit) = route.directions_at(tile);
-            return TrainUnitPose {
-                tile,
-                rail_pixel: u8::try_from(15 - (into - 1) % 16).unwrap_or(15),
-                direction: enter,
-                curve_prev_direction: exit,
+            return ProjectionPosition {
+                pose: TrainUnitPose {
+                    tile,
+                    rail_pixel: u8::try_from(15 - (into - 1) % 16).unwrap_or(15),
+                    direction: enter,
+                    curve_prev_direction: exit,
+                },
+                history_index: None,
             };
         };
-        let (enter, exit) = route.directions_at(tile);
+        let (enter, exit) = route_directions_at_history(route, history);
         let entry_side = crate::map::opposite_diag_dir(crate::train_movement::diag_dir_side(enter));
         let exit_side = crate::train_movement::diag_dir_side(exit);
         let track = crate::map::rail_bit_for_sides(entry_side, exit_side);
         let span = if enter & 1 == 0 || exit & 1 == 0 {
-            // A missing entrance leaves no authoritative historical piece.
             16
         } else {
             crate::train_movement::train_render_dir_on_track(enter, track, 0.0)
                 .map_or(16, crate::train_movement::rail_pixels_per_tile)
         };
         if into <= u16::from(span) {
-            return TrainUnitPose {
-                tile,
-                rail_pixel: span - u8::try_from(into).unwrap_or(span),
-                direction: enter,
-                curve_prev_direction: exit,
+            return ProjectionPosition {
+                pose: TrainUnitPose {
+                    tile,
+                    rail_pixel: span - u8::try_from(into).unwrap_or(span),
+                    direction: enter,
+                    curve_prev_direction: exit,
+                },
+                history_index: Some(history),
             };
         }
         into -= u16::from(span);
@@ -272,6 +299,18 @@ fn route_directions_on_projection(
         return (enter, exit);
     }
     let Some(index) = route.history_index(tile) else {
+        return (head.curve_prev_direction, head.curve_prev_direction);
+    };
+    route_directions_at_history(route, index)
+}
+
+/// Entrance/exit of this occurrence, including an older visit to the head tile.
+fn route_directions_at_history(
+    route: &ProjectionRoute<'_>,
+    index: usize,
+) -> (VehicleDirection, VehicleDirection) {
+    let head = route.head;
+    let Some(tile) = route.history_tile(index) else {
         return (head.curve_prev_direction, head.curve_prev_direction);
     };
     let newer = if index == 0 {

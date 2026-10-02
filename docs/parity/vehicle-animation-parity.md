@@ -246,6 +246,59 @@ No se descarta el primer intento ni se certifica raster nativo completo.
 Evidencia completa, incluidos intentos fallidos, en
 `target/parity/train-short-track-transition-20261002/`.
 
+## #326-TRAIN-CONSIST-ORDINARY-GEOMETRY — separación en piezas cortas
+
+La regresión previa encuentra 2.280 diferencias de geometría y 3.288 de
+metadatos de ruta entre 11.520 muestras. La proyección hacia atrás dividía
+el historial en tramos uniformes de 16 píxeles. En una curva corta, colocaba
+un vagón en un píxel o tesela incorrectos. Además, la pose de cabeza guardaba
+su rumbo físico cardinal como rumbo de entrada diagonal.
+
+La proyección recorre ahora cada tesela del historial con su pieza de vía:
+ocho o dieciséis posiciones. El rumbo de entrada de la cabeza se obtiene
+de la tesela anterior. Cuando falta información para identificar una pieza
+histórica, conserva el fallback previo de recta; ese caso no se certifica.
+
+El oracle extrae sin modificaciones `_initial_tile_subcoord`,
+`GetNewVehiclePos`, el bloque de entrada y `CalcNextVehicleOffset`. También
+ejecuta la expresión nativa de distancia entre centros de `CheckTrainsLengths`.
+Adapta el almacenamiento, la selección de ruta y el bucle exterior. Inicializa
+cada follower a su offset sobre una secuencia de píxeles nativos registrada;
+esto no ejecuta el controlador nativo completo ni sus señales/velocidad.
+
+Las 36 parejas de vías y cinco configuraciones de longitudes (`8/8/8`,
+`8/7/5`, `7/8/3`, `1/1/1`, `3/5/7`) producen 11.520 muestras de unidad.
+Los 7.680 pares de centros consecutivos cumplen la expresión nativa de
+distancia. La prueba del port compara tesela, píxel, metadatos de entrada y
+salida, rumbo dibujado y X/Y de mundo, después de persistir las poses con
+`propagate_consist_unit_poses`. No cubre remanentes fraccionales,
+historial incompleto o repetido, reversas, depósitos, túneles, señales,
+importación ni recorridos completos. El padre de paridad de consist sigue
+abierto.
+
+```bash
+python3 scripts/oracle_train_consist_track_geometry.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/train-consist-track-geometry-fresh --check
+cargo test -p openttdrs-core --test native_train_consist_track_geometry
+```
+
+Gates aprobados: oracle independiente (`--check`), 11.520 muestras,
+regresión de persistencia de poses, formato y Clippy estricto, 3.043 tests de
+core (6 ignorados), 1.700 del cliente (2 ignorados), frescura de docs y diff.
+**Cerrado el sub-issue de geometría ordinaria de tres unidades**, con
+publicación de esta etapa.
+
+Los [controles de zoom](evidence/train-consist-short-track-control-raster-20261002.csv)
+conservan cámara, composición completa tras renombrado biyectivo y PNG
+idénticos en los siete pares (seis escalas efectivas y la petición `0.125`
+limitada). En `0.50`/`2` coinciden también entradas completas, 633 buffers
+CPU, cobertura y oclusión. Son controles de Kale congelado; no certifican
+animación, recorridos ni raster nativo de todos los casos de la fixture.
+La variación del compositor reproducida en etapas anteriores sigue abierta.
+La evidencia completa de esta etapa se conserva en
+`target/parity/train-consist-short-track-20261002/`.
+
 ## Alcance pendiente
 
 - La emisión está ligada a `Update`: agrupar ticks puede omitir decisiones de

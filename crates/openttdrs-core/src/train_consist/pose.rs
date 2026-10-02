@@ -72,7 +72,6 @@ pub(crate) fn consist_unit_poses_indexed(
 /// Retrocede `back_pixels` desde la pose de la unidad precedente sobre el
 /// recorrido de la cabeza.
 fn project_behind_unit(head: &Vehicle, from: &TrainUnitPose, back_pixels: u16) -> TrainUnitPose {
-    const PIXELS_PER_TILE: u16 = 16;
     let start_pixel = u16::from(from.rail_pixel.min(15));
     if back_pixels == 0 {
         return *from;
@@ -89,23 +88,42 @@ fn project_behind_unit(head: &Vehicle, from: &TrainUnitPose, back_pixels: u16) -
 
     // Cruzamos el borde trasero de la tesela de referencia: `into` píxeles
     // dentro del historial relativo a `from.tile`.
-    let into = back_pixels - start_pixel;
-    let hist_skip = history_index_after(head, from.tile);
-    let hist = usize::from((into - 1) / PIXELS_PER_TILE);
-    let pixel_from_exit = (into - 1) % PIXELS_PER_TILE;
-    let rail_pixel = 15_u8.saturating_sub(u8::try_from(pixel_from_exit).unwrap_or(15));
-    let abs_hist = hist_skip.saturating_add(hist);
-    let tile = head
-        .rail_tile_history
-        .get(abs_hist)
-        .copied()
-        .unwrap_or_else(|| fallback_tile(head.pos, head.direction, abs_hist + 1));
-    let (enter, exit) = route_directions_at(head, tile);
-    TrainUnitPose {
-        tile,
-        rail_pixel,
-        direction: enter,
-        curve_prev_direction: exit,
+    let mut into = back_pixels - start_pixel;
+    let mut history = history_index_after(head, from.tile);
+    loop {
+        let Some(&tile) = head.rail_tile_history.get(history) else {
+            // Preserve the straight fallback for history not yet recorded.
+            let extra = usize::from((into - 1) / 16);
+            let tile = fallback_tile(head.pos, head.direction, history + extra + 1);
+            let (enter, exit) = route_directions_at(head, tile);
+            return TrainUnitPose {
+                tile,
+                rail_pixel: u8::try_from(15 - (into - 1) % 16).unwrap_or(15),
+                direction: enter,
+                curve_prev_direction: exit,
+            };
+        };
+        let (enter, exit) = route_directions_at(head, tile);
+        let entry_side = crate::map::opposite_diag_dir(crate::train_movement::diag_dir_side(enter));
+        let exit_side = crate::train_movement::diag_dir_side(exit);
+        let track = crate::map::rail_bit_for_sides(entry_side, exit_side);
+        let span = if enter & 1 == 0 || exit & 1 == 0 {
+            // A missing entrance leaves no authoritative historical piece.
+            16
+        } else {
+            crate::train_movement::train_render_dir_on_track(enter, track, 0.0)
+                .map_or(16, crate::train_movement::rail_pixels_per_tile)
+        };
+        if into <= u16::from(span) {
+            return TrainUnitPose {
+                tile,
+                rail_pixel: span - u8::try_from(into).unwrap_or(span),
+                direction: enter,
+                curve_prev_direction: exit,
+            };
+        }
+        into -= u16::from(span);
+        history += 1;
     }
 }
 
@@ -114,7 +132,18 @@ fn project_behind_unit(head: &Vehicle, from: &TrainUnitPose, back_pixels: u16) -
 /// `TrackBit` correcto aun cuando su `path` se mantiene vacío.
 fn route_directions_at(head: &Vehicle, tile: TileCoord) -> (VehicleDirection, VehicleDirection) {
     if tile == head.pos {
-        let enter = head.direction;
+        let enter = head
+            .rail_tile_history
+            .front()
+            .copied()
+            .map_or(head.direction, |previous| {
+                crate::vehicle::direction_for_path_step(
+                    previous,
+                    tile,
+                    head.path.front().copied(),
+                    head.direction,
+                )
+            });
         let exit = head.path.front().copied().map_or(enter, |next| {
             crate::vehicle::direction_for_path_step(tile, next, head.path.get(1).copied(), enter)
         });

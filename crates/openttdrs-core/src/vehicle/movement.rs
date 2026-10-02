@@ -1894,17 +1894,9 @@ impl super::model::Vehicle {
         let Some(order) = self.current_order_ref().copied() else {
             return;
         };
-        // Sólo una estación puede retener la llegada para descargar. Una
-        // waypoint —por ejemplo una boya— es siempre de paso, aun cuando el
-        // vehículo lleve carga. Aplicar este freno a cualquier orden dejaba
-        // al barco detenido sobre la boya sin poder avanzar a su destino.
-        if self.cargo > 0
-            && matches!(order, crate::vehicle::order::VehicleOrder::Station { .. })
-            && !order.no_unload()
-        {
-            self.progress = 255;
-            return;
-        }
+        // La fase de transferencia ya tuvo su oportunidad. Conservar carga
+        // a bordo no impide salir si no hay transferencia activa ni full-load
+        // pendiente: LoadUnloadVehicle marca LoadingFinished en ese caso.
         let pass_through = order.is_pass_through();
         if order.is_depot() {
             let halt = order.depot_stops();

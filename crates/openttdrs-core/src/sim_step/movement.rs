@@ -340,10 +340,10 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             if was_at_station && !state.vehicles[i].awaiting_load_window {
                 state.vehicles[i].sync_order_destination_with_stations(&state.map, &state.stations);
             }
-            if was_at_station && state.vehicles[i].train_station_departure_hold {
+            if state.vehicles[i].train_station_departure_hold {
                 // La ruta global del tick se ejecutó antes de que la llegada
-                // avanzara la orden. Resolver ahora el próximo andén permite
-                // que `TrainCheckIfLineEnds` invierta en este mismo tick,
+                // o la fase de carga avanzara la orden. Resolver ahora el próximo
+                // andén permite que `TrainCheckIfLineEnds` invierta en este tick,
                 // como el `OT_LEAVESTATION` nativo.
                 super::routing::reroute_train_after_station_departure(state, i);
             }

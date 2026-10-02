@@ -99,6 +99,146 @@ fn unfinished_full_load_keeps_native_loading_guard_and_physical_position() {
     assert_eq!(cases, 1512);
 }
 
+fn no_transfer_fixture_vehicle(kind: VehicleKind, fields: &[u16]) -> Vehicle {
+    let mut v = full_load_wait_vehicle(
+        kind,
+        false,
+        u32::from(fields[4]),
+        u8::try_from(fields[5]).unwrap(),
+        u8::try_from(fields[6]).unwrap(),
+    );
+    v.capacity = u32::from(fields[3]);
+    if let VehicleOrder::Station {
+        load_type,
+        unload_type,
+        ..
+    } = &mut v.orders[0]
+    {
+        *load_type = match fields[1] {
+            0 => super::OrderLoadType::LoadIfPossible,
+            2 => super::OrderLoadType::FullLoad,
+            3 => super::OrderLoadType::FullLoadAny,
+            4 => super::OrderLoadType::NoLoad,
+            _ => panic!("unknown native load enum"),
+        };
+        *unload_type = match fields[2] {
+            0 => super::OrderUnloadType::UnloadIfPossible,
+            1 => super::OrderUnloadType::Unload,
+            2 => super::OrderUnloadType::Transfer,
+            4 => super::OrderUnloadType::NoUnload,
+            _ => panic!("unknown native unload enum"),
+        };
+    }
+    v
+}
+
+#[test]
+fn no_transfer_completion_matches_native_finished_policy_and_remainders() {
+    let mut cases = 0;
+    for kind in [VehicleKind::Train, VehicleKind::Bus, VehicleKind::Truck] {
+        for line in
+            include_str!("../../tests/fixtures/parity/native-station-no-transfer-finish.csv")
+                .lines()
+                .skip(1)
+        {
+            let fields: Vec<u16> = line
+                .split(',')
+                .map(|field| field.parse().unwrap())
+                .collect();
+            if (kind == VehicleKind::Train) != (fields[0] == 0) {
+                continue;
+            }
+            assert_eq!(fields[11], if fields[7] == 0 { 3 } else { 4 });
+            for finish_directly in [false, true] {
+                let mut v = no_transfer_fixture_vehicle(kind, &fields);
+                if finish_directly {
+                    v.finish_arrival_after_load_window();
+                } else {
+                    v.complete_station_load_window();
+                }
+                assert_eq!(
+                    v.current_order,
+                    usize::from(fields[12]),
+                    "{line}, {kind:?}, direct={finish_directly}"
+                );
+                assert_eq!(v.awaiting_load_window, fields[13] != 0, "{line}, {kind:?}");
+                assert_eq!(
+                    (v.cur_speed, u16::from(v.progress), u16::from(v.subspeed)),
+                    (fields[8], fields[9], fields[10]),
+                    "{line}, {kind:?}"
+                );
+                assert_eq!(
+                    (v.cargo, v.pos, v.rail_pixel),
+                    (u32::from(fields[4]), TileCoord::new(1, 1), 4)
+                );
+                assert_eq!(
+                    v.direction,
+                    if kind == VehicleKind::Train {
+                        DIR_NE
+                    } else {
+                        DIR_SE
+                    }
+                );
+                if kind != VehicleKind::Train {
+                    assert_eq!((v.frame, v.road_x, v.road_y), (20, 21, 22));
+                }
+                cases += 1;
+            }
+        }
+    }
+    assert_eq!(cases, 16128);
+}
+
+#[test]
+fn unfinished_no_transfer_full_load_keeps_physical_position_in_steps() {
+    let mut cases = 0;
+    for kind in [VehicleKind::Train, VehicleKind::Bus, VehicleKind::Truck] {
+        for line in
+            include_str!("../../tests/fixtures/parity/native-station-no-transfer-finish.csv")
+                .lines()
+                .skip(1)
+        {
+            let fields: Vec<u16> = line
+                .split(',')
+                .map(|field| field.parse().unwrap())
+                .collect();
+            if fields[7] != 0 || fields[2] == 4 || (kind == VehicleKind::Train) != (fields[0] == 0)
+            {
+                continue;
+            }
+            for calls in [1, 2, 10, 100] {
+                let mut v = no_transfer_fixture_vehicle(kind, &fields);
+                for _ in 0..calls {
+                    v.step();
+                }
+                assert_eq!(
+                    (v.cur_speed, u16::from(v.progress), u16::from(v.subspeed)),
+                    (fields[8], fields[9], fields[10]),
+                    "{line}, {kind:?}, calls={calls}"
+                );
+                assert!(v.awaiting_load_window);
+                assert_eq!(
+                    (v.current_order, v.pos, v.rail_pixel),
+                    (0, TileCoord::new(1, 1), 4)
+                );
+                assert_eq!(
+                    v.direction,
+                    if kind == VehicleKind::Train {
+                        DIR_NE
+                    } else {
+                        DIR_SE
+                    }
+                );
+                if kind != VehicleKind::Train {
+                    assert_eq!((v.frame, v.road_x, v.road_y), (20, 21, 22));
+                }
+                cases += 1;
+            }
+        }
+    }
+    assert_eq!(cases, 4536);
+}
+
 #[test]
 fn completed_full_load_closes_native_loading_guard_without_deadlock() {
     let mut cases = 0;

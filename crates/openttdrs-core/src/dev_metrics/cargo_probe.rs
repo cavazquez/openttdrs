@@ -157,6 +157,35 @@ mod tests {
     };
 
     #[test]
+    fn train_cargo_completion_resolves_next_station_before_movement() {
+        let Some(mut state) = parity::build_scenario("train_line") else {
+            panic!("escenario train_line");
+        };
+        let mut was_loading = false;
+        for _ in 0..1000 {
+            state.step();
+            let vehicle = state
+                .vehicles
+                .iter()
+                .find(|v| v.id == TRAIN_LINE_VEHICLE_ID)
+                .expect("tren de escenario");
+            if was_loading && !vehicle.cargo_loading {
+                assert!(vehicle.cargo > 0, "sale con la carga recién completada");
+                assert_eq!(vehicle.current_order, 1, "no debe saltar la estación B");
+                assert!(!vehicle.awaiting_load_window, "no debe reabrir carga en A");
+                assert_ne!(vehicle.dest, parity::TRAIN_LINE_STATION_A);
+                assert_eq!(
+                    vehicle.current_order_ref().map(|order| order.destination()),
+                    Some(parity::TRAIN_LINE_STATION_B)
+                );
+                return;
+            }
+            was_loading = vehicle.cargo_loading;
+        }
+        panic!("el tren debe completar su primera carga");
+    }
+
+    #[test]
     fn train_line_vehicle_loads_delivers_and_earns_income() {
         let Some(mut state) = parity::build_scenario("train_line") else {
             panic!("escenario train_line");

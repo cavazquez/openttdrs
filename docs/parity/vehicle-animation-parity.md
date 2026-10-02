@@ -873,6 +873,71 @@ abiertos descarga pendiente con NoUnload desactivado, consist/capacidades y
 decisiones completas de carga, horarios, callbacks/RNG, tick completo, mundo,
 viaje completo y renderer nativo. FPS sigue pausado; #326/#329 siguen abiertos.
 
+## #326-STATION-NO-TRANSFER-FINISH — cerrar servicio con carga a bordo
+
+Tras una fase sin transferencia, `LoadUnloadVehicle` marca LoadingFinished
+si la orden no necesita seguir esperando FullLoad. Conservar mercancía no
+impide salir. El port retenía cualquier carga positiva con descarga habilitada,
+forzaba progreso `255` y podía reabrir una espera en la estación equivocada.
+El arreglo elimina ese guard: transferencia activa mantiene su freno y
+FullLoad incompleta conserva la ventana y las fracciones como en la etapa previa.
+
+El nuevo oracle extrae intacto el bloque de cierre sin carga/descarga de
+`LoadUnloadVehicle` y ejecuta después los cuerpos completos de `HandleLoading`
+y `LeaveStation`. El flag de terminación se deriva del bloque nativo. Enumera
+train/road, cuatro modos de carga y cuatro de descarga, capacidad `0/40`,
+carga `0/1/39/40` y 21 pares de fracciones: **5.376 filas**. Se adaptan los
+conteos y máscaras full/not-full de un solo tipo de carga, predicados, flags,
+almacenamiento, reloj y efectos externos. El predecesor se fija a ninguna
+transferencia; no ejecuta aceptación/staging, política de consist, cooldown,
+callbacks/RNG, controlador ni renderer nativo. El hook de ticks recibe `20`,
+pero no certifica el cálculo ni avance real de la espera. Ambas generaciones
+coinciden byte a byte y los corpus previos de carga/salida permanecen iguales.
+
+La regresión compara dos APIs de cierre en train/bus/truck: **16.128 estados**.
+Comprueba orden, ventana, carga conservada, velocidad, fracciones y posición.
+Otra recorre **4.536 estados** FullLoad/Any inconclusos con descarga habilitada,
+repitiendo `step` 1/2/10/100 veces; conserva tile, pixel ferroviario, rumbo y
+frame/XY vial. Las dos fallan antes del arreglo: una retiene orden `0` donde
+OpenTTD ya avanzó a `1`; otra produce `63/48` donde el guard conserva `0/0`.
+
+La salida también necesita resolver el siguiente andén si la carga completó
+la orden después de la pasada global de rutas. El reroute de salida sólo se
+aplicaba si la ventana seguía abierta al entrar en movimiento. Ahora alcanza
+las salidas completadas por la fase de carga y usa el algoritmo existente.
+La nueva regresión comprueba el primer cierre de carga de `train_line`, sin
+reabrir ventana en A ni conservar su destino cuando la orden ya apunta a B.
+La sonda existente comprueba además carga, entrega e ingreso. El cuerpo nativo
+completo de `TrainLocoHandler` se conserva como evidencia de ProcessOrders y
+LeavingStation anteriores al guard/movimiento; no es un oracle del pathfinder.
+Los candidatos previos y sus fallos/trazas permanecen conservados.
+
+```bash
+python3 scripts/oracle_station_no_transfer_finish.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/station-no-transfer-fresh --check
+cargo test -p openttdrs-core --lib no_transfer_
+cargo test -p openttdrs-core --lib train_cargo_completion_resolves_next_station_before_movement
+```
+
+Validación general: **3.064 core / 1.701 client**, sin fallos, 6/2 ignorados;
+ambos Clippy estrictos, formato, documentación y diff pasan. Client tests usa
+`CARGO_INCREMENTAL=0`, sin cambiar la configuración del proyecto.
+
+Release reconstruida en **79.08 s**, core `fresh:false`,
+client SHA-256 `130ebd621e0c8cc4243e19bf59f8e13d647527966793bda57f74d142d032af75`. Los
+[controles congelados](evidence/station-no-transfer-finish-control-raster-20261002.csv)
+en seis escalas y `.125` limitada a `.25` dan PNG, cámara principal y
+orden completo idénticos. En `.5`/`2` coinciden todas las entradas de sprites,
+**265/368 buffers CPU**, cobertura y oclusión. Kale pausado no certifica un
+servicio sin transferencia real ni el renderer completo de OpenTTD.
+
+Evidencia privada en `target/parity/station-pending-unload-hold-20261002/`.
+El cierre se limita al bloque sin transferencia y a resolver la siguiente
+estación al completar carga. Siguen abiertos aceptación y decisiones previas,
+consist, cooldown, horarios, callbacks/RNG, destinos de depósito, mundo,
+viaje completo y renderer nativo. FPS sigue pausado; #326/#329 siguen abiertos.
+
 ## Alcance pendiente
 
 - La emisión está ligada a `Update`: agrupar ticks puede omitir decisiones de

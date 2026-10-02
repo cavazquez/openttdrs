@@ -239,6 +239,154 @@ fn unfinished_no_transfer_full_load_keeps_physical_position_in_steps() {
     assert_eq!(cases, 4536);
 }
 
+fn enter_station_timetable_wait(kind: VehicleKind, phase: u8, fields: &[i16]) -> Vehicle {
+    let mut v = full_load_wait_vehicle(
+        kind,
+        false,
+        if phase == 3 { 0 } else { 40 },
+        u8::try_from(fields[6]).unwrap(),
+        u8::try_from(fields[7]).unwrap(),
+    );
+    v.timetable_active = true;
+    if let VehicleOrder::Station {
+        wait_ticks,
+        load_type,
+        unload_type,
+        ..
+    } = &mut v.orders[0]
+    {
+        *wait_ticks = u32::try_from(fields[3]).unwrap();
+        if phase == 3 {
+            *load_type = super::OrderLoadType::LoadIfPossible;
+            *unload_type = super::OrderUnloadType::UnloadIfPossible;
+        }
+    }
+    match phase {
+        0 => v.complete_station_load_window(),
+        1 => v.advance_after_loading(),
+        2 => v.advance_after_consist_loading(),
+        _ => v.advance_after_unloading(),
+    }
+    v
+}
+
+#[test]
+fn station_timetable_wait_preserves_native_loading_guard_and_physical_position() {
+    let mut cases = 0;
+    for kind in [VehicleKind::Train, VehicleKind::Bus, VehicleKind::Truck] {
+        for line in include_str!("../../tests/fixtures/parity/native-station-loading-guard.csv")
+            .lines()
+            .skip(1)
+        {
+            let fields: Vec<i16> = line
+                .split(',')
+                .map(|field| field.parse().unwrap())
+                .collect();
+            if fields[1] != 0
+                || fields[2] != 1
+                || fields[3] == 0
+                || fields[4] != 0
+                || fields[5] != 0
+                || (kind == VehicleKind::Train) != (fields[0] == 0)
+            {
+                continue;
+            }
+            assert_eq!((fields[12], fields[13], fields[14]), (3, 0, 1));
+            for phase in 0..4 {
+                let mut v = enter_station_timetable_wait(kind, phase, &fields);
+                for _ in 0..fields[8] {
+                    v.step();
+                }
+                assert_eq!(
+                    (v.cur_speed, i16::from(v.progress), i16::from(v.subspeed)),
+                    (u16::try_from(fields[9]).unwrap(), fields[10], fields[11]),
+                    "{line}, {kind:?}, phase={phase}"
+                );
+                assert_eq!(
+                    v.timetable_wait_remaining,
+                    u32::try_from(fields[3]).unwrap()
+                );
+                assert_eq!(
+                    (v.current_order, v.pos, v.rail_pixel),
+                    (0, TileCoord::new(1, 1), 4)
+                );
+                assert_eq!(
+                    v.direction,
+                    if kind == VehicleKind::Train {
+                        DIR_NE
+                    } else {
+                        DIR_SE
+                    }
+                );
+                if kind != VehicleKind::Train {
+                    assert_eq!((v.frame, v.road_x, v.road_y), (20, 21, 22));
+                }
+                cases += 1;
+            }
+        }
+    }
+    assert_eq!(cases, 2016);
+}
+
+#[test]
+fn station_timetable_wait_completion_matches_native_departure_remainders() {
+    let mut cases = 0;
+    for kind in [VehicleKind::Train, VehicleKind::Bus, VehicleKind::Truck] {
+        for line in include_str!("../../tests/fixtures/parity/native-station-loading-guard.csv")
+            .lines()
+            .skip(1)
+        {
+            let fields: Vec<i16> = line
+                .split(',')
+                .map(|field| field.parse().unwrap())
+                .collect();
+            if fields[1] != 0
+                || fields[2] != 1
+                || fields[3] == 0
+                || fields[4] != 0
+                || fields[5] != fields[3]
+                || fields[8] != 1
+                || (kind == VehicleKind::Train) != (fields[0] == 0)
+            {
+                continue;
+            }
+            assert_eq!((fields[12], fields[13], fields[14]), (4, 1, 0));
+            for phase in 0..4 {
+                let mut v = enter_station_timetable_wait(kind, phase, &fields);
+                for _ in 0..fields[3] {
+                    v.tick_timetable_wait();
+                }
+                assert_eq!(v.timetable_wait_remaining, 0);
+                assert_eq!(
+                    v.current_order,
+                    usize::try_from(fields[13]).unwrap(),
+                    "{line}, {kind:?}, phase={phase}"
+                );
+                assert!(!v.awaiting_load_window);
+                assert_eq!(
+                    (v.cur_speed, i16::from(v.progress), i16::from(v.subspeed)),
+                    (u16::try_from(fields[9]).unwrap(), fields[10], fields[11]),
+                    "{line}, {kind:?}, phase={phase}"
+                );
+                assert_eq!((v.pos, v.rail_pixel), (TileCoord::new(1, 1), 4));
+                assert_eq!(
+                    v.direction,
+                    if kind == VehicleKind::Train {
+                        DIR_NE
+                    } else {
+                        DIR_SE
+                    }
+                );
+                if kind != VehicleKind::Train {
+                    assert_eq!((v.frame, v.road_x, v.road_y), (20, 21, 22));
+                }
+                cases += 1;
+            }
+        }
+    }
+    assert_eq!(cases, 504);
+}
+
 #[test]
 fn completed_full_load_closes_native_loading_guard_without_deadlock() {
     let mut cases = 0;

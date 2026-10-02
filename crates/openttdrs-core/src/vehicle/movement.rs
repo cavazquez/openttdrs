@@ -266,7 +266,12 @@ impl super::model::Vehicle {
         self.resolve_conditional_orders();
 
         if self.holding_for_timetable() {
-            self.update_movement_speed_with_catalog(map, train_accel, engine_catalog);
+            if self.is_station_service_timetable_wait() && self.retains_station_movement_fractions()
+            {
+                self.hold_station_movement();
+            } else {
+                self.update_movement_speed_with_catalog(map, train_accel, engine_catalog);
+            }
             return;
         }
 
@@ -1784,6 +1789,18 @@ impl super::model::Vehicle {
         self.timetable_active && self.timetable_wait_remaining > 0
     }
 
+    pub(super) fn is_station_service_timetable_wait(&self) -> bool {
+        matches!(
+            self.timetable_wait_kind,
+            super::model::TimetableWaitKind::AfterArrival
+                | super::model::TimetableWaitKind::AfterLoad
+                | super::model::TimetableWaitKind::AfterUnload
+        ) && matches!(
+            self.current_order_ref(),
+            Some(crate::vehicle::order::VehicleOrder::Station { .. })
+        )
+    }
+
     pub(crate) fn resolve_conditional_orders(&mut self) {
         const MAX_STEPS: usize = 64;
         for _ in 0..MAX_STEPS {
@@ -1809,7 +1826,7 @@ impl super::model::Vehicle {
                 && crate::road_movement::rvsb::is_bay_road_state(self.road_state)
     }
 
-    fn hold_station_movement(&mut self) {
+    pub(super) fn hold_station_movement(&mut self) {
         if self.retains_station_movement_fractions() {
             // BeginLoading stops speed; the loading guards return before
             // movement and retain both progress and subspeed.
@@ -1927,7 +1944,6 @@ impl super::model::Vehicle {
             return;
         }
         if self.schedule_timetable_wait(super::model::TimetableWaitKind::AfterArrival) {
-            self.progress = 255;
             return;
         }
         self.do_advance_after_arrival(pass_through);

@@ -938,6 +938,57 @@ estación al completar carga. Siguen abiertos aceptación y decisiones previas,
 consist, cooldown, horarios, callbacks/RNG, destinos de depósito, mundo,
 viaje completo y renderer nativo. FPS sigue pausado; #326/#329 siguen abiertos.
 
+## #326-STATION-TIMETABLE-HELD-REMAINDER — conservar fracciones en la espera
+
+Con carga terminada y tiempo de orden menor que la espera, `HandleLoading`
+retorna antes de salir o actualizar movimiento. El port fijaba progreso `255`
+en las cuatro entradas de espera y después actualizaba velocidad/subspeed en
+`step`. El primer fallo: tren, espera `2`, lateness `0`, fracciones `0/0`;
+tras un paso el port queda en `255/160`, frente a `0/0` nativos.
+
+La programación de la espera aplica ahora el freno compartido de estación.
+Los pasos de trenes y buses/camiones físicos en bahía conservan velocidad cero
+y ambas fracciones durante las esperas AfterArrival/AfterLoad/AfterUnload.
+El criterio exige una orden de estación y excluye TravelEarly y depósito;
+el fallback sintético conserva su endpoint y la actualización previa.
+
+Se reutiliza y regenera byte a byte el corpus de los cuerpos nativos completos
+de `HandleLoading`/`LeaveStation`: **24.192 filas**. Las regresiones seleccionan
+carga terminada, espera `2/4`, lateness cero y tiempo inicial cero, sobre
+train/bus/truck y las cuatro APIs de entrada: cierre de ventana, carga, carga
+del consist y descarga. Son **2.016 estados retenidos**, con 1/2/10/100 llamadas
+sin avanzar el reloj, y **504 cierres** comparados con filas nativas cuyo tiempo
+ya alcanzó la espera. Comprueban orden, velocidad, progreso/subspeed y posición
+física; el cierre debe avanzar sin bloquearse. Descarga usa una orden de carga
+si es posible y cargo cero; las otras entradas usan capacidad/carga `40` y
+NoUnload. LoadingFinished/reloj/dependencias del oracle siguen adaptados;
+no se certifica cómo se calcula ese flag ni la política/duración completa.
+
+```bash
+python3 scripts/oracle_station_loading_guard.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/station-timetable-fresh --check
+cargo test -p openttdrs-core --lib station_timetable_wait_
+```
+
+Validación general: **3.066 core / 1.701 client**, sin fallos, 6/2 ignorados;
+ambos Clippy estrictos, formato, documentación y diff pasan. Client tests usa
+`CARGO_INCREMENTAL=0`, sin cambiar la configuración del proyecto.
+
+Release reconstruida en **79.46 s**, core `fresh:false`,
+client SHA-256 `654dab59e8970b2572fe8d6417ad7fcc7c1db5ee75730f293bf7b90497e48503`. Los
+[controles congelados](evidence/station-timetable-held-remainder-control-raster-20261002.csv)
+en seis escalas y `.125` limitada a `.25` dan PNG, cámara principal y
+orden completo idénticos. En `.5`/`2` coinciden todas las entradas de sprites,
+**265/368 buffers CPU**, cobertura y oclusión. Kale pausado no certifica una
+espera por horario real ni el renderer completo de OpenTTD.
+
+Evidencia privada en `target/parity/station-timetable-held-remainder-20261002/`.
+El cierre cubre conservación física durante estas esperas de servicio y al
+terminarlas. Siguen abiertos duración real, lateness no nulo, tiempo de carga,
+TravelEarly, depósito, consist/política de carga, callbacks/RNG, viaje completo
+y renderer nativo. FPS sigue pausado; #326/#329 siguen abiertos.
+
 ## Alcance pendiente
 
 - La emisión está ligada a `Update`: agrupar ticks puede omitir decisiones de

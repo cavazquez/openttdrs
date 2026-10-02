@@ -316,7 +316,6 @@ impl super::model::Vehicle {
             return;
         }
         if self.schedule_timetable_wait(super::model::TimetableWaitKind::AfterUnload) {
-            self.progress = 255;
             return;
         }
         self.do_advance_after_unloading();
@@ -345,7 +344,6 @@ impl super::model::Vehicle {
             return;
         }
         if self.schedule_timetable_wait(super::model::TimetableWaitKind::AfterLoad) {
-            self.progress = 255;
             return;
         }
         self.do_advance_after_loading();
@@ -365,7 +363,6 @@ impl super::model::Vehicle {
         }
         self.sanitize_current_order();
         if self.schedule_timetable_wait(super::model::TimetableWaitKind::AfterLoad) {
-            self.progress = 255;
             return;
         }
         self.do_advance_after_loading();
@@ -439,6 +436,11 @@ impl super::model::Vehicle {
         }
         self.timetable_wait_remaining = wait;
         self.timetable_wait_kind = kind;
+        if self.is_station_service_timetable_wait() {
+            self.hold_station_movement();
+        } else {
+            self.progress = 255;
+        }
         true
     }
 

@@ -71,6 +71,63 @@ avanzado `FA`. Los intentos originales permanecen conservados.
 La evidencia completa de esta etapa se conserva en
 `target/parity/vehicle-effect-cadence-20261002/`.
 
+## #326-ROAD-ORDINARY-TURN-PRESENTATION — orientación y pasos de giro
+
+El primer fallo se reprodujo en tabla 2, subpaso 2/frame 2: OpenTTD conserva
+`DIR_SE`, pero el renderer elegía `DIR_E` por la tangente del siguiente punto.
+El controlador físico del port ya coincidía en los 352 estados de 24 tablas
+ordinarias, incluyendo cambios de dirección que conservan frame y posición.
+
+La presentación parte ahora del rumbo autoritativo de vehículos con posición
+vial válida. Recorre el presupuesto de avance, consume el paso de giro sin
+moverse y calcula el coste del siguiente paso con el rumbo nuevo. Posición y
+sprite consultan la misma regla; el controlador comparte su función de rumbo
+sin cambiar el movimiento físico. Se conserva el fallback para posiciones aún
+no inicializadas y las ramas separadas de bahías/medias vueltas.
+
+`oracle_road_vehicle_turn_direction.py` usa los cuerpos nativos de rumbo,
+las 32 tablas de carretera, sus enlaces originales y el bloque de giro sin
+modificaciones. Conserva también la función completa como referencia. Adapta
+estado inicial, almacenamiento, viewport y el bucle exterior sin tráfico,
+bahías, reversas, transiciones ni integración de velocidad. Para interpolar,
+recorre la secuencia de estados nativos ya registrada y usa el cuerpo nativo
+de `GetAdvanceDistance`; esa interpolación continua es la presentación del
+port, no una ejecución del renderer nativo.
+
+Las fixtures contienen 352 estados y 3.520 muestras de presupuesto, que se
+comprueban para bus, camión y tranvía (10.560 poses de dibujo). Verifican
+posición con tolerancia `0.0001` de píxel de mundo y dirección exacta. Una
+regresión del cliente comprueba que los handles/sprites de bus mantengan el
+rumbo anterior antes del giro y seleccionen el nuevo tras consumir ese paso.
+Esto cubre todas las rectas y curvas normales de 90 grados por ambos lados;
+no certifica viajes completos ni las variantes excluidas.
+
+Reproducción:
+
+```bash
+python3 scripts/oracle_road_vehicle_turn_direction.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/road-turn-direction-fresh --check
+cargo test -p openttdrs-core --test native_road_turn_direction
+```
+
+Gates aprobados: oracle independiente de ambas fixtures (`--check`), tres
+regresiones diferenciales, formato, Clippy estricto, 3.040 tests de core
+(6 ignorados), 1.700 de cliente (2 ignorados), frescura de docs y diff. **Cerrado el sub-issue de curvas ordinarias**, con publicación de esta etapa.
+Los [controles de zoom](evidence/road-vehicle-turn-direction-control-raster-20261002.csv)
+conservan la misma cámara en los siete pares (seis niveles efectivos y `0.125`
+limitado). En `0.25`/`0.50` el PNG no cambia; en `1`/`2`/`4`/`8` cambian
+521/326/291/82 píxeles (54/50/69/37 bloques 4×4). No se exige imagen idéntica
+para una corrección de orientación. La cobertura y oclusión CPU coinciden en
+`0.50`/`2`; las entradas/buffers completos cambian, así que tampoco se
+presentan como iguales. El [diagnóstico de atribución](evidence/road-vehicle-turn-direction-control-attribution-20261002.csv)
+resuelve bytes de imágenes y fuentes de proxies: los conjuntos semánticos
+estáticos se mantienen y cambian 75 sprites dinámicos y sus 75 proxies en
+ambas escalas. Este diagnóstico omite identidades/orden y no certifica sus
+relaciones completas ni raster nativo. Sigue abierta la variación de aliases
+del compositor observada antes de esta etapa. Evidencia privada en
+`target/parity/road-vehicle-turn-direction-20261002/`.
+
 ## Alcance pendiente
 
 - La emisión está ligada a `Update`: agrupar ticks puede omitir decisiones de

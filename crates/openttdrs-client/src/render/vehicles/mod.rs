@@ -2415,6 +2415,7 @@ mod tests {
         v.direction = openttdrs_core::DIR_NE;
         v.road_state = 3; // TRACKDIR_LOWER_E: curva NE -> SE
         v.frame = 4;
+        v.road_pos_valid = true;
         v.set_cruise_speed();
         v.progress = 140;
 
@@ -2426,8 +2427,15 @@ mod tests {
         let pose = extrapolate_vehicle_pose(&v, 1.0);
         assert!(
             pose.road_frame_f >= 5.0,
-            "la extrapolación cruza al tramo diagonal de la tabla"
+            "el presupuesto alcanza el punto anterior al giro"
         );
+        assert_eq!(
+            openttdrs_core::vehicle_sprite_direction_at(&v, pose),
+            openttdrs_core::DIR_NE,
+            "el giro espera su paso adicional sin avanzar"
+        );
+        let mut pose = pose;
+        pose.road_frame_f = f32::from(v.frame) + 2.0;
         let render_dir = openttdrs_core::vehicle_sprite_direction_at(&v, pose).min(7) as usize;
         assert_eq!(render_dir, openttdrs_core::DIR_E as usize);
 

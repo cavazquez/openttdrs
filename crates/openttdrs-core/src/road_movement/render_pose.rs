@@ -353,6 +353,9 @@ fn road_frame_subtile(v: &Vehicle, frame_f: f32, drive_on_right: bool) -> Option
     }
     let state =
         drive_state_with_overtake_and_side(v.road_state, v.overtaking, drive_on_right) & 0x1F;
+    if let Some((position, _)) = ordinary_road_render_sample(v, state, frame_f) {
+        return Some(position);
+    }
     let frame_f = frame_f.max(0.0);
     let index = frame_f.floor().min(f32::from(u8::MAX)) as u8;
     let a = normal_road_point(state, index).or_else(|| {
@@ -379,6 +382,9 @@ fn road_frame_direction(
     }
     let state =
         drive_state_with_overtake_and_side(v.road_state, v.overtaking, drive_on_right) & 0x1F;
+    if let Some((_, direction)) = ordinary_road_render_sample(v, state, frame_f) {
+        return Some(direction);
+    }
     let index = frame_f.floor().clamp(0.0, f32::from(u8::MAX)) as u8;
     let here = normal_road_point(state, index)?;
     if let Some(next) = index
@@ -392,6 +398,59 @@ fn road_frame_direction(
         .checked_sub(1)
         .and_then(|i| normal_road_point(state, i))?;
     direction_from_subtile_delta(here.0 - previous.0, here.1 - previous.1)
+}
+
+/// Predict ordinary road movement from the authoritative heading. A turn
+/// consumes one controller step while keeping its position/frame unchanged;
+/// its new heading also changes the cost of the following step.
+#[allow(clippy::cast_precision_loss)]
+fn ordinary_road_render_sample(
+    v: &Vehicle,
+    state: u8,
+    frame_f: f32,
+) -> Option<((f32, f32), VehicleDirection)> {
+    if !v.road_pos_valid || state & 7 >= 6 {
+        return None;
+    }
+    let mut frame = v.frame;
+    let mut position = normal_road_point(state, frame)?;
+    let mut direction = v.direction;
+    let mut budget = (frame_f - f32::from(frame)).max(0.0)
+        * crate::engine::get_advance_distance(direction) as f32;
+    loop {
+        let Some(next) = frame
+            .checked_add(1)
+            .and_then(|index| normal_road_point(state, index))
+        else {
+            return Some((position, direction));
+        };
+        #[allow(clippy::cast_possible_truncation)]
+        let new_direction = super::controller::road_sliding_direction_from_position(
+            direction,
+            position.0 as i32,
+            position.1 as i32,
+            next.0 as i32,
+            next.1 as i32,
+        );
+        let cost = crate::engine::get_advance_distance(direction) as f32;
+        if budget < cost {
+            if new_direction == direction {
+                let fraction = budget / cost;
+                position = (
+                    position.0 + (next.0 - position.0) * fraction,
+                    position.1 + (next.1 - position.1) * fraction,
+                );
+            }
+            return Some((position, direction));
+        }
+        budget -= cost;
+        if new_direction == direction {
+            frame = frame.saturating_add(1);
+            position = next;
+        } else {
+            direction = new_direction;
+        }
+    }
 }
 
 fn normal_road_point(state: u8, frame: u8) -> Option<(f32, f32)> {

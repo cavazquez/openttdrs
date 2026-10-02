@@ -546,7 +546,8 @@ fn finish_road_vehicle_turn(
     v.road_state = dir;
     v.frame = RVC_TURN_AROUND_START_FRAME;
     sync_road_position_from_table(v, drive_on_right);
-    let new_dir = road_sliding_direction_from_position(v, old_x, old_y, v.road_x, v.road_y);
+    let new_dir =
+        road_sliding_direction_from_position(v.direction, old_x, old_y, v.road_x, v.road_y);
     v.set_direction_with_curve_penalty(
         new_dir,
         Some(map),
@@ -614,7 +615,8 @@ fn reverse_road_vehicle_at_marker(
     v.road_state = reverse_state;
     v.frame = RVC_DEFAULT_START_FRAME;
     sync_road_position_from_table(v, drive_on_right);
-    let new_dir = road_sliding_direction_from_position(v, old_x, old_y, v.road_x, v.road_y);
+    let new_dir =
+        road_sliding_direction_from_position(v.direction, old_x, old_y, v.road_x, v.road_y);
     v.set_direction_with_curve_penalty(
         new_dir,
         map,
@@ -747,11 +749,11 @@ fn update_road_z_position(v: &mut Vehicle) {
 
 /// Equivalente a `RoadVehGetSlidingDirection` (`roadveh_cmd.cpp:751-775`).
 fn road_sliding_direction(v: &Vehicle, next_x: i32, next_y: i32) -> u8 {
-    road_sliding_direction_from_position(v, v.road_x, v.road_y, next_x, next_y)
+    road_sliding_direction_from_position(v.direction, v.road_x, v.road_y, next_x, next_y)
 }
 
-fn road_sliding_direction_from_position(
-    v: &Vehicle,
+pub(super) fn road_sliding_direction_from_position(
+    direction: u8,
     current_x: i32,
     current_y: i32,
     next_x: i32,
@@ -768,17 +770,17 @@ fn road_sliding_direction_from_position(
         (0, 2) => crate::vehicle::DIR_E,
         (1, 2) => crate::vehicle::DIR_SE,
         (2, 2) => crate::vehicle::DIR_S,
-        _ => return v.direction,
+        _ => return direction,
     };
-    if new_dir == v.direction {
-        return v.direction;
+    if new_dir == direction {
+        return direction;
     }
-    let delta = if crate::train_movement::dir_difference(new_dir, v.direction) > 4 {
+    let delta = if crate::train_movement::dir_difference(new_dir, direction) > 4 {
         7
     } else {
         1
     };
-    v.direction.wrapping_add(delta) & 7
+    direction.wrapping_add(delta) & 7
 }
 
 fn tick_reverse_counter(v: &mut Vehicle) -> bool {

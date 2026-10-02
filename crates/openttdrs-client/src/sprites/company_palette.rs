@@ -325,9 +325,28 @@ pub(crate) fn native_zoom_factor_for(capture_requested: bool, scale: Option<f32>
 }
 
 #[must_use]
+fn native_zoom_capture_requested_for(capture_requested: bool, mode: Option<&str>) -> bool {
+    capture_requested && !matches!(mode, Some("0" | "false" | "off" | "no"))
+}
+
+/// Permite capturar sin las correcciones de zoom exclusivas del oracle.
+/// Atlas, recoloreados, NewGRF y redondeo de posición comparten este selector.
+/// No habilita variantes en una partida interactiva ni altera otros ajustes
+/// del driver de captura (pausa, cámara, capas o resolución).
+#[must_use]
+pub(crate) fn native_zoom_capture_requested() -> bool {
+    native_zoom_capture_requested_for(
+        std::env::var_os("OPENTTDRS_MAP_SHOT").is_some(),
+        std::env::var("OPENTTDRS_MAP_SHOT_NATIVE_ZOOM")
+            .ok()
+            .as_deref(),
+    )
+}
+
+#[must_use]
 pub(crate) fn native_zoom_factor_for_capture_env() -> Option<u32> {
     native_zoom_factor_for(
-        std::env::var_os("OPENTTDRS_MAP_SHOT").is_some(),
+        native_zoom_capture_requested(),
         std::env::var("OPENTTDRS_MAP_SHOT_SCALE")
             .ok()
             .and_then(|raw| raw.parse::<f32>().ok()),
@@ -572,6 +591,27 @@ impl CompanyColoredSprites {
 #[allow(clippy::expect_used, clippy::implicit_clone)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn capture_native_zoom_defaults_on_and_can_be_disabled_without_enabling_gameplay() {
+        for mode in [None, Some("1"), Some("true")] {
+            assert!(native_zoom_capture_requested_for(true, mode));
+            assert!(!native_zoom_capture_requested_for(false, mode));
+        }
+        for mode in [Some("0"), Some("false"), Some("off"), Some("no")] {
+            assert!(!native_zoom_capture_requested_for(true, mode));
+            assert!(!native_zoom_capture_requested_for(false, mode));
+            for scale in [2.0, 4.0, 8.0] {
+                assert_eq!(
+                    native_zoom_factor_for(
+                        native_zoom_capture_requested_for(true, mode),
+                        Some(scale)
+                    ),
+                    None
+                );
+            }
+        }
+    }
 
     #[test]
     fn native_zoom_factor_is_capture_scoped_and_fixed() {

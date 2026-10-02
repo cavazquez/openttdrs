@@ -3886,3 +3886,43 @@ la comprobación de raíces/bancos de esta pareja. F08/F31 y jugabilidad
 permanecen abiertos. El siguiente sub-issue hará explícita y medible la
 selección de correcciones nativas de zoom en la captura, conservando el
 control actual, para probar también la ruta sin esas correcciones.
+
+## Etapa 50 — Selector explícito de correcciones de captura (F08/F31)
+
+OPENTTDRS_MAP_SHOT_NATIVE_ZOOM=0 desactiva juntos el banco del atlas, las
+variantes de recoloreados/NewGRF y el redondeo especial de posición. También
+acepta false/off/no; el valor ausente conserva el comportamiento anterior.
+El wrapper expone OPENTTDRS_WORLD_SCREENSHOT_NATIVE_ZOOM, predeterminado 1.
+El selector requiere MAP_SHOT: no habilita variantes en una partida normal.
+No desactiva pausa, cámara, resolución ni las demás reglas del driver.
+
+Veinte capturas con ejecutables inmutables: seis control/candidato,
+seis con el candidato desactivado y dos habilitados explícitamente.
+Los seis PNG predeterminados y streams completos son exactos tras renumerar
+entidades; In2x/Out2x conservan todas las entradas, 272/384 imágenes CPU y
+ambas máscaras. Los dos controles explícitos también son exactos.
+[14 comparaciones](evidence/capture-native-zoom-mode-raster-20261002.csv).
+
+Desactivar las correcciones conserva los tres zooms cercanos. En Out2x,
+Out4x y Out8x cambia **373546/668899/574099 píxeles** y
+43588/50806/43910 bloques 4×4. En Out2x cambian imágenes, entradas y ambas
+máscaras, conservando el stream del sorter. En Out4x cambian también los
+parents incluidos: 12390 frente a 12406; no se afirma un stream igual.
+Estos contrastes miden el conjunto de correcciones, no el aporte individual
+de textura o posición ni equivalencia con toda la sesión interactiva.
+No prueban que una de las dos rutas reproduzca el compositor nativo completo.
+
+Gates: cliente **1683 pasados/2 ignorados**, Clippy estricto de todos los
+targets de cliente/core, formato, sintaxis del wrapper, tres self-tests del
+comparador, docs y diff. El core no cambia; se reutiliza su suite previa.
+Release 54,69 s de pared/54,63 de Cargo; core fresh con SHA retenido 6240adc8.
+Cliente SHA ac807968ef7d7a1f7cae9171f1eaef990b9ec0e4c1a307721be9e840f85af606,
+187202768 bytes. No se atribuye una mejora de compilación o FPS.
+
+Fuentes, ejecutables, trazas, imágenes, máscaras, logs, timing y hashes se
+conservan en `target/performance/capture-native-zoom-mode-20261002`.
+El primer driver abortó por SyntaxError antes de lanzar el cliente; se
+conserva y se corrige su delimitador. Se cierra sólo el selector y su control
+de regresión. F08/F31, importación, 30 FPS y jugabilidad siguen abiertos.
+La siguiente etapa vuelve al perfil de CPU de Kale activa con el cliente
+vigente, para elegir el siguiente coste medido del frame.

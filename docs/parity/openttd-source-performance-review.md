@@ -303,6 +303,13 @@ Out4x y Out8x. Ajustar muestra y dimensiones coincide en las doce máscaras
 nativas de la sonda, en dos runs. No cambia el compositor ni atribuye las
 pérdidas de escena; faltan fase real, atlas y clipping.
 
+Las etapas [49](performance-implementation.md#etapa-49--raíces-nativas-cargadas-y-bancos-de-zoom-reales-f08f31)
+y [50](performance-implementation.md#etapa-50--selector-explícito-de-correcciones-de-captura-f08f31)
+verifican las raíces cargadas y hacen explícito el alcance de las variantes:
+se usan sólo en capturas. El selector conserva seis controles exactos y
+permite medir la ruta sin correcciones, con diferencias amplias en los zooms
+lejanos. No certifica la sesión interactiva ni acredita FPS nuevos.
+
 La [etapa 49](performance-implementation.md#etapa-49--raíces-nativas-cargadas-y-bancos-de-zoom-reales-f08f31)
 confirma las dos raíces reales cargadas y ocho crops de bancos en dos runs.
 Out2x ya compensa el paso del blitter en sus RGBA; la sonda 48 no se instala

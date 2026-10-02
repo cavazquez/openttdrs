@@ -153,7 +153,7 @@ fn sync_native_map_sprite_position(
         >,
     )>,
 ) {
-    let capture_requested = std::env::var_os("OPENTTDRS_MAP_SHOT").is_some();
+    let capture_requested = crate::sprites::company_palette::native_zoom_capture_requested();
     if !capture_requested {
         return;
     }

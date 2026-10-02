@@ -247,6 +247,12 @@ Out2x capturado ya replica texeles nativos; esas variantes y el redondeo están
 limitados a capturas en el código actual. La evidencia runtime de FPS se
 conserva, pero las capturas no certifican la misma ruta visual interactiva.
 
+La etapa 50 permite desactivar explícitamente esas correcciones de captura.
+Veinte capturas conservan exactamente los seis controles predeterminados;
+el modo desactivado cambia ampliamente los tres zooms lejanos. Su alcance
+no incluye todas las reglas de la sesión interactiva. No hay nuevo benchmark
+de FPS; el siguiente paso vuelve al perfil de CPU de la flota activa.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

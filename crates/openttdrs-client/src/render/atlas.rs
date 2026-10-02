@@ -39,7 +39,7 @@ fn native_zoom_suffix_for(capture_requested: bool, scale: Option<f32>) -> &'stat
 
 fn native_zoom_suffix_for_capture_env() -> &'static str {
     native_zoom_suffix_for(
-        std::env::var_os("OPENTTDRS_MAP_SHOT").is_some(),
+        crate::sprites::company_palette::native_zoom_capture_requested(),
         std::env::var("OPENTTDRS_MAP_SHOT_SCALE")
             .ok()
             .and_then(|raw| raw.parse::<f32>().ok()),

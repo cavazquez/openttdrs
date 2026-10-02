@@ -544,6 +544,18 @@ stream completo idéntico, pero mantiene 18 píxeles distintos: el siguiente
 fallo pertenece a entradas/fases que ese stream no describe. No se cierra el
 sort universal, el compositor ni el presupuesto de 30 FPS.
 
+
+La [etapa 60](performance-implementation.md#etapa-60--desempate-nativo-de-children-de-árboles-f08f18f31)
+usa el ordinal existente del combine para children con igual `source_depth`.
+El oracle extrae DrawTile_Trees/TreeListEnt/tabla originales de una tesela;
+la prueba real falla antes y pasa después de dos asignaciones ECS. Normal
+8 píxeles y Out2x 18 al reconstruir pasan a cero, con las mismas texturas.
+Out4x inicial varía 319 píxeles, aunque las repeticiones coinciden; Out8x
+mantiene 27. Se conserva el fallo inicial. La lectura opcional del metadata
+cuesta ~0,23–0,26 ms adicionales en children; la ABBA da 23,93 FPS fijo y
+23,21 pan, con un tick de diferencia en la ventana fija. Ese coste y los
+contratos generales siguen abiertos; no se certifica lectura universal.
+
 ### F19 — El guardado bloquea UI y codifica dos veces el JSON
 
 P2 · Persistencia · Evidencia: **Fuente** · Alcance estimado: medio.

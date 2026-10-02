@@ -315,6 +315,16 @@ sorter idéntico, pero el raster aún cambia 18 píxeles. La ABBA mantiene
 presupuesto. No se atribuye una ganancia de rendimiento; el siguiente fallo
 visual y el objetivo de jugabilidad siguen abiertos.
 
+
+La [etapa 60](performance-implementation.md#etapa-60--desempate-nativo-de-children-de-árboles-f08f18f31)
+corrige el orden de copas empatadas según DrawTile_Trees: Normal 8 y Out2x
+18 píxeles distintos al reconstruir pasan a cero, con texturas idénticas.
+Out4x conserva una variación inicial de 319 píxeles, aunque las repeticiones
+coinciden, y Out8x mantiene 27. La query opcional añade ~0,23–0,26 ms a
+children; ABBA ~23,93 FPS fijo /23,21 pan (72/80 y 78/80 fuera de presupuesto).
+La ventana fija candidata cubre un tick posterior. Se cierra sólo el orden
+cubierto y se continúa con su coste y los fallos visuales abiertos.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

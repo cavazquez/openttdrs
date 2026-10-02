@@ -4491,3 +4491,79 @@ Los fallos y binarios de control siguen recuperables; no se limpia el caché
 activo ni archivos del usuario.
 Sólo se cierra el orden de inserción de las columnas cubiertas. F08/F18/F31,
 37 ticks/s, 30 FPS por frame y jugabilidad completa siguen abiertos.
+
+## Etapa 60 — Desempate nativo de children de árboles (F08/F18/F31)
+
+El primer píxel divergente de Out2x, (32,139), corresponde a las copas de
+la tesela Kale (134,96). Sus sprites nativos 1614 y 1586 comparten
+`source_depth` (bits 1075003893). La caché de children desempata por ID ECS,
+que cambia al reconstruir, aunque el stream completo de parents/proxies ya
+coincide desde 59. Ahora usa el `combine_ordinal` existente para profundidades
+iguales, antes del ID; las profundidades distintas mantienen su prioridad.
+También detecta cambios, retiro y reinserción del metadata sin reconstruir
+los grupos estables. La query lee ese componente opcional: cambia su firma,
+sin añadir componentes ni modificar la simulación, el sorter de parents o
+el cálculo de los intervalos Z.
+
+`scripts/oracle_tree_combine_order.py` extrae `DrawTile_Trees`, `TreeListEnt`
+y la tabla original intactos del pin 14ec60f2. El adaptador fija los getters
+a los campos de esa tesela congelada (m3=7, m5=192, m2=48), slope 4 y captura
+sprite, palette y offsets. Emite 1590/1614/1586/1593 con ordinales 0/1/2/3;
+las cuatro filas se regeneran byte a byte con C++20 y warnings estrictos.
+El oracle valida emisión de esta tesela, sin certificar lectura SAV, píxeles
+nativos ni todos los árboles/NewGRF. La regresión del sistema real falla
+antes y pasa con dos asignaciones de entidades; la de caché cubre mutación,
+retiro, reinserción y ningún grupo sucio cuando no cambia nada.
+
+GPU real, Kale pausada, centro 128,128, 1280×720, settle 180, CLEAN=0:
+14 capturas nuevas se comparan con los controles inmutables de 59, en carga
+normal y redibujo completo. Se ejercitan los seis niveles 0,25/0,5/1/2/4/8;
+0,125 se limita al mínimo 0,25. Las diferencias al reconstruir desaparecen
+en Normal **8 píxeles/4 bloques → cero** y Out2x **18/16 → cero**. El par
+1614/1586 conserva su Z creciente en ambas cargas; (32,139) pasa de
+(32,72,44)/(32,80,4) a (32,80,4) en ambas. Las texturas originales del port
+no cambian: coinciden las 265/368 imágenes CPU y las máscaras In2x/Out2x en
+las cuatro comparaciones. Los inputs completos Main aún difieren tras
+reconstruir, por lo que no se cierra composición ni lectura universal.
+[Raster](evidence/remaining-raster-input-order-raster-20261002.csv),
+[inputs](evidence/remaining-raster-input-order-sprite-inputs-20261002.csv),
+[par de copas](evidence/remaining-raster-input-order-native-tree-children-20261002.csv).
+
+Out4x cambia 27 píxeles verdes por el orden corregido en la captura
+reconstruida, pero la primera carga normal presenta además una variación
+**319 píxeles/119 bloques** al reconstruir. Cuatro repeticiones conservan
+los controles; la candidata normal y reconstruida coinciden entonces con
+la primera reconstruida. Dos capturas adicionales con inputs también dan
+esos PNG: un emparejamiento diagnóstico único localiza 2420 cambios de Z
+en árboles, ninguno en otras familias, con 36 claves ambiguas que no se
+normalizan ni cuentan como un gate pasado. No se descarta la primera
+variación ni se la atribuye a una causa sin prueba. El stream Out4x conserva
+diferencias de índices de entrada; Out8x mantiene **27/7** píxeles/bloques
+distintos al redibujar. Se registra esta brecha como abierta y no se cambia
+ninguna tolerancia. [Repetición Out4x](evidence/remaining-raster-input-order-out4-repeat-20261002.csv).
+
+Pasan **3037 core/6 ignoradas**, **1693 cliente/2 ignoradas**, Clippy estricto
+de ambos, formato, docs y diff. Release aislada del cliente: **53,368 s**,
+core fresco 754dc09a. Binario copiado readonly 187373600 bytes, SHA
+9e3f6c45f6570dfbbc4991944c26d35530a7a0b7262e8f7c2843e34cee9feeb9.
+La lectura del metadata añade una query opcional, cuyo coste se mide con la
+partida activa; esta etapa no se presenta como una optimización de FPS.
+
+ABBA GPU activa, escala 2, warmup 120, 40 frames/run, básico y Main en
+ambas versiones, sin compilación/pruebas simultáneas: fijo **40,4502 →
+41,7903 ms** (24,722 → 23,929 FPS), **69/80 → 72/80** fuera de presupuesto.
+Pan estabilizado **42,3915 → 43,0915 ms** (23,590 → 23,206 FPS), **77/80 →
+78/80**; máximos 61,202 → 62,834 ms. Children sube **0,7564 → 0,9816 ms**
+fijo y **0,7881 → 1,0435 ms** en pan. Las candidatas fijas cubren un tick
+posterior; las seis otras ventanas cubren 3703193–3703232. La medición
+conserva el coste adicional observado, sin atribuir a ese único sistema la
+totalidad de la diferencia de frame. Reducir el coste de leer el metadata
+queda abierto como la próxima tarea F18.
+[Frames fijos](evidence/remaining-raster-input-order-steady-20261002.csv)
+y [pan estabilizado](evidence/remaining-raster-input-order-pan-settled-20261002.csv).
+
+Fuentes, oracle, controles, repeticiones y drivers:
+target/performance/remaining-raster-input-order-20261002.
+Se cierra sólo el desempate de copas cubierto. La variación Out4x inicial,
+Out8x, composición/lectura universal, coste de children, 37 ticks/s,
+30 FPS por frame y jugabilidad completa siguen abiertos.

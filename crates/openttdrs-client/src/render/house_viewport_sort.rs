@@ -2132,8 +2132,8 @@ pub(crate) fn sort_viewport_sortable_parents(
 /// added, removed, reparented, or promoted. Parent poses/windows remain live.
 #[derive(Default)]
 pub(crate) struct ViewportChildGroups {
-    by_child: EntityHashMap<(Entity, f32)>,
-    by_parent: EntityHashMap<Vec<(Entity, f32)>>,
+    by_child: EntityHashMap<(Entity, f32, Option<u8>)>,
+    by_parent: EntityHashMap<Vec<(Entity, f32, Option<u8>)>>,
     independent: EntityHashSet,
     initialized: bool,
 }
@@ -2141,7 +2141,7 @@ pub(crate) struct ViewportChildGroups {
 impl ViewportChildGroups {
     fn remove_from_group(&mut self, entity: Entity, parent: Entity) {
         if let Some(group) = self.by_parent.get_mut(&parent) {
-            group.retain(|&(child, _)| child != entity);
+            group.retain(|&(child, _, _)| child != entity);
             if group.is_empty() {
                 self.by_parent.remove(&parent);
             }
@@ -2150,7 +2150,13 @@ impl ViewportChildGroups {
 
     fn refresh<'a>(
         &mut self,
-        children: impl Iterator<Item = (Entity, Ref<'a, ViewportSortableChild>)>,
+        children: impl Iterator<
+            Item = (
+                Entity,
+                Ref<'a, ViewportSortableChild>,
+                Option<Ref<'a, ViewportSortablePromotableChild>>,
+            ),
+        >,
         removed: impl Iterator<Item = Entity>,
         independent: &EntityHashSet,
         live_count: usize,
@@ -2158,7 +2164,7 @@ impl ViewportChildGroups {
     ) -> usize {
         let mut dirty_parents = EntityHashSet::default();
         for entity in removed {
-            if let Some((parent, _)) = self.by_child.remove(&entity) {
+            if let Some((parent, _, _)) = self.by_child.remove(&entity) {
                 self.remove_from_group(entity, parent);
                 dirty_parents.insert(parent);
             }
@@ -2171,35 +2177,45 @@ impl ViewportChildGroups {
                 .copied()
                 .collect();
             for entity in changed {
-                if let Some(&(parent, depth)) = self.by_child.get(&entity) {
+                if let Some(&(parent, depth, ordinal)) = self.by_child.get(&entity) {
                     self.remove_from_group(entity, parent);
                     if !independent.contains(&entity) {
                         self.by_parent
                             .entry(parent)
                             .or_default()
-                            .push((entity, depth));
+                            .push((entity, depth, ordinal));
                     }
                     dirty_parents.insert(parent);
                 }
             }
             self.independent.clone_from(independent);
         }
-        for (entity, child) in children {
-            if self.initialized && !child.is_changed() {
+        for (entity, child, promotable) in children {
+            let ordinal_changed = promotable.as_ref().map_or_else(
+                || {
+                    self.by_child
+                        .get(&entity)
+                        .is_some_and(|(_, _, ordinal)| ordinal.is_some())
+                },
+                DetectChanges::is_changed,
+            );
+            if self.initialized && !child.is_changed() && !ordinal_changed {
                 continue;
             }
-            if let Some((old_parent, _)) = self
+            let ordinal = promotable.map(|child| child.combine_ordinal);
+            if let Some((old_parent, _, _)) = self
                 .by_child
-                .insert(entity, (child.parent, child.source_depth))
+                .insert(entity, (child.parent, child.source_depth, ordinal))
             {
                 self.remove_from_group(entity, old_parent);
                 dirty_parents.insert(old_parent);
             }
             if !independent.contains(&entity) {
-                self.by_parent
-                    .entry(child.parent)
-                    .or_default()
-                    .push((entity, child.source_depth));
+                self.by_parent.entry(child.parent).or_default().push((
+                    entity,
+                    child.source_depth,
+                    ordinal,
+                ));
             }
             dirty_parents.insert(child.parent);
         }
@@ -2214,7 +2230,7 @@ impl ViewportChildGroups {
                 .filter(|&entity| !is_live(entity))
                 .collect();
             for entity in stale {
-                if let Some((parent, _)) = self.by_child.remove(&entity) {
+                if let Some((parent, _, _)) = self.by_child.remove(&entity) {
                     self.remove_from_group(entity, parent);
                     dirty_parents.insert(parent);
                 }
@@ -2222,11 +2238,17 @@ impl ViewportChildGroups {
         }
         for parent in &dirty_parents {
             if let Some(group) = self.by_parent.get_mut(parent) {
-                group.sort_unstable_by(|(left_entity, left_depth), (right_entity, right_depth)| {
-                    left_depth
-                        .total_cmp(right_depth)
-                        .then_with(|| left_entity.to_bits().cmp(&right_entity.to_bits()))
-                });
+                group.sort_unstable_by(
+                    |(left_entity, left_depth, left_ordinal),
+                     (right_entity, right_depth, right_ordinal)| {
+                        left_depth
+                            .total_cmp(right_depth)
+                            // Combine emission is explicit; equal source Z must
+                            // not replace it with the allocation order of ECS.
+                            .then_with(|| left_ordinal.cmp(right_ordinal))
+                            .then_with(|| left_entity.to_bits().cmp(&right_entity.to_bits()))
+                    },
+                );
             }
         }
         self.initialized = true;
@@ -2244,7 +2266,14 @@ pub(crate) fn sync_viewport_sortable_children(
         (Entity, &ViewportSortableParent, &Transform),
         (With<ViewportSortableParent>, Without<ViewportSortableChild>),
     >,
-    children: Query<(Entity, Ref<ViewportSortableChild>), With<ViewportSortableChild>>,
+    children: Query<
+        (
+            Entity,
+            Ref<ViewportSortableChild>,
+            Option<Ref<ViewportSortablePromotableChild>>,
+        ),
+        With<ViewportSortableChild>,
+    >,
     mut child_transforms: Query<&mut Transform, With<ViewportSortableChild>>,
     child_depth_windows: Res<ViewportSortableChildDepthWindows>,
     mut removed: RemovedComponents<ViewportSortableChild>,
@@ -2269,7 +2298,7 @@ pub(crate) fn sync_viewport_sortable_children(
             .get(parent_entity)
             .copied();
 
-        for (rank, (entity, source_depth)) in children.iter().copied().enumerate() {
+        for (rank, (entity, source_depth, _)) in children.iter().copied().enumerate() {
             let historical_depth =
                 source_depth + (parent_transform.translation.z - parent.source_depth);
             let depth = child_depth_in_parent_interval(
@@ -4290,7 +4319,7 @@ mod tests {
             {
                 let (query, mut removed) = params.get_mut(&mut world).unwrap();
                 let dirty = cache.refresh(
-                    query.iter(),
+                    query.iter().map(|(entity, child)| (entity, child, None)),
                     removed.read(),
                     &independent,
                     query.count(),
@@ -4335,14 +4364,27 @@ mod tests {
                             .collect()
                     };
                 assert_eq!(
-                    canonical(&cache.by_parent),
+                    canonical(
+                        &cache
+                            .by_parent
+                            .iter()
+                            .map(|(parent, children)| (
+                                *parent,
+                                children
+                                    .iter()
+                                    .map(|&(entity, depth, _)| (entity, depth))
+                                    .collect()
+                            ))
+                            .collect()
+                    ),
                     canonical(&reference),
                     "phase {phase}"
                 );
                 let actual_children: BTreeMap<_, _> = cache
                     .by_child
                     .iter()
-                    .map(|(entity, &(parent, depth))| {
+                    .map(|(entity, &(parent, depth, ordinal))| {
+                        assert_eq!(ordinal, None);
                         (entity.to_bits(), (parent.to_bits(), depth.to_bits()))
                     })
                     .collect();
@@ -4358,7 +4400,7 @@ mod tests {
             let (query, mut removed) = params.get_mut(&mut world).unwrap();
             assert_eq!(
                 cache.refresh(
-                    query.iter(),
+                    query.iter().map(|(entity, child)| (entity, child, None)),
                     removed.read(),
                     &independent,
                     query.count(),
@@ -4384,7 +4426,7 @@ mod tests {
             let removals: Vec<_> = removed.read().collect();
             assert!(removals.is_empty(), "the removal message really expired");
             cache.refresh(
-                query.iter(),
+                query.iter().map(|(entity, child)| (entity, child, None)),
                 removals.into_iter(),
                 &independent,
                 query.count(),
@@ -4401,7 +4443,7 @@ mod tests {
         let (query, mut removed) = params.get_mut(&mut world).unwrap();
         assert!(removed.read().next().is_none());
         cache.refresh(
-            query.iter(),
+            query.iter().map(|(entity, child)| (entity, child, None)),
             std::iter::empty(),
             &independent,
             query.count(),
@@ -4409,6 +4451,168 @@ mod tests {
         );
         assert!(!cache.by_child.contains_key(&replacement));
         assert_eq!(cache.by_child.len(), query.count());
+    }
+
+    #[test]
+    fn equal_depth_tree_children_keep_native_combine_order_after_reallocation() {
+        let native: Vec<(u8, u32)> =
+            include_str!("../../tests/fixtures/native_tree_combine_order_openttd.csv")
+                .lines()
+                .skip(1)
+                .map(|row| {
+                    let mut fields = row.split(',');
+                    (
+                        fields
+                            .next()
+                            .expect("draw order")
+                            .parse()
+                            .expect("native ordinal"),
+                        fields
+                            .next()
+                            .expect("sprite")
+                            .parse()
+                            .expect("native sprite"),
+                    )
+                })
+                .collect();
+        assert_eq!(native.len(), 4);
+        for allocation in [[1, 2, 3], [3, 2, 1]] {
+            let mut world = World::new();
+            world.init_resource::<ViewportSortableChildDepthWindows>();
+            let bounds = ParentSpriteBounds::new(2144, 1536, 12, 2159, 1551, 59);
+            let parent_depth = f32::from_bits(1075011764);
+            let upper = f32::from_bits(1075011806);
+            let parent = world
+                .spawn((
+                    ViewportSortableParent {
+                        sprite_id: native[0].1,
+                        bounds,
+                        insertion_key: viewport_insertion_key(134, 96, 1),
+                        source_depth: f32::from_bits(1075013842),
+                    },
+                    Transform::from_xyz(0.0, 0.0, parent_depth),
+                ))
+                .id();
+            world
+                .resource_mut::<ViewportSortableChildDepthWindows>()
+                .next_parent_depth
+                .insert(parent, upper);
+            let mut children = [Entity::PLACEHOLDER; 3];
+            for ordinal in allocation {
+                let source_depth = f32::from_bits(1075003893 + u32::from(ordinal == 3));
+                children[usize::from(ordinal - 1)] = world
+                    .spawn((
+                        ViewportSortableChild {
+                            parent,
+                            source_depth,
+                        },
+                        ViewportSortablePromotableChild {
+                            sprite_id: native[usize::from(ordinal)].1,
+                            bounds,
+                            insertion_key: viewport_insertion_key(134, 96, 1),
+                            combine_ordinal: ordinal,
+                        },
+                        Transform::from_xyz(f32::from(ordinal), 0.0, source_depth),
+                    ))
+                    .id();
+            }
+            let mut schedule = Schedule::default();
+            schedule.add_systems(sync_viewport_sortable_children);
+            schedule.run(&mut world);
+            let depths: Vec<_> = children
+                .iter()
+                .map(|&child| {
+                    world
+                        .get::<Transform>(child)
+                        .expect("child pose")
+                        .translation
+                        .z
+                })
+                .collect();
+            assert!(
+                depths.windows(2).all(|pair| pair[0] < pair[1]),
+                "native DrawTile_Trees sequence changed for allocation {allocation:?}: {depths:?}"
+            );
+            assert!(parent_depth < depths[0] && depths[2] < upper);
+        }
+    }
+
+    #[test]
+    fn cached_child_groups_track_combine_ordinal_changes_and_removal() {
+        use bevy::ecs::system::SystemState;
+
+        let mut world = World::new();
+        let parent = world.spawn_empty().id();
+        let metadata = |ordinal| ViewportSortablePromotableChild {
+            sprite_id: 1586,
+            bounds: ParentSpriteBounds::new(0, 0, 0, 15, 15, 47),
+            insertion_key: viewport_insertion_key(0, 0, 1),
+            combine_ordinal: ordinal,
+        };
+        let first = world
+            .spawn((
+                ViewportSortableChild {
+                    parent,
+                    source_depth: 1.0,
+                },
+                metadata(1),
+            ))
+            .id();
+        let second = world
+            .spawn((
+                ViewportSortableChild {
+                    parent,
+                    source_depth: 1.0,
+                },
+                metadata(2),
+            ))
+            .id();
+        let mut params = SystemState::<(
+            Query<(
+                Entity,
+                Ref<ViewportSortableChild>,
+                Option<Ref<ViewportSortablePromotableChild>>,
+            )>,
+            RemovedComponents<ViewportSortableChild>,
+        )>::new(&mut world);
+        let mut cache = ViewportChildGroups::default();
+        let mut refresh = |world: &mut World, cache: &mut ViewportChildGroups| {
+            let (query, mut removed) = params.get_mut(world).expect("child query");
+            let dirty = cache.refresh(
+                query.iter(),
+                removed.read(),
+                &EntityHashSet::default(),
+                query.count(),
+                |entity| query.contains(entity),
+            );
+            params.apply(world);
+            world.clear_trackers();
+            dirty
+        };
+        let order = |cache: &ViewportChildGroups| {
+            cache.by_parent[&parent]
+                .iter()
+                .map(|&(entity, _, _)| entity)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(refresh(&mut world, &mut cache), 1);
+        assert_eq!(order(&cache), vec![first, second]);
+        assert_eq!(refresh(&mut world, &mut cache), 0);
+        world
+            .get_mut::<ViewportSortablePromotableChild>(second)
+            .expect("combine metadata")
+            .combine_ordinal = 0;
+        assert_eq!(refresh(&mut world, &mut cache), 1);
+        assert_eq!(order(&cache), vec![second, first]);
+        world
+            .entity_mut(second)
+            .remove::<ViewportSortablePromotableChild>();
+        assert_eq!(refresh(&mut world, &mut cache), 1);
+        assert_eq!(cache.by_child[&second].2, None);
+        assert_eq!(refresh(&mut world, &mut cache), 0);
+        world.entity_mut(second).insert(metadata(3));
+        assert_eq!(refresh(&mut world, &mut cache), 1);
+        assert_eq!(order(&cache), vec![first, second]);
     }
 
     #[test]

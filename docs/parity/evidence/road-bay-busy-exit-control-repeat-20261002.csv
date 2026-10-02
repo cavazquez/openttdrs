@@ -1,0 +1,3 @@
+comparison,different_pixels,different_4x4_blocks,main_camera_equal,complete_sort_equal,complete_inputs_equal,cpu_bytes_equal,cpu_images_compared,sprites_equal,cameras_equal,assets_equal,coverage_equal,occlusion_equal,different_input_fields,different_mesh_fields
+same-after-binary,0,0,True,True,False,True,265,True,True,True,True,True,17703,17703
+before-versus-after-repeat,0,0,True,True,True,True,265,True,True,True,True,True,0,0

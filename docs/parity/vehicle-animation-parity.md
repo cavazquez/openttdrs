@@ -700,6 +700,63 @@ El cierre es sólo de la conservación durante transferencia activa. Siguen
 abiertos espera sin transferencia, full-load/horarios, salida, servicio,
 tráfico y recorridos completos. FPS permanece pausado.
 
+## #326-ROAD-BAY-BUSY-EXIT — detenerse ante la boca ocupada
+
+El bloque nativo de salida de bahía pone `cur_speed = 0` si la entrada está
+ocupada y retorna sin mover frame, coordenadas, rumbo, progreso ni subspeed.
+El port sólo retornaba. La primera divergencia: tabla 32, frame 20, velocidad
+de entrada `1`; OpenTTD queda en `0` y el port conserva `1`. El arreglo añade
+la asignación nativa antes de retornar; no cambia ocupación ni selección de ruta.
+
+`oracle_road_bay_busy_exit.py` reutiliza los fragmentos de llegada, tablas y
+dirección sin modificar. Adapta orden de salida ya cargada, almacenamiento,
+bit de ocupación y repetición. Enumera 16 tablas, cuatro velocidades, tres
+subspeeds, cuatro remanentes y 1/2/10/100 llamadas con boca ocupada; la boca
+libre tiene una sola llamada. Son **3.840 filas**, **7.680 estados** de
+bus/camión; antes divergen **4.608**. El primer paso libre coincide en todos
+los casos. La ocupación nativa se adapta con otro vehículo en el tramo de
+entrada; no certifica equivalencia del pool/gestión de tráfico.
+
+La regresión comprueba retorno, velocidad, subspeed, progreso, frame, XY,
+rumbo y estado de entrada exactos. Con ruta de salida activa comprueba además
+**30.720 poses** retenidas, en cinco alphas, con tolerancia `0.0001` y rumbo
+exacto. Es presentación del port sobre coordenadas físicas nativas; no ejecuta
+el renderer de OpenTTD. El oracle omite tick/integración de velocidad, servicio,
+procesamiento de órdenes, efectos de liberar orden, callbacks/RNG y recorrido
+completo. El corpus se reproduce byte a byte y coincide con el prototipo previo.
+
+```bash
+python3 scripts/oracle_road_bay_busy_exit.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/road-bay-busy-exit-fresh --check
+cargo test -p openttdrs-core --test native_road_bay_busy_exit
+```
+
+Validación general: **3.058 core / 1.701 client**, sin fallos, 6/2 ignorados;
+ambos Clippy estrictos, formato, documentación y diff pasan. Client tests usa
+`CARGO_INCREMENTAL=0`, sin cambiar la configuración del proyecto.
+
+Release reconstruida en **77.95 s**, core `fresh:false`,
+client SHA-256 `30dc1bda7778ff3c85f24fdd44345a2b292f3e2abee1aba88b3367adb6580031`. Los
+[controles congelados](evidence/road-bay-busy-exit-control-raster-20261002.csv)
+en seis escalas y `.125` limitada a `.25` dan PNG, cámara principal y
+orden de composición completos idénticos. En `.5`/`2` coinciden
+**265/368 buffers CPU**, cobertura y oclusión; en `2`, también todas las
+entradas de dibujo. En `.5` quedan **17.703 campos distintos de meshes** en
+el orden de consulta, con sprites/cámaras/assets idénticos. Se conserva el
+diff completo, sin ordenar ni filtrar los inputs. La
+[repetición del mismo binario](evidence/road-bay-busy-exit-control-repeat-20261002.csv)
+reproduce esos mismos 17.703 cambios; la segunda captura del corregido
+coincide completamente con el anterior. Es una variación previa de consulta,
+que se registra sin cerrar la brecha del renderer global. Kale pausado no
+certifica una salida con tráfico real ni el renderer completo de OpenTTD.
+
+Evidencia privada en `target/parity/road-bay-busy-exit-20261002/` y
+`target/parity/road-bay-busy-exit-prototype-20261002/`. El cierre cubre sólo el
+subpaso bloqueado y la presentación detenida. Siguen pendientes tick completo,
+salida/continuación de servicio, tráfico, cadenas articuladas y viaje completo.
+FPS sigue pausado; #326/#329 permanecen abiertos.
+
 ## Alcance pendiente
 
 - La emisión está ligada a `Update`: agrupar ticks puede omitir decisiones de

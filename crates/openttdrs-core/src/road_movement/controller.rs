@@ -154,6 +154,7 @@ pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
             && vehicles[v_idx].frame == stop
             && bay_entrance_busy(vehicles, v_idx, vehicles[v_idx].pos, drive_on_right)
         {
+            vehicles[v_idx].cur_speed = 0;
             return false;
         }
 

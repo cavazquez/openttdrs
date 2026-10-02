@@ -1,7 +1,9 @@
 //! Estructura de pose y extrapolación entre ticks.
 
 use crate::map::TileCoord;
-use crate::vehicle::{Vehicle, VehicleKind, direction_from_tile_step, reverse_direction};
+use crate::vehicle::{
+    Vehicle, VehicleKind, direction_for_path_step, direction_from_tile_step, reverse_direction,
+};
 
 /// Posición sub-tesela usada para dibujo (puede diferir del estado de sim tras extrapolar).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -158,6 +160,66 @@ pub(super) fn virtual_advance_tile(
     ))
 }
 
+/// Reconstruct the ordinary selected piece after entering a route tile. The
+/// physical heading can be cardinal even though both path steps are diagonal.
+fn train_heading_after_tile_entry(v: &Vehicle, previous: TileCoord, pose: VehiclePose) -> u8 {
+    let next = movement_target_at(v, pose.pos, pose.path_index);
+    let enter = direction_for_path_step(previous, pose.pos, next, v.direction);
+    let outbound = next.map_or(enter, |next| {
+        direction_for_path_step(
+            pose.pos,
+            next,
+            v.path.get(pose.path_index + 1).copied(),
+            enter,
+        )
+    });
+    let entry_side = crate::map::opposite_diag_dir(crate::train_movement::diag_dir_side(enter));
+    let exit_side = crate::train_movement::diag_dir_side(outbound);
+    let track = crate::map::rail_bit_for_sides(entry_side, exit_side);
+    crate::train_movement::train_render_dir_on_track(enter, track, 0.0).unwrap_or(enter)
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn extrapolate_train_pose(v: &Vehicle, mut pose: VehiclePose, alpha: f32) -> VehiclePose {
+    if v.cur_speed == 0 || movement_target_at(v, pose.pos, pose.path_index).is_none() {
+        return pose;
+    }
+    let physical_step =
+        crate::engine::get_advance_speed(v.effective_speed()).saturating_mul(2) as f32;
+    let mut direction = v.direction;
+    let mut advance_distance = crate::engine::get_advance_distance(direction) as f32;
+    let mut pixel = f32::from(v.rail_pixel) + f32::from(v.progress) / advance_distance;
+    let mut budget = physical_step * alpha;
+    loop {
+        let span = f32::from(crate::train_movement::rail_pixels_per_tile(direction));
+        let boundary_cost = (span - pixel).max(0.0) * advance_distance;
+        if budget < boundary_cost {
+            pixel += budget / advance_distance;
+            break;
+        }
+        let Some((next, next_index)) = virtual_advance_tile(v, pose.pos, pose.path_index) else {
+            // Preserve the legacy endpoint query when the route ends.
+            pose.progress_f = 255.0;
+            pose.sync_discrete_fields();
+            return pose;
+        };
+        budget -= boundary_cost;
+        let previous = pose.pos;
+        pose.pos = next;
+        pose.path_index = next_index;
+        direction = train_heading_after_tile_entry(v, previous, pose);
+        advance_distance = crate::engine::get_advance_distance(direction) as f32;
+        pixel = 0.0;
+        if budget <= 0.0 {
+            break;
+        }
+    }
+    // progress_f retains its public 16-pixel scale for either track length.
+    pose.progress_f = pixel * (255.0 / 16.0);
+    pose.sync_discrete_fields();
+    pose
+}
+
 /// Pose un poco detrás del vehículo para emitir humo/chispas (cola en la vía).
 #[must_use]
 pub fn retreat_vehicle_pose(v: &Vehicle, pose: VehiclePose, back: u8) -> VehiclePose {
@@ -291,27 +353,7 @@ pub fn extrapolate_vehicle_pose(v: &Vehicle, alpha: f32) -> VehiclePose {
         return pose;
     }
     if v.kind == VehicleKind::Train {
-        if v.cur_speed == 0 || movement_target_at(v, pose.pos, pose.path_index).is_none() {
-            return pose;
-        }
-        let physical_step =
-            crate::engine::get_advance_speed(v.effective_speed()).saturating_mul(2) as f32;
-        let advance_distance = crate::engine::get_advance_distance(v.direction) as f32;
-        let delta = physical_step / advance_distance.max(1.0) * (255.0 / 16.0) * alpha;
-        pose.progress_f += delta;
-        let mut path_index = pose.path_index;
-        while pose.progress_f >= 255.0 {
-            pose.progress_f -= 255.0;
-            let Some((next, next_index)) = virtual_advance_tile(v, pose.pos, path_index) else {
-                pose.progress_f = 255.0;
-                break;
-            };
-            pose.pos = next;
-            path_index = next_index;
-        }
-        pose.path_index = path_index;
-        pose.sync_discrete_fields();
-        return pose;
+        return extrapolate_train_pose(v, pose, alpha);
     }
     let mut step = f32::from(v.progress_step());
     if step <= f32::EPSILON {

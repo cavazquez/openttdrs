@@ -158,8 +158,8 @@ del core y exige rumbo exacto y tolerancia de `0.0001` píxel de mundo.
 Esto certifica la cabeza dentro de la pieza, con los remanentes indicados.
 No ejecuta el renderer nativo ni certifica importación, saltos de tesela,
 aceleración, separación/coste de followers o un recorrido completo. La
-extrapolación que cruza una pieza corta sigue requiriendo el criterio correcto
-de ocho pasos y la reconstrucción de la pieza siguiente; no se cierra aquí.
+extrapolación que cruza una pieza corta se comprueba en el sub-issue siguiente;
+no forma parte de estas 512 muestras.
 
 ```bash
 python3 scripts/oracle_train_subtile_motion.py \
@@ -186,6 +186,65 @@ conserva cámara, composición y PNG idénticos; el intento inicial no comparabl
 permanece registrado.
 Evidencia privada en
 `target/parity/train-native-subtile-motion-20261002/`.
+
+## #326-TRAIN-ORDINARY-TRACK-TRANSITIONS — salida y coste de la siguiente pieza
+
+La regresión previa registra 808 diferencias entre 1.440 muestras, 600 al
+salir de piezas cortas. La presentación esperaba 16 posiciones para todas
+las vías; el controlador nativo cruza una pieza corta después de ocho.
+Al entrar en una curva desde una recta también conservaba el coste anterior:
+con presupuesto 240 desde el último píxel de una recta, entregaba
+`(30.75,40.25)` en vez de `(30.8125,40.1875)`.
+
+La extrapolación consume ahora el presupuesto físico hasta el borde según
+la longitud actual, avanza la ruta y reconstruye el rumbo de la pieza
+siguiente desde sus lados de entrada/salida. Recalcula el coste de cada
+pieza: 192 para un eje, 256 para dos. Conserva la escala pública de progreso
+de 16 píxeles y la consulta legacy del extremo de una ruta. No cambia el
+controlador autoritativo, sus decisiones de ruta ni la velocidad.
+
+`oracle_train_track_transition.py` extrae sin cambios la tabla de entrada,
+`GetNewVehiclePos`, `GetAdvanceDistance` y el bloque que reasigna X/Y y rumbo
+al entrar en la vía elegida. Adapta el bucle exterior, almacenamiento,
+teselas y selección de piezas. La interpolación fraccional continúa el paso
+del píxel actual; al completarlo, aplica la entrada nativa. Es una convención
+de presentación continua del port, no una ejecución del renderer nativo.
+
+La fixture cubre las 36 parejas válidas de piezas ordinarias, desde el último
+píxel de la primera, con cuatro remanentes y diez presupuestos de avance.
+La regresión comprueba tesela, índice de ruta, rumbo exacto y coordenadas de
+mundo con tolerancia `0.0001`. Pasan sus 1.440 muestras y las 512 de posición
+dentro de la pieza. No certifica followers, tráfico/señales, velocidad,
+túneles, depósitos, final de ruta ni viajes completos.
+
+```bash
+python3 scripts/oracle_train_track_transition.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/train-track-transition-fresh --check
+cargo test -p openttdrs-core --test native_train_track_transition
+```
+
+Gates aprobados: oracle independiente (`--check`), regresión de 1.440 muestras,
+formato, Clippy estricto, 3.042 tests de core (6 ignorados), 1.700 del cliente
+(2 ignorados), frescura de docs y diff. **Cerrado el sub-issue de transiciones
+ordinarias de cabeza**, con publicación de esta etapa.
+
+Los [controles de zoom](evidence/train-short-track-transition-control-raster-20261002.csv)
+conservan cámara y composición completa tras renombrado biyectivo de
+identidades en los siete pares. Los PNG coinciden en `0.125/0.25/0.50/1/4/8`;
+en `2` difieren 2.622 píxeles/183 bloques 4×4 aun con entradas completas,
+368 buffers CPU, cobertura y oclusión idénticos. En `0.50` coinciden también
+las entradas y sus 265 buffers. La escena de Kale está congelada: controla
+el estado dibujado y no ejerce todas las transiciones fraccionales del oracle.
+La [repetición conservada](evidence/train-short-track-transition-control-out2-repeat-20261002.csv)
+coincide en PNG entre ambos binarios y con la primera captura del anterior.
+Repetir el mismo binario corregido reproduce la diferencia original de
+2.622 píxeles/183 bloques, manteniendo cámara, composición, entradas,
+368 buffers CPU y máscaras idénticos. Esto demuestra una variación de raster
+con el mismo ejecutable; su causa permanece abierta en el compositor global.
+No se descarta el primer intento ni se certifica raster nativo completo.
+Evidencia completa, incluidos intentos fallidos, en
+`target/parity/train-short-track-transition-20261002/`.
 
 ## Alcance pendiente
 

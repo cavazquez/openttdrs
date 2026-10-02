@@ -3625,3 +3625,87 @@ píxeles descritos. F08/F31 permanecen abiertos. El siguiente candidato debe
 separar profundidades world distintas sin recortar el dominio original ni
 alterar empates world verdaderos, y comprobar el resultado con GPU, nativo y
 seis zooms. Cadencia, importación y el objetivo de jugabilidad siguen pendientes.
+
+## Etapa 46 — Rango de profundidad conservando clipping: candidato retirado (F08/F31)
+
+Se ensaya asignar un rango por Z world distinto en RenderApp, después de
+extract_mesh2d. El tag de cada instancia transporta el rango; los empates
+world verdaderos, incluidos -0/+0, comparten tag. Un vertex shader compatible
+con SpriteMaterial conserva geometría, UV, fragment shader, cámara y bins,
+pero escribe un valor Depth32Float representable entre 0,25 y 0,5. Antes de
+reemplazar Z conserva la decisión de clipping original. El prototipo deja
+todo el pase en su dominio anterior si encuentra planos inclinados o Z no
+finito. No crea MeshTag ni otras entidades/resources en el mundo principal.
+**El candidato se retira; este código/shader no queda en producción.**
+
+La sonda texturada 44 incorpora la misma función del vertex candidato y
+ocho casos en ambos órdenes. Con los Z capturados, almacena 1048576001 y
+1048576002: child conserva la propiedad nativa en los 13.728 píxeles, en
+ambos órdenes. Repite el resultado con -97,56/-97,5596 y con los rangos
+máximos, cuyos bits son 1056964606/1056964607. El control world igual conserva
+un solo valor y la dependencia del orden anterior. Los planos bajo y sobre
+el clipping original no escriben ningún píxel ni profundidad; sus 4.112
+diferencias frente al blit sin frustum son esperadas por el control de recorte.
+No se confunden con una regresión nativa de escena.
+
+Dos runs GPU son exactos en sus 32 buffers RGBA/profundidad. Después de
+retirar el código se conserva sólo la función experimental en
+[probe_mask_rank_mapping.wgsl](../../scripts/probe_mask_rank_mapping.wgsl),
+usada por [la sonda](../../scripts/probe_textured_mask_pair.rs). Un tercer
+run confirma los mismos 16 casos y buffers; los controles capturado/sin
+offset también siguen idénticos a 44. [48 lecturas GPU](evidence/ranked-mask-depth-gpu-20261002.csv).
+Hardware: RX 7600/RADV, Vulkan/Mesa 26.0.8. No certifica otros backends,
+geometrías, estados o el resultado de todo el compositor.
+
+Una prueba aislada del módulo real del candidato, compilada contra las rlib
+de Bevy con -D warnings, verifica la pareja capturada, negativos, los empates
+0 y repetición de Z, y orden de los tags. Pasa un test; el módulo/test queda
+preservado como experimento y no se agrega a la suite retenida del cliente.
+Compilación aislada ~0,39 s y sonda ~0,51; no son tiempos del cliente completo.
+
+La escena completa conserva sorter, todas las entradas ordenadas, 272/384
+imágenes CPU y cobertura en In2x/Out2x; cambia la oclusión. Diferencias de
+PNG frente al control en seis zooms: 0/3.464/346/1.068/1.407/219 píxeles,
+0/421/56/275/502/115 bloques 4×4.
+[Seis regresiones del candidato](evidence/ranked-mask-depth-raster-20261002.csv).
+Los seis PNG after son **bit-idénticos al candidato Transparent2d retirado
+en 31**. Separar los Z mediante depth test reproduce aquel resultado sin
+su cola ordenada ni pérdida del dominio de clipping. Esto acota el ensayo;
+no demuestra que el orden world del port sea correcto frente al nativo.
+
+La comparación con los PNG nativos históricos 31 repite sus resultados:
+In2x gana 2.618 exactos, pierde cero y deja 846 sin coincidencia; normal
+gana 331/cero/15. Out2x gana 147, **pierde 114** y deja 807; Out4x,
+265/**44**/1.098. La alineación procede de cámaras (+8/+4/+2/+1 píxeles Y),
+sin búsqueda de ajuste. Out8x mantiene desplazamiento fraccionario
+(-85,75,-42,125) por clamping nativo y no cuenta coincidencias exactas.
+[Comparación nativa y alcance](evidence/ranked-mask-depth-native-raster-20261002.csv).
+La referencia es CLEAN=0, sin certificar ticks, vehículos, UI o animaciones
+sincronizados; se mantiene ese límite. Las pérdidas no se dispensan y el
+prototipo no se instala por mejorar sólo In2x.
+
+Control e4900c927783092231ff313f3118bcf794979bbf89cd2a5a55cfce886741d340;
+candidato retirado 744eb4d0174dd428e9cb1283a70a1d1d94baedcb8e2d1fc2342f9549d9ff6a53,
+187.452.792 bytes. Release candidato tarda 54,38 s total / Cargo 54,20; core
+6240adc8 fresh e idéntico. Fuentes, shader, binarios readonly, trazas, buffers,
+casos nativos perdidos y logs se conservan en
+`target/performance/ranked-mask-depth-20261002`.
+
+Tras verificar las copias, se restauran exactamente las fuentes 45. El rebuild
+53,45 s / Cargo 53,07 produce el mismo SHA e4900c92 del control. Se conserva
+otro ejecutable readonly y el HTML/JSON. No es una mejora de compilación.
+No se ejecutan benchmarks activos de un cambio ya rechazado ni se acredita
+30 FPS; permanecen las cifras de la versión 41.
+
+Gates del candidato: Clippy cliente all-targets, formato, test aislado del
+módulo, dos runs GPU, seis capturas completas y comparación nativa. No se
+ejecuta la suite completa del candidato tras rechazar su raster. Gates de la
+sonda retenida: rustc con warnings estrictos, rustfmt, tercer run GPU idéntico,
+tres self-tests del comparador, docs y diff. Las 1.682 pruebas cliente/dos
+ignorados y 3.035 core/seis ignorados son evidencia previa de las fuentes
+restauradas, no reruns de esta etapa.
+
+Se cierra la evaluación como retirada. F08/F31, muestreo/composición/orden
+nativo, cadencia, importación y jugabilidad siguen abiertos. El siguiente
+paso obtiene una referencia nativa pausada sin activar CLEAN ni ocultar los
+vehículos, con metadatos de estado, antes de atribuir las pérdidas restantes.

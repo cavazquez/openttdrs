@@ -226,6 +226,12 @@ los sprites: la pareja entra parent→child en In2x y al revés en Out2x. Sus
 también cambian en el PNG. El diagnóstico conserva seis zooms y la comparación
 off/on exacta. Falta una corrección y el oracle de escena; no mejora aún FPS.
 
+La etapa 46 ensaya rangos en el depth buffer conservando clipping y empates
+world. La sonda texturada pasa, pero la escena reproduce los seis PNG del
+candidato retirado 31 y pierde 114/44 coincidencias nativas en Out2x/Out4x.
+También se retira: fuentes y binario vuelven exactamente a 45. Se conserva
+la sonda para seguir aislando el defecto, sin nuevo benchmark ni cierre.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

@@ -1,0 +1,7 @@
+scale,different_pixels,different_4x4_blocks,bbox,native_png_sha256,native_dx_from_camera,native_dy_from_camera,native_comparable_changed_pixels,new_matches_native,old_matches_native,neither_matches_native,scope
+.25,0,0,,19a5e1704155af8f1f751c3014966e93e26bc36ef4a0ed3962fcd725f97bca30,0,16,0,0,0,0,"historical CLEAN=0, native tick/vehicles/UI/animations not synchronized; no full-scene certification"
+.5,3464,421,"(0, 0, 628, 386)",4c331822037c52973404d785c990eb2ac234663dd689304d6a830db3da575c8a,0,8,3464,2618,0,846,"historical CLEAN=0, native tick/vehicles/UI/animations not synchronized; no full-scene certification"
+1,346,56,"(264, 0, 387, 364)",b8d9ded21dda57e92b9e29c5d1a305519f8c1eb762848c7ecf37f358cc61232c,0,4,346,331,0,15,"historical CLEAN=0, native tick/vehicles/UI/animations not synchronized; no full-scene certification"
+2,1068,275,"(163, 81, 1124, 686)",208ad50ce7f2b9cefac7df61916a096cefbca144a8f418faaee204d1c4998a94,0,2,1068,147,114,807,"historical CLEAN=0, native tick/vehicles/UI/animations not synchronized; no full-scene certification"
+4,1407,502,"(18, 232, 1155, 684)",ce4e97b18ad81774a2ae6a9ee2eb5e975e415264f6be3ce68deee7ecdec6a5e8,0,1,1407,265,44,1098,"historical CLEAN=0, native tick/vehicles/UI/animations not synchronized; no full-scene certification"
+8,219,115,"(64, 74, 1231, 685)",89499a11c4dfdd89b5927b711abb3b6b1429692bae59164216fbf4019a8c9bd6,-85.75,-42.125,0,fractional_alignment,fractional_alignment,fractional_alignment,"historical CLEAN=0, native tick/vehicles/UI/animations not synchronized; no full-scene certification"

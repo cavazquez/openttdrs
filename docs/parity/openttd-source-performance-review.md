@@ -282,6 +282,13 @@ La misma pareja entra parent→child en In2x y child→parent en Out2x. Se local
 48 cambios de máscara y 40 del PNG histórico en su solapamiento visible; falta
 el registro de bins del fallo y no se atribuyen todos sus 204 píxeles.
 
+La [etapa 46](performance-implementation.md#etapa-46--rango-de-profundidad-conservando-clipping-candidato-retirado-f08f31)
+separa Z mediante tags GPU sin cambiar clipping ni empates world. La pareja
+texturada y controles pasan, pero los seis PNG repiten bit a bit el candidato
+31, incluidas 114/44 coincidencias nativas perdidas en Out2x/Out4x. Se retira;
+el programa vuelve exactamente a 45. Falta una referencia nativa pausada
+con vehículos y metadatos para aislar los límites de la comparación de escena.
+
 ### F09 — Var 62 usa crashed para el bit de Hidden
 
 P2 · NewGRF · Evidencia: **Fuente** · Alcance estimado: medio.
@@ -688,6 +695,10 @@ y cifras 41 mientras descarta instalar el offset cero por su recorte de Z.
 La etapa 45 añade trazas de bins CPU vinculadas a extracción por FrameCount.
 No son timestamps GPU ni una nueva mejora de frame. Las comparaciones off/on
 son exactas y las cifras activas siguen siendo las de la etapa 41.
+
+La etapa 46 conserva 48 lecturas de una sonda GPU de rangos, pero retira el
+candidato de escena por pérdidas nativas. No mide FPS ni cambia las cifras
+retenidas. La corrección del orden aislado no cierra el render de todo el mapa.
 
 ### F32 — Separar contratos facilita optimizar sin romper paridad
 

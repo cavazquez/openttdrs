@@ -10,7 +10,7 @@ use wgpu::util::DeviceExt;
 const WIDTH: u32 = 132;
 const HEIGHT: u32 = 104;
 const SHADER: &str = r"
-struct Params { clip_from_world: mat4x4<f32>, world_position: vec4<f32>, color: vec4<f32> }
+struct Params { clip_from_world: mat4x4<f32>, world_position: vec4<f32>, color: vec4<f32>, rank: vec4<u32> }
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var image: texture_2d<f32>;
 @group(0) @binding(2) var nearest: sampler;
@@ -23,7 +23,7 @@ struct VertexOutput {
     let uv = array<vec2<f32>, 6>(vec2(0.0,1.0),vec2(1.0,1.0),vec2(1.0,0.0),vec2(0.0,1.0),vec2(1.0,0.0),vec2(0.0,0.0));
     let projected = params.clip_from_world * params.world_position;
     var output: VertexOutput;
-    output.position = vec4(xy[index], projected.z, projected.w);
+    output.position = mask_ranked_clip_position(vec4(xy[index], projected.z, projected.w), params.rank.x, true);
     output.uv = uv[index];
     return output;
 }
@@ -41,6 +41,8 @@ fn render(
     matrix: Mat4,
     images: &[Vec<u8>; 2],
     order: &[usize],
+    depths: [f32; 2],
+    tags: [u32; 2],
 ) -> (Vec<u8>, Vec<u8>) {
     let size = wgpu::Extent3d {
         width: WIDTH,
@@ -71,7 +73,6 @@ fn render(
         ..Default::default()
     });
     let layout = pipeline.get_bind_group_layout(0);
-    let depths = [f32::from_bits(1075726681), f32::from_bits(1075726728)];
     let bindings: Vec<_> = images
         .iter()
         .enumerate()
@@ -109,7 +110,12 @@ fn render(
             } else {
                 [1.0, 0.0, 0.0, 1.0]
             });
-            let bytes: Vec<_> = values.into_iter().flat_map(f32::to_ne_bytes).collect();
+            let mut bytes: Vec<_> = values.into_iter().flat_map(f32::to_ne_bytes).collect();
+            bytes.extend(
+                [tags[index], 0, 0, 0]
+                    .into_iter()
+                    .flat_map(u32::to_ne_bytes),
+            );
             let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("captured matrix"),
                 contents: &bytes,
@@ -245,9 +251,18 @@ fn main() {
     eprintln!("adapter: {:?}", adapter.get_info());
     let (device, queue) =
         block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).expect("device");
+    let production = include_str!("probe_mask_rank_mapping.wgsl");
+    let mapping = production
+        .split("// BEGIN_MASK_DEPTH_MAPPING\n")
+        .nth(1)
+        .expect("mapping start")
+        .split("// END_MASK_DEPTH_MAPPING")
+        .next()
+        .expect("mapping end");
+    let shader_source = format!("{mapping}\n{SHADER}");
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("textured mask pair"),
-        source: wgpu::ShaderSource::Wgsl(SHADER.into()),
+        source: wgpu::ShaderSource::Wgsl(shader_source.into()),
     });
     let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("same Mask depth rule"),
@@ -287,9 +302,63 @@ fn main() {
     println!(
         "projection,order,pixels,ownership_differences_native,background,parent,glass,min_nonzero_depth_bits,max_nonzero_depth_bits"
     );
-    for (name, matrix) in [("captured", current), ("zero_depth_offset", precise)] {
+    let captured = [f32::from_bits(1075726681), f32::from_bits(1075726728)];
+    for (name, matrix, depths, tags, clipped, tied) in [
+        ("captured", current, captured, [0, 0], false, true),
+        ("zero_depth_offset", precise, captured, [0, 0], false, false),
+        (
+            "ranked_depth",
+            current,
+            captured,
+            [0x80000001, 0x80000002],
+            false,
+            false,
+        ),
+        (
+            "ranked_negative",
+            current,
+            [-97.56, -97.5596],
+            [0x80000001, 0x80000002],
+            false,
+            false,
+        ),
+        (
+            "ranked_max",
+            current,
+            captured,
+            [0x807ffffe, 0x807fffff],
+            false,
+            false,
+        ),
+        (
+            "ranked_equal_world",
+            current,
+            [captured[0]; 2],
+            [0x80000001; 2],
+            false,
+            true,
+        ),
+        (
+            "ranked_below_clip",
+            current,
+            [-1001.0, -1000.5],
+            [0x80000001, 0x80000002],
+            true,
+            false,
+        ),
+        (
+            "ranked_above_clip",
+            current,
+            [3001.0, 3002.0],
+            [0x80000001, 0x80000002],
+            true,
+            false,
+        ),
+    ] {
         for (label, order) in [("parent_child", [0, 1]), ("child_parent", [1, 0])] {
-            let (colors, depths) = render(&device, &queue, &pipeline, matrix, &images, &order);
+            let (colors, depths) = render(
+                &device, &queue, &pipeline, matrix, &images, &order, depths, tags,
+            );
             let actual: Vec<u8> = colors
                 .chunks_exact(4)
                 .map(|rgba| {
@@ -312,8 +381,18 @@ fn main() {
                 .map(|b| u32::from_ne_bytes(b.try_into().expect("depth bits")))
                 .filter(|&b| b != 0)
                 .collect();
-            assert_eq!(counts[0], 9616);
-            if name == "captured" {
+            assert_eq!(
+                counts[0],
+                if clipped {
+                    (WIDTH * HEIGHT) as usize
+                } else {
+                    9616
+                }
+            );
+            if clipped {
+                assert!(actual.iter().all(|&tag| tag == 0));
+                assert!(written.is_empty());
+            } else if tied {
                 assert_eq!(differences, if order[1] == 1 { 0 } else { 68 });
             } else {
                 assert_eq!(
@@ -331,8 +410,8 @@ fn main() {
                 counts[0],
                 counts[1],
                 counts[2],
-                written.iter().min().expect("written depth"),
-                written.iter().max().expect("written depth")
+                written.iter().min().unwrap_or(&0),
+                written.iter().max().unwrap_or(&0)
             );
         }
     }

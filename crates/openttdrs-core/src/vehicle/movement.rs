@@ -273,7 +273,7 @@ impl super::model::Vehicle {
         // Carga/descarga gradual: no mover hasta cerrar la transferencia.
         if self.cargo_transfer_active() {
             self.cur_speed = 0;
-            self.progress = 255;
+            self.hold_station_movement();
             return;
         }
 
@@ -1799,6 +1799,22 @@ impl super::model::Vehicle {
         }
     }
 
+    fn hold_station_movement(&mut self) {
+        let physical_bay = self.road_pos_valid
+            && matches!(
+                self.kind,
+                super::model::VehicleKind::Bus | super::model::VehicleKind::Truck
+            )
+            && crate::road_movement::rvsb::is_bay_road_state(self.road_state);
+        if self.kind == super::model::VehicleKind::Train || physical_bay {
+            // BeginLoading stops speed; the loading guards return before
+            // movement and retain both progress and subspeed.
+            self.cur_speed = 0;
+        } else {
+            self.progress = 255;
+        }
+    }
+
     /// Cierra la ventana de carga abierta en la llegada (inicio del `step`
     /// siguiente). Si las fases de carga/descarga actuaron, ya avanzaron la
     /// orden (`advance_after_loading`/`_unloading`) y aquí no queda nada.
@@ -1816,7 +1832,7 @@ impl super::model::Vehicle {
         }
         // Carga/descarga gradual: mantener la ventana abierta mientras haya transferencia.
         if self.cargo_transfer_active() {
-            self.progress = 255;
+            self.hold_station_movement();
             return;
         }
         self.awaiting_load_window = false;
@@ -1851,19 +1867,7 @@ impl super::model::Vehicle {
                 self.maybe_insert_implicit_order(station);
             }
             self.awaiting_load_window = true;
-            let physical_bay = self.road_pos_valid
-                && matches!(
-                    self.kind,
-                    super::model::VehicleKind::Bus | super::model::VehicleKind::Truck
-                )
-                && crate::road_movement::rvsb::is_bay_road_state(self.road_state);
-            if self.kind == super::model::VehicleKind::Train || physical_bay {
-                // Native BeginLoading stops speed. The train/road handler
-                // keeps subspeed and stores its own movement remainder.
-                self.cur_speed = 0;
-            } else {
-                self.progress = 255;
-            }
+            self.hold_station_movement();
             return;
         }
         self.finish_arrival_after_load_window_with_catalog(engine_catalog);
@@ -1879,7 +1883,7 @@ impl super::model::Vehicle {
         engine_catalog: &[crate::engine::EngineDef],
     ) {
         if self.cargo_transfer_active() {
-            self.progress = 255;
+            self.hold_station_movement();
             return;
         }
         self.sanitize_current_order();

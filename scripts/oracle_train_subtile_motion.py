@@ -32,6 +32,7 @@ struct Vehicle {
     uint8_t direction = 0;
     uint16_t cur_speed = 0;
     uint8_t progress = 0;
+    uint8_t subspeed = 0;
     Flags vehstatus{};
     Order current_order{};
     ADVANCE_DISTANCE
@@ -46,10 +47,12 @@ bool native_hold(Vehicle *v) {
     return false;
 }
 int main(int argc, char **) {
-    assert(argc == 1 || argc == 2);
-    const bool held = argc == 2;
+    assert(argc >= 1 && argc <= 3);
+    const bool held = argc >= 2;
+    const bool transfer_held = argc == 3;
     std::cout << "track_bit,enter_direction,pixel,remainder,advance_distance,x,y,direction"
-              << (held ? ",hold_mode,handler_result" : "") << '\n'
+              << (held ? ",hold_mode,handler_result" : "")
+              << (transfer_held ? ",subspeed,held_calls" : "") << '\n'
               << std::fixed << std::setprecision(8);
     for (uint track = 0; track < 6; ++track)
     for (uint enter = 0; enter < 4; ++enter) {
@@ -62,6 +65,7 @@ int main(int argc, char **) {
             const uint cost = v.GetAdvanceDistance();
             for (uint mode = 1; mode <= (held ? 2U : 1U); ++mode)
             for (uint quarter = 0; quarter < 4; ++quarter) {
+                if (transfer_held && mode != 2) continue;
                 const uint held_remainders[] = {0,1,cost / 2,cost - 1};
                 const uint remainder = held ? held_remainders[quarter] : cost * quarter / 4;
                 v.progress = remainder;
@@ -72,11 +76,23 @@ int main(int argc, char **) {
                 const double fraction = hold_result ? 0.0 : double(remainder) / cost;
                 const double x = v.x_pos + (next.x - v.x_pos) * fraction;
                 const double y = v.y_pos + (next.y - v.y_pos) * fraction;
-                std::cout << (1U << track) << ',' << enter * 2 + 1 << ',' << pixel << ','
-                          << remainder << ',' << cost << ',' << x << ',' << y << ','
-                          << unsigned(v.direction);
-                if (held) std::cout << ',' << mode << ',' << hold_result;
-                std::cout << '\n';
+                for (uint subspeed : {0U,99U,255U})
+                for (uint calls : {1U,2U,10U,100U}) {
+                    if (!transfer_held && (subspeed != 0 || calls != 1)) continue;
+                    Vehicle sample = v;
+                    sample.subspeed = subspeed;
+                    if (transfer_held) {
+                        for (uint call = 0; call < calls; ++call) assert(native_hold(&sample));
+                        assert(sample.x_pos == v.x_pos && sample.y_pos == v.y_pos && sample.direction == v.direction);
+                        assert(sample.tile == v.tile && sample.cur_speed == v.cur_speed);
+                    }
+                    std::cout << (1U << track) << ',' << enter * 2 + 1 << ',' << pixel << ','
+                              << unsigned(sample.progress) << ',' << cost << ',' << x << ',' << y << ','
+                              << unsigned(sample.direction);
+                    if (held) std::cout << ',' << mode << ',' << hold_result;
+                    if (transfer_held) std::cout << ',' << unsigned(sample.subspeed) << ',' << calls;
+                    std::cout << '\n';
+                }
             }
             if (next.new_tile != v.tile) break;
             v.x_pos = next.x; v.y_pos = next.y;
@@ -92,6 +108,7 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--check', action='store_true')
     parser.add_argument('--held', action='store_true', help='stopped/loading guards; physical pixel unchanged despite retained progress')
+    parser.add_argument('--transfer-held', action='store_true', help='isolated loading guard repeated with three subspeeds and four call counts')
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=False)
     sources = {}
@@ -124,12 +141,13 @@ def main():
     command = ['c++', '-std=c++20', '-O2', '-Wall', '-Wextra', '-Werror', str(cpp), '-o', str(binary)]
     subprocess.run(command, check=True)
     binary.chmod(0o555)
-    invocation = [str(binary.resolve())] + (['--held'] if args.held else [])
+    args.held = args.held or args.transfer_held
+    invocation = [str(binary.resolve())] + (['--held'] if args.held else []) + (['--transfer-held'] if args.transfer_held else [])
     output = subprocess.check_output(invocation, text=True)
-    count = 1024 if args.held else 512
+    count = 6144 if args.transfer_held else 1024 if args.held else 512
     if len(output.splitlines()) != count + 1:
         raise ValueError(f'expected {count} native train pose samples')
-    filename = 'native-train-held-motion.csv' if args.held else 'native-train-subtile-motion.csv'
+    filename = 'native-train-station-held-remainder.csv' if args.transfer_held else 'native-train-held-motion.csv' if args.held else 'native-train-subtile-motion.csv'
     (args.out / filename).write_text(output)
     if args.check:
         fixture = Path(__file__).resolve().parents[1] / 'crates/openttdrs-core/tests/fixtures/parity' / filename
@@ -140,7 +158,7 @@ def main():
         unmodified_fragment_sha256={name: hashlib.sha256(body.encode()).hexdigest() for name, body in
                                    [('entry_table', table[0]), ('pixel_step', step), ('advance_distance', distance), ('stopped_guard', stopped), ('loading_guard', loading)]},
         command=command, invocation=invocation, rows=count,
-        scope=__doc__ if not args.held else 'Isolated unchanged stopped/loading guards retain native physical pixel positions. Adapted state flags, loading maintenance and enumeration; no full handler, speed integration, callbacks or native renderer.'), indent=2) + '\n')
+        scope=('Isolated unchanged loading guard repeated with adapted order/state flags and subspeed storage. Service/order maintenance, cargo transfers, tick counters, callbacks/RNG, departure, full handler/world and native renderer are omitted.' if args.transfer_held else __doc__ if not args.held else 'Isolated unchanged stopped/loading guards retain native physical pixel positions. Adapted state flags, loading maintenance and enumeration; no full handler, speed integration, callbacks or native renderer.')), indent=2) + '\n')
     print('Native train poses:', count, 'samples, 12 valid track entries, four pixel remainders')
 
 

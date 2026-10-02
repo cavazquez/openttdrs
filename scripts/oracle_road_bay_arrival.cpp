@@ -21,7 +21,7 @@ constexpr int AM_ORIGINAL = 0, RVS_ENTERED_STOP = 2, RVS_DRIVE_SIDE = 4;
 constexpr int RVSB_IN_ROAD_STOP = 32, RVSB_IN_ROAD_STOP_END = 48;
 constexpr int RVSB_IN_DT_ROAD_STOP = 64, RVSB_IN_DT_ROAD_STOP_END = 80;
 constexpr int RVC_DRIVE_THROUGH_STOP_FRAME = 11;
-constexpr int OT_GOTO_STATION = 1, OT_LEAVESTATION = 2;
+constexpr int OT_GOTO_STATION = 1, OT_LEAVESTATION = 2, OT_LOADING = 3;
 constexpr int WC_VEHICLE_VIEW = 0, WID_VV_START_STOP = 0;
 enum class RoadStopType { Bus, Truck };
 enum class StationRandomTrigger { VehicleArrives };
@@ -29,8 +29,9 @@ enum class StationAnimationTrigger { VehicleArrives };
 #include "native-distance-constants.inc"
 struct Settings { struct { int roadveh_acceleration_model = AM_ORIGINAL, road_side = 0; } vehicle; } _settings_game;
 struct Order {
+    bool loading = false;
     bool ShouldStopAtStation(const void *, int) const { return true; }
-    bool IsType(int type) const { return type == OT_GOTO_STATION; }
+    bool IsType(int type) const { return loading ? type == OT_LOADING : type == OT_GOTO_STATION; }
     int GetDestination() const { return 0; }
     void Free() {}
 };
@@ -117,15 +118,20 @@ bool blocked = false;
 #include "native-tick-progress.inc"
 }
 
+bool native_loading_hold(RoadVehicle *v) {
+#include "native-loading-guard.inc"
+return false;
+}
 void emit(unsigned table, unsigned step, const RoadVehicle &v, bool result) {
     std::cout << table << ',' << step << ',' << v.frame << ',' << v.x_pos << ','
               << v.y_pos << ',' << unsigned(v.direction) << ',' << v.cur_speed << ','
               << HasBit(v.state, RVS_ENTERED_STOP) << ',' << result << ',' << v.begin_loading << '\n';
 }
 int main(int argc, char **) {
-    assert(argc == 1 || argc == 2);
-    const bool tick = argc == 2;
-    if (tick) std::cout << "table,frame,x,y,direction,input_speed,input_subspeed,input_progress,speed,subspeed,progress,entered,loading\n";
+    assert(argc >= 1 && argc <= 3);
+    const bool held = argc == 3;
+    const bool tick = argc >= 2;
+    if (tick) std::cout << "table,frame,x,y,direction,input_speed,input_subspeed,input_progress,speed,subspeed,progress,entered,loading" << (held ? ",held_calls" : "") << '\n';
     else std::cout << "table,substep,frame,x,y,direction,speed,entered,result,begin_loading\n";
     for (unsigned table = 32; table < 64; ++table) {
         if ((table & (1U << RVS_ENTERED_STOP)) != 0) continue;
@@ -155,9 +161,22 @@ int main(int argc, char **) {
                 RoadStop::GetByTile(0, RoadStopType::Bus)->busy = true;
                 native_tick(&sample);
                 assert(sample.frame == v.frame && sample.x_pos == v.x_pos && sample.y_pos == v.y_pos && sample.direction == v.direction);
-                std::cout << table << ',' << v.frame << ',' << v.x_pos << ',' << v.y_pos << ',' << unsigned(v.direction) << ','
-                          << speed << ',' << subspeed << ',' << progress << ',' << sample.cur_speed << ',' << unsigned(sample.subspeed) << ','
-                          << unsigned(sample.progress) << ',' << HasBit(sample.state,RVS_ENTERED_STOP) << ',' << sample.begin_loading << '\n';
+                if (held && !sample.begin_loading) continue;
+                for (unsigned calls : {1U,2U,10U,100U}) {
+                if (!held && calls != 1) continue;
+                RoadVehicle held_sample = sample;
+                if (held) {
+                    held_sample.current_order.loading = true;
+                    for (unsigned call=0;call<calls;++call) assert(native_loading_hold(&held_sample));
+                    assert(held_sample.frame == sample.frame && held_sample.x_pos == sample.x_pos && held_sample.y_pos == sample.y_pos && held_sample.direction == sample.direction);
+                    assert(held_sample.state == sample.state && held_sample.begin_loading == sample.begin_loading);
+                }
+                std::cout << table << ',' << held_sample.frame << ',' << held_sample.x_pos << ',' << held_sample.y_pos << ',' << unsigned(held_sample.direction) << ','
+                          << speed << ',' << subspeed << ',' << progress << ',' << held_sample.cur_speed << ',' << unsigned(held_sample.subspeed) << ','
+                          << unsigned(held_sample.progress) << ',' << HasBit(held_sample.state,RVS_ENTERED_STOP) << ',' << held_sample.begin_loading;
+                if (held) std::cout << ',' << calls;
+                std::cout << '\n';
+                }
             }
         }
     }

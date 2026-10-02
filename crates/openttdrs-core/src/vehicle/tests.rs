@@ -11,6 +11,98 @@ use super::model::{DIR_N, DIR_NE, DIR_S, DIR_SE, DIR_SW, Vehicle, VehicleKind};
 use super::order::{OrderConditionKind, VehicleOrder};
 
 #[test]
+fn station_window_phases_preserve_native_road_hold_remainders() {
+    let mut cases = 0;
+    for kind in [VehicleKind::Bus, VehicleKind::Truck] {
+        for unloading in [false, true] {
+            for line in
+                include_str!("../../tests/fixtures/parity/native-road-bay-held-remainder.csv")
+                    .lines()
+                    .skip(1)
+            {
+                let fields: Vec<u16> = line
+                    .split(',')
+                    .map(|field| field.parse().unwrap())
+                    .collect();
+                let mut v = Vehicle::new(1, kind, TileCoord::new(0, 0), TileCoord::new(0, 0));
+                v.running = true;
+                v.awaiting_load_window = true;
+                v.cargo_loading = !unloading;
+                v.cargo_unloading = unloading;
+                v.road_pos_valid = true;
+                v.road_state = u8::try_from((fields[0] & 0x2F) | (fields[11] << 2)).unwrap();
+                v.cur_speed = fields[8];
+                v.subspeed = u8::try_from(fields[9]).unwrap();
+                v.progress = u8::try_from(fields[10]).unwrap();
+                for _ in 0..fields[13] {
+                    v.complete_station_load_window();
+                    assert_eq!(
+                        (v.cur_speed, u16::from(v.subspeed), u16::from(v.progress)),
+                        (fields[8], fields[9], fields[10]),
+                        "complete: {line}"
+                    );
+                    v.finish_arrival_after_load_window();
+                    assert_eq!(
+                        (v.cur_speed, u16::from(v.subspeed), u16::from(v.progress)),
+                        (fields[8], fields[9], fields[10]),
+                        "finish: {line}"
+                    );
+                    assert!(v.awaiting_load_window, "{line}");
+                }
+                cases += 1;
+            }
+        }
+    }
+    assert_eq!(cases, 13_056);
+}
+
+#[test]
+fn station_window_phases_preserve_native_train_hold_remainders() {
+    let mut cases = 0;
+    for unloading in [false, true] {
+        for line in
+            include_str!("../../tests/fixtures/parity/native-train-station-held-remainder.csv")
+                .lines()
+                .skip(1)
+        {
+            let fields: Vec<_> = line.split(',').collect();
+            let progress: u8 = fields[3].parse().unwrap();
+            let subspeed: u8 = fields[10].parse().unwrap();
+            let calls: u16 = fields[11].parse().unwrap();
+            let mut v = Vehicle::new(
+                1,
+                VehicleKind::Train,
+                TileCoord::new(1, 1),
+                TileCoord::new(1, 1),
+            );
+            v.awaiting_load_window = true;
+            v.cargo_loading = !unloading;
+            v.cargo_unloading = unloading;
+            v.cur_speed = 0;
+            v.progress = progress;
+            v.subspeed = subspeed;
+            for _ in 0..calls {
+                v.complete_station_load_window();
+                assert_eq!(
+                    (v.cur_speed, v.subspeed, v.progress),
+                    (0, subspeed, progress),
+                    "complete: {line}"
+                );
+                v.finish_arrival_after_load_window();
+                assert_eq!(
+                    (v.cur_speed, v.subspeed, v.progress),
+                    (0, subspeed, progress),
+                    "finish: {line}"
+                );
+                assert!(v.awaiting_load_window, "{line}");
+            }
+            cases += 1;
+        }
+    }
+    assert_eq!(cases, 12_288);
+}
+
+#[test]
 fn display_name_with_catalog_uses_custom_engine_name() {
     let custom_id = crate::engine::NEWGRF_ENGINE_ID_BASE + 58;
     let mut custom = crate::engine::engine_by_id(crate::engine::ENGINE_BUS_MPS)

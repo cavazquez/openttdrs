@@ -643,6 +643,63 @@ prototipo previo `target/parity/train-consist-history-prototype-20261002/`.
 Permanecen abiertos otros recorridos, longitudes/callbacks, tráfico,
 reversa/depots, túneles/puentes y raster completo. FPS continúa pausado.
 
+## #326-STATION-ACTIVE-TRANSFER-REMAINDER — conservar la pausa de carga
+
+Los guards nativos de `OT_LOADING` retornan antes de actualizar velocidad o
+movimiento. Tras entrar en una bahía, el primer caso conserva progreso `191`;
+el port lo sustituía por `255` en la siguiente pausa. En el tren, el primer
+remanente `0` también cambiaba a `255`. Había tres entradas: movimiento,
+cierre de ventana y finalización de llegada durante una transferencia activa.
+
+El helper compartido conserva progreso y subspeed de trenes y buses/camiones
+con posición física en bahía, con velocidad cero. El movimiento sintético
+conserva su contrato anterior. No modifica órdenes, cargas, geometría ni salida.
+
+Los oracles extraen sin modificar los guards de carga de `RoadVehTick` y
+`TrainLocoHandler`. El corpus vial parte de los 816 casos de entrada de carga
+y repite el guard 1/2/10/100 veces: **3.264 filas**. El ferroviario enumera
+512 posiciones/remanentes de carga, tres subspeeds y cuatro repeticiones:
+**6.144 filas**. Se adaptan flags de orden, almacenamiento y llamadas externas;
+se omiten mantenimiento de servicio/órdenes, transferencia real de carga,
+contadores de tick, callbacks/RNG, partida completa y salida de la estación.
+
+Las regresiones comprueban carga y descarga por separado, bus/camión y tren:
+**25.344 estados** por entrada del port. Verifican progreso, subspeed y
+velocidad exactos; el movimiento comprueba además frame/coordenadas/rumbo
+viales, tesela/píxel/rumbo ferroviarios y conservación de ventana/orden.
+Los otros dos puntos de pausa verifican fracciones y ventana contra los mismos
+valores nativos. Las dos regresiones de movimiento fallan antes del arreglo.
+Los 432 estados de llegada, 1.728 ticks de entrada de carga, 512 poses móviles
+y 1.024 poses detenidas anteriores se reproducen byte a byte sin cambios.
+
+```bash
+python3 scripts/oracle_road_bay_arrival.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/station-road-held-fresh --held --check
+python3 scripts/oracle_train_subtile_motion.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/station-train-held-fresh --transfer-held --check
+cargo test -p openttdrs-core --test native_station_held_remainder
+cargo test -p openttdrs-core --lib station_window_phases_preserve_native
+```
+
+Validación general: **3.057 core / 1.701 client**, sin fallos, 6/2 ignorados;
+ambos Clippy estrictos, formato, documentación y diff pasan. Client tests usa
+`CARGO_INCREMENTAL=0`, sin cambiar la configuración del proyecto.
+
+Release reconstruida en **79.16 s**, core `fresh:false`,
+client SHA-256 `72291d8d8c8ef94274956afa94ab6c751d33692dde053597bce871503dd3c844`. Los
+[controles congelados](evidence/station-held-remainder-control-raster-20261002.csv)
+en seis escalas y `.125` limitada a `.25` dan PNG, cámara principal y
+orden completo idénticos. En `.5`/`2` coinciden todas las entradas de sprites,
+**265/368 buffers CPU**, cobertura y oclusión. Kale pausado no certifica una
+transferencia de carga real ni el renderer completo de OpenTTD.
+
+Evidencia privada en `target/parity/station-held-remainder-20261002/`.
+El cierre es sólo de la conservación durante transferencia activa. Siguen
+abiertos espera sin transferencia, full-load/horarios, salida, servicio,
+tráfico y recorridos completos. FPS permanece pausado.
+
 ## Alcance pendiente
 
 - La emisión está ligada a `Update`: agrupar ticks puede omitir decisiones de

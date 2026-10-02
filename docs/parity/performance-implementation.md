@@ -2426,3 +2426,130 @@ ambos para todos los targets, formato, diff, frescura de docs y tres tests del
 comparador de entradas. Esta etapa acota la optimización a estas búsquedas;
 F18/F31 completos, variaciones históricas, paridad nativa, cadencia y 30 FPS
 siguen abiertos.
+
+## Etapa 34 — Atribución por etapas del loop principal (F31)
+
+`OPENTTDRS_PERF_MAIN_OUT=otro.csv`, junto con `OPENTTDRS_PERF_OUT`, registra
+intervalos de pared para cada schedule del MainScheduleOrder vigente, incluyendo
+StateTransition y schedules de otros plugins. Intercala observadores entre las
+etiquetas originales sin agregar dependencias entre sus sistemas ni modificar
+los schedules de Startup. Conserva frame, tick, warmup y flush final. Los timers
+se guardan dentro del FrameCapture existente, sin registrar otro recurso ECS.
+El CSV normal mantiene su esquema; el detallado incluye main_ms y una columna
+por etiqueta, con índice y nombre escapado. Rechaza archivos coincidentes,
+incluidos aliases por hardlink en Unix, antes de alterar los schedules.
+
+La regresión añade un schedule propio y exige su orden original durante cinco
+frames, tres muestras tras warmup, ticks exactos y suma de intervalos. Comprueba
+también que destinos inválidos o coincidentes conservan el orden y los archivos.
+Detectó un fallo real del primer intento: insert_before/after no encuentra una
+etiqueta internada pasada como wrapper. Se corrige construyendo la lista con
+las etiquetas originales intactas. El intento fallido queda en los logs.
+OpenTTD 14ec60f248 separa game loop, drawing y video en PerformanceElement;
+estas categorías de Bevy son otro contrato y no se equiparan por nombre.
+
+GPU real, Kale activa, 1280×720, escala 2, ABBA del **mismo binario** con el
+observador detallado off/on, 40 muestras/run, sin perf o compilación concurrentes.
+Fijo, warmup 120: frame off 42,4367 / 42,7722 ms, on
+42,7305 / 42,8685; FPS 23,565 / 23,380 frente a 23,402 / 23,327.
+p95 off 56,5327 / 56,8575, on 56,7248 / 57,5323; máximos/p99
+58,8752 / 60,3485 frente a 59,6329 / 57,9557. TPS
+23,570 / 23,366 frente a 23,385 / 23,314. Los cuatro runs cubren
+3703193–3703232; exceden 33,33 ms 73/80 frames off y 76/80 on.
+El frame combinado aumenta 42,6044 → 42,7995 ms; no acredita una ganancia.
+[160 muestras y coste observado](evidence/main-schedule-attribution-stable-steady-observer-20261001.csv).
+
+Con el observador on, main_ms es 40,4268 / 40,5005;
+RunFixedMainLoop 14,2132 / 14,3216, Update 18,7290 / 18,7186 y
+**PostUpdate 6,9101 / 6,8971 ms**. First, PreUpdate, StateTransition,
+SpawnScene y Last completan la suma. Los 80 registros se alinean por frame/tick
+con el CSV normal y su suma difiere menos de 0,001 ms por redondeo.
+[80 muestras por schedule](evidence/main-schedule-attribution-stable-steady-phases-20261001.csv).
+
+Pan, warmup 30: frame off 48,1724 / 48,3672, on
+48,4545 / 48,5860 ms; FPS 20,759 / 20,675 frente a 20,638 / 20,582.
+p95 60,5872 / 61,9569 frente a 61,6757 / 61,8302; máximos/p99
+130,2161 / 128,3545 frente a 130,3193 / 129,0829. TPS
+21,707 / 21,591 frente a 21,572 / 21,495. Los cuatro runs cubren
+3703103–3703142; los 80 frames por condición superan el presupuesto.
+Frame combinado 48,2698 → 48,5202 ms. Main on 43,0131 / 43,2000;
+RunFixedMainLoop 14,8441 / 15,0416, Update 19,4741 / 19,4254 y
+**PostUpdate 8,0711 / 8,0824 ms**.
+[160 muestras y coste](evidence/main-schedule-attribution-stable-pan-observer-20261001.csv),
+[80 registros por schedule](evidence/main-schedule-attribution-stable-pan-phases-20261001.csv).
+
+Son intervalos del hilo principal con dispatch y observadores incluidos.
+PostUpdate contiene, entre otras tareas, propagación de transforms, cálculo de
+bounds, visibilidad y UI: esta medición no reparte sus 6,9–8,1 ms entre ellas.
+Main no incluye el subapp de render ni GPU. frame_ms mide el intervalo anterior
+entre begin_frame, mientras main_ms cubre el ciclo actual: restarlos por fila
+no constituye un timer de GPU. Cadencia y 30 FPS permanecen abiertos.
+
+El primer prototipo añadía MainScheduleCapture como recurso ECS independiente.
+En los seis zooms congelados .25/.5/1/2/4/8 produjo respectivamente
+0/1136/1500/245/1033/399 píxeles diferentes y 0/97/247/102/341/231 bloques 4×4.
+Los streams completos coincidían sólo en los tres primeros. In2x/Out2x fallaban
+la comparación ordenada de entradas y bytes por ordinal; el multiset de
+descriptores y payloads era idéntico. No se acepta ese multiset como paridad.
+Se retira el recurso adicional; su binario, capturas y cuatro CSV de tiempos
+marcados retired_extra_ecs_resource permanecen como
+diagnóstico. [Fallos completos](evidence/main-schedule-attribution-raster-first-resource-20261001.csv).
+
+La variante conservada, con timers en FrameCapture, da doce PNG exactos en los
+seis zooms, cero píxeles/bloques y seis streams completos exactos. In2x/Out2x
+conservan todas las entradas ordenadas, los bytes de 272/384 imágenes y ambas
+máscaras. El control usa el colector normal anterior y el candidato añade el
+detalle; no se omiten campos ni se amplía tolerancia.
+[Seis zooms con colector](evidence/main-schedule-attribution-raster-20261001.csv).
+
+Sin colector, se reutilizan los controles congelados de la etapa 33 y se toman
+seis PNG nuevos: cinco zooms son exactos; In2x reproduce el hash alternativo
+histórico 4e1118f0, con 204 píxeles/45 bloques y sorter exacto.
+[Control desactivado](evidence/main-schedule-attribution-raster-disabled-20261001.csv).
+Tres parejas nuevas In2x con entradas completas dan cero diferencias en la
+primera/tercera y 204/45 en la segunda. Las tres conservan sorter, bytes CPU
+y cobertura; la segunda cambia oclusión y falla entradas completas. En ella,
+sprites fuente y cámaras son idénticos, pero 3.333 de 13.623 filas de meshes
+aparecen en otro orden. Conservan el multiset de todos sus campos y referencias
+de fuente al quitar sólo sus IDs propios temporales para diagnóstico. Esto
+acota la permutación de proxies; **no sustituye la comparación ordenada fallida**
+ni demuestra por sí solo la causa de cada píxel. No se declara resuelta la
+variación histórica ni conservación raster universal.
+[Tres parejas In2x](evidence/main-schedule-attribution-raster-disabled-in2-repeats-20261001.csv).
+
+También se reproduce un efecto del colector normal preexistente: mismo binario
+3ac2ff2c, off/on, cambia 0/104/1122/1456/2048/546 píxeles y
+0/13/174/337/622/275 bloques. Los streams coinciden en .25/.5/1 y divergen
+en 2/4/8. Ese colector registra recursos/queries adicionales antes de entrar
+en partida. Las mediciones anteriores comparaban la misma instrumentación
+entre versiones; esta evidencia no las transforma en FPS de una sesión sin
+colector. Se abre el sub-issue de conservar también su forma ECS antes de
+usar la instrumentación como referencia del juego normal.
+[Efecto del colector básico](evidence/main-schedule-attribution-legacy-observer-20261001.csv).
+
+Artefactos en `target/performance/main-schedule-attribution-20261001`.
+Control SHA256 `3ac2ff2cf93f4e89bf8ee88eee8bed2e19bb3cf9e4513b398f2d4d925b96f63d`;
+prototipo retirado `0e9167e5fa8d30592d14bb879a46970d283e20196f6efa2e4063eec719ac7a16`;
+conservado `6245fe0374e2aab5b8a5fb7ee3c499ed34fe509099895ce512287951d8c5e427`.
+Todos mantienen la biblioteca cliente core Cargo fresh, SHA256 09d42185,
+fijada completa en la etapa 33; no se atribuye otro replay de las 61 fases.
+Los JSON de entradas se comparan antes de archivarse y sus gzip conservan el
+SHA256 raw; las imágenes usan hardlinks readonly comprobados byte a byte.
+
+El primer release falla en mold por falta de espacio, sin binario validado.
+Se conserva su JSON de error y reporte HTML. Dos binarios propios readonly
+se trasladan a /tmp con verificación SHA y enlaces desde sus cuatro rutas,
+recuperando 374.118.616 bytes; se preserva también el output Cargo obsoleto
+del prototipo antes de liberar sus dos aliases de caché, 187.591.768 bytes.
+Los manifiestos están en relocated-verified-binaries.csv y retired-cargo-output.csv.
+El release correcto del prototipo tarda 53,13 s; el conservado, 53,09 s.
+Cargo --timings identifica sólo la unidad cliente activa, 53,01/52,95 s,
+con dependencias fresh y sin desglose frontend/codegen/link. No es un build
+frío ni una mejora de compilación.
+[Unidades de compilación](evidence/main-schedule-attribution-build-20261001.csv).
+
+Validación: 3.035 tests core/seis ignorados, 1.674 cliente/dos; Clippy de ambos
+para todos los targets, formato, diff, frescura de docs y tres tests del
+comparador de entradas. Cierra sólo la captura de estos intervalos con el
+recurso existente; atribución fina de PostUpdate, colector básico, proxies
+variables, paridad nativa, cadencia y 30 FPS siguen abiertos.

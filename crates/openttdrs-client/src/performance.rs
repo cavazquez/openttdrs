@@ -3,9 +3,14 @@
 //! after N samples, following `OPENTTDRS_PERF_WARMUP` frames (default 120). Paused/running comparisons
 //! use `OPENTTDRS_PERF_PAUSED=1`; `OPENTTDRS_PERF_SCALE` fixes the camera zoom.
 //! `OPENTTDRS_PERF_PAN=1` moves the camera during the measured frames.
+//! `OPENTTDRS_PERF_MAIN_OUT=file.csv` adds opt-in wall timings around every
+//! schedule currently in Bevy's main loop, alongside the normal capture.
+
+mod main_schedule;
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -60,6 +65,8 @@ impl Drop for Measurement {
 #[derive(Resource)]
 struct FrameCapture {
     output: BufWriter<File>,
+    path: PathBuf,
+    main_detail: Option<main_schedule::MainScheduleCapture>,
     frame: u32,
     warmup: u32,
     limit: Option<u32>,
@@ -78,7 +85,7 @@ impl Plugin for PerformancePlugin {
         let Some(path) = std::env::var_os("OPENTTDRS_PERF_OUT") else {
             return;
         };
-        let result = File::create(path).and_then(|file| {
+        let result = File::create(&path).and_then(|file| {
             let mut output = BufWriter::new(file);
             writeln!(
                 output,
@@ -112,6 +119,8 @@ impl Plugin for PerformancePlugin {
         }
         app.insert_resource(FrameCapture {
             output,
+            path: path.into(),
+            main_detail: None,
             frame: 0,
             warmup,
             limit,
@@ -125,6 +134,7 @@ impl Plugin for PerformancePlugin {
         ENABLED.store(true, Ordering::Relaxed);
         app.add_systems(First, begin_frame);
         app.add_systems(Last, finish_frame);
+        main_schedule::install_from_env(app);
     }
 }
 

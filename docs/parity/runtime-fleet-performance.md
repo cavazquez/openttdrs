@@ -146,6 +146,16 @@ global de FPS. Doce PNG y seis streams completos son exactos; In2x/Out2x
 conservan todas las entradas, bytes CPU y máscaras. Evidencia y alcance en la
 etapa 33; trabajo residual del frame, cadencia y 30 FPS siguen abiertos.
 
+La etapa 34 registra intervalos de los schedules de Bevy: PostUpdate toma
+6,9 ms fijo y 8,1 ms en pan, además de Update 18,7/19,4 y fixed loop 14–15 ms.
+El detalle conserva doce PNG, seis streams y entradas/bytes/máscaras In2x/Out2x
+del colector anterior; el prototipo que añadía un recurso se retira por raster.
+Sin colector reaparece la variación histórica In2x de 204 píxeles, acotada a
+una permutación de proxies en una pareja, con bytes y fuentes idénticos.
+También se documenta que el colector básico cambia capturas del mismo binario;
+conservar su forma ECS queda como siguiente sub-issue. Estas mediciones no
+acreditan FPS de una sesión sin colector ni cierran cadencia o 30 FPS.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

@@ -1,0 +1,3 @@
+build_status,package,target,start_seconds,duration_seconds,sections,scope
+success,openttdrs-client," openttdrs-client ""bin""",0.12,53.01,null,client-only release; dependencies fresh; not a cold build
+success_no_extra_ecs_resource,openttdrs-client," openttdrs-client ""bin""",0.14,52.95,null,client-only release; dependencies fresh; not a cold build

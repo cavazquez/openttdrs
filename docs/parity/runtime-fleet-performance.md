@@ -388,3 +388,11 @@ cumpla el presupuesto.
 - Raster comparado con el baseline en seis zooms y una captura limpia: el
   resultado y las métricas se conservan en la sección de rendimiento enlazada.
 - `scripts/check_parity_docs_fresh.sh`: correcto.
+
+La [etapa 62](performance-implementation.md#etapa-62--perfil-cpu-renovado-tras-el-ordinal-f08f18f31)
+renueva el perfil del binario 61: 2111/976 muestras activas/pausadas, cero
+pérdidas y un evento activo fuera de orden. El coste de máscaras es
+3,4198/3,8736 ms y el PostUpdate 6,0949/4,5210 ms. MCF queda en otro TID.
+Los 480 frames bajo perf son diagnóstico; no reemplazan la ABBA de 61.
+El siguiente sub-issue mide las comprobaciones repetidas de proxies antes
+de modificar su caché; los contratos visuales y 30 FPS permanecen abiertos.

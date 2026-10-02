@@ -565,6 +565,13 @@ texturas y máscaras. Children baja 17,7 % fijo y 18,3 % en pan. El frame
 queda ~24,89/23,50 FPS con ventanas desplazadas en dos runs; no se atribuye
 toda la diferencia global a la marca. Los fallos generales permanecen abiertos.
 
+La [etapa 62](performance-implementation.md#etapa-62--perfil-cpu-renovado-tras-el-ordinal-f08f18f31)
+perfila IP hoja y separa TIDs: máscaras 4,97/13,22 % de CPU del proceso
+y 3,4198/3,8736 ms activos/pausados; PostUpdate 6,0949/4,5210 ms.
+MCF sigue en otro thread. El siguiente ensayo debe reducir recorridos
+repetidos sin cambiar liveness, generaciones, orden ni el contrato de 44.
+No hay cambio de producción ni nueva certificación de FPS en esta etapa.
+
 ### F19 — El guardado bloquea UI y codifica dos veces el JSON
 
 P2 · Persistencia · Evidencia: **Fuente** · Alcance estimado: medio.

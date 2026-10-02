@@ -4634,3 +4634,64 @@ Se cierra sólo la consulta hash repetida de presencia del ordinal. F18
 restante, fallos de composición, 37 ticks/s, 30 FPS por frame y jugabilidad
 completa siguen abiertos. La próxima etapa debe medir el coste residual
 del render antes de escoger otra modificación.
+
+## Etapa 62 — Perfil CPU renovado tras el ordinal (F08/F18/F31)
+
+Se perfila el binario publicado b362fe82 sin modificar fuentes: Kale 256²,
+escala 2, 1280×720, GPU real, 120 frames de warmup y 240 registrados en
+cada modo. `cpu-clock:u`, 199 Hz, stack DWARF 32768, herencia de threads y
+control FIFO mantienen perf desactivado hasta el frame 60 ya volcado. El
+ACK `61636b0a00` acredita la activación. La pausa congela el tick mediante
+`VisualCaptureFreeze`; los sistemas de presentación siguen ejecutándose.
+Se recogen timings básicos y Main en ambos modos. Son diagnósticos bajo
+perf; no constituyen una ABBA ni una mejora de FPS sin instrumentación.
+
+El análisis usa exclusivamente **IP hoja**, agrega periodos y conserva PID,
+TID, símbolo y DSO. Las cadenas DWARF se guardan como datos originales,
+pero no se usan para atribuir coste por caller. La captura activa contiene
+**2111 muestras**, 10608,04 ms de CPU muestreada de todos los threads en
+7105,05 ms de intervalo; la pausada, **976**, 4904,52 ms en 3030,69 ms.
+Ambas tienen cero muestras perdidas; perf informa un evento fuera de orden
+en la activa. No se equipara CPU acumulada multithread con latencia de frame.
+[Hojas completas](evidence/render-residual-cpu-leaf-samples-20261002.csv)
+y [threads](evidence/render-residual-cpu-threads-20261002.csv).
+
+El main TID es 671785 activo y 672220 pausado: 7,77 % y 3,48 % de los
+periodos. MCF se observa sólo en el TID 671803, distinto del principal, con
+113 hojas de símbolos MCF; no aparece pausado. El pop de BinaryHeap de MCF
+también queda en ese worker. No se presenta esa CPU como bloqueo directo
+del hilo principal ni se acredita ausencia de contención.
+
+Al agregar por símbolo, la sincronización de máscaras ocupa **4,97 % activa
+y 13,22 % pausada**; visibilidad paralela, 3,55 % y 5,23 %; sort de parents,
+2,27 % y 2,25 %; extracción Mesh2d, 1,80 % y 2,05 %. Los porcentajes de
+`perf report --sort comm` separaban el mismo símbolo por nombre de thread;
+esta tabla suma todos sus TIDs. Son proporciones del proceso completo, no
+porcentajes de tiempo del frame ni estimaciones de ahorro.
+
+Los 240 frames activos cubren 3703193–3703432: media **39,5140 ms**, p95
+48,1011, máximo 66,4643, **202/240** sobre 33,33 ms. Simulación 14,2076,
+sort 4,4193, children 0,7741 y máscaras **3,4198 ms**. Pausa permanece en
+3703074: frame medio **16,6665 ms**, p95 19,1668, máximo 19,5869, cero
+fuera del presupuesto; sort 2,1806, children 0,3668 y máscaras **3,8736 ms**.
+Main activo suma 37,3830 ms y PostUpdate 6,0949; pausado 15,4436 y 4,5210.
+Cada par de CSV coincide en frame/tick, y la suma de las ocho fases Main
+coincide con Main dentro de 0,0003 ms. Main no mide la GPU ni toda la latencia
+del render thread. [Frames](evidence/render-residual-cpu-frames-20261002.csv)
+y [Main](evidence/render-residual-cpu-main-phases-20261002.csv).
+
+La diferencia de porcentaje pausado frente a 51 no prueba una regresión:
+son versiones e instrumentación distintas y cambia el denominador. El coste
+absoluto actual identifica una tarea acotada: medir los recorridos de fuentes
+y verificaciones de liveness de `sync_rail_glass_mask_proxies` antes de
+probar una caché más barata. Se deben conservar reparaciones de proxies,
+retiros de componentes, generaciones ECS, orden y profundidades originales;
+el compositor nativo de 44 y los seis zooms siguen siendo restricciones.
+
+Se conservan drivers, perf originales, reportes, CSV y análisis en
+target/performance/render-residual-cpu-20261002. El binario readonly es
+el de 61, SHA 3c46fd9b1140597d35bcde9c81042c0f1b77c22651fa78ddd56f524de22e1ba1.
+No hay cambio Rust: se reutilizan los gates completos de ese SHA
+(3037 core/6 ignoradas, 1693 cliente/2 ignoradas y ambos Clippy estrictos),
+y se ejecutan formato, docs y diff para esta publicación. Se cierra sólo
+el perfil renovado; 30 FPS por frame, 37 ticks/s y jugabilidad siguen abiertos.

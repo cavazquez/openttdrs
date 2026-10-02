@@ -182,7 +182,7 @@ Fuentes: [Rust: `parity/from_game.rs`, L163](https://github.com/cavazquez/opentt
 
 P1 · NewGRF · Evidencia: **Medido** · Alcance estimado: grande.
 
-**Port:** action2_eval_ctx_for_unit_indexed materializa scopes propios y vecinos, conteos, mapas y offsets anidados de curvatura. El arreglo anterior eliminó recorridos redundantes; los efectos siguen costando unos 33–35 ms por tick de esta flota.
+**Port:** action2_eval_ctx_for_unit_indexed materializa scopes propios y vecinos, conteos, mapas y offsets anidados de curvatura. La [etapa 39](performance-implementation.md#etapa-39--lookup-indexado-del-vehículo-para-efectos-visuales-f04f31) reutiliza FleetIndex para evitar otro scan por ID: efectos ~1,9–2,0 → 0,5 ms en dos tandas ABBA. Quedan el resolver a demanda, la caché CB10 y su cadencia nativa.
 
 **Original:** VehicleGetVariable resuelve la variable y parámetro solicitados sobre el vehículo seleccionado. El cache grf_cache tiene entradas específicas para propiedades estables del consist.
 
@@ -252,6 +252,12 @@ P1 · Render · Evidencia: **Medido** · Alcance estimado: medio.
 
 Fuentes: [Rust: `render/rail_glass_compositor.rs`, L143](https://github.com/cavazquez/openttdrs/blob/8994755781092e2e7a6baf463a2126d9125fbebb/crates/openttdrs-client/src/render/rail_glass_compositor.rs#L143);
 [OpenTTD: `src/blitter/8bpp_optimized.cpp`, L101](https://github.com/OpenTTD/OpenTTD/blob/14ec60f248547d4d062a1160f0fc26d742319888/src/blitter/8bpp_optimized.cpp#L101).
+
+La etapa 39 conserva un fallo Out2x de 406 píxeles/124 bloques, seguido de
+dos parejas exactas con el mismo candidato. Fuentes y bytes de assets son
+exactos; los valores de máscara por fuente también, pero cambia el orden
+ECS. Ese diagnóstico no permite dispensar entradas ordenadas, dar por
+probada la causa ni cerrar F08. Véase la evidencia en la etapa 39.
 
 ### F09 — Var 62 usa crashed para el bit de Hidden
 
@@ -618,6 +624,11 @@ zooms, con entradas/bytes/máscaras en In2x/Out2x y tres repeticiones In2x.
 La medición actual sitúa PostUpdate alrededor de 6,9 ms fijo y 8,0 en pan;
 la atribución interna, el coste del diagnóstico completo y 30 FPS siguen
 pendientes. No cierra F31 ni acredita paridad por una captura.
+
+La etapa 39 mide dos nuevas tandas ABBA con Main y registro básico alineados:
+efectos ~0,5 ms, Update ~17,3–17,9, PostUpdate ~6,9 fijo/8,1 pan, y
+~24 FPS fijo/~21,4 pan. Conserva ticks desplazados y todos los picos. El
+lookup mejora Update; no explica aún todo el frame ni cumple 30 FPS.
 
 ### F32 — Separar contratos facilita optimizar sin romper paridad
 

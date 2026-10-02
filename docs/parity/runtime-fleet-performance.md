@@ -184,6 +184,16 @@ el guard añade comparación al sort, mientras glass/PostUpdate bajan algo en
 la repetición. El pico de 82 ms y un control fijo desplazado un tick quedan
 en la evidencia. Continúa alrededor de 23 FPS fijo y 20–21 en pan.
 
+La etapa 39 reutiliza el índice de flota en el contexto de efectos: dos
+tandas ABBA reducen esta fase ~71–74 %, hasta unos 0,5 ms, y Update
+~1,2–1,7 ms. La repetición queda en ~24 FPS fijo y ~21,4 pan, con
+70/80 y 78/80 frames respectivamente sobre 33,33 ms. Se conservan los
+runs desplazados y máximos. La primera pareja Out2x difiere 406 píxeles;
+dos repeticiones son exactas con el mismo candidato. Fuentes/bytes/valores
+por sprite coinciden, el orden de máscaras cambia y F08 sigue abierto.
+La [etapa 39](performance-implementation.md#etapa-39--lookup-indexado-del-vehículo-para-efectos-visuales-f04f31)
+contiene la evidencia completa y los límites de importación/cadencia.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios
@@ -218,9 +228,9 @@ Para cerrar este bloque:
 3. Volver a perfilar carga, reservas/PBS, rutas y callbacks con NewGRF activo
    tras retirar el coste global del tick. El tiempo restante también debe
    entrar en 27 ms; desplazar MCF por sí solo no lo acredita.
-   Los efectos visuales corregidos todavía toman unos 33–35 ms por tick en
-   esta flota; revisar la construcción de contextos cuando no se invoca un
-   callback y conservar las reglas CB10/CB160, persistent registers y RNG.
+   Los efectos visuales de la etapa 39 toman unos 0,5 ms en esta flota;
+   completar el resolver a demanda y la caché nativa CB10 conservando
+   cadencia, CB160, persistent registers y RNG.
 4. Medir la ordenación del viewport durante movimiento y Out8x, junto con
    pan/zoom. Comprobar raster y stream de parents/children al reducir su
    trabajo, en los seis zooms soportados.

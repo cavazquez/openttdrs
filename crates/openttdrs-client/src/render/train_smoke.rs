@@ -1,7 +1,7 @@
 //! Humo/chispas de locomotoras (`EV_STEAM_SMOKE`, `EV_DIESEL_SMOKE`, `EV_ELECTRIC_SPARK`).
 //!
-//! Tanto la decisión de emitir como el avance del efecto se apoyan en ticks de
-//! simulación. Así el resultado no depende de FPS ni del reloj visual.
+//! El avance usa ticks de simulación. La decisión todavía se evalúa en Update
+//! sobre el último tick observado; recuperar ticks omitidos queda pendiente.
 
 use bevy::prelude::*;
 
@@ -876,13 +876,13 @@ fn visual_effect_head_states(
 /// evita preparar variables relativas y badges que no se consultarán.
 fn vehicle_visual_effect_context(
     state: &openttdrs_core::GameState,
+    fleet: &openttdrs_core::FleetIndex,
     vehicle_id: u32,
     engine: &EngineDef,
 ) -> openttdrs_core::Action2EvalCtx {
-    let Some(vehicle) = state
-        .vehicles
-        .iter()
-        .find(|vehicle| vehicle.id == vehicle_id)
+    let Some(vehicle) = fleet
+        .lookup_slot(&state.vehicles, vehicle_id)
+        .and_then(|slot| state.vehicles.get(slot))
     else {
         return openttdrs_core::Action2EvalCtx::default();
     };
@@ -981,7 +981,7 @@ fn spawn_train_smoke(
         else {
             continue;
         };
-        let mut visual_ctx = vehicle_visual_effect_context(state, vehicle_id, engine);
+        let mut visual_ctx = vehicle_visual_effect_context(state, &fleet, vehicle_id, engine);
         let vehicle = &mut state.vehicles[slot];
         let visual_spec =
             openttdrs_core::vehicle_visual_effect_spec_with_ctx(engine, &mut visual_ctx);
@@ -1411,6 +1411,164 @@ mod tests {
     }
 
     #[test]
+    fn indexed_visual_context_keeps_all_fields_callbacks_registers_and_rng() {
+        let mut cases = 0;
+        for engine_id in [
+            ENGINE_TRAIN_KIRBY,
+            openttdrs_core::engine::ENGINE_TRAIN_MANLEY_MOREL,
+            ENGINE_TRAIN_ASIASTAR,
+        ] {
+            for mode in 0..6 {
+                for topology in 0..7 {
+                    let mut state = GameState::new(4, 4);
+                    for (slot, id) in [17, 4, 23, 81].into_iter().enumerate() {
+                        let mut vehicle = running_train(engine_id);
+                        vehicle.id = id;
+                        vehicle.cur_speed = 24 + slot as u16 * 5;
+                        vehicle.newgrf_tick_counter = slot as u8 * 4;
+                        vehicle.newgrf_random_bits =
+                            0x1234 + u16::try_from(id).expect("small fixture ID");
+                        vehicle.newgrf_persistent_regs.insert(0x23, 147 + id);
+                        state.vehicles.push(vehicle);
+                    }
+                    let mut fleet = openttdrs_core::FleetIndex::default();
+                    fleet.rebuild(&state.vehicles);
+                    match topology {
+                        0 => {}
+                        1 => fleet = Default::default(),
+                        2 => state.vehicles.rotate_left(1),
+                        3 => {
+                            state.vehicles.remove(0);
+                        }
+                        4 => {
+                            state.vehicles[2].id = state.vehicles[0].id;
+                            fleet.rebuild(&state.vehicles);
+                        }
+                        5 => state.vehicles.clear(),
+                        6 => state.vehicles[0].id = 55,
+                        _ => unreachable!(),
+                    }
+                    state.runtime.fleet_index.rebuild(&state.vehicles);
+                    let mut engine = openttdrs_core::engine_by_id(engine_id)
+                        .expect("vanilla engine")
+                        .clone();
+                    if mode != 0 {
+                        engine.newgrf_grfid = 0x5649_5355;
+                        engine.newgrf_local_id = 0;
+                        engine.vehicle_callback_mask = u16::from(mode == 1);
+                        engine.newgrf_runtime =
+                            Some(Box::new(callback_vehicle_variable(0xB4, 0xFF)));
+                        if mode == 2 {
+                            engine.visual_effect = 0x41;
+                        } else if mode == 3 {
+                            engine.newgrf_grfid = 0;
+                        } else if mode == 4 {
+                            engine.newgrf_runtime = None;
+                        }
+                    }
+                    for id in [17, 4, 23, 81, 55, 999] {
+                        let vehicle = state.vehicles.iter().find(|vehicle| vehicle.id == id);
+                        let mut expected = vehicle.map_or_else(Default::default, |vehicle| {
+                            if matches!(mode, 1 | 2) {
+                                full_vehicle_visual_effect_context(&state, vehicle, &engine)
+                            } else {
+                                openttdrs_core::action2_eval_ctx_from_vehicle(vehicle)
+                            }
+                        });
+                        let mut actual = vehicle_visual_effect_context(&state, &fleet, id, &engine);
+                        macro_rules! compare_fields {
+                            ($($field:ident),* $(,)?) => {
+                                $(assert_eq!(actual.$field, expected.$field, stringify!($field));)*
+                            };
+                        }
+                        compare_fields!(
+                            vars,
+                            parameterized_vars,
+                            parent_vars,
+                            parent_parameterized_vars,
+                            random_bits,
+                            parent_random_bits,
+                            vehicle_palette_generation,
+                            parent_vehicle_palette_generation,
+                            consist_random_bits,
+                            relative_random_bits,
+                            relative_same_engine_random_bits,
+                            relative_vars,
+                            relative_parameterized_vars,
+                            temp_registers,
+                            registers_100,
+                            persistent_registers,
+                            persistent_storage_available,
+                            parent_persistent_registers,
+                            parent_persistent_storage_available,
+                            last_result,
+                            grf_params,
+                            vehicle_loading,
+                            vehicle_cargo,
+                            vehicle_capacity,
+                        );
+                        let expected_spec = openttdrs_core::vehicle_visual_effect_spec_with_ctx(
+                            &engine,
+                            &mut expected,
+                        );
+                        let actual_spec = openttdrs_core::vehicle_visual_effect_spec_with_ctx(
+                            &engine,
+                            &mut actual,
+                        );
+                        assert_eq!(actual_spec, expected_spec);
+                        if let Some(vehicle) = vehicle {
+                            let mut expected_vehicle = vehicle.clone();
+                            let mut actual_vehicle = vehicle.clone();
+                            openttdrs_core::writeback_vehicle_persistent_registers(
+                                &mut expected_vehicle,
+                                &expected,
+                            );
+                            openttdrs_core::writeback_vehicle_persistent_registers(
+                                &mut actual_vehicle,
+                                &actual,
+                            );
+                            let head =
+                                VisualEffectHeadState::from_vehicle(&state.map, vehicle, &engine);
+                            let props = openttdrs_core::RailTypeRuntimeProps::defaults();
+                            let mut expected_rng =
+                                openttdrs_core::linkgraph_parity::Randomizer::new(99);
+                            let mut actual_rng = expected_rng;
+                            let before = train_smoke_to_emit_with_engine_and_random_with_spec(
+                                &state.map,
+                                &mut expected_vehicle,
+                                &engine,
+                                expected_spec,
+                                head,
+                                2,
+                                &props,
+                                &mut Some(&mut expected_rng),
+                            );
+                            let after = train_smoke_to_emit_with_engine_and_random_with_spec(
+                                &state.map,
+                                &mut actual_vehicle,
+                                &engine,
+                                actual_spec,
+                                head,
+                                2,
+                                &props,
+                                &mut Some(&mut actual_rng),
+                            );
+                            assert_eq!(after, before);
+                            assert_eq!(actual_rng, expected_rng);
+                            assert_eq!(
+                                serde_json::to_value(&actual_vehicle).expect("actual"),
+                                serde_json::to_value(&expected_vehicle).expect("expected"),
+                            );
+                        }
+                        cases += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(cases, 756);
+    }
+
+    #[test]
     fn visual_effect_context_exposes_vehicle_variables_to_cb10() {
         let mut state = openttdrs_core::GameState::new(4, 4);
         let vehicle = running_train(ENGINE_TRAIN_KIRBY);
@@ -1425,7 +1583,8 @@ mod tests {
         // CB10 lee la velocidad real (var B4) y convierte 0x18 en tipo vapor.
         engine.newgrf_runtime = Some(Box::new(callback_vehicle_variable(0xB4, 0xFF)));
 
-        let mut rich_ctx = vehicle_visual_effect_context(&state, vehicle.id, &engine);
+        let mut rich_ctx =
+            vehicle_visual_effect_context(&state, &Default::default(), vehicle.id, &engine);
         let rich = openttdrs_core::vehicle_visual_effect_spec_with_ctx(&engine, &mut rich_ctx);
         assert_eq!(rich.kind, VehicleVisualEffectKind::Steam);
 
@@ -1471,7 +1630,12 @@ mod tests {
                     let mut expected = vehicle.clone();
                     let mut actual = vehicle.clone();
                     let mut full = full_vehicle_visual_effect_context(&state, vehicle, &engine);
-                    let mut reduced = vehicle_visual_effect_context(&state, vehicle.id, &engine);
+                    let mut reduced = vehicle_visual_effect_context(
+                        &state,
+                        &Default::default(),
+                        vehicle.id,
+                        &engine,
+                    );
                     assert!(!reduced.vars.contains_key(&0xB4));
                     let expected_spec =
                         openttdrs_core::vehicle_visual_effect_spec_with_ctx(&engine, &mut full);
@@ -1531,7 +1695,12 @@ mod tests {
         engine.newgrf_runtime = Some(Box::new(callback_vehicle_variable(0xB4, 3)));
         state.vehicles.push(vehicle);
 
-        let mut ctx = vehicle_visual_effect_context(&state, state.vehicles[0].id, &engine);
+        let mut ctx = vehicle_visual_effect_context(
+            &state,
+            &Default::default(),
+            state.vehicles[0].id,
+            &engine,
+        );
         let spec = openttdrs_core::vehicle_visual_effect_spec_with_ctx(&engine, &mut ctx);
         assert!(spec.advanced);
         assert_eq!(spec.kind, VehicleVisualEffectKind::Steam);

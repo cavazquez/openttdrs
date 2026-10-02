@@ -2940,3 +2940,138 @@ formato, tres self-tests del comparador, frescura de docs y diff sin errores.
 Se cierra sólo el sub-issue de flags de Sprite ordinarios reutilizados.
 Slices, F08/F18/F31 completos, paridad nativa, empates f32, variaciones
 históricas, cadencia y 30 FPS siguen abiertos.
+
+## Etapa 39 — Lookup indexado del vehículo para efectos visuales (F04/F31)
+
+spawn_train_smoke ya reconstruye FleetIndex una vez por ejecución. Sin embargo,
+vehicle_visual_effect_context buscaba cada ID recorriendo otra vez la flota.
+Ahora reutiliza lookup_slot del mismo índice, expuesto públicamente sin cambiar
+su algoritmo. El slot se valida contra el ID; índice vacío/obsoleto y IDs
+duplicados conservan el primer match del scan anterior. No se cambian contexto
+completo/reducido, orden de vehículos, callbacks, consumo de RNG ni writeback.
+El comentario de cadencia deja explícito que Update todavía observa sólo el
+último tick: este cambio no recupera decisiones de ticks omitidos (F07).
+
+Una regresión diferencial cubre 756 combinaciones: tres motores, seis modos
+CB10/CB160 y disponibilidad de runtime, siete estados del índice/flota y seis
+IDs, incluidos faltantes. Compara los 24 campos Action2, especificación,
+emisiones, RNG, registros persistentes y JSON de vehículos contra el primer
+match lineal. Cubren índice fresco/vacío, reorder, eliminación, duplicados,
+flota vacía y cambio de ID. Pasan las 29 pruebas de train_smoke.
+
+Fuente nativa prístina: OpenTTD 14ec60f248547d4d062a1160f0fc26d742319888,
+vehicle.cpp: ShowVisualEffect (L2777) opera sobre this/Next; no busca el ID
+repetidamente en el pool. UpdateVisualEffect (L2636) calcula y guarda
+cached_vis_effect; CB10 no se reevalúa en cada ShowVisualEffect. El port aún
+reevalúa esa especificación y ejecuta efectos después de step en Update.
+Esta etapa sólo corrige el lookup del port; no implementa la caché nativa,
+no añade un oracle C++ de callbacks ni acredita su cadencia nativa completa.
+
+Kale congelada, tick 3703074, centro 128,128, 1280×720, clean=0,
+settle=180 y sin colector en ambas versiones: cinco de las seis parejas
+iniciales tienen PNG/sort exactos y cero píxeles/bloques distintos. La primera
+Out2x falla con **406 píxeles / 124 bloques 4×4**: PNG candidato
+3f48dbf22b08439c427b1ddbe1d0d05e0c4ae15d8e0391b37685b5e3b50dc3d6.
+Dos nuevas parejas Out2x con los mismos ejecutables son exactas y recuperan
+el PNG 7e8cb274. El fallo original se conserva; no se reporta 6/6 inicial.
+[Primera matriz](evidence/visual-effect-slot-lookup-raster-20261001.csv),
+[tres parejas Out2x](evidence/visual-effect-slot-lookup-out2-repeats-20261001.csv).
+
+In2x conserva entradas ordenadas/referencias, 272 imágenes CPU y máscaras.
+Out2x inicial conserva 384 imágenes y cobertura, pero falla el orden de
+entradas y la máscara de oclusión. Sus 45.209 fuentes son exactas; el sort
+sólo difiere en dos input_index globales, sin variar el orden final ni z.
+Hay 7.638 posiciones de meshes permutadas. Comparar la captura fallida con
+la repetición exacta del **mismo candidato** confirma valores bit a bit por
+fuente canónica, fuentes únicas, assets y multiconjuntos de meshes/cámaras
+idénticos al quitar únicamente las identidades propias. Eso es un diagnóstico,
+no una dispensa del contrato de entradas ordenadas. No prueba la causa del
+cambio de orden ni paridad de importación; F08 y los empates f32 siguen abiertos.
+[Diagnóstico mismo binario](evidence/visual-effect-slot-lookup-same-binary-out2-20261001.csv).
+
+Dos tandas ABBA activas, GPU, escala 2, 40 muestras/run, colector básico y
+Main detail en ambas versiones; fijo warmup 120 y pan 30. Sin perf, trazas
+ni compilaciones concurrentes. Se conservan 640 muestras básicas y 640
+registros Main, incluidos ticks desplazados y máximos. Los valores siguientes
+son ms salvo FPS/TPS; p99 coincide con el máximo con 40 muestras/run.
+
+Primera fija: frame 42,4635 / 42,7448 → 41,6466 / 41,6836;
+FPS 23,55 / 23,395 → 24,012 / 23,99;
+p95 56,0181 / 56,3965 → 55,2899 / 56,9651;
+máximos/p99 57,847 / 57,9305 → 57,2774 / 57,1181;
+TPS 23,537 / 23,391 → 23,889 / 23,997.
+Ticks antes 3703193,,3703232 / 3703193,,3703232;
+después 3703194,,3703233 / 3703193,,3703232.
+Frames >33,33 ms: 73/80 → 69/80.
+frame combinado 42,6042 → 41,6651; efectos 1,8973 → 0,5487; simulación 14,131 → 14,1983; Update 18,6948 → 17,5262; PostUpdate 6,835 → 6,9303;
+[160 muestras](evidence/visual-effect-slot-lookup-steady-20261001.csv),
+[160 registros Main](evidence/visual-effect-slot-lookup-steady-phases-20261001.csv).
+
+Primera pan: frame 47,9782 / 48,5239 → 46,3845 / 46,8827;
+FPS 20,843 / 20,608 → 21,559 / 21,33;
+p95 59,4695 / 62,0081 → 59,3269 / 60,4342;
+máximos/p99 126,781 / 128,3038 → 126,403 / 131,6651;
+TPS 21,759 / 21,515 → 22,557 / 22,367.
+Ticks antes 3703104,,3703143 / 3703103,,3703142;
+después 3703104,,3703143 / 3703103,,3703142.
+Frames >33,33 ms: 80/80 → 78/80.
+frame combinado 48,2511 → 46,6336; efectos 2,0534 → 0,5312; simulación 14,7256 → 14,8226; Update 19,6057 → 17,8847; PostUpdate 8,0172 → 7,9687;
+[160 muestras](evidence/visual-effect-slot-lookup-pan-20261001.csv),
+[160 registros Main](evidence/visual-effect-slot-lookup-pan-phases-20261001.csv).
+
+Repetición fija: frame 42,8917 / 42,501 → 41,4527 / 41,2286;
+FPS 23,315 / 23,529 → 24,124 / 24,255;
+p95 56,2653 / 55,475 → 54,2291 / 55,6083;
+máximos/p99 59,2068 / 58,1015 → 57,3564 / 58,3848;
+TPS 23,334 / 23,537 → 24,114 / 24,232.
+Ticks antes 3703193,,3703232 / 3703193,,3703232;
+después 3703193,,3703232 / 3703193,,3703232.
+Frames >33,33 ms: 74/80 → 70/80.
+frame combinado 42,6963 → 41,3407; efectos 1,8829 → 0,5107; simulación 14,1395 → 14,2597; Update 18,7244 → 17,2837; PostUpdate 6,8167 → 6,8579;
+[160 muestras](evidence/visual-effect-slot-lookup-repeat-steady-20261001.csv),
+[160 registros Main](evidence/visual-effect-slot-lookup-repeat-steady-phases-20261001.csv).
+
+Repetición pan: frame 48,282 / 48,6111 → 46,641 / 46,8002;
+FPS 20,712 / 20,571 → 21,44 / 21,367;
+p95 61,628 / 62,1512 → 58,7253 / 59,9585;
+máximos/p99 129,4556 / 129,0127 → 127,4103 / 126,6132;
+TPS 21,645 / 21,483 → 22,437 / 22,344.
+Ticks antes 3703103,,3703142 / 3703103,,3703142;
+después 3703104,,3703143 / 3703103,,3703142.
+Frames >33,33 ms: 80/80 → 78/80.
+frame combinado 48,4465 → 46,7206; efectos 2,0289 → 0,5473; simulación 14,8741 → 14,8057; Update 19,556 → 17,9136; PostUpdate 8,0044 → 8,0708;
+[160 muestras](evidence/visual-effect-slot-lookup-repeat-pan-20261001.csv),
+[160 registros Main](evidence/visual-effect-slot-lookup-repeat-pan-phases-20261001.csv).
+
+La reducción de efectos (~71–74 %) y de Update se repite en todas las tandas;
+la mejora de frame es menor. La repetición fija alinea los cuatro ticks;
+las otras tandas conservan los runs desplazados indicados, sin declarar que
+comparan el mismo estado activo. PostUpdate no mejora uniformemente y la
+simulación sigue alrededor de 14–15 ms. Main y CSV básico alinean frame/tick
+y sus intervalos suman dentro de 0,001 ms. Main mide el ciclo actual y
+frame_ms el intervalo previo: restarlos por fila no mide GPU.
+Se alcanzan aproximadamente 24 FPS fijos y 21,4 en pan, con mayoría de
+frames sobre presupuesto. No hay 30 FPS ni 37 ticks/s nativos certificados.
+
+Control ce75b321 de la etapa 38 y candidato
+607b460e69600c2d56ec18c2f477d954752e2054f633a55f05b4af66838ba498
+son inmutables, con ejecutable en /tmp y fuentes exactas antes/después en
+target/performance/visual-effect-slot-lookup-20261001. Release incremental
+78,5 s total: core 25,11, net 5,24 y cliente 53,19, con solapamiento de
+metadata/net. La biblioteca core real del cliente se recompila por visibilidad
+de API y pasa de 09d42185 a 6240adc809bbd5e419c8bc2294237452f6d62460e9f201868d4cef9edc9375c3;
+no se declara fresh ni se atribuye un nuevo replay de las 61 fases. Reportes
+HTML/JSON preservados; no hay desglose frontend/codegen/link ni mejora de
+compilación atribuida. Traces gzip y bytes CPU se verifican antes de deduplicar.
+
+Validación: 3.035 tests core/seis ignorados y 1.680 del cliente/dos ignorados;
+29 de train_smoke, Clippy de ambos crates/todos los targets, formato, tres
+self-tests del comparador, frescura de docs y diff correctos. El primer Clippy
+falló por conversiones en la fixture; corregidas y rerun correcto. Un intento
+de ejecutar la repetición GPU no arrancó por timeout del auto-review; el mismo
+comando reintentado una vez fue autorizado y terminó correctamente.
+
+Se cierra sólo el lookup indexado del contexto visual. F04 completo, caché
+CB10/cadencia F07, compositor F08, atribución F31, importación/paridad nativa
+general y 30 FPS permanecen abiertos. El fallo Out2x inicial no se oculta ni
+se acepta ampliando tolerancias.

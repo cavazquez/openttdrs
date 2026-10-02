@@ -74,7 +74,8 @@ impl FleetIndex {
     /// Same first-match semantics as a legacy linear lookup. A current index
     /// handles unique IDs in O(1); previews, moved slots and duplicate IDs use
     /// the live fallback. Rebuild after changing the Vec generation.
-    pub(crate) fn lookup_slot(&self, vehicles: &[Vehicle], id: u32) -> Option<usize> {
+    #[must_use]
+    pub fn lookup_slot(&self, vehicles: &[Vehicle], id: u32) -> Option<usize> {
         if !self.has_duplicate_ids
             && let Some(slot) = self.slot(id)
             && vehicles.get(slot).is_some_and(|vehicle| vehicle.id == id)

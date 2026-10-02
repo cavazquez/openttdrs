@@ -3828,3 +3828,61 @@ activo. Se cierra sólo la reproducción de muestreo alineado y dimensiones;
 F08/F31, 30 FPS y jugabilidad siguen abiertos. El siguiente sub-issue debe
 probar la fase real de las coordenadas/UV y clipping de la escena antes de
 combinar muestreo nativo con la separación de profundidad.
+
+## Etapa 49 — Raíces nativas cargadas y bancos de zoom reales (F08/F31)
+
+Antes de aplicar el ajuste aislado 48, se verifican los inputs que realmente
+usa 46. Out2x no usa la misma textura que In2x: su atlas es
+`tiles_atlas_0_out2.png`, y su imagen parent recoloreada también repite la
+reducción nativa. Frente al alpha normal, parent cambia 481 texeles y conserva
+684 opacos; child cambia 270 y conserva 516. **Ambos buffers Out2x completos
+son exactamente la réplica por pasos de dos de sus RGBA capturados normales.**
+Por tanto, la sonda con textura normal 48 no mide directamente el muestreo de
+la escena que ya seleccionó un banco preparado.
+
+Se instrumenta temporalmente GetSprite después de cargar Kale, con pausa 47
+y 8bpp-simple, para extraer la raíz codificada real de los IDs 1163/1167.
+Ambas miden 264×208 (54912 bytes). Los offsets nativos son (-124,-80) y (0,0).
+Sus bytes se repiten exactamente en dos runs y ambos PNG coinciden con la
+referencia pausada Out2x, sin cambiar las tres muestras del estado registrado.
+El alpha de cada raíz cargada coincide en sus 54912 píxeles con la máscara
+normal capturada expandida 4×. Se valida así aquella hipótesis del scaffold
+48 para estos dos sprites; no para todos los decoders, IDs o paletas.
+
+[La nueva sonda](../../scripts/probe_mask_zoom_assets.py) comprueba además el
+atlas normal y Out2x/Out4x/Out8x. Los ocho crops conservan exactamente los
+RGBA generados por tomar el primer texel de cada bloque y repetirlo en su
+huella. Conteos de alpha opaco normal/2/4/8: parent 541/684/592/528,
+child 504/516/656/640. Cada prueba se repite con el segundo dump nativo.
+[16 comprobaciones](evidence/mask-native-assets-20261002.csv).
+Esto prueba raíz/alpha/bancos, no la posición, UV de atlas en GPU, clipping,
+paleta nativa, oclusión ni compositor de todo el mapa. No se instala el ajuste
+48 y no se atribuyen las pérdidas 114/44.
+
+La lectura de fuentes acota otra brecha: TileAtlas::build,
+native_zoom_image_for_capture y native_zoom_bytes_for_capture seleccionan
+estas variantes sólo con OPENTTDRS_MAP_SHOT; sync_native_map_sprite_position
+limita también el redondeo a capturas. La función pura devuelve None cuando
+capture_requested=false, incluso en 2/4/8. Es una limitación explícita del
+código: **la captura con correcciones nativas no certifica por sí sola el
+camino visual de una partida interactiva**. La validación de performance
+retiene sus resultados runtime; no se convierte una captura en un benchmark
+ni se extrapola esta diferencia a todos los FPS.
+
+Native root SHA parent 4a98e8200f12935cd3a1eb3cfd923389f7d7f7875f729b19e572790e21b25773;
+child 408c37da2facd68b429111d2860cd11eb762679d22c32c2efc3b3754835915c9.
+El rebuild nativo incremental tarda 4,46 s. Se preserva un ejecutable propio
+sin símbolos de debug antes de ejecutarlo: 95738344 bytes, SHA
+914925c22fe8fe2e70b5342e6f340cfa6e3b1de055eaa51a106381d39c1d1b50.
+Fuente y binario originales vuelven byte a byte antes de validar; reference/
+no se publica. Dumps, fuentes readonly, ejecutable, banco Out2x capturado,
+PNG, estado, logs y hashes se conservan en
+`target/performance/mask-native-assets-20261002`.
+
+Gates: dos extracciones nativas reales, dos runs de ocho crops, estado 47,
+formato, self-tests del comparador, docs y diff. Cliente/core sin cambios;
+se reutilizan las suites anteriores. No se mide FPS nuevo. Se cierra sólo
+la comprobación de raíces/bancos de esta pareja. F08/F31 y jugabilidad
+permanecen abiertos. El siguiente sub-issue hará explícita y medible la
+selección de correcciones nativas de zoom en la captura, conservando el
+control actual, para probar también la ruta sin esas correcciones.

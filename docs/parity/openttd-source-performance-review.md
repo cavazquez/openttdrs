@@ -303,6 +303,13 @@ Out4x y Out8x. Ajustar muestra y dimensiones coincide en las doce máscaras
 nativas de la sonda, en dos runs. No cambia el compositor ni atribuye las
 pérdidas de escena; faltan fase real, atlas y clipping.
 
+La [etapa 49](performance-implementation.md#etapa-49--raíces-nativas-cargadas-y-bancos-de-zoom-reales-f08f31)
+confirma las dos raíces reales cargadas y ocho crops de bancos en dos runs.
+Out2x ya compensa el paso del blitter en sus RGBA; la sonda 48 no se instala
+sobre esas texturas. Las correcciones de atlas/posición están limitadas a
+MAP_SHOT: una captura nativa no certifica la ruta visual interactiva. Faltan
+posición/clipping y una comparación explícita sin esas correcciones.
+
 ### F09 — Var 62 usa crashed para el bit de Hidden
 
 P2 · NewGRF · Evidencia: **Fuente** · Alcance estimado: medio.

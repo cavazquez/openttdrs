@@ -242,6 +242,11 @@ alejar zoom, sin profundidad ni oclusores. Una variante de muestra y tamaño
 coincide en doce mapas nativos alineados, repetidos dos veces. Es diagnóstico;
 faltan coordenadas/clipping reales y no se modifica el juego ni la métrica FPS.
 
+La etapa 49 verifica dos raíces cargadas de OpenTTD y los bancos de zoom.
+Out2x capturado ya replica texeles nativos; esas variantes y el redondeo están
+limitados a capturas en el código actual. La evidencia runtime de FPS se
+conserva, pero las capturas no certifican la misma ruta visual interactiva.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

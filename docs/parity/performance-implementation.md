@@ -4983,3 +4983,68 @@ Se cierra sólo la selección del cuadro al reconstruir estas chimeneas.
 Continúan el fallo Out2x, Out4x intermitente, lectura/composición universal,
 FPS y jugabilidad. El siguiente sub-issue mide la amplificación del remap de
 campos a chunks completos antes de proponer una actualización retenida.
+
+## Etapa 67 — Amplificación del remap por campos y reservas (F17/F31)
+
+Se mide el binario publicado b4c1591a, sin cambios Rust de producción.
+Una sonda offline enlaza el rlib release ya fresco y observa las colas tras
+cada step. Carga el mismo SAV y catálogos NewGRF, asegura el índice de
+terminales y conserva snapshots de mapa para registrar los bytes anteriores.
+Tras 118 ticks, registra 3703193–3703232. No ejecuta el VehicleIndex del
+cliente ni certifica igualdad de toda la simulación o tiempos del cliente.
+
+Dos corridas conservan 494 avisos cada una: **76 paisaje, 6 industria,
+20 señal, 50 animación aeroportuaria y 342 reserva**. Paisaje, industria y
+aeropuertos conservan listas completas; señales y reservas difieren en su
+orden, aunque el multiset sin notice_index coincide. Se guardan las listas
+originales, sin usarlas como prueba de equivalencia de orden o estado.
+Dentro de paisaje, **65 avisos son campos** con cambio de etapa; en los
+planos registrados no cambian cercas. No hay campos con bit de nieve.
+[Notices originales](evidence/field-remap-amplification-core-notices-20261002.csv)
+y [repetición](evidence/field-remap-amplification-core-repeatability-20261002.csv).
+
+La fuente nativa fijada 14ec60f2, DrawTile_Clear/TileLoop_Clear, confirma que
+la etapa cambia el ID del suelo; cercas se resuelven aparte. Avanzar sólo
+el contador ya evita dirty en el port (etapa 20). No se propone suprimir
+estos cambios visibles. La preferencia PBS está activa en la sesión medida;
+el default del original fijado también es true. El snapshot de fuente y
+su SHA quedan en el directorio privado. No se cambia esa preferencia.
+
+Cuatro corridas del cliente actual, escala 2, warmup 120, 40 frames/run,
+colectores básico/Main/remap, sin compilación ni otra carga CPU simultánea.
+Fijo 1/2: **125621/122637 bajas**, **86/84 chunks**; preparación media
+**2,1801/2,0946 ms**, aplicación de su cola **2,1250/2,0376 ms**. Pan 1/2:
+**131519/131519 bajas**, **91/91 chunks**, preparación **2,3027/2,3338 ms**,
+aplicación **2,2997/2,3376 ms**. Hay 40 registros por tanda seleccionados
+por sus ticks. Las dos marcas no crean estado ECS; incluyen sólo la cola
+propia del remap, no todas las bajas de otros sistemas o etiquetas.
+[Cola medida](evidence/field-remap-amplification-remap-20261002.csv)
+y [resumen](evidence/field-remap-amplification-summary-20261002.csv).
+
+Un modelo diagnóstico proyecta los notices a los chunks según la fórmula
+del viewport, origen de cámara inferido, PBS activa y radar/manga retenidos.
+Da **21 campos/chunks exclusivos** para fijo 2 y **24 para cada pan**.
+Coincide con los conteos reales en **39/40 frames**, pero sobreestima un
+chunk de casa en tick 3703210. En fijo 1 sólo observa 39 ticks: la ventana
+real empieza un tick después y termina fuera de la sonda. Esa discrepancia
+y la cámara inferida impiden acreditar una atribución exacta de cada baja
+a un campo o extrapolar un ahorro. El conjunto global incluye muchas
+reservas ferroviarias; su actualización retenida requiere otro alcance.
+[Modelo, con mismatches](evidence/field-remap-amplification-chunk-model-20261002.csv).
+
+Frames medios fijo 1/2 **40,6304/39,8937 ms**, pan **42,4312/42,4853**;
+son dos repeticiones del mismo ejecutable, **no una ABBA de mejora**.
+Las fases suman Main dentro de 0,001 ms y conservan frame/tick de las filas
+básicas. 30 FPS por frame y ticks/s siguen sin cumplirse.
+[Frames](evidence/field-remap-amplification-client-20261002.csv)
+y [fases](evidence/field-remap-amplification-client-phases-20261002.csv).
+
+Siete CSV públicos conservan **1637 filas**. Sonda, binarios readonly,
+fuentes nativas, drivers, notices, colas y logs quedan en
+target/performance/field-remap-amplification-20261002. Se reutilizan los
+gates Rust de 66 (3037 core/6, 1697 cliente/2, Clippy estrictos), sin
+cambios de producción, y se ejecutan formato, docs y diff. Se cierra sólo
+esta medición. F17/F31, variaciones raster y jugabilidad continúan abiertos.
+El siguiente ensayo retiene el suelo sólo cuando cambia la etapa de un
+campo vanilla, manteniendo el rebuild para cercas, terreno, conversión,
+comandos y dependencias NewGRF no cubiertas.

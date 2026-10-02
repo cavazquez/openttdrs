@@ -487,6 +487,14 @@ ABBA fijo mejora 42,51 → 39,90 ms (~25,06 FPS); la traza reduce 161195 →
 122637 bajas de visuales. Pan junto al cambio de zoom aún tiene picos
 ~247 ms. F17, estabilidad general y el presupuesto por frame siguen abiertos.
 
+La [etapa 67](performance-implementation.md#etapa-67--amplificación-del-remap-por-campos-y-reservas-f17f31)
+mide la cola de remap actual: 122637–131519 bajas/40 ticks y preparación
+más aplicación 4,13–4,67 ms. El modelo de notices sitúa 21–24 chunks en
+cambios exclusivos de cultivo, pero conserva un mismatch de casa y una
+ventana desplazada; no atribuye cada baja ni una ganancia de FPS. El siguiente
+ensayo conserva el suelo en cambios exclusivos de etapa, con rebuild para
+las demás dependencias. F17 general continúa abierto.
+
 ### F18 — El sort ya tiene caché y no es un Z plano
 
 P2 · Render · Evidencia: **Fuente** · Alcance estimado: medio.

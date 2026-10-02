@@ -1,0 +1,6 @@
+reason,rows_before,rows_repeat,ordered_rows_equal,multiset_without_notice_index_equal_DIAGNOSTIC_ONLY
+landscape,76,76,True,True
+industry,6,6,True,True
+signal,20,20,False,True
+airport_animation,50,50,True,True
+reservation,342,342,False,True

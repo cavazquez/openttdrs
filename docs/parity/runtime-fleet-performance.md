@@ -430,3 +430,11 @@ pero el fallo se conserva abierto y no se certifica el renderer general.
 ABBA fija 40,2979 → 40,1967 ms y pan 42,8680 → 42,4873, con simulación
 variable; no se atribuye ganancia. Se continúa con la amplificación del remap
 por campos. 30 FPS por frame, ticks/s y jugabilidad siguen pendientes.
+
+La [etapa 67](performance-implementation.md#etapa-67--amplificación-del-remap-por-campos-y-reservas-f17f31)
+mide 122637–131519 bajas por 40 ticks y 4,13–4,67 ms medios para preparar
+más aplicar la cola de remap. Hay 65 cambios de etapa de campo entre 76
+avisos de paisaje; el modelo da 21–24 chunks exclusivos, con un mismatch
+de casa y una ventana desplazada. Se conserva ese límite, el orden distinto
+de notices de señal/reserva y la PBS activa. No es una mejora de FPS.
+El siguiente ensayo retiene sólo cambios de etapa de campos vanilla.

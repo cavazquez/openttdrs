@@ -223,6 +223,8 @@ mod tests {
             TileCoord::new(2, 2),
             TileCoord::new(3, 2),
         );
+        v.running = true;
+        v.cur_speed = 112;
         v.direction = DIR_SW;
         v.rail_pixel = 8;
         v.progress = 96;

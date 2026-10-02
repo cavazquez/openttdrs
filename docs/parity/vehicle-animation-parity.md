@@ -469,6 +469,65 @@ Evidencia en `target/parity/road-bay-loading-remainder-20261002/`.
 Esto no cierra las fracciones durante los ticks posteriores de transferencia
 y salida ni el modelo de aceleración realista.
 
+## #326-TRAIN-HELD-REMAINDER — pose física mientras está detenido
+
+El oracle de sub-tesela incorpora las dos salidas nativas de
+`TrainLocoHandler` para detenido con velocidad cero y `OT_LOADING`,
+extraídas sin modificaciones. Omite las fases anteriores de avería,
+reversa, procesamiento de órdenes y mantenimiento de carga. Enumera los
+píxeles de las doce entradas válidas mediante las tablas y el avance
+nativos; la rama de espera conserva esas coordenadas con cuatro
+remanentes. No es una ejecución del handler completo ni del renderer.
+
+La opción `--held` produce 1.024 estados. La regresión dibuja cada uno
+en cinco alfas (5.120 poses), comparando coordenadas con tolerancia
+`0.0001` y rumbo exacto. Antes falla incluso con remanente 1: la posición
+nativa `(15,8)` se dibuja `(14.994792,8)` pese a velocidad cero.
+
+`VehiclePose::from_vehicle` usa ahora sólo `rail_pixel` cuando el tren
+tiene velocidad cero. Conserva `progress` en la simulación; el movimiento
+posterior lo podrá consumir. Las poses en movimiento conservan su
+normalización y costes previos. La fixture de 512 muestras móviles se
+reproduce sin cambios, junto a las regresiones de transiciones y consists.
+
+```bash
+python3 scripts/oracle_train_subtile_motion.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/train-held-motion-fresh --held --check
+cargo test -p openttdrs-core --test native_train_held_motion
+```
+
+Validación general: **3.050 core / 1.700 client**, sin fallos, 6/2
+ignorados; ambos Clippy estrictos, formato, documentación y diff pasan.
+El test existente de remanente móvil ahora declara velocidad no nula;
+su coordenada esperada se conserva. Release reconstruida en 79,53 s,
+core `fresh:false`, client SHA-256
+`20f45a8ff61e4d7da834858deb80643215942e87c6d03fb6a190a28bffc87571`.
+
+El [control de raster](evidence/train-held-motion-control-raster-20261002.csv)
+cubre seis escalas y la solicitud redundante `.125` (limitada a `.25`).
+Cámara principal y traza completa de orden coinciden. Hay cinco imágenes
+idénticas; la primera pareja Out2 difiere 565 píxeles/175 bloques y Out8
+un píxel/un bloque, sin atribución aislada para este último. En `.5`
+cambian 266 campos de transformaciones: 133 en sprites y 133 en proxies; los 67
+sprites están fuera de la vista. Los 265 buffers CPU y ambas máscaras
+coinciden. En Out2 hay dos sprites modificados visibles, los 368 buffers
+CPU coinciden, la cobertura coincide y la oclusión difiere.
+
+La [repetición Out2](evidence/train-held-motion-control-out2-repeat-20261002.csv)
+reproduce los 565 píxeles/175 bloques con **el mismo binario posterior**.
+Sus sprites son idénticos; difieren el orden de cámaras y 54.672 campos
+de mallas, manteniendo cámara principal, orden de padres y 368 buffers
+CPU. La pareja repetida antes/después da PNG idéntico y únicamente los
+266 campos de poses esperados. Se conservan todos los órdenes de query
+y aliases; no se descartan para forzar equivalencia. Esta variación no
+certifica ni refuta por sí sola el remanente de un tren detenido.
+
+Evidencia privada, incluidos fallos iniciales, fuentes, binarios, trazas,
+repeticiones y hashes, en `target/parity/train-held-motion-remainder-20261002/`.
+Quedan abiertos el handler completo, animaciones de estaciones/GRF,
+la presentación fraccionaria de los vagones y el raster global.
+
 ## Alcance pendiente
 
 - La emisión está ligada a `Update`: agrupar ticks puede omitir decisiones de

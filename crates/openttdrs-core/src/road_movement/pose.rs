@@ -30,7 +30,7 @@ impl VehiclePose {
         let progress_f = if v.kind == VehicleKind::Train {
             crate::engine::train_visual_progress_from_motion(
                 v.rail_pixel,
-                v.progress,
+                if v.cur_speed == 0 { 0 } else { v.progress },
                 crate::engine::get_advance_distance(v.direction),
             )
         } else {

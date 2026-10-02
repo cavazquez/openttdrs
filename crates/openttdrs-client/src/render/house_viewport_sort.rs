@@ -153,6 +153,25 @@ pub(crate) const fn viewport_insertion_key(tx: u32, ty: u32, local_ordinal: u8) 
     ((tx as u64 + ty as u64) << 40) | ((u32::MAX - tx) as u64) << 8 | local_ordinal as u64
 }
 
+/// `DrawPillarColumn` emite cada columna de arriba hacia abajo. El productor
+/// de puentes reserva 80/81 para las columnas delantera/trasera, pero todos
+/// sus segmentos comparten ese ordinal. Recuperar la secuencia desde la caja
+/// nativa evita que una reconstrucción del chunk la cambie por los IDs ECS.
+fn bridge_pillar_insertion_tie(parent: &ViewportSortableParent) -> i64 {
+    let bounds = parent.bounds;
+    let x_extent = i64::from(bounds.xmax) - i64::from(bounds.xmin);
+    let y_extent = i64::from(bounds.ymax) - i64::from(bounds.ymin);
+    let z_extent = i64::from(bounds.zmax) - i64::from(bounds.zmin);
+    if matches!(parent.insertion_key & 255, 80 | 81)
+        && z_extent == 5
+        && matches!((x_extent, y_extent), (15, 1) | (1, 15))
+    {
+        -i64::from(bounds.zmax)
+    } else {
+        0
+    }
+}
+
 /// Recupera la tesela que emitió un parent desde la clave de inserción.
 ///
 /// `ViewportAddLandscape` entrega parents al sorter desde el draw-proc de la
@@ -844,6 +863,28 @@ struct ViewportSegmentProxyCandidate {
     chunk: Option<crate::render::MapTileChunk>,
 }
 
+fn segment_proxy_insertion_order(
+    left: &ViewportSegmentProxyCandidate,
+    right: &ViewportSegmentProxyCandidate,
+) -> std::cmp::Ordering {
+    left.candidate
+        .promoted_parent
+        .insertion_key
+        .cmp(&right.candidate.promoted_parent.insertion_key)
+        .then_with(|| left.band.cmp(&right.band))
+        .then_with(|| {
+            left.candidate
+                .combine_ordinal
+                .cmp(&right.candidate.combine_ordinal)
+        })
+        .then_with(|| {
+            bridge_pillar_insertion_tie(&left.candidate.promoted_parent).cmp(
+                &bridge_pillar_insertion_tie(&right.candidate.promoted_parent),
+            )
+        })
+        .then_with(|| left.candidate.entity_bits.cmp(&right.candidate.entity_bits))
+}
+
 fn transforms_have_same_bits(left: &Transform, right: &Transform) -> bool {
     left.translation.to_array().map(f32::to_bits) == right.translation.to_array().map(f32::to_bits)
         && left.rotation.to_array().map(f32::to_bits) == right.rotation.to_array().map(f32::to_bits)
@@ -965,7 +1006,8 @@ fn segment_proxy_depths_for_band(
     // global, así que agregarlos al final cambia el desempate entre teselas.
     // La clave recupera la misma fila diagonal, ordinal local y ordinal del
     // child que dio origen a la promoción.
-    let mut entries: Vec<(Option<usize>, ParentSprite, Option<f32>, u64, u8, u64)> = Vec::new();
+    let mut entries: Vec<(Option<usize>, ParentSprite, Option<f32>, u64, u8, i64, u64)> =
+        Vec::new();
     for (global_index, &(entity, parent, depth)) in global_sorted_parents.iter().enumerate() {
         let reaches_band = parent_states
             .get(&entity)
@@ -990,6 +1032,7 @@ fn segment_proxy_depths_for_band(
             Some(depth),
             parent.insertion_key,
             (parent.insertion_key & u64::from(u8::MAX)) as u8,
+            bridge_pillar_insertion_tie(&parent),
             global_index as u64,
         ));
     }
@@ -1004,17 +1047,20 @@ fn segment_proxy_depths_for_band(
             None,
             candidate.candidate.promoted_parent.insertion_key,
             candidate.candidate.combine_ordinal,
+            bridge_pillar_insertion_tie(&candidate.candidate.promoted_parent),
             candidate.candidate.entity_bits,
         ));
     }
 
-    entries.sort_unstable_by_key(|(_, _, _, insertion_key, ordinal, tie_breaker)| {
-        (*insertion_key, *ordinal, *tie_breaker)
-    });
+    entries.sort_unstable_by_key(
+        |(_, _, _, insertion_key, ordinal, pillar_tie, tie_breaker)| {
+            (*insertion_key, *ordinal, *pillar_tie, *tie_breaker)
+        },
+    );
 
     let parents: Vec<_> = entries
         .iter()
-        .map(|(_, parent, _, _, _, _)| parent.clone())
+        .map(|(_, parent, _, _, _, _, _)| parent.clone())
         .collect();
     let order = viewport_sort_parent_sprites(&parents);
     let mut depths = vec![0.0; candidates.len()];
@@ -1875,19 +1921,7 @@ pub(crate) fn sort_viewport_sortable_parents(
     // siguiente cuando Bevy aplica el `CommandQueue`.
     let mut segment_proxy_candidates = segment_parent_candidates;
     segment_proxy_candidates.extend(promotion_by_parent_band.into_values());
-    segment_proxy_candidates.sort_unstable_by(|left, right| {
-        left.candidate
-            .promoted_parent
-            .insertion_key
-            .cmp(&right.candidate.promoted_parent.insertion_key)
-            .then_with(|| left.band.cmp(&right.band))
-            .then_with(|| {
-                left.candidate
-                    .combine_ordinal
-                    .cmp(&right.candidate.combine_ordinal)
-            })
-            .then_with(|| left.candidate.entity_bits.cmp(&right.candidate.entity_bits))
-    });
+    segment_proxy_candidates.sort_unstable_by(segment_proxy_insertion_order);
 
     #[cfg(test)]
     {
@@ -1914,7 +1948,9 @@ pub(crate) fn sort_viewport_sortable_parents(
     // El query ECS no ofrece un orden contractual. Recuperar el barrido
     // diagonal de `ViewportAddLandscape` es necesario tanto para desempates
     // del C++ como para que dos ejecuciones del mismo save sean idénticas.
-    input.sort_unstable_by_key(|(_, parent, _)| parent.insertion_key);
+    input.sort_unstable_by_key(|(_, parent, _)| {
+        (parent.insertion_key, bridge_pillar_insertion_tie(parent))
+    });
     let sprite_parents: Vec<_> = input
         .iter()
         .map(|(entity, parent, _)| {
@@ -3250,6 +3286,137 @@ mod tests {
 
         assign_segment_proxy_depths(&[0], Some(4.0), None, &mut depths);
         assert_eq!(depths[0], 4.0 + VIEWPORT_SEGMENT_PROXY_EDGE_STEP);
+    }
+
+    fn native_bridge_pillar_parents() -> Vec<ViewportSortableParent> {
+        include_str!("../../tests/fixtures/native_bridge_pillar_column_openttd.csv")
+            .lines()
+            .skip(1)
+            .map(|row| {
+                let fields: Vec<i32> = row
+                    .split(',')
+                    .map(|value| value.parse().expect("integer from native pillar oracle"))
+                    .collect();
+                ViewportSortableParent {
+                    sprite_id: fields[0] as u32,
+                    bounds: ParentSpriteBounds::new(
+                        fields[1], fields[2], fields[3], fields[4], fields[5], fields[6],
+                    ),
+                    insertion_key: viewport_insertion_key(124, 149, 80),
+                    source_depth: 2.0,
+                }
+            })
+            .collect()
+    }
+
+    fn bridge_pillar_proxy(
+        parent: ViewportSortableParent,
+        allocation_rank: usize,
+    ) -> ViewportSegmentProxyCandidate {
+        let entity = Entity::from_bits(allocation_rank as u64 + 1);
+        ViewportSegmentProxyCandidate {
+            candidate: ViewportPromotionCandidate {
+                original_parent: entity,
+                child_entity: entity,
+                combine_ordinal: (parent.insertion_key & 255) as u8,
+                entity_bits: entity.to_bits(),
+                promoted_parent: parent,
+                current_depth: 2.0,
+            },
+            band: 0,
+            sprite: Sprite::default(),
+            anchor: Anchor::CENTER,
+            transform: Transform::default(),
+            chunk: None,
+        }
+    }
+
+    #[test]
+    fn bridge_pillar_insertion_matches_native_column_after_entity_reallocation() {
+        for column in native_bridge_pillar_parents().chunks(3) {
+            for ordinal in [80, 81] {
+                for allocation in [[0, 1, 2], [2, 1, 0], [1, 2, 0]] {
+                    let mut proxies: Vec<_> = column
+                        .iter()
+                        .enumerate()
+                        .map(|(index, parent)| {
+                            let mut parent = *parent;
+                            parent.insertion_key = viewport_insertion_key(124, 149, ordinal);
+                            bridge_pillar_proxy(parent, allocation[index])
+                        })
+                        .collect();
+                    proxies.sort_unstable_by(segment_proxy_insertion_order);
+                    assert_eq!(
+                        proxies
+                            .iter()
+                            .map(|proxy| proxy.candidate.promoted_parent.bounds)
+                            .collect::<Vec<_>>(),
+                        column
+                            .iter()
+                            .map(|parent| parent.bounds)
+                            .collect::<Vec<_>>(),
+                        "native DrawPillarColumn emission must survive allocation {allocation:?}",
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn bridge_pillar_tie_preserves_other_producers_and_identical_boxes() {
+        let parent = native_bridge_pillar_parents()[0];
+        for ordinal in [0, 32, 48, 64, 79, 82, 255] {
+            let mut other = parent;
+            other.insertion_key = viewport_insertion_key(124, 149, ordinal);
+            assert_eq!(bridge_pillar_insertion_tie(&other), 0);
+        }
+        for bounds in [
+            ParentSpriteBounds::new(0, 0, 0, 15, 15, 5),
+            ParentSpriteBounds::new(0, 0, 0, 15, 1, 6),
+            ParentSpriteBounds::new(0, 0, 0, 15, 0, 5),
+        ] {
+            assert_eq!(
+                bridge_pillar_insertion_tie(&ViewportSortableParent { bounds, ..parent }),
+                0
+            );
+        }
+        let first = bridge_pillar_proxy(parent, 0);
+        let second = bridge_pillar_proxy(parent, 1);
+        assert!(segment_proxy_insertion_order(&first, &second).is_lt());
+    }
+
+    #[test]
+    fn bridge_pillar_local_depths_survive_entity_reallocation() {
+        for column in native_bridge_pillar_parents().chunks(3) {
+            let mut expected = None;
+            for allocation in [[0, 1, 2], [2, 1, 0], [1, 2, 0]] {
+                let proxies: Vec<_> = column
+                    .iter()
+                    .enumerate()
+                    .map(|(index, parent)| bridge_pillar_proxy(*parent, allocation[index]))
+                    .collect();
+                let depths = segment_proxy_depths_for_band(0, &proxies, &[], &EntityHashMap::new());
+                let bits: Vec<_> = depths.iter().map(|depth| depth.to_bits()).collect();
+                if let Some(expected) = &expected {
+                    assert_eq!(&bits, expected, "allocation {allocation:?}");
+                } else {
+                    let native_parents: Vec<_> = column
+                        .iter()
+                        .enumerate()
+                        .map(|(index, parent)| {
+                            ParentSprite::sprite(index as u64, parent.sprite_id, parent.bounds)
+                        })
+                        .collect();
+                    let native_order = viewport_sort_parent_sprites(&native_parents);
+                    assert!(
+                        native_order
+                            .windows(2)
+                            .all(|pair| depths[pair[0]] < depths[pair[1]])
+                    );
+                    expected = Some(bits);
+                }
+            }
+        }
     }
 
     #[test]

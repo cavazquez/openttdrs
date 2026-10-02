@@ -4425,3 +4425,69 @@ Fuentes, oracle, controles, drivers y resultados:
 target/performance/native-airport-animation-cadence-20261002.
 Se cierra sólo el período vanilla cubierto. F28 general, compositor F08/F31,
 listas/overrides, 37 ticks/s, 30 FPS por frame y jugabilidad siguen abiertos.
+
+## Etapa 59 — Inserción nativa de columnas de pilares (F08/F18/F31)
+
+El redibujado de 56 cambia IDs ECS sin cambiar la escena. Los segmentos de
+una columna comparten ordinal 80/81 y clave de inserción: el desempate por
+entidad invierte algunas alturas. Se corrige sólo esa colisión de alturas
+distintas para cajas nativas 16×2×6 o 2×16×6, recuperando la emisión de arriba
+hacia abajo antes de ordenar parents globales, candidatos y bandas locales.
+No cambia el formato de claves, los componentes ni las firmas de queries.
+
+`scripts/oracle_bridge_pillar_column.py` extrae sin modificar los cuerpos de
+`DrawPillar` y `DrawPillarColumn` del pin original 14ec60f2. Comprueba sus
+constantes y captura las cajas mediante un sink adaptado, sin raster nativo.
+Dos ejes y tres alturas producen seis filas, regeneradas byte a byte. La
+regresión de inserción falla antes al invertir IDs; la prueba de profundidad
+local sola ya pasaba y no detectaba el contrato perdido. Ahora pasan ambos
+ejes, ordinales delantero/trasero y tres permutaciones de asignación. Las
+cajas de otros productores y las idénticas conservan el desempate anterior.
+Medios pilares de igual altura, combines y orden universal siguen abiertos.
+
+GPU real, Kale pausada, centro 128,128, 1280×720, settle 180, CLEAN=0:
+28 capturas comparan control/candidata y carga normal/redibujo completo.
+Se ejercitan los seis niveles 0,25/0,5/1/2/4/8; la petición adicional 0,125
+queda limitada a 0,25 y no añade un nivel nativo. Las inversiones de columna
+del control normal Out2x/Out4x/Out8x son **42/131/218 → cero**. Los pilares
+conservan ahora emisión y profundidades tras redibujar en todos los niveles.
+[Emisión por zoom](evidence/bridge-pillar-insertion-order-pillar-emission-20261002.csv).
+
+Todos los PNG antes/después, tanto normales como reconstruidos, conservan
+sus bytes. Out2x recupera además el stream completo idéntico entre carga y
+redibujado. Los fallos generales de raster siguen siendo Normal **8 píxeles/4
+bloques**, Out2x **18/16** y Out8x **27/7**; Out4x conserva PNG con stream
+distinto. In4x/In2x son exactos. Las 265/368 imágenes CPU y ambas máscaras en
+In2x/Out2x coinciden en las cuatro comparaciones; los inputs completos Main
+todavía difieren en los redibujados. Un stream corregido no certifica el
+compositor ni la lectura universal de sprites.
+[Raster](evidence/bridge-pillar-insertion-order-raster-20261002.csv),
+[inputs capturados](evidence/bridge-pillar-insertion-order-sprite-inputs-20261002.csv).
+
+Pasan **3037 core/6 ignoradas**, **1691 cliente/2 ignoradas**, Clippy estricto
+de ambos, formato, docs y diff. La primera ejecución de Clippy rechaza un
+`unwrap` del lector de fixture: se sustituye por un `expect` descriptivo y se
+conserva la salida fallida. Release cliente 53,671 s con core fresco 754dc09a;
+un oracle C++ de 0,18 s coincidió al comienzo, por lo que no se presenta como
+benchmark aislado de compilación. Binario readonly 187353944 bytes, SHA
+21c736512473274e7adfb5bded03048a39ca9eb1699cffe8c0a82aeab4011ad5.
+
+ABBA GPU activa, escala 2, warmup 120, 40 frames/run, básico y Main en
+ambas versiones, sin compilación/pruebas simultáneas: fijo **40,0049 →
+39,9492 ms** (24,997 → 25,032 FPS), **70/80 → 70/80** fuera de presupuesto.
+Pan estabilizado **42,6654 → 42,4821 ms** (23,438 → 23,539 FPS), **78/80 →
+78/80**; máximos 61,913 → 61,738 ms. Sort sube 4,2871 → 4,3996 ms fijo
+y 4,2938 → 4,3910 en pan. El primer control fijo cubre un tick posterior;
+las otras siete corridas cubren 3703193–3703232. No se atribuye una ganancia
+de FPS a una diferencia pequeña ni se certifican picos de transición.
+[Frames fijos](evidence/bridge-pillar-insertion-order-steady-20261002.csv),
+[pan estabilizado](evidence/bridge-pillar-insertion-order-pan-settled-20261002.csv).
+
+Fuentes, oracle, controles y resultados:
+target/performance/bridge-pillar-insertion-order-20261002.
+Dos cachés core inactivas desde el 27/09 se preservan en tar.gz, comprobando
+todos los bytes, modos y mtimes ns antes de retirar sólo sus árboles antiguos.
+Los fallos y binarios de control siguen recuperables; no se limpia el caché
+activo ni archivos del usuario.
+Sólo se cierra el orden de inserción de las columnas cubiertas. F08/F18/F31,
+37 ticks/s, 30 FPS por frame y jugabilidad completa siguen abiertos.

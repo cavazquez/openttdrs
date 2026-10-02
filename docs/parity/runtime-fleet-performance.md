@@ -307,6 +307,14 @@ su hash normalizando únicamente esos frames. La medición fija da ~24,89
 FPS y pan estabilizado ~23,42; es paridad de cadencia, sin ganancia de FPS
 atribuida. El objetivo de 30 FPS por frame continúa pendiente.
 
+La [etapa 59](performance-implementation.md#etapa-59--inserción-nativa-de-columnas-de-pilares-f08f18f31)
+corrige las inversiones de pilares al reconstruir entidades: sigue el orden
+descendente de alturas emitido por el original. Out2x recupera el stream del
+sorter idéntico, pero el raster aún cambia 18 píxeles. La ABBA mantiene
+~25,03 FPS fijo y ~23,54 pan estabilizado, con 70/80 y 78/80 frames fuera de
+presupuesto. No se atribuye una ganancia de rendimiento; el siguiente fallo
+visual y el objetivo de jugabilidad siguen abiertos.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

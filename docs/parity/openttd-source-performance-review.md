@@ -534,6 +534,16 @@ ABBA empeoran el frame y no reducen consistentemente sort. El diferencial
 CPU pasa, pero In2x inicial falla 204 píxeles y dos repeticiones son exactas.
 Se conservan todos los resultados; producción vuelve a la etapa 41.
 
+La [etapa 59](performance-implementation.md#etapa-59--inserción-nativa-de-columnas-de-pilares-f08f18f31)
+recupera el orden de alturas de `DrawPillarColumn` cuando varios segmentos
+comparten una clave y cambian los IDs ECS. El oracle extrae las funciones
+originales intactas; dos ejes, seis cajas y permutaciones de entidades cubren
+el subcaso. Out2x/Out4x/Out8x pasan de 42/131/218 inversiones a cero; todos
+los pilares conservan orden y profundidad al reconstruir. Out2x tiene ahora
+stream completo idéntico, pero mantiene 18 píxeles distintos: el siguiente
+fallo pertenece a entradas/fases que ese stream no describe. No se cierra el
+sort universal, el compositor ni el presupuesto de 30 FPS.
+
 ### F19 — El guardado bloquea UI y codifica dos veces el JSON
 
 P2 · Persistencia · Evidencia: **Fuente** · Alcance estimado: medio.

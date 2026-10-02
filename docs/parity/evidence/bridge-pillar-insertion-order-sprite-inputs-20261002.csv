@@ -1,0 +1,9 @@
+scale,comparison,complete_inputs_equal_after_bijective_identity_renaming,cpu_image_bytes_equal,cpu_images_compared,images_without_cpu_data,coverage_equal,occlusion_equal
+.5,default-change,True,True,265,0,True,True
+.5,redraw-change,True,True,265,0,True,True
+.5,control-redraw,False,True,265,0,True,True
+.5,candidate-redraw,False,True,265,0,True,True
+2,default-change,False,True,368,0,True,True
+2,redraw-change,True,True,368,0,True,True
+2,control-redraw,False,True,368,0,True,True
+2,candidate-redraw,False,True,368,0,True,True

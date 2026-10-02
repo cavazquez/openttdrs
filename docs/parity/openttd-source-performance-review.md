@@ -296,6 +296,13 @@ Las pérdidas 114/44 se mantienen; no se atribuyen a una carrera entre capturas
 ni se acepta el candidato. Faltan muestreo/oclusión nativos y el contrato de
 importación/compositor completo.
 
+La [etapa 48](performance-implementation.md#etapa-48--muestreo-nearest-frente-al-blitter-en-seis-zooms-f08f31)
+reproduce una diferencia independiente de Z: nearest toma texeles distintos
+al blitter cuando aleja el zoom. Dos máscaras alineadas difieren en Out2x,
+Out4x y Out8x. Ajustar muestra y dimensiones coincide en las doce máscaras
+nativas de la sonda, en dos runs. No cambia el compositor ni atribuye las
+pérdidas de escena; faltan fase real, atlas y clipping.
+
 ### F09 — Var 62 usa crashed para el bit de Hidden
 
 P2 · NewGRF · Evidencia: **Fuente** · Alcance estimado: medio.

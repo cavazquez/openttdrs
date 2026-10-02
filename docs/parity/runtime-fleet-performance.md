@@ -237,6 +237,11 @@ campos visuales por captura. Los seis PNG y dos repeticiones son exactos
 contra la referencia histórica; las pérdidas 114/44 siguen presentes.
 Mejora la referencia, sin cambiar el cliente ni acreditar FPS nuevos.
 
+La etapa 48 reproduce diferencias de nearest en las dos máscaras reales al
+alejar zoom, sin profundidad ni oclusores. Una variante de muestra y tamaño
+coincide en doce mapas nativos alineados, repetidos dos veces. Es diagnóstico;
+faltan coordenadas/clipping reales y no se modifica el juego ni la métrica FPS.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

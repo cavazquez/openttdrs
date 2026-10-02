@@ -3772,3 +3772,59 @@ ni avance acreditado hacia 30 FPS. Se cierra sólo el sub-issue de referencia
 pausada con campos registrados estables. F08/F31 siguen abiertos; el siguiente
 paso debe aislar muestreo y oclusión de vidrio frente al blitter nativo en
 Out2x/Out4x, donde separar Z no alcanza.
+
+## Etapa 48 — Muestreo nearest frente al blitter en seis zooms (F08/F31)
+
+La referencia pausada 47 conserva las pérdidas de 46. Se aísla ahora el
+muestreo de las dos máscaras reales 66×52, sin depth test ni otros sprites.
+[La sonda nativa](../../scripts/probe_mask_sampling_native.py) extrae Draw
+prístino de 8bpp-simple y ScaleByZoom/UnScaleByZoom del pin 14ec60f2.
+Un scaffold replica el alpha normal 4× para formar el root; no sustituye Draw.
+El canvas es 288×232 y el origen de ambas máscaras está alineado en (8,8).
+No ejecuta decoder/Encode/GfxBlitter completo, atlas, offsets/subsprite ni SAV.
+
+El blitter avanza por texeles enteros desde el origen y redondea hacia arriba
+el tamaño de destino: 264×208, 132×104, 66×52, 33×26, 17×13 y 9×7.
+Dos ejecuciones verifican exactamente los doce mapas de ocupación contra
+los índices esperados. [24 mapas nativos](evidence/mask-sampling-native-20261002.csv).
+Fuente Draw SHA 7eacfbeed029d3abe38d042c7a56650448c1efc14535b3afce4ff6357d7e36c7;
+helpers de zoom b25cfcce253d7987fed5ce43ff9ec865beb1774c35de0333f378e8ddeaa67864.
+
+[La sonda GPU](../../scripts/probe_mask_sampling_gpu.rs) usa las texturas
+RGBA capturadas, nearest, Rgba8UnormSrgb, Mask >=0,5 y MSAA=1. No agrega
+oclusores, LUT ni Z. El control nearest toma muestras del centro del píxel.
+Conserva ocupación exacta en In4x, In2x y normal. En Out2x/Out4x/Out8x,
+parent difiere en **128/52/11 píxeles** y child en **93/23/7**.
+La diferencia aparece sin empates de profundidad ni orden entre entidades.
+
+Se ensayan dos controles sólo en la sonda. Para escalas s>1 se desplaza la
+muestra (1-s)/2 texeles: lleva el centro GPU al centro del texel elegido por
+el paso nativo; escalas s<=1 conservan el muestreo inicial. Eso elimina las
+diferencias de child y Out2x parent. Quedan 2/3 píxeles parent en Out4x/Out8x:
+el borde derecho de su quad fraccionario no llega a los centros finales.
+Redondear el tamaño de destino hacia arriba y ampliar las UV proporcionalmente
+corrige también esos casos. Esta tercera variante coincide en los 66816
+píxeles de cada uno de los doce mapas nativos.
+
+Dos runs de 36 casos GPU conservan exactamente sus 36 buffers RGBA y los
+resultados CSV. [72 lecturas GPU](evidence/mask-sampling-gpu-20261002.csv).
+RX 7600/RADV, Vulkan/Mesa 26.0.8; se rechaza adaptador CPU. Los inputs y
+la cámara artificial alineada no prueban otras geometrías, clipping, fases
+fraccionarias, atlas o backends. **No se instala ningún ajuste en el cliente.**
+No se atribuyen a esta sonda las 114/44 pérdidas de la escena completa.
+
+La primera invocación referenció un directorio de inputs inexistente y el
+scaffold abortó sin raster; sus fuentes/binario se conservan. La herramienta
+ahora valida tamaño y alpha binario antes de compilar, y usa los inputs
+verificados de 46. Sondas, fuentes readonly, hashes, compilaciones, casos,
+buffers y fallo inicial quedan en `target/performance/mask-sampling-20261002`.
+Compilación GPU aislada 0,57 s con -D warnings; ambos C++ con warnings como
+errores. No son mejoras de compilación del juego.
+
+Gates: dos runs nativos/GPU, controles de ocupación, rustfmt de sondas,
+formato de workspace, self-tests del comparador, docs y diff. Cliente/core
+sin cambios; se reutilizan las suites anteriores. No hay nuevo benchmark
+activo. Se cierra sólo la reproducción de muestreo alineado y dimensiones;
+F08/F31, 30 FPS y jugabilidad siguen abiertos. El siguiente sub-issue debe
+probar la fase real de las coordenadas/UV y clipping de la escena antes de
+combinar muestreo nativo con la separación de profundidad.

@@ -704,6 +704,14 @@ vanilla fijadas de OpenTTD usan radar 12 frames cada 4 ticks y manga 4 cada
 sin cambiar la simulación. F28 mantiene abierto corregir la cadencia con
 oracle por tick, sin afectar NewGRF, RNG ni las otras fases.
 
+La [etapa 58](performance-implementation.md#etapa-58--cadencia-nativa-de-radar-y-manga-f28)
+cierra el período vanilla en los gfx cubiertos: oracle con template y tabla
+originales intactos, 219/288 diferencias previas → cero. Los 11 estados
+muestreados conservan el hash al normalizar sólo esos frames; el hash
+completo cambia como corresponde. 3037 core y 1688 cliente pasan. La ABBA
+mantiene ~24,89 FPS fijo/~23,42 pan, sin mejora atribuida. F28 completo,
+overrides y listas animadas generales continúan abiertos.
+
 ### F29 — Preview y ejecución deben compartir reglas sin efectos secundarios
 
 P3 · Comandos · Evidencia: **Fuente** · Alcance estimado: medio.

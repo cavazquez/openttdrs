@@ -1773,7 +1773,7 @@ mod tests {
             station.ottd_station_id = Some(77);
             station.airport_tiles.push(pos);
             state.stations.push(station);
-            state.tick = crate::GameTick::new(3);
+            state.tick = crate::GameTick::new(4);
             let before_random = state.random;
             let before_json = serde_json::to_value(&state.runtime).unwrap();
             if profiled {

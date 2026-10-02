@@ -86,8 +86,8 @@ fn capture_station_animation_sound(
 
 /// Avanza `m7` en las teselas airport animadas; coste O(aeropuertos), no O(mapa).
 pub fn step_airport_tiles(map: &mut Map, tick: u64, stations: &[Station]) -> Vec<TileCoord> {
-    // Un frame cada 3 ticks ≈ ritmo visual cercano a OpenTTD.
-    if !tick.is_multiple_of(3) {
+    // Native default speeds: radar 2 (every 4 ticks), wind 1 (every 2).
+    if !tick.is_multiple_of(2) {
         return Vec::new();
     }
     let mut dirty = Vec::new();
@@ -122,6 +122,10 @@ pub fn step_airport_tiles(map: &mut Map, tick: u64, stations: &[Station]) -> Vec
             let Some(frames) = frames else {
                 continue;
             };
+            let period = if frames == AIRPORT_RADAR_FRAMES { 4 } else { 2 };
+            if !tick.is_multiple_of(period) {
+                continue;
+            }
             tile.m7 = tile.m7.wrapping_add(1) % frames;
             let _ = map.set_tile(pos, tile);
             dirty.push(pos);
@@ -3420,13 +3424,13 @@ mod tests {
             AirportPiece::Apron as u8
         ));
 
-        let dirty = step_airport_tiles(&mut map, 3, &[station.clone()]);
+        let dirty = step_airport_tiles(&mut map, 4, &[station.clone()]);
         assert_eq!(dirty, vec![pos]);
         assert_eq!(map.get(pos).unwrap().m7, 1);
         assert_eq!(airport_radar_frame(1), 1);
 
-        let _ = step_airport_tiles(&mut map, 6, &[station.clone()]);
-        let _ = step_airport_tiles(&mut map, 9, &[station]);
+        let _ = step_airport_tiles(&mut map, 8, &[station.clone()]);
+        let _ = step_airport_tiles(&mut map, 12, &[station]);
         assert_eq!(map.get(pos).unwrap().m7, 3);
 
         assert!(step_airport_tiles(&mut map, 4, &[]).is_empty());
@@ -4160,6 +4164,55 @@ mod tests {
     }
 
     #[test]
+    fn vanilla_airport_frames_match_the_pristine_native_template_each_tick() {
+        let oracle =
+            include_str!("../../tests/fixtures/native_airport_animation_cadence_openttd.csv");
+        let gfx = [31, 51, 52, 39, 73, 47];
+        let coords: Vec<_> = (1..=6).map(|x| TileCoord::new(x, 1)).collect();
+        let mut map = Map::new_flat(8, 8, 1);
+        for (&coord, &gfx) in coords.iter().zip(&gfx) {
+            let mut tile = map.get(coord).unwrap();
+            tile.kind = TileKind::Airport;
+            tile.m5 = gfx;
+            map.set_tile(coord, tile).unwrap();
+        }
+        let before = map.clone();
+        let mut station = Station::new_with_kind(coords[0], StopKind::RailStation);
+        station.ottd_station_id = Some(77);
+        station.airport_tiles = coords.clone();
+        let mut lines = oracle.lines();
+        assert_eq!(lines.next(), Some("tick,gfx,frame,dirty,random_calls"));
+        for tick in 1..=48 {
+            let dirty = step_airport_tiles(&mut map, tick, std::slice::from_ref(&station));
+            let mut expected_dirty = Vec::new();
+            for (&coord, &gfx) in coords.iter().zip(&gfx) {
+                let row: Vec<_> = lines.next().unwrap().split(',').collect();
+                assert_eq!(row.len(), 5);
+                assert_eq!(row[0].parse::<u64>().unwrap(), tick);
+                assert_eq!(row[1].parse::<u8>().unwrap(), gfx);
+                assert_eq!(row[4], "0", "vanilla does not consume animation RNG");
+                let mut tile = map.get(coord).unwrap();
+                assert_eq!(
+                    tile.m7,
+                    row[2].parse::<u8>().unwrap(),
+                    "tick={tick}, gfx={gfx}"
+                );
+                if row[3] == "1" {
+                    expected_dirty.push(coord);
+                }
+                tile.m7 = before.get(coord).unwrap().m7;
+                assert_eq!(
+                    tile,
+                    before.get(coord).unwrap(),
+                    "only the frame may change"
+                );
+            }
+            assert_eq!(dirty, expected_dirty);
+        }
+        assert!(lines.next().is_none());
+    }
+
+    #[test]
     fn imported_airport_animates_only_the_explicit_station_gfx_variants() {
         let mut map = Map::new_flat(8, 8, 1);
         let radar = TileCoord::new(1, 1);
@@ -4177,13 +4230,13 @@ mod tests {
         station.ottd_station_id = Some(77);
         station.airport_tiles = vec![radar, flag, static_tower];
 
-        let dirty = step_airport_tiles(&mut map, 3, &[station.clone()]);
+        let dirty = step_airport_tiles(&mut map, 4, &[station.clone()]);
         assert_eq!(dirty, vec![radar, flag]);
         assert_eq!(map.get(radar).unwrap().m7, 1);
         assert_eq!(map.get(flag).unwrap().m7, 1);
         assert_eq!(map.get(static_tower).unwrap().m7, 0);
 
-        for tick in [6, 9, 12] {
+        for tick in [8, 12, 16] {
             let _ = step_airport_tiles(&mut map, tick, &[station.clone()]);
         }
         assert_eq!(map.get(flag).unwrap().m7, 0, "flag has four frames");

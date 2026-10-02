@@ -300,6 +300,13 @@ pico 247,46 y 80/80 frames fuera de presupuesto. La cola propia muestra
 menos bajas de visuales. La cadencia aeroportuaria 3 ticks del port frente
 a radar 4/manga 2 nativos queda abierta, junto a los 30 FPS por frame.
 
+La [etapa 58](performance-implementation.md#etapa-58--cadencia-nativa-de-radar-y-manga-f28)
+corrige radar cada 4 ticks y manga cada 2 con oracle original reproducible:
+219/288 diferencias → cero. El resto del estado core muestreado conserva
+su hash normalizando únicamente esos frames. La medición fija da ~24,89
+FPS y pan estabilizado ~23,42; es paridad de cadencia, sin ganancia de FPS
+atribuida. El objetivo de 30 FPS por frame continúa pendiente.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

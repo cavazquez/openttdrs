@@ -4368,3 +4368,60 @@ target/performance/retained-airport-animation-20261002.
 La ganancia se limita a la clasificación y representación retenida vanilla.
 Cadencia nativa, otros remaps, estabilidad general del compositor, 37 ticks/s,
 30 FPS por frame y jugabilidad completa siguen abiertos.
+
+## Etapa 58 — Cadencia nativa de radar y manga (F28)
+
+Se corrige el subcaso vanilla que quedó abierto en 57: radar gfx 31/51/52
+avanza cada 4 ticks y manga 39/73 cada 2, según `animation.speed` 2/1 del
+original. La torre legacy comparte el período del radar; la torre estática
+47 conserva su frame. No cambia el renderer ni el camino retenido de 57.
+La implementación NewGRF permanece intacta; overrides, frames inválidos y
+listas animadas nativas generales no se certifican con este subcaso.
+
+El oracle compila **sin modificar** `AnimationBase`, `AnimationInfo` y la
+tabla `_origin_airporttile_specs` del pin OpenTTD 14ec60f2. Adapta sólo
+interfaces de mundo (clock, almacenamiento del frame y avisos dirty), con
+callbacks default desactivados. No carga SAV nativos ni valida callbacks.
+`scripts/oracle_airport_animation.py` y su C++ regeneran el resultado desde
+el checkout original: repetición byte idéntica a la fixture versionada.
+En 48 ticks, cinco gfx animados y uno estático producen 288 filas; la
+primera diferencia anterior es manga 39 en tick 2. **219 diferencias antes,
+cero después**, con frame y aviso dirty comprobados por tick. La regresión
+conserva todos los demás bytes de cada tesela. Se ajustan tests que suponían
+el período anterior; la fixture nativa no se cambia para obtener verde.
+[Comparación por tick](evidence/native-airport-animation-cadence-ticks-20261002.csv).
+
+En Kale, 11 estados core muestreados durante 200 ticks conservan su hash
+canónico al poner a cero **sólo los m7 de aeropuertos vanilla animados en una
+copia**. Los hashes sin normalizar difieren en 10 muestras: el cambio de
+frames es esperado, no una equivalencia byte completa. RNG, vehículos,
+carga, economía y demás estado persistido siguen dentro del hash normalizado.
+Es una prueba headless del núcleo; no certifica callbacks cliente ni la
+simulación completa contra el original.
+[Estados muestreados](evidence/native-airport-animation-cadence-state-hashes-20261002.csv).
+
+Pasan **104 pruebas core aeroportuarias**, **3037 core/6 ignoradas**, **1688
+cliente/2 ignoradas**, Clippy estricto de ambos crates, formato, docs y diff.
+Release aislada 78,396 s, recompilando core/net/cliente; core 754dc09a.
+Cliente readonly 187373448 bytes, SHA
+cfd3dd39514dbea39bf5f48c3fb6a985ac6c99d693b28c01ada1f0a5a5ff5e6f.
+
+Las seis referencias pausadas de 56 siguen exactas en PNG y stream global
+en 0,25/0,5/1/2/4/8. En 0,5/2 también coinciden todos los inputs Main,
+265/368 imágenes CPU y las dos máscaras. La petición extra 0,125 se limita
+al mínimo real 0,25. Estas capturas no ejercitan la nueva cadencia; lo hace
+el oracle por tick. El gate general de reconstrucción de 56 sigue abierto.
+[Raster y contratos](evidence/native-airport-animation-cadence-raster-20261002.csv).
+
+ABBA GPU real, Kale activa, escala 2, warmup 120, 40 frames/run, básico y
+Main en ambas: fijo **39,9242 → 40,1696 ms** (25,047 → 24,894 FPS),
+69/80 → 71/80 fuera de presupuesto. Pan ya estabilizado **42,5466 →
+42,6952 ms** (23,504 → 23,422 FPS), 79/80 → 80/80; pico 62,446 → 62,701.
+No se atribuye una mejora de rendimiento a este cambio de paridad.
+[Frames fijos](evidence/native-airport-animation-cadence-steady-20261002.csv)
+y [pan estabilizado](evidence/native-airport-animation-cadence-pan-settled-20261002.csv).
+
+Fuentes, oracle, controles, drivers y resultados:
+target/performance/native-airport-animation-cadence-20261002.
+Se cierra sólo el período vanilla cubierto. F28 general, compositor F08/F31,
+listas/overrides, 37 ticks/s, 30 FPS por frame y jugabilidad siguen abiertos.

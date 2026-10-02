@@ -273,6 +273,14 @@ La [etapa 54](performance-implementation.md#etapa-54--bajas-agrupadas-variante-r
 retira ese ensayo: no reduce aplicación ni frame. Producción conserva 53;
 continúa reducir el alcance del redibujado por tesela.
 
+La [etapa 55](performance-implementation.md#etapa-55--señales-por-tesela-y-divergencia-de-redibujado-f17f31)
+retira el ensayo de señales por tesela: no mejora frames ni aplicación de
+comandos. Seis capturas normales son exactas, pero forzar chunk/tesela durante
+la pausa cambia raster o stream; el redibujado de chunks añade faroles y
+árboles de banquina en In2x/Out2x. Sigue verificar la consistencia del detalle
+dependiente de zoom. La sonda headless identifica además avisos de aeropuertos
+ya animados por el cliente. Producción conserva 53; no se cierra el objetivo.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

@@ -4118,3 +4118,85 @@ Se cierra sólo este ensayo fallido. Continúa la reducción del alcance del
 redibujado: una tesela alterada no debería retirar todos los productores de
 un chunk cuando sus vecinos no cambiaron. F07/F17/F31, 30 FPS y jugabilidad
 siguen abiertos; ningún umbral ni golden cambia.
+
+## Etapa 55 — Señales por tesela y divergencia de redibujado (F17/F31)
+
+Se ensaya sustituir únicamente los chunks afectados por señales por sus
+teselas productoras. El filtro admite culling y la base vanilla canónica
+ogfx1_base.grf, estática, ff4f5401 y sin parámetros; otros GRF activos
+conservan el redibujo anterior. Coalescea causas y no duplica una tesela si
+su chunk ya se reconstruye. El test compara Sprite, Transform, parent/child
+del productor y exige conservar entidades vecinas. **Variante retirada**:
+no mejora sostenida y el diferencial forzado expone una divergencia de
+representación. Las siete fuentes y el release activo vuelven exactamente a
+53; prototipo, diagnósticos y capturas quedan conservados.
+
+ABBA sin perf ni sonda, GPU real, Kale activa, escala 2 y 40 frames/run,
+colectores básico/Main en ambas versiones. Fijo, warmup 120:
+**40,5711 → 41,0559 ms**, 24,648 → 24,357 FPS; 66/80 → 68/80 frames
+exceden 33,33 ms. Todos cubren 3703193–3703232. Pan, warmup 30:
+**45,9180 → 46,5900 ms**, 21,778 → 21,464 FPS; 78/80 en ambas,
+picos candidatos 130,831/134,840 ms. Todos cubren 3703103–3703142.
+[Frames fijos](evidence/tile-signal-refresh-steady-20261002.csv),
+[pan](evidence/tile-signal-refresh-pan-20261002.csv), y sus dos CSV de fases.
+
+Cuatro runs con sonda: fijo 40 remapeos, 160839 → 159449 bajas y
+108 → 107 refrescos; aplicación **2,5737 → 2,7417 ms**. Pan 39 registros
+seleccionados en 3703103–3703141, 174289 → 171041 bajas y 127 → 125
+refrescos, 17 entradas en ambas; aplicación **2,8509 → 2,8912 ms**.
+Sin rebuilds completos. La menor cantidad no basta para mejorar tiempo;
+la señal aislada cubre poco trabajo en esta ventana.
+[446 registros, incluido warmup](evidence/tile-signal-refresh-commands-20261002.csv),
+[frames instrumentados](evidence/tile-signal-refresh-trace-frames-20261002.csv),
+[intervalos Main](evidence/tile-signal-refresh-trace-phases-20261002.csv).
+
+Las doce capturas normales conservan exactamente seis PNG y streams;
+In2x/Out2x conserva inputs, 272/384 imágenes CPU y ambas máscaras.
+[Regresión predeterminada](evidence/tile-signal-refresh-raster-20261002.csv).
+No se activaba ninguna señal dirty durante esa pausa. Por eso se añaden
+doce capturas forzadas del mismo candidato: en frame 90 se encolan todas las
+teselas con señales, por chunk o por tesela, sin modificar el mapa desde la
+sonda. Las trazas permanecen en tick 3703074; esto no acredita un hash completo
+de estado/RNG. Los seis casos fallan la igualdad de stream. PNG cambia en
+3680/1908/3815/4511/0/28 píxeles y 230/177/424/730/0/8 bloques 4×4 para
+escalas 0,25/0,5/1/2/4/8. La ruta por tesela conserva los seis PNG previos;
+la reconstrucción por chunk revela diferencias existentes en esa ruta.
+[Diferencial forzado](evidence/tile-signal-refresh-probe-raster-20261002.csv).
+
+En las trazas completas de In2x y Out2x, la ruta por chunk contiene
+**451/1564 parents estáticos adicionales**, todos sprites 1406, 1407 o 4626:
+faroles y árboles de banquina. Children, vidrio y proxies mantienen cantidades.
+Es un indicio concreto para revisar el detalle dependiente de zoom de chunks
+reutilizados. Los bytes CPU se comparan por índice en la tabla de assets:
+su fallo con orden/cantidad distintos no demuestra que el decoder cambie
+los píxeles de una misma imagen. La lectura del sprite y la composición
+por zoom siguen siendo contratos separados; un único zoom dentro de tolerancia
+no certifica ambos.
+
+La nueva [sonda versionada](../../scripts/profile_tile_dirty_causes.rs) ejecuta
+200 ticks del core sin callbacks visuales del cliente. Se compila con
+rustc -D warnings contra el rlib fijado 6240adc8; una repetición reproduce
+los bytes de sus 1850 filas. Deduplica coordenadas dentro de cada causa/tick,
+no entre causas. Totales: industria 295, paisaje 377, señales 246 y reservas
+932. En la ventana fija hay 59 avisos de industria, **52 Airport**, frente a
+17 señales. El cliente ya anima radar/bandera retenidos, mientras step_airport_tiles
+añade esos avisos al remapeo general. Será otra investigación acotada tras
+la consistencia del zoom; este conteo headless no mide FPS ni certifica replay.
+[Avisos por causa y tesela](evidence/tile-signal-refresh-dirty-causes-20261002.csv).
+
+Gates candidatos: **1687 tests cliente/2 ignorados**, Clippy estricto
+core/cliente, formato, docs y diff. Se conservan los fallos iniciales de
+comparación de Sprite y del tamaño mínimo de culling y sus correcciones;
+ningún umbral de producción cambia. Core sin cambios, suite anterior reutilizada.
+Release 53,621 s de pared/53,58 Cargo, core fresh 6240adc8. Candidata
+187245320 bytes, SHA 88c0ea0a0b00b435fd76e6fe5afe7e69a954f6bd8b11dc9e88e3e0209a4d0dba.
+Restauración guardada por bytes/SHA a adcbd9cd de 53. Fuentes, drivers, HTML,
+trazas, hashes y decisión: target/performance/tile-signal-refresh-20261002.
+El candidato inactivo de 54 se conserva en gzip con recuperación verificada;
+cinco caches cliente anteriores se conservan en tar.gz tras verificar bytes,
+modos y mtimes. Sus tamaños lógicos no se presentan como espacio físico
+recuperado, porque pueden contener hardlinks compartidos.
+
+Se cierra sólo este ensayo. Continúa la consistencia de detalle al variar zoom,
+seguida de la animación retenida de aeropuertos. F07/F17/F31, 30 FPS y
+jugabilidad permanecen abiertos.

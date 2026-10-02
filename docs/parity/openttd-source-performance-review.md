@@ -460,6 +460,14 @@ La [etapa 54](performance-implementation.md#etapa-54--bajas-agrupadas-variante-r
 ensaya ese agrupado y lo retira: aplicación y frames no mejoran. Producción
 conserva 53; continúa la granularidad del redibujado con oracle raster.
 
+La [etapa 55](performance-implementation.md#etapa-55--señales-por-tesela-y-divergencia-de-redibujado-f17f31)
+retira señales por tesela sin mejora sostenida. Su sonda de redibujado forzado
+expone diferencias de faroles y árboles de banquina según la ruta de
+reconstrucción, aun manteniendo el tick: continúa comprobar que los chunks
+reutilizados actualizan el detalle al cambiar zoom. La sonda headless de
+causas abre además la animación retenida de aeropuertos. Estas evidencias no
+certifican el decoder ni sustituyen la comparación nativa por zoom.
+
 ### F18 — El sort ya tiene caché y no es un Z plano
 
 P2 · Render · Evidencia: **Fuente** · Alcance estimado: medio.

@@ -335,7 +335,10 @@ fn animate_airport_station_overlays(
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
+    use bevy::asset::AssetPlugin;
     use bevy::ecs::schedule::Schedule;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::image::ImagePlugin;
 
     use super::*;
     use crate::render::grid::TileRenderInfo;
@@ -393,6 +396,109 @@ mod tests {
             frame.parent.bounds,
             ParentSpriteBounds::new(2983, 23, 8, 2984, 24, 15)
         );
+    }
+
+    #[test]
+    fn live_airport_frames_update_sprite_and_anchor_without_replacing_entities() {
+        let dir = tempfile::tempdir().expect("asset fixture");
+        crate::render::assets::stub_opengfx_tiles_for_tests(dir.path());
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_plugins(AssetPlugin {
+            file_path: dir.path().to_str().expect("asset path").into(),
+            ..default()
+        });
+        app.add_plugins(ImagePlugin::default());
+        app.init_asset::<TextureAtlasLayout>();
+        app.update();
+        let world = app.world_mut();
+        let atlas = world.resource_scope(|world, mut layouts: Mut<Assets<TextureAtlasLayout>>| {
+            crate::render::TileAtlas::build(world.resource::<AssetServer>(), &mut layouts)
+        });
+        let assets = WorldAssets::load(&atlas, &mut world.resource_mut::<Assets<Image>>());
+        world.insert_resource(assets.clone());
+        let ctx = airport_ctx();
+        let mut sim = SimWorld::default();
+        sim.state.map = Map::new_flat(256, 256, 1);
+        world.insert_resource(sim);
+        for (gfx, anim, first, frames) in [
+            (
+                31,
+                AirportStationAnim::station_radar(&ctx, 1, 256, 0),
+                2680,
+                12,
+            ),
+            (
+                39,
+                AirportStationAnim::station_wind(&ctx, 1, 256, 1),
+                2676,
+                4,
+            ),
+            (
+                6,
+                AirportStationAnim::legacy_radar_tower(&ctx, 1, 256),
+                2680,
+                12,
+            ),
+        ] {
+            let frame = anim.frame_for_m7(0, gfx).expect("first frame");
+            let entity = world
+                .spawn((
+                    anim,
+                    assets
+                        .airport_station_sprite(first)
+                        .expect("first sprite")
+                        .sprite(),
+                    Transform::from_xyz(frame.translation.x, frame.translation.y, 42.0),
+                    Visibility::Inherited,
+                    frame.parent,
+                ))
+                .id();
+            for m7 in 0..12 {
+                let mut tile = world
+                    .resource::<SimWorld>()
+                    .state
+                    .map
+                    .get(ctx.coord)
+                    .unwrap();
+                tile.kind = TileKind::Airport;
+                tile.m5 = gfx;
+                tile.m7 = m7;
+                world
+                    .resource_mut::<SimWorld>()
+                    .state
+                    .map
+                    .set_tile(ctx.coord, tile)
+                    .unwrap();
+                world
+                    .run_system_once(animate_airport_station_overlays)
+                    .expect("retained frame update");
+                let expected = first + u32::from(m7 % frames);
+                let current = world.entity(entity);
+                assert_eq!(
+                    current.get::<ViewportSortableParent>().unwrap().sprite_id,
+                    expected
+                );
+                assert!(
+                    assets
+                        .airport_station_sprite(expected)
+                        .unwrap()
+                        .matches(current.get::<Sprite>().unwrap())
+                );
+                let expected_frame = anim.frame_for_m7(m7, gfx).unwrap();
+                let transform = current.get::<Transform>().unwrap();
+                assert_eq!(
+                    transform.translation.truncate(),
+                    expected_frame.translation.truncate()
+                );
+                assert_eq!(
+                    transform.translation.z, 42.0,
+                    "the global sorter's depth survives animation"
+                );
+                assert_eq!(*current.get::<Visibility>().unwrap(), Visibility::Visible);
+            }
+            world.entity_mut(entity).despawn();
+        }
     }
 
     #[test]

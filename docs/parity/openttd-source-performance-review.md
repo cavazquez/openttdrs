@@ -478,6 +478,15 @@ coinciden 3733 parents globales y difieren 76 proxies locales. Ni paridad
 general del renderer ni 30 FPS están resueltos. Continúa la animación
 vanilla de aeropuertos y la atribución de esas diferencias.
 
+La [etapa 57](performance-implementation.md#etapa-57--animación-aeroportuaria-sin-reconstruir-chunks-f17f28)
+separa avisos de radar/manga vanilla y conserva sus overlays vivos. Otros
+cambios y GRFs activos custom siguen por el camino general. Estados core
+muestreados en 200 ticks y los avisos completos coinciden tras reclasificar;
+seis zooms congelados conservan raster, stream y los inputs capturados.
+ABBA fijo mejora 42,51 → 39,90 ms (~25,06 FPS); la traza reduce 161195 →
+122637 bajas de visuales. Pan junto al cambio de zoom aún tiene picos
+~247 ms. F17, estabilidad general y el presupuesto por frame siguen abiertos.
+
 ### F18 — El sort ya tiene caché y no es un Z plano
 
 P2 · Render · Evidencia: **Fuente** · Alcance estimado: medio.
@@ -687,6 +696,13 @@ P3 · Mapa/economía · Evidencia: **Fuente** · Alcance estimado: corto.
 
 Fuentes: [Rust: `map/tile_loop.rs`, L174](https://github.com/cavazquez/openttdrs/blob/8994755781092e2e7a6baf463a2126d9125fbebb/crates/openttdrs-core/src/map/tile_loop.rs#L174);
 [OpenTTD: `src/landscape.cpp`, L795](https://github.com/OpenTTD/OpenTTD/blob/14ec60f248547d4d062a1160f0fc26d742319888/src/landscape.cpp#L795).
+
+La revisión aeroportuaria de la etapa 57 encuentra una excepción pendiente:
+`step_airport_tiles` aproxima todo a 3 ticks, mientras las especificaciones
+vanilla fijadas de OpenTTD usan radar 12 frames cada 4 ticks y manga 4 cada
+2. La separación de avisos conserva esa regla anterior para medir el ahorro
+sin cambiar la simulación. F28 mantiene abierto corregir la cadencia con
+oracle por tick, sin afectar NewGRF, RNG ni las otras fases.
 
 ### F29 — Preview y ejecución deben compartir reglas sin efectos secundarios
 

@@ -32,8 +32,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         state.step();
         let tick = state.tick.get();
-        let causes: [(&str, &[TileCoord]); 4] = [
+        let causes: [(&str, &[TileCoord]); 5] = [
             ("industry", &state.runtime.industry_tile_dirty),
+            (
+                "airport_animation",
+                &state.runtime.airport_tile_animation_dirty,
+            ),
             ("landscape", &state.runtime.landscape_tile_dirty),
             ("signal", &state.runtime.signal_tile_dirty),
             ("reservation", &state.runtime.reservation_tile_dirty),

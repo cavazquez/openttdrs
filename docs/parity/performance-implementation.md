@@ -4275,3 +4275,96 @@ Se cierra únicamente el subcaso de presencia del detalle al cruzar zoom.
 F08/F17/F31, estabilidad tras redibujar, 30 FPS y jugabilidad continúan
 abiertos. Sigue separar la animación vanilla de aeropuertos del remapeo
 general, conservando otros cambios y callbacks NewGRF.
+
+## Etapa 57 — Animación aeroportuaria sin reconstruir chunks (F17/F28)
+
+Los radares y mangas vanilla ya tienen un overlay retenido que lee `m7`,
+actualiza sprite/ancla y conserva la profundidad asignada por el sorter.
+Sin embargo, cada frame de animación también pedía reconstruir su chunk.
+Ahora la fase original publica `airport_tile_animation_dirty`, separado de
+los avisos generales. El cliente aprovecha el overlay sólo con la pila
+canónica estática `ogfx1_base.grf` (GRFID ff4f5401, sin parámetros) o vacía.
+Una entrada custom activa o parámetros conservan el remap; una entrada
+inactiva no lo necesita. Industria, paisaje, señales, reservas visibles,
+construcción/demolición y otras causas en la misma tesela o un vecino siguen
+solicitando su reconstrucción. No se agregan componentes, recursos ni
+parámetros de query ECS.
+
+Oracle de fuente OpenTTD 15.3, pin 14ec60f2: station_cmd.cpp dibuja la
+secuencia del frame vivo; AnimateAirportTile delega en AnimationBase, que
+marca dirty sólo cuando cambia el frame. Las tablas airporttiles.h tienen
+12 frames de radar a velocidad 2 y 4 de manga a velocidad 1.
+**Se conserva la cadencia actual del port, un avance cada 3 ticks.**
+El original usa 4/2 ticks: es una divergencia independiente abierta en F28,
+no corregida ni certificada por esta optimización.
+
+La regresión del núcleo cubre step normal/perfilado, `m7`, delta transitorio,
+RNG y serialización: el aviso no entra en el JSON del runtime; flows/jobs
+sí conservan su contrato persistido. La regresión cliente cubre las causas
+concurrentes y fallback NewGRF. Otra prueba ECS recorre 12 valores de `m7`
+en radar, manga y torre legacy; comprueba sprite, ancla, entidad estable,
+visibilidad y Z del sorter. Pasan **3036 tests core/6 ignorados**, **1688
+cliente/2 ignorados**, 36 pruebas cliente aeroportuarias y ambos Clippy
+estrictos. Los dos primeros intentos de suite cliente fallaron por espacio
+(OS 28 en /home, cuota OS 122 en /tmp); se conserva su salida. Cinco cachés
+core inactivas quedan comprimidas con todos sus bytes, modos y mtimes
+verificados antes de recuperar espacio. La misma suite pasa después sin
+modificar fuentes.
+
+La sonda headless pública `scripts/profile_tile_state_hashes.rs` compara
+11 hashes canónicos muestreados durante 200 ticks y todos coinciden con 56.
+Son hashes del estado persistido del núcleo, no replay de callbacks cliente.
+La sonda de causas conserva los 1850 avisos y todos sus campos al normalizar
+sólo la clasificación nueva: 268 Airport pasan a `airport_animation`, los
+27 Industry continúan como generales; señales, paisaje y reservas coinciden.
+[Estados muestreados](evidence/retained-airport-animation-state-hashes-20261002.csv)
+y [causas](evidence/retained-airport-animation-dirty-causes-20261002.csv).
+
+Ocho capturas nuevas, reutilizando las seis referencias inmutables de 56,
+conservan PNG y stream geométrico completo en 0,25/0,5/1/2/4/8, pausadas
+en tick 3703074, 1280×720, centro 128,128, frame 180, CLEAN=0.
+La petición adicional 0,125 se limita al mínimo real de cámara 0,25; no
+acredita un séptimo zoom nativo. En 0,5/2 coinciden todos los inputs Main,
+265/368 imágenes CPU y ambas máscaras. Son capturas congeladas; la
+regresión ECS cubre el avance de frames. No se reabre como verde el gate
+general de reconstrucción que falló en 56.
+[Raster y contratos](evidence/retained-airport-animation-raster-20261002.csv).
+
+ABBA Kale activa/GPU real, escala 2, 40 frames/run, básico y Main en ambas
+versiones, sin compilaciones concurrentes. Fijo warmup 120:
+**42,5100 → 39,8969 ms**, **23,524 → 25,065 FPS**; 73/80 → 70/80 frames
+sobre 33,33 ms. Remap 2,5774 → 2,0812 ms; simulación 14,2237 → 14,2053.
+El primer control cubre 3703194–3703233, los otros 3703193–3703232.
+Pan warmup 30, junto a la transición de escala:
+**54,0063 → 50,7618 ms**, **18,516 → 19,700 FPS**, 79/80 → 80/80 fuera
+de presupuesto; pico 267,425 → 247,461 ms. Primer control un tick después
+que los otros, como en fijo. No se llama pan estabilizado ni éxito a 30 FPS.
+[Frames fijos](evidence/retained-airport-animation-steady-20261002.csv),
+[pan/transición](evidence/retained-airport-animation-pan-20261002.csv) y
+sus CSV de fases conservan los tiempos completos.
+
+La segunda ABBA fija confirma **42,3865 → 40,3266 ms**,
+23,592 → 24,798 FPS, 73/80 → 72/80 fuera de presupuesto.
+El pan con warmup 120, después de finalizar la transición, registra
+**44,9776 → 42,9170 ms**, 22,233 → 23,301 FPS, 78/80 → 78/80 y
+pico 64,396 → 63,512 ms. Separa la ventana estable de la transición;
+ambas mantienen el objetivo de 30 FPS por frame abierto.
+[Confirmación fija](evidence/retained-airport-animation-confirm-steady-20261002.csv)
+y [pan estabilizado](evidence/retained-airport-animation-confirm-pan-settled-20261002.csv).
+
+Con la sonda propia de remap, en la misma ventana fija de 40 ticks bajan
+161195 → 122637 bajas de visuales; la cola propia suma 113,605 → 82,487 ms.
+Continúan 40 remapeos: hay otras causas por tick. Pan registra 201592 →
+159709 bajas y 131,678 → 108,340 ms de aplicación en 39 remapeos. Es
+atribución instrumentada; preparación comienza tras resolver el viewport y
+las bajas cuentan sólo los estáticos directos, no todo el trabajo de ECS.
+[Cola propia](evidence/retained-airport-animation-trace-commands-20261002.csv).
+
+Release aislada: 79,264 s de pared, recompilando core/net/cliente.
+Core e049d933; cliente readonly 187373048 bytes, SHA
+b44751794298419b9c6e54a379810242bf4f073114f5586cc27817e63c0ec822.
+Fuentes fijadas, binarios, drivers, fallos y decisiones:
+target/performance/retained-airport-animation-20261002.
+La ganancia se limita a la clasificación y representación retenida vanilla.
+Cadencia nativa, otros remaps, estabilidad general del compositor, 37 ticks/s,
+30 FPS por frame y jugabilidad completa siguen abiertos.

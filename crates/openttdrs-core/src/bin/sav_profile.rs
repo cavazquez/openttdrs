@@ -68,10 +68,12 @@ struct CargoLoadSiteSummary {
 #[derive(Default)]
 struct VisualDirtySummary {
     max_industry: usize,
+    max_airport_animation: usize,
     max_landscape: usize,
     max_signal: usize,
     max_reservation: usize,
     last_industry: usize,
+    last_airport_animation: usize,
     last_landscape: usize,
     last_signal: usize,
     last_reservation: usize,
@@ -80,14 +82,17 @@ struct VisualDirtySummary {
 impl VisualDirtySummary {
     fn observe(&mut self, state: &GameState) {
         let industry = state.runtime.industry_tile_dirty.len();
+        let airport_animation = state.runtime.airport_tile_animation_dirty.len();
         let landscape = state.runtime.landscape_tile_dirty.len();
         let signal = state.runtime.signal_tile_dirty.len();
         let reservation = state.runtime.reservation_tile_dirty.len();
         self.max_industry = self.max_industry.max(industry);
+        self.max_airport_animation = self.max_airport_animation.max(airport_animation);
         self.max_landscape = self.max_landscape.max(landscape);
         self.max_signal = self.max_signal.max(signal);
         self.max_reservation = self.max_reservation.max(reservation);
         self.last_industry = industry;
+        self.last_airport_animation = airport_animation;
         self.last_landscape = landscape;
         self.last_signal = signal;
         self.last_reservation = reservation;
@@ -503,9 +508,11 @@ fn run(args: &Args) -> Result<(), String> {
         state.runtime.terminal_spatial_index.full_map_scans(),
     );
     println!(
-        "\nvisual dirty (máximo / último): industria {} / {}, paisaje {} / {}, señales {} / {}, reservas {} / {}",
+        "\nvisual dirty (máximo / último): industria {} / {}, animación airport {} / {}, paisaje {} / {}, señales {} / {}, reservas {} / {}",
         visual_dirty.max_industry,
         visual_dirty.last_industry,
+        visual_dirty.max_airport_animation,
+        visual_dirty.last_airport_animation,
         visual_dirty.max_landscape,
         visual_dirty.last_landscape,
         visual_dirty.max_signal,

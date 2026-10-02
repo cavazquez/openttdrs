@@ -585,8 +585,8 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         .industry_tile_dirty
         .sort_by_key(|coord| (coord.x, coord.y));
     state.runtime.industry_tile_dirty.dedup();
-    let airport_dirty = crate::map::step_airport_tiles(&mut state.map, t, &state.stations);
-    state.runtime.industry_tile_dirty.extend(airport_dirty);
+    state.runtime.airport_tile_animation_dirty =
+        crate::map::step_airport_tiles(&mut state.map, t, &state.stations);
     let mut airport_sounds = Vec::new();
     let newgrf_airport_dirty =
         crate::map::step_newgrf_airport_tiles_with_towns_and_airport_catalog_and_sounds_with_snow_line_and_overrides(
@@ -1757,6 +1757,46 @@ mod tests {
             assert!(state.runtime.house_lift_animation_dirty.is_empty());
             assert!(state.runtime.landscape_tile_dirty.contains(&newgrf_coord));
             assert_eq!(state.random, before_random);
+        }
+    }
+
+    #[test]
+    fn vanilla_airport_frames_keep_a_distinct_tick_delta() {
+        for profiled in [false, true] {
+            let mut state = GameState::new(4, 4);
+            let pos = TileCoord::new(2, 2);
+            let mut tile = state.map.get(pos).unwrap();
+            tile.kind = crate::TileKind::Airport;
+            tile.m5 = 31;
+            state.map.set_tile(pos, tile).unwrap();
+            let mut station = crate::Station::new_with_kind(pos, crate::StopKind::Airport);
+            station.ottd_station_id = Some(77);
+            station.airport_tiles.push(pos);
+            state.stations.push(station);
+            state.tick = crate::GameTick::new(3);
+            let before_random = state.random;
+            let before_json = serde_json::to_value(&state.runtime).unwrap();
+            if profiled {
+                let _ = step_profiled(&mut state);
+            } else {
+                step(&mut state);
+            }
+            assert_eq!(state.map.get(pos).unwrap().m7, 1);
+            assert_eq!(state.runtime.airport_tile_animation_dirty, [pos]);
+            assert!(!state.runtime.industry_tile_dirty.contains(&pos));
+            assert_eq!(state.random, before_random);
+            assert_eq!(serde_json::to_value(&state.runtime).unwrap(), before_json);
+            if profiled {
+                let _ = step_profiled(&mut state);
+            } else {
+                step(&mut state);
+            }
+            assert_eq!(state.map.get(pos).unwrap().m7, 1);
+            assert!(state.runtime.airport_tile_animation_dirty.is_empty());
+            assert_eq!(state.random, before_random);
+            state.runtime.airport_tile_animation_dirty.push(pos);
+            state.runtime.clear_transient();
+            assert!(state.runtime.airport_tile_animation_dirty.is_empty());
         }
     }
 

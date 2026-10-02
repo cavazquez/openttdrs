@@ -291,6 +291,15 @@ reconstruir, pero el gate general falla en cuatro zooms por raster o stream;
 proxies y inputs Main siguen abiertos. Continúa la animación retenida de
 aeropuertos, además del coste de vidrio y de la transición.
 
+La [etapa 57](performance-implementation.md#etapa-57--animación-aeroportuaria-sin-reconstruir-chunks-f17f28)
+evita reconstruir chunks por cada frame de radar/manga con la pila vanilla;
+custom GRFs y otras causas mantienen el camino general. Pasan core/cliente,
+estados core muestreados en 200 ticks y seis zooms congelados. ABBA fijo
+42,51 → 39,90 ms (~25,06 FPS); pan/transición 54,01 → 50,76 ms, aún con
+pico 247,46 y 80/80 frames fuera de presupuesto. La cola propia muestra
+menos bajas de visuales. La cadencia aeroportuaria 3 ticks del port frente
+a radar 4/manga 2 nativos queda abierta, junto a los 30 FPS por frame.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

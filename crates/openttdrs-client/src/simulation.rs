@@ -121,6 +121,16 @@ fn step_sim(
     vehicle_index.rebuild_state(&mut sim.state);
 }
 
+fn retained_airport_animation_allowed(stack: &[openttdrs_core::NewGrfEntry]) -> bool {
+    stack.iter().all(|entry| {
+        !entry.enabled
+            || (entry.is_static
+                && entry.grfid == 0xff4f_5401
+                && entry.filename == "ogfx1_base.grf"
+                && entry.params.is_empty())
+    })
+}
+
 fn flag_map_tile_dirty_remap(
     sim: Res<SimWorld>,
     prefs: Res<ClientPreferences>,
@@ -143,6 +153,17 @@ fn flag_map_tile_dirty_remap(
         .chain(sim.state.runtime.signal_tile_dirty.iter())
     {
         tiles.push((coord.x, coord.y));
+    }
+    // Only the original radar/wind frame phase uses this distinct notice.
+    // Active custom GRFs can depend on m7 outside the retained vanilla layer.
+    if !retained_airport_animation_allowed(&sim.state.newgrf_stack) {
+        tiles.extend(
+            sim.state
+                .runtime
+                .airport_tile_animation_dirty
+                .iter()
+                .map(|coord| (coord.x, coord.y)),
+        );
     }
     // Las reservas sólo alteran sprites cuando está activo el overlay PBS.
     // Evitar el remap cuando está oculto corta una fuente de trabajo por tick
@@ -495,6 +516,78 @@ mod tests {
             let pending = app.world().resource::<RemapMapVisualsPending>();
             assert_eq!(pending.is_pending(), cause != 0, "cause={cause}");
             assert_eq!(pending.labels_dirty_requested(), matches!(cause, 5 | 6));
+        }
+    }
+
+    #[test]
+    fn airport_frames_keep_custom_grfs_and_other_redraws_on_the_general_path() {
+        use openttdrs_core::newgrf_config::{NewGrfEntry, default_vanilla_stack};
+
+        let mut stack = default_vanilla_stack();
+        assert!(super::retained_airport_animation_allowed(&stack));
+        assert!(super::retained_airport_animation_allowed(&[]));
+        stack.push(NewGrfEntry::new("custom.grf", 0x1234));
+        assert!(!super::retained_airport_animation_allowed(&stack));
+        stack[1].enabled = false;
+        assert!(super::retained_airport_animation_allowed(&stack));
+        stack[0].params.push(1);
+        assert!(!super::retained_airport_animation_allowed(&stack));
+
+        let coord = TileCoord::new(4, 4);
+        for custom in [false, true] {
+            for cause in 0..8 {
+                let mut app = App::new();
+                let mut sim = SimWorld::default();
+                sim.state.runtime.clear_transient();
+                sim.state.runtime.airport_tile_animation_dirty.push(coord);
+                if custom {
+                    sim.state
+                        .newgrf_stack
+                        .push(NewGrfEntry::new("custom.grf", 0x1234));
+                }
+                match cause {
+                    0 => {}
+                    1 => sim.state.runtime.landscape_tile_dirty.push(coord),
+                    2 => sim.state.runtime.industry_tile_dirty.push(coord),
+                    3 => sim.state.runtime.signal_tile_dirty.push(coord),
+                    4 => sim.state.runtime.reservation_tile_dirty.push(coord),
+                    5 => sim
+                        .state
+                        .runtime
+                        .pending_sim_events
+                        .push(SimEvent::Construction {
+                            kind: ConstructionKind::Other,
+                            at: coord,
+                        }),
+                    6 => sim
+                        .state
+                        .runtime
+                        .pending_sim_events
+                        .push(SimEvent::Demolition { at: coord }),
+                    7 => sim
+                        .state
+                        .runtime
+                        .landscape_tile_dirty
+                        .push(TileCoord::new(5, 4)),
+                    _ => unreachable!(),
+                }
+                app.insert_resource(sim);
+                app.insert_resource(ClientPreferences {
+                    show_pbs_reservations: true,
+                    ..ClientPreferences::default()
+                });
+                app.init_resource::<RemapMapVisualsPending>();
+                app.world_mut()
+                    .run_system_once(flag_map_tile_dirty_remap)
+                    .unwrap();
+                let pending = app.world().resource::<RemapMapVisualsPending>();
+                assert_eq!(
+                    pending.is_pending(),
+                    custom || cause != 0,
+                    "custom={custom}, cause={cause}"
+                );
+                assert_eq!(pending.labels_dirty_requested(), matches!(cause, 5 | 6));
+            }
         }
     }
 }

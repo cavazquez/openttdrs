@@ -1287,6 +1287,16 @@ fn viewport_sort_trace_signature(
     hasher.finish()
 }
 
+// Commands are applied in this order, which also determines entity recycling
+// and dense-table swaps. A fresh HashMap seed must not choose that order.
+fn retired_segment_proxies_in_order(
+    proxies: HashMap<(Entity, i64), Entity>,
+) -> impl Iterator<Item = Entity> {
+    let mut retired: Vec<_> = proxies.into_iter().collect();
+    retired.sort_unstable_by_key(|&((source, band), _)| (band, source.to_bits()));
+    retired.into_iter().map(|(_, entity)| entity)
+}
+
 /// Aplica el ordenador de OpenTTD a los parents del viewport actual.
 ///
 /// La lista nativa es local a cada `ViewportDoDraw`. El renderer puede retener
@@ -1891,7 +1901,7 @@ pub(crate) fn sort_viewport_sortable_parents(
     // A source represented entirely by local draw-band proxies has no global
     // slot, but still contributes visible sprites to each native band.
     if input.is_empty() && segment_proxy_candidates.is_empty() {
-        for proxy_entity in existing_segment_proxies.into_values() {
+        for proxy_entity in retired_segment_proxies_in_order(existing_segment_proxies) {
             if let Ok((_, _, _, mut visibility, _, _, _, _)) = segment_proxies.get_mut(proxy_entity)
             {
                 visibility.set_if_neq(Visibility::Hidden);
@@ -2072,7 +2082,7 @@ pub(crate) fn sort_viewport_sortable_parents(
         &local_proxy_trace,
         &mut previous_trace_signature,
     );
-    for proxy_entity in existing_segment_proxies.into_values() {
+    for proxy_entity in retired_segment_proxies_in_order(existing_segment_proxies) {
         // Only retired proxies need hiding before deferred despawn. Reused
         // proxies keep their final visibility without a temporary dirty flag.
         if let Ok((_, _, _, mut visibility, _, _, _, _)) = segment_proxies.get_mut(proxy_entity) {
@@ -2197,6 +2207,84 @@ mod tests {
             }),
         ));
         world
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn segment_proxy_retirement_keeps_stable_band_source_order() {
+        #[derive(Resource, Default)]
+        struct Retired(Vec<Entity>);
+
+        for keep_ordinary_parent in [false, true] {
+            for _ in 0..8 {
+                let mut world = viewport_scope_test_world(128, 128);
+                world.init_resource::<Retired>();
+                let sources: Vec<_> = (0..3).map(|_| world.spawn_empty().id()).collect();
+                let mut expected = Vec::new();
+                // Creation order differs from draw-band order. Neither that
+                // order nor a fresh HashMap seed may choose the retirement order.
+                for band in [8, 1, 6, 3, 9, 0, 7, 2, 5, 4] {
+                    for &source in sources.iter().rev() {
+                        let entity = world
+                            .spawn((
+                                ViewportSortableSegmentProxy {
+                                    source_child: source,
+                                    band,
+                                },
+                                ViewportSortableParent {
+                                    sprite_id: 5473,
+                                    bounds: ParentSpriteBounds::new(0, 0, 0, 15, 15, 31),
+                                    insertion_key: viewport_insertion_key(5, 5, 0),
+                                    source_depth: 2.0,
+                                },
+                                Sprite::sized(Vec2::ONE),
+                                Transform::from_xyz(0.0, 0.0, 2.0),
+                                Anchor::CENTER,
+                                Visibility::Inherited,
+                            ))
+                            .id();
+                        expected.push(((band, source.to_bits()), entity));
+                    }
+                }
+                if keep_ordinary_parent {
+                    world.spawn((
+                        ViewportSortableParent {
+                            sprite_id: 1422,
+                            bounds: ParentSpriteBounds::new(0, 0, 0, 15, 15, 31),
+                            insertion_key: viewport_insertion_key(4, 4, 0),
+                            source_depth: 3.0,
+                        },
+                        Sprite::sized(Vec2::ONE),
+                        Transform::from_xyz(0.0, 0.0, 3.0),
+                    ));
+                }
+                expected.sort_unstable_by_key(|&(key, _)| key);
+                let expected: Vec<_> = expected.into_iter().map(|(_, entity)| entity).collect();
+                let mut schedule = Schedule::default();
+                schedule.add_systems(
+                    (
+                        sort_viewport_sortable_parents,
+                        |mut removed: RemovedComponents<ViewportSortableSegmentProxy>,
+                         mut retired: ResMut<Retired>| {
+                            retired.0.extend(removed.read());
+                        },
+                    )
+                        .chain(),
+                );
+                schedule.run(&mut world);
+                assert_eq!(world.resource::<Retired>().0, expected);
+                assert_eq!(
+                    world
+                        .query::<&ViewportSortableSegmentProxy>()
+                        .iter(&world)
+                        .count(),
+                    0
+                );
+                // No retirement is replayed in an unchanged scene.
+                schedule.run(&mut world);
+                assert_eq!(world.resource::<Retired>().0, expected);
+            }
+        }
     }
 
     #[test]

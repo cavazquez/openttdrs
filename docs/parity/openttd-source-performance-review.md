@@ -423,6 +423,12 @@ evita flags falsos de Sprite ordinarios reutilizados, con comparación raw y
 reparación de cambios externos. Dos tandas no acreditan ganancia sostenida de
 FPS; slices conservan el refresco anterior y el resto de F18 sigue abierto.
 
+La [etapa 40](performance-implementation.md#etapa-40--orden-estable-al-retirar-proxies-segmentados-f08f18)
+fija el orden del CommandQueue al retirar sobrantes por banda/fuente. La
+regresión del sistema falla antes y pasa en ambas ramas; seis zooms y tres
+parejas Out2x son exactos. No prueba la causa de la variación 39, no elimina
+los empates f32 ni acredita mejora de FPS. F08/F18 permanecen abiertos.
+
 ### F19 — El guardado bloquea UI y codifica dos veces el JSON
 
 P2 · Persistencia · Evidencia: **Fuente** · Alcance estimado: medio.

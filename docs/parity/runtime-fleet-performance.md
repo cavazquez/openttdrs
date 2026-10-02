@@ -194,6 +194,11 @@ por sprite coinciden, el orden de máscaras cambia y F08 sigue abierto.
 La [etapa 39](performance-implementation.md#etapa-39--lookup-indexado-del-vehículo-para-efectos-visuales-f04f31)
 contiene la evidencia completa y los límites de importación/cadencia.
 
+La etapa 40 fija el orden de retiro de proxies segmentados; una regresión
+real cubre las dos ramas y la repetición estable. Seis zooms y tres parejas
+Out2x conservan imágenes/entradas/máscaras exactas. No se mide FPS activo ni
+se da por resuelta la variación 39: permanecen las cifras y límites de la 39.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

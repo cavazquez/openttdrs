@@ -3075,3 +3075,72 @@ Se cierra sólo el lookup indexado del contexto visual. F04 completo, caché
 CB10/cadencia F07, compositor F08, atribución F31, importación/paridad nativa
 general y 30 FPS permanecen abiertos. El fallo Out2x inicial no se oculta ni
 se acepta ampliando tolerancias.
+
+## Etapa 40 — Orden estable al retirar proxies segmentados (F08/F18)
+
+Las dos salidas del sorter retiraban los proxies sobrantes mediante
+HashMap::into_values. Una semilla nueva de HashMap podía cambiar el orden
+del CommandQueue, el reciclado de entidades y los swaps de tablas densas.
+Ahora los retiros se ordenan por banda y bits de fuente. Sólo se ordena el
+conjunto sobrante, conservando el lookup, creación, sort global/local,
+campos de imagen, profundidades y ocultación antes del despawn diferido.
+Una escena sin retiros no obtiene una nueva lista de dibujo.
+
+La regresión usa el sistema real, 30 proxies creados en orden mezclado para
+tres fuentes/diez bandas, y registra RemovedComponents. Exige una secuencia
+estable, cero proxies restantes y que otro frame no repita retiros. Ejecuta
+ocho mundos para cada rama: salida sin parents ni candidatos y salida con
+un parent ordinario. Antes falla con una secuencia mezclada; después pasan
+las 31 pruebas de viewport, incluida ocultación previa/retorno por pan de
+las etapas 36–38. Fuentes y logs anteriores/posteriores quedan preservados.
+El primer comando de test usó --exact con un nombre incompleto y ejecutó
+cero pruebas; el rerun con filtro correcto reproduce realmente el fallo.
+
+Fuente nativa: ViewportDoDraw/ViewportDrawParentSprites del viewport.cpp
+prístino de OpenTTD 14ec60f248547d4d062a1160f0fc26d742319888 conservan
+secuencias explícitas de parents/children. La sonda geométrica de la etapa 37
+sigue acreditando seis bandas, sin añadir aquí una sonda nativa nueva.
+OpenTTD no tiene estos proxies ECS ni el mismo allocator; el desempate del
+retiro es una decisión interna del port para hacer reproducible su ciclo de
+vida, no una equivalencia de IDs o de reciclado con el C++.
+
+Kale congelada, tick 3703074, centro 128,128, 1280×720, clean=0,
+settle=180 y colector apagado en ambos: los doce PNG de seis zooms son
+exactos, cero píxeles/bloques 4×4 distintos, y streams completos de sort
+idénticos bajo renombrado biyectivo de entidades. In2x/Out2x conservan todas
+las entradas ordenadas y referencias, bytes CPU de 272/384 imágenes y ambas
+máscaras. Dos nuevas parejas Out2x de los mismos binarios son también
+exactas. Se conservan tres muestras, sin dispensar campos, permutar filas
+ni ampliar tolerancias. Traces gzip y bytes CPU se verifican antes de deduplicar.
+[Seis parejas](evidence/segment-proxy-retirement-order-raster-20261001.csv),
+[tres parejas Out2x](evidence/segment-proxy-retirement-order-out2-repeats-20261001.csv).
+
+Estas muestras no demuestran que el retiro aleatorio causara los 406 píxeles
+de la etapa 39, ni eliminan el contrajemplo de proyección f32 de la etapa 31.
+El mismo binario 39 ya produjo capturas distintas: su fallo original y las
+variaciones históricas permanecen registrados y abiertos. Hace falta aislar
+orden efectivo GPU, cuantización, sampling y comparación nativa sincronizada.
+La igualdad de una captura no certifica importación SAV ni paridad general.
+
+Control de la etapa 39, SHA256
+607b460e69600c2d56ec18c2f477d954752e2054f633a55f05b4af66838ba498;
+candidato b999a0b9f1641329fad963dc217ff01a519f7bd2f9ccabbe571e6c8a1b605e6a.
+Ejecutables readonly en /tmp, fuentes exactas en
+target/performance/segment-proxy-retirement-order-20261001.
+Release incremental 54,29 s total / unidad cliente 54,13; core real del cliente
+6240adc8 fresh e idéntico, HTML/JSON preservados. No hay desglose
+frontend/codegen/link ni mejora de compilación atribuida. No se mide FPS
+activo en esta etapa; siguen las cifras de la 39 (~24 fijo/~21,4 pan).
+
+Validación: 3.035 core/seis ignorados, 1.681 cliente/dos ignorados,
+31 viewport, Clippy de ambos/todos los targets, formato, tres self-tests del
+comparador, frescura de docs y diff correctos. El primer cliente completo
+falló en dos copias por cuota de /tmp (1.679 pasaron); se preserva ese log.
+Repetido completo con temporales propios en el repositorio: 1.681/0 fallos.
+Para liberar espacio de trabajo se archiva exclusivamente una caché cliente
+inactiva del 26/09: 1.342 archivos con SHA256/tamaño verificados antes de
+retirar cada archivo original. El tar de 1.001.250.840 bytes y manifiesto en
+/tmp permiten restauración; no se modifica una caché activa ni datos de usuario.
+
+Se cierra sólo el orden de retiro de proxies segmentados. F08/F18 completos,
+empates y variaciones históricas, paridad nativa, cadencia y 30 FPS siguen abiertos.

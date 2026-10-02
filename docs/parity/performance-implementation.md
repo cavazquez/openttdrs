@@ -2832,3 +2832,111 @@ formato, tres self-tests del comparador, frescura de docs y diff sin errores.
 Se cierra únicamente el sub-issue del parent segmentado aislado y su salida
 vacía. F08/F18/F31 completos, empates f32, variaciones históricas,
 paridad nativa general, cadencia y 30 FPS siguen abiertos.
+
+## Etapa 38 — No invalidar sprites iguales de proxies (F18/F31)
+
+El sorter reescribía Sprite en cada proxy reutilizado, incluso con valores
+idénticos. Bevy 0.19.1, calculate_bounds_2d, filtra actualizaciones por
+Changed<Sprite/Anchor>; el compositor también observa esos cambios. Una
+regresión forzando otro sort sin mutaciones reproduce seis Sprite modificados.
+Ahora el proxy sólo recibe la asignación cuando difiere algún campo de la
+imagen ordinaria: handle, atlas/layout/índice, variante y componentes raw del
+color, flips, tamaño, recorte o modo de escala. Los floats se comparan por
+bits, sin convertir espacios de color. Auto y los seis modos Scale quedan
+cubiertos; Sliced/Tiled conservan su refresco anterior.
+
+La regresión del sistema real exige cero flags de pose/ancla/visibilidad/Sprite
+estables y sigue reparando ediciones externas de color, flips, tamaño, recorte,
+atlas y modo, junto a la escala/ancla/visibilidad de la etapa 36. Dos pruebas
+añaden los diez espacios de color y sus cuatro componentes, -0, NaN idéntico,
+todos los campos de imagen y el refresco conservador de slices. Pasan las
+30 pruebas de viewport. Se conserva el fallo antes de la corrección.
+El cambio no altera el sort, geometría de bandas, creación de entidades,
+queries, EPSILON ni desempates; el contrato nativo de parents/children
+verificado en la etapa 37 permanece acotado a aquella sonda geométrica.
+
+GPU real, Kale congelada en tick 3703074, centro 128,128, 1280×720,
+clean=0, settle=180 y sin colector: los doce PNG de seis zooms son exactos,
+cero píxeles/bloques 4×4 distintos y streams completos de sort idénticos bajo
+renombrado biyectivo de identidades. In2x/Out2x conservan todas las entradas
+ordenadas y referencias, bytes CPU de 272/384 imágenes y ambas máscaras.
+No se cambia tolerancia ni se admite permutar filas por multiconjuntos.
+[Seis parejas](evidence/viewport-proxy-sprite-flags-raster-20261001.csv).
+
+Dos tandas ABBA de Kale activa, GPU, escala 2, 40 muestras/run, colector
+básico y detalle Main activos en ambas versiones. Fijo warmup 120 y pan 30;
+sin perf, trazas ni compilaciones concurrentes. Se conservan 640 muestras
+básicas y 640 detalladas, incluidos el pico y el control desplazado.
+
+Primera tanda fija: frame antes 42,7915 / 43,1742 ms, después
+42,6175 / 44,5804; FPS 23,369 / 23,162 → 23,465 / 22,431.
+p95 56,5889 / 56,6507 → 55,6857 / 59,4778; máximos/p99
+59,3970 / 59,6249 → 57,8316 / 82,2200. TPS
+23,368 / 23,164 → 23,462 / 22,403. Todos cubren 3703193–3703232;
+75/80 frames sobre 33,33 ms en ambas versiones. Combinado:
+frame 42,9829 → 43,5990; sort 4,2565 → 4,4107; glass
+2,5458 → 2,5370; PostUpdate 6,9108 → 7,1053 ms. El run del
+pico aumenta también simulación y otras fases; no se atribuye sólo al guard.
+[160 muestras](evidence/viewport-proxy-sprite-flags-steady-20261001.csv),
+[160 registros por schedule](evidence/viewport-proxy-sprite-flags-steady-phases-20261001.csv).
+
+Primera tanda pan: frame 48,1571 / 47,9608 → 48,3807 / 48,7214;
+FPS 20,765 / 20,850 → 20,669 / 20,525. p95
+60,1434 / 62,7014 → 60,8964 / 60,3520; máximos/p99
+129,0670 / 126,6408 → 129,6761 / 133,1939. TPS
+21,700 / 21,766 → 21,600 / 21,480. Todos cubren 3703103–3703142
+y exceden el presupuesto. Combinado: frame 48,0589 → 48,5511;
+sort 4,0182 → 4,1899; glass 2,4524 → 2,4335; PostUpdate
+8,0183 → 8,0487. También aumenta simulación, cuyo código queda idéntico.
+[160 muestras](evidence/viewport-proxy-sprite-flags-pan-20261001.csv),
+[160 por schedule](evidence/viewport-proxy-sprite-flags-pan-phases-20261001.csv).
+
+La repetición fija da frame 42,4545 / 43,2157 → 42,8006 / 43,0567;
+FPS 23,555 / 23,140 → 23,364 / 23,225. p95
+55,7518 / 57,4178 → 56,1107 / 57,1153; máximos/p99
+59,0712 / 59,5159 → 61,7447 / 57,9602. TPS
+23,547 / 23,040 → 23,358 / 23,245. El control 2 cubre
+3703194–3703233, los otros 3703193–3703232; no se declara el mismo
+estado activo en ese run. Hay 74/80 frames sobre presupuesto por versión.
+Combinado: frame 42,8351 → 42,9286; sort 4,2791 → 4,3840;
+glass 2,5425 → 2,4574; PostUpdate 6,9254 → 6,8344.
+[160 muestras de repetición](evidence/viewport-proxy-sprite-flags-repeat-steady-20261001.csv),
+[160 por schedule](evidence/viewport-proxy-sprite-flags-repeat-steady-phases-20261001.csv).
+
+Repetición pan: frame 48,0518 / 48,3255 → 48,2454 / 48,2075;
+FPS 20,811 / 20,693 → 20,727 / 20,744. p95
+60,4959 / 61,1307 → 60,8058 / 60,4868; máximos/p99
+129,0129 / 128,3920 → 129,6018 / 128,1121. TPS
+21,751 / 21,611 → 21,664 / 21,664. Todos cubren 3703103–3703142;
+80/80 frames por versión superan 33,33 ms. Combinado: frame
+48,1887 → 48,2265; sort 4,0537 → 4,1397; glass
+2,4326 → 2,3896; PostUpdate 8,0340 → 7,9891 ms.
+[160 muestras de repetición](evidence/viewport-proxy-sprite-flags-repeat-pan-20261001.csv),
+[160 por schedule](evidence/viewport-proxy-sprite-flags-repeat-pan-phases-20261001.csv).
+
+Las dos tandas conservan alineación frame/tick básico–detalle y suma de
+intervalos dentro de 0,001 ms. La primera y la repetición pan conservan
+exactamente las tuplas de frame/tick/conteos entre versiones. La repetición
+fija conserva el control desplazado sin descartarlo. Main mide el ciclo
+actual y frame_ms el intervalo previo: su resta por fila no mide GPU.
+El guard añade comparación al sort; sus medias aumentan 0,09–0,17 ms,
+mientras glass y PostUpdate bajan ligeramente en la repetición. Se retiene
+la reducción de invalidaciones probada, **sin acreditar ganancia sostenida
+de FPS ni una reducción uniforme de PostUpdate**. 30 FPS sigue pendiente.
+
+Control 01066a4d de la etapa 37 y candidato
+ce75b3217ed5d5d6544dca41cdc515c6ce22b55d08e6b3e605c45b52038f3d38
+son inmutables en target/performance/viewport-proxy-sprite-flags-20261001,
+con ejecutables en /tmp y fuentes exactas antes/después. Core real del cliente
+09d42185 sigue fresh e idéntico; no se atribuye otro replay de las 61 fases.
+Release incremental 53,89 s total / unidad cliente 53,73, dependencias frescas,
+HTML y JSON preservados, sin desglose frontend/codegen/link ni mejora de
+compilación atribuida. Traces gzip y bytes deduplicados se verifican antes
+de retirar copias redundantes.
+
+Validación: 3.035 tests core/seis ignorados y 1.679 del cliente/dos ignorados;
+30 regresiones de viewport, Clippy en todos los targets de ambos crates,
+formato, tres self-tests del comparador, frescura de docs y diff sin errores.
+Se cierra sólo el sub-issue de flags de Sprite ordinarios reutilizados.
+Slices, F08/F18/F31 completos, paridad nativa, empates f32, variaciones
+históricas, cadencia y 30 FPS siguen abiertos.

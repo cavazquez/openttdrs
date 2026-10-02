@@ -411,7 +411,11 @@ tiempos no acreditan ganancia clara de FPS. La
 corrige la desaparición de una fuente segmentada sin parents globales:
 regresión de seis bandas, sonda geométrica con las funciones nativas y
 conservación de Kale en seis zooms. No se cierra F18 ni el contrato nativo
-completo; las escrituras de Sprite reutilizado siguen pendientes.
+completo. La
+[etapa 38](performance-implementation.md#etapa-38--no-invalidar-sprites-iguales-de-proxies-f18f31)
+evita flags falsos de Sprite ordinarios reutilizados, con comparación raw y
+reparación de cambios externos. Dos tandas no acreditan ganancia sostenida de
+FPS; slices conservan el refresco anterior y el resto de F18 sigue abierto.
 
 ### F19 — El guardado bloquea UI y codifica dos veces el JSON
 

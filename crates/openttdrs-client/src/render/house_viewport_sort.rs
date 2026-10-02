@@ -12,6 +12,7 @@ use std::hash::{Hash, Hasher};
 use std::path::Path;
 
 use bevy::asset::{AssetEvent, AssetId};
+use bevy::color::ColorToComponents;
 use bevy::ecs::change_detection::{DetectChanges, Mut};
 use bevy::ecs::entity::{EntityHashMap, EntityHashSet};
 use bevy::ecs::message::{MessageCursor, Messages};
@@ -847,6 +848,55 @@ fn transforms_have_same_bits(left: &Transform, right: &Transform) -> bool {
     left.translation.to_array().map(f32::to_bits) == right.translation.to_array().map(f32::to_bits)
         && left.rotation.to_array().map(f32::to_bits) == right.rotation.to_array().map(f32::to_bits)
         && left.scale.to_array().map(f32::to_bits) == right.scale.to_array().map(f32::to_bits)
+}
+
+fn colors_have_same_bits(left: Color, right: Color) -> bool {
+    let components = |color: Color| {
+        let values = match color {
+            Color::Srgba(value) => value.to_f32_array(),
+            Color::LinearRgba(value) => value.to_f32_array(),
+            Color::Hsla(value) => value.to_f32_array(),
+            Color::Hsva(value) => value.to_f32_array(),
+            Color::Hwba(value) => value.to_f32_array(),
+            Color::Laba(value) => value.to_f32_array(),
+            Color::Lcha(value) => value.to_f32_array(),
+            Color::Oklaba(value) => value.to_f32_array(),
+            Color::Oklcha(value) => value.to_f32_array(),
+            Color::Xyza(value) => value.to_f32_array(),
+        };
+        values.map(f32::to_bits)
+    };
+    std::mem::discriminant(&left) == std::mem::discriminant(&right)
+        && components(left) == components(right)
+}
+
+/// Avoid false Sprite changes for ordinary map images. Slice modes retain
+/// their existing refresh path until their float parameters are also covered.
+fn segment_proxy_sprite_matches(left: &Sprite, right: &Sprite) -> bool {
+    let image_mode_matches = match (&left.image_mode, &right.image_mode) {
+        (SpriteImageMode::Auto, SpriteImageMode::Auto) => true,
+        (SpriteImageMode::Scale(left), SpriteImageMode::Scale(right)) => left == right,
+        _ => false,
+    };
+    let size_bits = |size: Option<Vec2>| size.map(|value| value.to_array().map(f32::to_bits));
+    let rect_bits = |rect: Option<Rect>| {
+        rect.map(|value| {
+            [
+                value.min.x.to_bits(),
+                value.min.y.to_bits(),
+                value.max.x.to_bits(),
+                value.max.y.to_bits(),
+            ]
+        })
+    };
+    image_mode_matches
+        && left.image == right.image
+        && left.texture_atlas == right.texture_atlas
+        && colors_have_same_bits(left.color, right.color)
+        && left.flip_x == right.flip_x
+        && left.flip_y == right.flip_y
+        && size_bits(left.custom_size) == size_bits(right.custom_size)
+        && rect_bits(left.rect) == rect_bits(right.rect)
 }
 
 /// Fila de diagnóstico para una copia que se ordena dentro de una banda
@@ -1985,7 +2035,9 @@ pub(crate) fn sort_viewport_sortable_parents(
                 if !transforms_have_same_bits(&transform, &proxy_transform) {
                     *transform = proxy_transform;
                 }
-                *sprite = proxy_candidate.sprite;
+                if !segment_proxy_sprite_matches(&sprite, &proxy_candidate.sprite) {
+                    *sprite = proxy_candidate.sprite;
+                }
                 if anchor.0.to_array().map(f32::to_bits)
                     != proxy_candidate.anchor.0.to_array().map(f32::to_bits)
                 {
@@ -2282,6 +2334,10 @@ mod tests {
             })
             .collect();
         assert!(expected.len() > 1, "source must span native draw bands");
+        let expected_sprites: EntityHashMap<_> = expected
+            .iter()
+            .map(|(entity, ..)| (*entity, world.get::<Sprite>(*entity).unwrap().clone()))
+            .collect();
         world.clear_trackers();
         world
             .entity_mut(source)
@@ -2305,17 +2361,26 @@ mod tests {
                 anchor.0.to_array().map(f32::to_bits)
             );
             assert_eq!(current.get::<Visibility>().unwrap(), visibility);
+            assert!(segment_proxy_sprite_matches(
+                current.get::<Sprite>().unwrap(),
+                &expected_sprites[entity]
+            ));
         }
         assert_eq!(
             world
                 .query_filtered::<(), (
                     With<ViewportSortableSegmentProxy>,
-                    Or<(Changed<Transform>, Changed<Anchor>, Changed<Visibility>)>,
+                    Or<(
+                        Changed<Transform>,
+                        Changed<Anchor>,
+                        Changed<Visibility>,
+                        Changed<Sprite>,
+                    )>,
                 )>()
                 .iter(&world)
                 .count(),
             0,
-            "unchanged poses must not dirty propagation or visibility"
+            "unchanged proxies must not dirty propagation, visibility or bounds"
         );
 
         let (entity, expected_transform, expected_anchor, expected_visibility) = expected[0];
@@ -2325,6 +2390,14 @@ mod tests {
             proxy.get_mut::<Transform>().unwrap().scale = Vec3::splat(4.0);
             proxy.get_mut::<Anchor>().unwrap().0.x = -0.0;
             *proxy.get_mut::<Visibility>().unwrap() = Visibility::Hidden;
+            let mut sprite = proxy.get_mut::<Sprite>().unwrap();
+            sprite.color = Color::linear_rgba(-0.0, 0.0, 0.0, 0.0);
+            sprite.flip_x = true;
+            sprite.flip_y = true;
+            sprite.custom_size = None;
+            sprite.rect = None;
+            sprite.texture_atlas = Some(TextureAtlas::default());
+            sprite.image_mode = SpriteImageMode::Scale(bevy::sprite::SpriteScalingMode::FitEnd);
         }
         world
             .entity_mut(source)
@@ -2347,6 +2420,10 @@ mod tests {
             expected_anchor.0.to_array().map(f32::to_bits)
         );
         assert_eq!(current.get::<Visibility>().unwrap(), &expected_visibility);
+        assert!(segment_proxy_sprite_matches(
+            current.get::<Sprite>().unwrap(),
+            &expected_sprites[&entity]
+        ));
 
         world.clear_trackers();
         world
@@ -2401,6 +2478,113 @@ mod tests {
             0,
             "retired proxies must leave"
         );
+    }
+
+    #[test]
+    fn proxy_sprite_comparison_preserves_raw_color_components() {
+        use bevy::color::{Hsla, Hsva, Hwba, Laba, Lcha, LinearRgba, Oklaba, Oklcha, Srgba, Xyza};
+
+        let constructors: [fn([f32; 4]) -> Color; 10] = [
+            |values| Srgba::from_f32_array(values).into(),
+            |values| LinearRgba::from_f32_array(values).into(),
+            |values| Hsla::from_f32_array(values).into(),
+            |values| Hsva::from_f32_array(values).into(),
+            |values| Hwba::from_f32_array(values).into(),
+            |values| Laba::from_f32_array(values).into(),
+            |values| Lcha::from_f32_array(values).into(),
+            |values| Oklaba::from_f32_array(values).into(),
+            |values| Oklcha::from_f32_array(values).into(),
+            |values| Xyza::from_f32_array(values).into(),
+        ];
+        for construct in constructors {
+            let color = construct([0.0; 4]);
+            assert!(colors_have_same_bits(color, color));
+            for component in 0..4 {
+                for value in [-0.0, 0.5, f32::from_bits(0x7fc0_0001)] {
+                    let mut values = [0.0; 4];
+                    values[component] = value;
+                    let changed = construct(values);
+                    assert!(!colors_have_same_bits(color, changed));
+                    assert!(colors_have_same_bits(changed, changed));
+                }
+            }
+        }
+        assert!(!colors_have_same_bits(
+            Color::srgba(0.0, 0.0, 0.0, 0.0),
+            Color::linear_rgba(0.0, 0.0, 0.0, 0.0),
+        ));
+    }
+
+    #[test]
+    fn proxy_sprite_comparison_detects_every_image_field_and_preserves_slice_refresh() {
+        use bevy::sprite::SpriteScalingMode;
+
+        let images = Assets::<Image>::default();
+        let layouts = Assets::<TextureAtlasLayout>::default();
+        let image = images.reserve_handle();
+        let other_image = images.reserve_handle();
+        let layout = layouts.reserve_handle();
+        let other_layout = layouts.reserve_handle();
+        let original = Sprite {
+            image,
+            texture_atlas: Some(TextureAtlas {
+                layout: layout.clone(),
+                index: 0,
+            }),
+            color: Color::srgba(-0.0, 0.5, 0.75, 1.0),
+            custom_size: Some(Vec2::new(-0.0, 20.0)),
+            rect: Some(Rect::new(-0.0, 0.0, 10.0, 20.0)),
+            ..Default::default()
+        };
+        assert!(segment_proxy_sprite_matches(&original, &original.clone()));
+        let mut changed = vec![original.clone(); 13];
+        changed[0].image = other_image;
+        changed[1].texture_atlas = None;
+        changed[2].texture_atlas = Some(TextureAtlas {
+            layout: other_layout,
+            index: 0,
+        });
+        changed[3].texture_atlas = Some(TextureAtlas { layout, index: 1 });
+        changed[4].color = Color::srgba(0.0, 0.5, 0.75, 1.0);
+        changed[5].flip_x = true;
+        changed[6].flip_y = true;
+        changed[7].custom_size = None;
+        changed[8].custom_size = Some(Vec2::new(0.0, 20.0));
+        changed[9].rect = None;
+        changed[10].rect = Some(Rect::new(0.0, 0.0, 10.0, 20.0));
+        changed[11].rect = Some(Rect::new(-0.0, 0.0, 11.0, 20.0));
+        changed[12].image_mode = SpriteImageMode::Scale(SpriteScalingMode::FitEnd);
+        for sprite in changed {
+            assert!(!segment_proxy_sprite_matches(&original, &sprite));
+        }
+        for scaling in [
+            SpriteScalingMode::FillCenter,
+            SpriteScalingMode::FillStart,
+            SpriteScalingMode::FillEnd,
+            SpriteScalingMode::FitCenter,
+            SpriteScalingMode::FitStart,
+            SpriteScalingMode::FitEnd,
+        ] {
+            let scaled = Sprite {
+                image_mode: SpriteImageMode::Scale(scaling),
+                ..original.clone()
+            };
+            assert!(segment_proxy_sprite_matches(&scaled, &scaled.clone()));
+        }
+        for image_mode in [
+            SpriteImageMode::Sliced(Default::default()),
+            SpriteImageMode::Tiled {
+                tile_x: true,
+                tile_y: false,
+                stretch_value: 1.5,
+            },
+        ] {
+            let sliced = Sprite {
+                image_mode,
+                ..original.clone()
+            };
+            assert!(!segment_proxy_sprite_matches(&sliced, &sliced.clone()));
+        }
     }
 
     #[test]

@@ -177,6 +177,13 @@ sonda de las funciones nativas confirma ese contrato geométrico. Kale
 conserva los seis zooms, entradas, bytes y máscaras capturados. No se mide
 una ganancia de FPS en esta corrección; continúan las cifras de la etapa 36.
 
+La etapa 38 evita flags falsos de Sprite ordinarios reutilizados y conserva
+sus campos raw y la reparación externa. Seis zooms y las entradas completas
+capturadas son exactos. Dos tandas ABBA no acreditan mejora sostenida de FPS;
+el guard añade comparación al sort, mientras glass/PostUpdate bajan algo en
+la repetición. El pico de 82 ms y un control fijo desplazado un tick quedan
+en la evidencia. Continúa alrededor de 23 FPS fijo y 20–21 en pan.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

@@ -528,6 +528,63 @@ repeticiones y hashes, en `target/parity/train-held-motion-remainder-20261002/`.
 Quedan abiertos el handler completo, animaciones de estaciones/GRF,
 la presentación fraccionaria de los vagones y el raster global.
 
+## #326-TRAIN-CONSIST-FRACTION — reloj común para la presentación
+
+El oracle de geometría de cadenas incorpora `GetAdvanceDistance` sin
+modificaciones. Sigue calculando cada centro con `CalcNextVehicleOffset`
+y los píxeles con tablas y avance nativos. La opción `--render` usa la
+fracción del reloj de la **cabeza**, aun cuando un follower está en una
+pieza con otro coste. Interpola hacia el candidato de `GetNewVehiclePos`
+antes del ajuste de entrada a la nueva tesela, como las fixtures de
+sub-tesela y transiciones ya existentes. Es presentación adaptada, no el
+renderer continuo de OpenTTD ni su `TrainController` completo.
+
+Son **115.200 poses**: 36 parejas de piezas, cinco cadenas de tres
+longitudes, cuatro remanentes y cinco presupuestos. La presentación
+discreta de los followers diverge en 72.960; la proyección nueva conserva
+coordenadas dentro de `0.0001`, tesela, rumbo y entrada/salida exactos.
+La primera versión del harness interpolaba hacia el siguiente centro ya
+ajustado; se conservó ese prototipo y su fallo. La versión final usa el
+candidato nativo, manteniendo el contrato de presentación anterior. El
+corpus entero de 11.520 poses físicas se reproduce sin cambios.
+
+`consist_render_poses_indexed` proyecta los offsets sobre una vista prestada
+de historial y path desde la pose extrapolada de la cabeza. Evita clonar
+vehículos/órdenes y se calcula una vez por cabeza durante la sincronización.
+Cada pose lleva la entrada/salida dibujada para reconstruir la pieza incluso
+si el follower cruza una tesela entre ticks. Spawn, sprites, bounds, profundidad
+y layers consumen la misma pose; el estado físico no cambia. Las cadenas
+apiladas sin historial y el endpoint legacy conservan su fallback físico.
+
+```bash
+python3 scripts/oracle_train_consist_track_geometry.py \
+  --openttd reference/openttd-15.3-oracle \
+  --out /tmp/train-chain-render-fresh --render --check
+cargo test -p openttdrs-core --test native_train_consist_fractional_render
+```
+
+La regresión ECS del cliente comprueba además el medio píxel nativo de un
+follower y de su layer NewGRF, conservando la resolución única por parent.
+Validación general: **3.051 core / 1.701 client**, cero fallos, 6/2 ignorados;
+ambos Clippy estrictos, formato, documentación y diff pasan. La primera
+compilación de tests del cliente agotó disco; el reintento dio símbolos
+incrementales sin resolver. Se preservaron ambos fallos y la caché por
+objetos comprimidos con SHA-256 verificado. La ejecución final usa
+`CARGO_INCREMENTAL=0`; no se cambió la configuración del proyecto.
+
+Release reconstruida en **78,91 s**, core `fresh:false`, client SHA-256
+`4b54e263c505727c5fbe03352e5c24459bf032891ab75c0580bb407429a08209`.
+Los [controles congelados de Kale](evidence/train-consist-fractional-render-control-raster-20261002.csv)
+en las seis escalas y `.125` limitada a `.25` dan PNG, cámara principal y
+trazas completas de orden idénticos. En `.5`/`2` también coinciden todas las
+entradas de sprites y los **265/368 buffers CPU**, cobertura y oclusión.
+Este control no contiene una cadena en movimiento certificada por OpenTTD;
+la interpolación se comprueba con el oracle geométrico y la regresión ECS.
+
+Evidencia privada en `target/parity/train-consist-fractional-render-20261002/`.
+Permanecen abiertos historial con teselas repetidas, depots, túneles/puentes,
+recorridos completos, callbacks y raster global. No se retomó el trabajo de FPS.
+
 ## Alcance pendiente
 
 - La emisión está ligada a `Update`: agrupar ticks puede omitir decisiones de

@@ -483,6 +483,14 @@ fn spawn_consist_trailer_sprites(
 ) {
     let owner_colour = Some(vehicle_owner_colour(sim, head));
     let ids = fleet_index.consist(head.id);
+    let train_poses = (head.kind == VehicleKind::Train).then(|| {
+        let slots: Vec<_> = ids.iter().filter_map(|&id| fleet_index.slot(id)).collect();
+        openttdrs_core::train_consist::consist_render_poses_indexed(
+            &sim.state.vehicles,
+            &slots,
+            extrapolate_vehicle_pose(head, 0.0),
+        )
+    });
     for (i, &uid) in ids.iter().enumerate().skip(1) {
         let Some(unit) = fleet_index
             .slot(uid)
@@ -490,7 +498,11 @@ fn spawn_consist_trailer_sprites(
         else {
             continue;
         };
-        let unit_pose = openttdrs_core::VehiclePose::from_vehicle(unit)
+        let unit_pose = train_poses
+            .as_ref()
+            .and_then(|poses| poses.get(i))
+            .copied()
+            .unwrap_or_else(|| openttdrs_core::VehiclePose::from_vehicle(unit))
             .with_drive_on_right(sim.state.construction.road_drive_on_right());
         let layers = trucks.for_vehicle_with_newgrf_layers(
             unit,

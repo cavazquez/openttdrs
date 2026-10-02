@@ -19,6 +19,12 @@ pub struct VehiclePose {
     pub road_frame_f: f32,
     /// Índice en `Vehicle::path` del siguiente paso desde `pos`.
     pub path_index: usize,
+    /// Entrada/salida de la pieza proyectada para un follower sin path propio.
+    /// Sólo presentación; no modifica los rumbos autoritativos del vehículo.
+    pub train_route: Option<(
+        crate::vehicle::VehicleDirection,
+        crate::vehicle::VehicleDirection,
+    )>,
     /// `vehicle.road_side` / conducción por la derecha (`_rv_station_right_*`).
     pub drive_on_right: bool,
 }
@@ -62,6 +68,7 @@ impl VehiclePose {
             depart_turn_f: f32::from(v.depart_turn),
             road_frame_f,
             path_index: 0,
+            train_route: None,
             drive_on_right: false,
         }
     }
@@ -83,7 +90,7 @@ impl VehiclePose {
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    pub(super) fn sync_discrete_fields(&mut self) {
+    pub(crate) fn sync_discrete_fields(&mut self) {
         self.progress_f = self.progress_f.clamp(0.0, 255.0);
         self.depart_turn_f = self.depart_turn_f.clamp(0.0, 255.0);
         self.progress = self.progress_f.round() as u8;

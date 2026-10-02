@@ -151,28 +151,31 @@ fn train_route_on_tile(
     v: &Vehicle,
     pose: VehiclePose,
 ) -> (VehicleDirection, Option<u8>) {
-    let previous = train_previous_tile_at(v, pose);
-    let next = movement_target_at(v, pose.pos, pose.path_index);
-    let enter = previous.map_or(v.direction, |prev| {
-        direction_for_path_step(prev, pose.pos, next, v.direction)
+    let (enter, outbound) = pose.train_route.unwrap_or_else(|| {
+        let previous = train_previous_tile_at(v, pose);
+        let next = movement_target_at(v, pose.pos, pose.path_index);
+        let enter = previous.map_or(v.direction, |prev| {
+            direction_for_path_step(prev, pose.pos, next, v.direction)
+        });
+        let outbound = next.map_or_else(
+            || {
+                if v.prev_unit.is_some() {
+                    v.curve_prev_direction
+                } else {
+                    enter
+                }
+            },
+            |next| {
+                direction_for_path_step(
+                    pose.pos,
+                    next,
+                    v.path.get(pose.path_index + 1).copied(),
+                    enter,
+                )
+            },
+        );
+        (enter, outbound)
     });
-    let outbound = next.map_or_else(
-        || {
-            if v.prev_unit.is_some() {
-                v.curve_prev_direction
-            } else {
-                enter
-            }
-        },
-        |next| {
-            direction_for_path_step(
-                pose.pos,
-                next,
-                v.path.get(pose.path_index + 1).copied(),
-                enter,
-            )
-        },
-    );
 
     let Some(tile) = map.get(pose.pos).filter(|tile| tile.kind == TileKind::Rail) else {
         return (enter, None);

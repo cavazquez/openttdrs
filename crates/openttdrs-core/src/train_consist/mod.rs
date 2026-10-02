@@ -29,7 +29,7 @@ pub use newgrf_vars::{
     action2_eval_ctx_for_unit, action2_eval_ctx_for_unit_indexed, cargo_class_bits,
     cargo_type_a_id, enrich_vehicle_track_badge_vars,
 };
-pub use pose::{TrainUnitPose, consist_unit_poses};
+pub use pose::{TrainUnitPose, consist_render_poses_indexed, consist_unit_poses};
 pub(crate) use topology::unit_capacity_for_vehicle;
 pub use topology::{
     ConsistChangeContext, consist_changed, consist_changed_indexed, consist_changed_with_map,

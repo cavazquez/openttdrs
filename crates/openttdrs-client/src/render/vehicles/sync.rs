@@ -108,8 +108,7 @@ fn vehicle_cargo_label_pos(vehicle_pos: Vec3) -> Vec3 {
 
 /// Resultado de Action2 que un parent y sus children comparten dentro de un
 /// solo `update_vehicles`. La pose forma parte del resultado para que un
-/// trailer conserve su pose discreta y nunca herede la interpolada de la
-/// cabeza.
+/// trailer comparta su propia pose proyectada con todos sus children.
 struct ResolvedNewGrfStack {
     vehicle_id: u32,
     pose: openttdrs_core::VehiclePose,
@@ -316,6 +315,9 @@ pub(crate) fn update_vehicles(
     let mut rendered_vehicle_layers_by_id: HashMap<u32, NewGrfVehicleLayer> = HashMap::new();
     let mut rendered_vehicle_positions =
         (!labels.is_empty()).then(|| HashMap::with_capacity(sim.state.vehicles.len()));
+    // A follower can be visible while its head is hidden. Resolve lazily per
+    // chain, using the same head pose/clock as the head sprite.
+    let mut train_poses_by_head: HashMap<u32, Vec<openttdrs_core::VehiclePose>> = HashMap::new();
     for (entity, vs, mut transform, mut sprite, mut visibility, parent) in &mut q {
         let Some(i) = vehicle_index.core.slot(vs.0) else {
             continue;
@@ -421,8 +423,31 @@ pub(crate) fn update_vehicles(
             visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
-        let trailer_pose = openttdrs_core::VehiclePose::from_vehicle(unit)
-            .with_drive_on_right(sim.state.construction.road_drive_on_right());
+        let trailer_pose = if head.kind == VehicleKind::Train {
+            let poses = train_poses_by_head.entry(head.id).or_insert_with(|| {
+                let slots: Vec<_> = ids
+                    .iter()
+                    .filter_map(|&id| vehicle_index.core.slot(id))
+                    .collect();
+                let head_pose = vehicle_pose_for_construction(
+                    head,
+                    sim_clock.tick_alpha,
+                    sim.state.construction,
+                );
+                openttdrs_core::train_consist::consist_render_poses_indexed(
+                    &sim.state.vehicles,
+                    &slots,
+                    head_pose,
+                )
+            });
+            poses
+                .get(trailer.unit_index)
+                .copied()
+                .unwrap_or_else(|| openttdrs_core::VehiclePose::from_vehicle(unit))
+        } else {
+            openttdrs_core::VehiclePose::from_vehicle(unit)
+        }
+        .with_drive_on_right(sim.state.construction.road_drive_on_right());
         if vehicle_is_hidden_from_view(&sim, unit, trailer_pose) {
             visibility.set_if_neq(Visibility::Hidden);
             continue;

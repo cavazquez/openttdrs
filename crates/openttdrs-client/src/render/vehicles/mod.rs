@@ -2045,6 +2045,15 @@ mod tests {
 
     #[test]
     fn newgrf_stack_sync_resolves_once_per_parent_without_crossing_trailers() {
+        assert_newgrf_stack_sync(false);
+    }
+
+    #[test]
+    fn newgrf_trailer_stack_uses_the_native_heads_half_pixel_step() {
+        assert_newgrf_stack_sync(true);
+    }
+
+    fn assert_newgrf_stack_sync(moving: bool) {
         use crate::render::{
             ViewportSortableChild, ViewportSortablePromotableChild, ViewportSortableSegmentedChild,
             ViewportSortableSegmentedSource,
@@ -2088,6 +2097,37 @@ mod tests {
         trailer.progress = 64;
         trailer.path.push_back(TileCoord::new(3, 1));
         state.vehicles.extend([head, trailer]);
+        if moving {
+            // Native route 0, head pixel 0, lengths 8/8: budget 96 moves
+            // both units half a pixel. The follower is at world (86.5,72).
+            for x in 2..=7 {
+                let tile = TileCoord::new(x, 4);
+                state.map.set_kind(tile, TileKind::Rail).expect("rail");
+                state.map.set_mapt_m5(tile, 0, 1).expect("track");
+            }
+            let head = &mut state.vehicles[0];
+            head.pos = TileCoord::new(4, 4);
+            head.direction = openttdrs_core::DIR_NE;
+            head.curve_prev_direction = openttdrs_core::DIR_NE;
+            head.running = true;
+            head.cur_speed = 512;
+            head.unit_length = 8;
+            head.path
+                .extend([TileCoord::new(3, 4), TileCoord::new(2, 4)]);
+            head.rail_tile_history.extend([
+                TileCoord::new(5, 4),
+                TileCoord::new(6, 4),
+                TileCoord::new(7, 4),
+            ]);
+            let trailer = &mut state.vehicles[1];
+            trailer.pos = TileCoord::new(5, 4);
+            trailer.unit_length = 8;
+            trailer.direction = openttdrs_core::DIR_NE;
+            trailer.curve_prev_direction = openttdrs_core::DIR_NE;
+            trailer.cur_speed = 0;
+            trailer.progress = 0;
+            trailer.path.clear();
+        }
 
         let mut world = World::new();
         world.insert_resource(SimWorld {
@@ -2095,7 +2135,9 @@ mod tests {
             loaded_file: false,
             ottdmap_extras: None,
         });
-        world.insert_resource(crate::simulation::SimClock { tick_alpha: 0.5 });
+        world.insert_resource(crate::simulation::SimClock {
+            tick_alpha: if moving { 0.125 } else { 0.5 },
+        });
         world.insert_resource(default_handles());
         world.insert_resource(crate::render::CompanyColoredSprites::default());
         world.insert_resource(VehicleIndex::default());
@@ -2289,8 +2331,51 @@ mod tests {
                 .expect("trailer parent transform")
                 .translation
                 .truncate(),
-            "el child del trailer debe usar la misma pose discreta que su parent"
+            "el child del trailer debe usar la misma pose que su parent"
         );
+
+        if moving {
+            let sim = world.resource::<SimWorld>();
+            let unit = &sim.state.vehicles[1];
+            let mut native_pose = openttdrs_core::VehiclePose::from_vehicle(unit);
+            native_pose.progress_f = 135.46875; // (pixel 8 + 1/2) * 255/16
+            native_pose.progress = 135;
+            assert_eq!(
+                openttdrs_core::vehicle_subtile_at_with_map(
+                    unit,
+                    native_pose,
+                    Some(&sim.state.map)
+                ),
+                (6.5, 8.0)
+            );
+            let expected = pose::vehicle_sprite_pos_at_offsets(
+                unit,
+                &sim.state.map,
+                native_pose,
+                77.0,
+                0.0,
+                1.0,
+                1.0,
+            );
+            assert_eq!(
+                world
+                    .entity(trailer_parent)
+                    .get::<Transform>()
+                    .expect("parent")
+                    .translation
+                    .truncate(),
+                expected.truncate()
+            );
+            assert_eq!(
+                world
+                    .entity(trailer_child)
+                    .get::<Transform>()
+                    .expect("child")
+                    .translation
+                    .truncate(),
+                expected.truncate()
+            );
+        }
 
         world.clear_trackers();
         let stable_parent_sprite_change = world

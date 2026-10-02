@@ -1,0 +1,3 @@
+scale,png_equal,complete_sort_equal_after_bijective_identity_renaming,complete_sprite_inputs_equal,cpu_image_bytes_equal,cpu_images_compared,coverage_equal,occlusion_equal,remap_records
+.5,True,True,True,True,272,True,True,1
+2,True,True,True,True,384,True,True,1

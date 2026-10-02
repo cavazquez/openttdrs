@@ -4016,3 +4016,52 @@ Artefactos y hashes: `target/performance/hidden-hud-work-20261002`.
 Se cierra sólo el trabajo del HUD oculto. F24 visible, F07/F17/F31, 30 FPS
 y jugabilidad siguen abiertos. Continúa la atribución del trabajo ECS
 diferido, especialmente rematerialización de chunks, antes de elegir su cambio.
+
+## Etapa 53 — Medir la cola diferida del remapeo (F17/F31)
+
+OPENTTDRS_REMAP_TRACE_OUT habilita un CSV exclusivo. Dos comandos sin estado
+ECS rodean la cola propia de apply_remap_map_visuals y miden su aplicación.
+La preparación registrada empieza después de resolver el viewport; no es
+todo el intervalo Remap anterior. Los conteos de bajas cubren sus visuales
+directos, no todas las etiquetas/proxies retirados por otros sistemas.
+El test exige salida sólo después de aplicar la cola, baja efectiva y ningún
+componente registrado por las marcas. El modo ausente no encola marcas.
+
+Kale activa, GPU real, escala 2, dos runs fijos y dos con pan; 40 frames/run,
+warmup 120/30. La selección usa el rango de ticks de cada CSV de frames,
+no un ID de frame inexistente en la traza. Fijo: 40 remapeos/run,
+160839 bajas directas y 108 chunks refrescados, sin entradas/salidas de chunks.
+Preparación media 2,5322/2,6268 ms; aplicación **2,5960/2,6533 ms**,
+máximos 6,7340/6,9253. Pan: 39 remapeos/run, 174289 bajas, 127 refrescos
+y 17 chunks añadidos; preparación 2,9921/3,0085, aplicación
+**2,8823/2,8964 ms**, máximos 8,0469/8,5109. Sin rebuilds completos en
+las cuatro ventanas. Ese tramo de aplicación quedaba fuera de Phase::Remap.
+[446 filas, incluido startup/warmup](evidence/remap-command-cost-commands-20261002.csv),
+[160 frames instrumentados](evidence/remap-command-cost-frames-20261002.csv),
+[160 intervalos Main](evidence/remap-command-cost-phases-20261002.csv).
+Las latencias instrumentadas no son una ABBA de mejora de FPS.
+
+Catorce capturas: seis controles predeterminados exactos y dos off/on
+In2x/Out2x exactos, con entradas completas, 272/384 imágenes CPU y ambas
+máscaras. Streams completos conservados tras renumerar entidades.
+[Seis zooms](evidence/remap-command-cost-raster-20261002.csv),
+[selector off/on](evidence/remap-command-cost-enabled-raster-20261002.csv).
+Conservan el render previo; no certifican paridad nativa general.
+
+Gates: **1685 tests cliente/2 ignorados**, Clippy estricto core/cliente,
+formato, comparador, docs y diff. Se corrige el uso inicial de unwrap/expect
+del nuevo test mediante Result; fallo preservado. Core sin cambios, suite
+anterior reutilizada. Release 53,80 s de pared/53,76 Cargo; core fresh 6240adc8.
+Cliente readonly 187319528 bytes, SHA
+adcbd9cd9e21b1fb9666754cb0a9cbbc8e802276db50da6ca3d6b5b64bf9cee1.
+Artefactos: `target/performance/remap-command-cost-20261002`.
+
+Para recuperar espacio se comprimen dos snapshots nativos propios de 47,
+verificando bytes/hash completos antes de retirar sus copias sin comprimir.
+Los gzip y registros de recuperación quedan junto a los originales; se
+recuperan 465408955 bytes. El binario de reference/ permanece intacto.
+No se atribuye una mejora de compilación o FPS a este mantenimiento.
+
+Se cierra sólo la atribución de esta cola. Continúa una prueba de bajas
+agrupadas, conservando su orden, antes de cambiar la granularidad de chunks.
+F07/F17/F31, 30 FPS y jugabilidad siguen abiertos.

@@ -7,6 +7,7 @@
 //! schedule currently in Bevy's main loop, alongside the normal capture.
 
 mod main_schedule;
+pub(crate) mod remap;
 
 use std::fs::File;
 use std::io::{BufWriter, Write};

@@ -131,6 +131,11 @@ pub(crate) fn apply_remap_map_visuals(
         })
         .unwrap_or(1.0);
     let overview_stride = overview_stride_for_viewport(ortho_scale, spawn_bounds);
+    let mut command_trace = crate::performance::remap::RemapTrace::start(
+        &mut commands,
+        sim.state.tick.get(),
+        full_rebuild,
+    );
     commands.insert_resource(MapTileSpawnViewport {
         bounds: spawn_bounds,
         last_ortho_scale: ortho_scale,
@@ -148,6 +153,9 @@ pub(crate) fn apply_remap_map_visuals(
             .any(|(_, dynamic, vehicle)| dynamic.is_some() && vehicle.is_some());
     if !preserve_dynamic_visuals {
         for (entity, _, _) in &q_vis {
+            if let Some(trace) = command_trace.as_mut() {
+                trace.counts.despawned_visuals += 1;
+            }
             commands.entity(entity).despawn();
         }
     }
@@ -170,10 +178,19 @@ pub(crate) fn apply_remap_map_visuals(
         // Solo refrescar chunks dirty que siguen en el viewport (no todo el área visible).
         refresh_chunks.retain(|c| needed.contains(c));
         let plan = loaded_chunks.plan_incremental_remap(&needed, &refresh_chunks);
+        if let Some(trace) = command_trace.as_mut() {
+            trace.counts.incremental = true;
+            trace.counts.refreshed_chunks = refresh_chunks.len();
+            trace.counts.added_chunks = plan.to_add.len();
+            trace.counts.removed_chunks = plan.to_remove.len();
+        }
         let mut scope_counts = None;
 
         for (entity, chunk) in &q_chunks {
             if plan.to_despawn.contains(&(chunk.cx, chunk.cy)) {
+                if let Some(trace) = command_trace.as_mut() {
+                    trace.counts.despawned_visuals += 1;
+                }
                 commands.entity(entity).despawn();
             }
         }
@@ -288,6 +305,9 @@ pub(crate) fn apply_remap_map_visuals(
         if preserve_dynamic_visuals {
             for (entity, dynamic, _) in &q_vis {
                 if dynamic.is_none() {
+                    if let Some(trace) = command_trace.as_mut() {
+                        trace.counts.despawned_visuals += 1;
+                    }
                     commands.entity(entity).despawn();
                 }
             }
@@ -334,6 +354,9 @@ pub(crate) fn apply_remap_map_visuals(
 
     if do_sync_camera {
         sync_camera_for_sim(&mut q_cam, &sim);
+    }
+    if let Some(trace) = command_trace {
+        trace.finish(&mut commands);
     }
 }
 

@@ -452,6 +452,13 @@ P2 · Render · Evidencia: **Medido** · Alcance estimado: medio.
 Fuentes: [Rust: `world/remap.rs`, L65](https://github.com/cavazquez/openttdrs/blob/8994755781092e2e7a6baf463a2126d9125fbebb/crates/openttdrs-client/src/render/world/remap.rs#L65);
 [OpenTTD: `src/viewport.cpp`, L1811](https://github.com/OpenTTD/OpenTTD/blob/14ec60f248547d4d062a1160f0fc26d742319888/src/viewport.cpp#L1811).
 
+La [etapa 53](performance-implementation.md#etapa-53--medir-la-cola-diferida-del-remapeo-f17f31)
+separa preparación y aplicación de la cola propia. En la ventana fija retira
+160839 visuales en 40 remapeos; aplicarlos suma 2,60/2,65 ms medios que
+Phase::Remap no registraba. Conserva seis zooms y dos off/on exactos.
+Se ensayarán bajas agrupadas conservando el orden; la medición no acredita
+una mejora de FPS ni elimina la necesidad de validar granularidad y raster.
+
 ### F18 — El sort ya tiene caché y no es un Z plano
 
 P2 · Render · Evidencia: **Fuente** · Alcance estimado: medio.

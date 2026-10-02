@@ -1697,6 +1697,12 @@ fn map_shot_driver(
             map_shot_scale_from_env(),
         );
     }
+    // Sonda de consistencia: vuelve a materializar el mundo sin modificar el
+    // mapa ni avanzar el reloj desde este driver. Ausente en la ruta normal.
+    if progress.frame == 90 && std::env::var("OPENTTDRS_MAP_SHOT_REDRAW").as_deref() == Ok("full") {
+        remap.request_full();
+        info!("map_shot: reconstrucción completa de diagnóstico");
+    }
     // `OPENTTDRS_MAP_SHOT_PLACE=x,y[;x,y…]`: aplica la herramienta en esas
     // teselas antes de la captura (p. ej. colocar vía/estación y ver el render).
     if progress.frame == OPEN_FRAME + 5

@@ -468,6 +468,16 @@ reutilizados actualizan el detalle al cambiar zoom. La sonda headless de
 causas abre además la animación retenida de aeropuertos. Estas evidencias no
 certifican el decoder ni sustituyen la comparación nativa por zoom.
 
+La [etapa 56](performance-implementation.md#etapa-56--detalle-vial-coherente-al-cambiar-zoom-f08f17f31)
+corrige únicamente que chunks reutilizados y mapas sin culling conserven el
+detalle vial de otro zoom. Su presencia sigue DrawRoadBits y Detail=Out2x;
+se prueba ida/vuelta y entidades de vehículos/mapa intactos. El coste aumenta
+al dibujar detalle que antes faltaba: ~23,65 FPS fijo, ventana pan/transición
+~18,72 y pico 250,54 ms. El redibujado forzado general aún falla; en Out2x
+coinciden 3733 parents globales y difieren 76 proxies locales. Ni paridad
+general del renderer ni 30 FPS están resueltos. Continúa la animación
+vanilla de aeropuertos y la atribución de esas diferencias.
+
 ### F18 — El sort ya tiene caché y no es un Z plano
 
 P2 · Render · Evidencia: **Fuente** · Alcance estimado: medio.

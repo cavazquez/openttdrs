@@ -4200,3 +4200,78 @@ recuperado, porque pueden contener hardlinks compartidos.
 Se cierra sólo este ensayo. Continúa la consistencia de detalle al variar zoom,
 seguida de la animación retenida de aeropuertos. F07/F17/F31, 30 FPS y
 jugabilidad permanecen abiertos.
+
+## Etapa 56 — Detalle vial coherente al cambiar zoom (F08/F17/F31)
+
+Se conserva **sólo la corrección de presencia del detalle vial**. OpenTTD
+DrawRoadBits retorna antes de faroles/árboles si zoom > ZoomLevel::Detail,
+y Detail = Out2x. El cliente ya implementaba ese corte al crear sprites,
+pero reutilizaba chunks completos de otro zoom. El camino sin culling ni
+siquiera inspeccionaba el cambio de escala. Ahora cruzar Out2x/Out4x solicita
+una reconstrucción de representación; los cambios de escala dentro del mismo
+nivel de detalle conservan el camino incremental donde corresponde.
+No cambia el decoder, los bytes de mapa ni la simulación.
+Oracle de fuente fijado a 14ec60f2: road_cmd.cpp L1669–1671,
+zoom_type.h L44 y las tablas de faroles/árboles road_land.h.
+
+La regresión reproduce primero el fallo: mapa 16², escala 4, conserva seis
+detalles que deben estar ausentes. Después cubre ida/vuelta en 16² y 256²,
+dos faroles/cuatro árboles con road bits 5, bytes completos del mapa intactos
+y las mismas entidades de vehículos. En la primera suite paralela otros
+tests modifican atomics globales de transparencia y ocultan los árboles;
+se conserva el fallo y se ejecuta esta regresión en un proceso propio.
+**1686 tests cliente pasados/2 ignorados**, Clippy estricto core/cliente,
+formato, docs y diff. Core sin cambios, suite anterior reutilizada.
+
+Doce capturas nuevas, seis por defecto y seis con
+OPENTTDRS_MAP_SHOT_REDRAW=full en frame 90, pausadas en tick 3703074,
+1280×720, centro 128,128, frame 180, CLEAN=0. El driver sólo pide redibujo;
+no se acredita un hash completo del estado/RNG. Frente al renderer 53 los
+seis PNG cambian en 3680/4152/3972/5282/0/0 píxeles para
+escalas 0,25/0,5/1/2/4/8; el CSV es la fuente de cantidades exactas y bloques.
+[Diferencial previo/nuevo](evidence/zoom-road-detail-refresh-raster-20261002.csv).
+Es una corrección funcional, no un nuevo golden de paridad nativa completa.
+
+Default/redibujo conserva **124/126/48** parents de sprites 1406/1407/4626
+en In2x y **516/514/661** en Out2x: el detalle ya no depende de esa
+reconstrucción. Conserva bytes de 265/368 imágenes CPU y ambas máscaras.
+In4x/In2x conserva PNG y stream global completo. **El gate general de
+redibujado falla**: Normal cambia 8 píxeles/4 bloques pese a stream igual;
+Out2x 18/16, Out8x 27/7; Out4x conserva PNG pero cambia stream.
+Out2x mantiene sus 3733 parents globales y cambia 76/749 proxies locales,
+incluidos bounds Z y profundidad. No se atribuyen esos fallos al decoder.
+Los inputs Main estrictos difieren tras reconstruir, incluso en In2x con
+PNG exacto; su primera diferencia es Z de un mesh. Estos contratos siguen
+abiertos en F31 y **no se certifica estabilidad general del renderer**.
+[Redibujado forzado](evidence/zoom-road-detail-refresh-redraw-raster-20261002.csv).
+
+ABBA, Kale activa, GPU real, escala 2, 40 frames/run, básico/Main en ambas.
+Fijo warmup 120: **40,8294 → 42,2877 ms**, 24,492 → 23,648 FPS;
+67/80 → 71/80 sobre 33,33 ms. Todos cubren 3703193–3703232.
+Vidrio 2,4896 → 3,7176 ms: ahora hay más detalle vial correcto presente.
+Pan warmup 30: **46,5223 → 53,4220 ms**, 21,495 → 18,719 FPS;
+78/80 → 80/80 y pico candidato 250,537 ms. El primer control cubre
+3703104–3703143; los otros 3703103–3703142, por lo que no toda pareja
+es idéntica por tick. La escala se fija en frame 30, justo en el límite de
+warmup pan: el rebuild y trabajo diferido de la transición pueden entrar
+en esa ventana. No se presenta como pan ya estabilizado ni mejora de FPS.
+[Frames fijos](evidence/zoom-road-detail-refresh-steady-20261002.csv),
+[pan](evidence/zoom-road-detail-refresh-pan-20261002.csv), y sus CSV de fases.
+El coste extra y la transición permanecen como trabajo de rendimiento.
+
+Release 72,708 s de pared con compilaciones de tests simultáneas; no es una
+medición aislada de compilación ni se atribuye una mejora. Core fresh 6240adc8.
+Cliente readonly 187371320 bytes, SHA
+3895d6940a9d14ab34f2455dd3e45fc3c16c5312468cd9c995a6b708c1682133.
+Se reutiliza tras la reparación cfg(test) porque todas las fuentes de
+producción permanecen byte idénticas; ambas versiones del test se conservan.
+El primer intento GPU sin acceso al compositor falla NoCompositor; se
+conserva y se repite la misma prueba con acceso Wayland/GPU. El candidato
+retirado de 55 queda gzip con recuperación completa verificada, recuperando
+142059684 bytes. Artefactos, fuentes, drivers y decisiones:
+target/performance/zoom-road-detail-refresh-20261002.
+
+Se cierra únicamente el subcaso de presencia del detalle al cruzar zoom.
+F08/F17/F31, estabilidad tras redibujar, 30 FPS y jugabilidad continúan
+abiertos. Sigue separar la animación vanilla de aeropuertos del remapeo
+general, conservando otros cambios y callbacks NewGRF.

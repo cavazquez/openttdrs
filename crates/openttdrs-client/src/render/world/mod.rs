@@ -201,6 +201,104 @@ mod tests {
     }
 
     #[test]
+    fn zoom_crossing_native_detail_boundary_refreshes_retained_roadside_sprites() {
+        // Otras pruebas cambian los atomics de transparencia del proceso.
+        // Ejecutar la regresión sola conserva la fixture visible durante
+        // toda la secuencia sin interferir con esos tests paralelos.
+        const CHILD: &str = "OPENTTDRS_ZOOM_ROAD_DETAIL_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+                .args([
+                    "--exact",
+                    "render::world::tests::zoom_crossing_native_detail_boundary_refreshes_retained_roadside_sprites",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1")
+                .output()
+                .expect("isolated zoom regression");
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        for size in [16, 256] {
+            let mut app = with_assets_app_for_map(size, size);
+            let world = app.world_mut();
+            let center = i32::try_from(size / 2).expect("map center");
+            let lamp_coord = TileCoord::new(center, center);
+            let tree_coord = TileCoord::new(center + 1, center);
+            {
+                let mut sim = world.resource_mut::<SimWorld>();
+                for (coord, roadside) in [(lamp_coord, 3), (tree_coord, 5)] {
+                    let mut tile = sim.state.map.get(coord).expect("road tile");
+                    tile.kind = TileKind::Road;
+                    tile.mapt = 0x20;
+                    tile.m5 = 0x05;
+                    tile.m6 = roadside << 3;
+                    sim.state.map.set_tile(coord, tile).expect("road detail");
+                }
+                sim.state
+                    .vehicles
+                    .push(Vehicle::new(77, VehicleKind::Bus, lamp_coord, tree_coord));
+            }
+            world.run_system_once(setup).expect("world setup");
+            let map_bytes = serde_json::to_vec(&world.resource::<SimWorld>().state.map)
+                .expect("unchanged map snapshot");
+            let vehicle_before: HashSet<Entity> = {
+                let mut query = world.query_filtered::<Entity, With<VehicleSprite>>();
+                query.iter(world).collect()
+            };
+            assert_eq!(vehicle_before.len(), 1);
+            for scale in [4.0, 2.0, 0.5, 4.0, 8.0, 2.0, 0.25] {
+                {
+                    let mut query =
+                        world.query_filtered::<&mut Projection, With<PrimaryGameCamera>>();
+                    let mut projection = query.single_mut(world).expect("primary camera");
+                    let Projection::Orthographic(orthographic) = &mut *projection else {
+                        panic!("orthographic camera");
+                    };
+                    orthographic.scale = scale;
+                }
+                world
+                    .run_system_once(viewport::sync_map_tile_spawn_viewport)
+                    .expect("zoom refresh request");
+                world
+                    .run_system_once(remap::apply_remap_map_visuals)
+                    .expect("zoom refresh");
+                let ids: Vec<_> = {
+                    let mut query = world.query::<&crate::render::ViewportSortableParent>();
+                    query
+                        .iter(world)
+                        .filter_map(|parent| {
+                            matches!(parent.sprite_id, 1406 | 1407 | 4626)
+                                .then_some(parent.sprite_id)
+                        })
+                        .collect()
+                };
+                assert_eq!(
+                    ids.len(),
+                    if scale <= 2.0 { 6 } else { 0 },
+                    "size={size}, scale={scale}: native roadside detail must follow zoom"
+                );
+                let vehicle_after: HashSet<Entity> = {
+                    let mut query = world.query_filtered::<Entity, With<VehicleSprite>>();
+                    query.iter(world).collect()
+                };
+                assert_eq!(vehicle_after, vehicle_before, "zoom preserves vehicles");
+                assert_eq!(
+                    serde_json::to_vec(&world.resource::<SimWorld>().state.map)
+                        .expect("map after zoom"),
+                    map_bytes,
+                    "visual refresh cannot modify the map"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn viewport_pan_uses_incremental_remap_and_reuses_shared_chunks() {
         // 256² activa culling real y deja margen para panear sin que el
         // viewport inicial cubra el mapa completo.

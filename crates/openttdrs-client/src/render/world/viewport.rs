@@ -79,10 +79,7 @@ pub(crate) fn sync_map_tile_spawn_viewport(
     mut viewport: ResMut<MapTileSpawnViewport>,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
-    if !large_map_viewport_cull_enabled(mw, mh) {
-        viewport.bounds = TileViewportBounds::full(mw, mh);
-        return;
-    }
+    let viewport_cull = large_map_viewport_cull_enabled(mw, mh);
     let needed = resolve_spawn_viewport(&sim, &windows, &cam_q);
     let ortho_scale = cam_q
         .single()
@@ -97,24 +94,29 @@ pub(crate) fn sync_map_tile_spawn_viewport(
         .unwrap_or(viewport.last_ortho_scale);
     let overview_stride = overview_stride_for_viewport(ortho_scale, needed);
     let scale_changed = (ortho_scale - viewport.last_ortho_scale).abs() > f32::EPSILON;
-    let representation_changed = overview_stride != viewport.last_overview_stride;
+    // Faroles y árboles de banquina sólo existen hasta Out2x. Un chunk
+    // completo aún depende de esa representación, aunque siga visible.
+    let road_detail_changed = super::remap::full_detail_enabled_at_zoom(true, ortho_scale)
+        != super::remap::full_detail_enabled_at_zoom(true, viewport.last_ortho_scale);
+    let representation_changed =
+        overview_stride != viewport.last_overview_stride || road_detail_changed;
     if scale_changed || !viewport.bounds.contains(needed) {
         viewport.bounds = needed;
         viewport.last_ortho_scale = ortho_scale;
         viewport.last_overview_stride = overview_stride;
-        // Overview y detalle no comparten entidades: tratar el cambio como
-        // rebuild completo evita conservar rombos agregados al volver a
-        // acercar (o dejar huecos al alejar) mientras el índice de chunks aún
-        // describe la representación anterior.
+        // Overview y detalle vial no comparten entidades: el rebuild evita
+        // conservar la representación de otro zoom en chunks reutilizados.
         if representation_changed {
             pending.request_full();
-        } else {
+        } else if viewport_cull {
             pending.request_incremental();
         }
         // El borde del viewport puede cambiar dentro del mismo chunk de 16×16;
         // en ese caso el plan incremental no agrega/quita chunks, pero sí hay
         // que volver a filtrar las etiquetas por el nuevo viewport.
-        pending.mark_labels_dirty();
+        if viewport_cull || representation_changed {
+            pending.mark_labels_dirty();
+        }
     }
 }
 

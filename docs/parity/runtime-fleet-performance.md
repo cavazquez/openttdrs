@@ -281,6 +281,16 @@ la pausa cambia raster o stream; el redibujado de chunks añade faroles y
 dependiente de zoom. La sonda headless identifica además avisos de aeropuertos
 ya animados por el cliente. Producción conserva 53; no se cierra el objetivo.
 
+La [etapa 56](performance-implementation.md#etapa-56--detalle-vial-coherente-al-cambiar-zoom-f08f17f31)
+corrige la presencia de faroles/árboles al cruzar Out2x/Out4x, también sin
+culling. La representación previa podía omitir detalle nativo y no sirve
+como nueva aceptación de rendimiento. Su ABBA da ~23,65 FPS fijo y ~18,72
+en la ventana de pan que empieza junto a la transición de zoom, con pico
+250,54 ms. No hay mejora de FPS. El detalle conserva cantidades al
+reconstruir, pero el gate general falla en cuatro zooms por raster o stream;
+proxies y inputs Main siguen abiertos. Continúa la animación retenida de
+aeropuertos, además del coste de vidrio y de la transición.
+
 La [revisión de fuentes OpenTTD](openttd-source-performance-review.md) registra
 32 hallazgos priorizados en los tres crates, diferencias semánticas NewGRF y
 una sonda nueva de serialización/hash/carga. Conserva propuestas y criterios

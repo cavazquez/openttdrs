@@ -93,11 +93,24 @@ fn bench_sim_tick(c: &mut Criterion) {
         group.throughput(Throughput::Elements(50));
         group.bench_function(format!("imported_{side}_steady_tick_50"), |b| {
             b.iter_batched(
-                || template.clone(),
+                || {
+                    // Clonar Map renueva su época: preparar el índice de esta
+                    // instancia fuera de la medición de ticks estables.
+                    let mut state = template.clone();
+                    state
+                        .runtime
+                        .terminal_spatial_index
+                        .ensure_current(&state.map, &state.stations);
+                    state
+                },
                 |mut state| {
+                    let scans_before = state.runtime.terminal_spatial_index.full_map_scans();
                     step_n(&mut state, 50);
                     let scans = state.runtime.terminal_spatial_index.full_map_scans();
-                    assert_eq!(scans, 1, "un tick estable no debe reescanear el mapa");
+                    assert_eq!(
+                        scans, scans_before,
+                        "un tick estable no debe reescanear el mapa"
+                    );
                     black_box(scans);
                 },
                 BatchSize::LargeInput,

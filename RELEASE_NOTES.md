@@ -1,27 +1,31 @@
-# openttdrs 0.1.0-alpha.4
+# openttdrs 0.1.0-alpha.5
 
-**Publicada el 2026-09-26.** Esta prerelease reúne los paquetes de escritorio
+**Alpha del 2026-10-02.** Esta prerelease reúne los paquetes de escritorio
 para Linux x86_64, Windows x86_64 y macOS arm64 en
-[GitHub Releases](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.4)
+[GitHub Releases](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.5)
 y el Snap para Linux amd64 en el canal
 [`latest/edge`](https://snapcraft.io/openttdrs). Incluye el cliente gráfico,
 el servidor dedicado lockstep y los assets libres necesarios.
 
 ## Novedades
 
-- El mouse se comporta de forma más predecible: ventanas y controles conservan
-  sus gestos, clic derecho y paneo no se confunden, y los arrastres de obra
-  usan el punto real de liberación o se cancelan si la interacción se
-  interrumpe.
-- Construir sin fondos suficientes no altera el mapa. Las obras parciales
-  informan qué teselas se rechazaron, por qué y cuánto se gastó.
-- La escena isométrica animada del menú representa una partida. Aeronaves y
-  barcos mantienen posiciones y orientaciones coherentes durante el trayecto.
-- Se corrige la pérdida del primer clic sobre el mapa después de usar la barra
-  de herramientas. Las capturas de partidas JSON también evitan una doble
-  transición de menú.
-- GitHub Actions reutiliza la caché del job Python para acelerar las
-  comprobaciones repetidas.
+- Mejor rendimiento con muchos vehículos: se reutilizan índices de flota,
+  ocupación, depósitos y estaciones, además de sprites y proxies sin cambios.
+- Las rutas de carretera y agua se conservan mientras la topología y el destino
+  sigan vigentes. CargoDist calcula sus trabajos en workers y los publica en
+  fechas previstas; sus flows y trabajos pendientes sobreviven a saves JSON.
+- Los casos verificados de trenes, buses y camiones conservan movimiento por
+  píxel, fracciones, separación de vagones y giros estacionarios. Carga,
+  descarga y esperas mantienen los vehículos quietos antes de salir.
+- Se corrigen detalles gráficos al cambiar zoom, orden de sprites, animaciones
+  vanilla, humo y chispas eléctricas, conservando las decisiones RNG cuando el
+  pool de efectos está lleno.
+- Los builds de desarrollo generan menos símbolos y conservan archivo/línea
+  en los backtraces. Las mediciones y sus límites están documentados en
+  `docs/parity/performance-implementation.md`.
+
+El protocolo propio de red es **v6**: cliente y servidor deben usar esta alpha.
+Las mejoras de rendimiento no garantizan 30 FPS en todas las partidas.
 
 ## Instalación
 
@@ -41,7 +45,7 @@ JSON en `~/snap/openttdrs/common/save/`. El servidor dedicado se inicia con
 Para Linux x86_64, Windows x86_64 o macOS arm64:
 
 1. Descargá el archivo de tu plataforma desde la
-   [prerelease](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.4)
+   [prerelease](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.5)
    y verificá el `.sha256` asociado.
 2. Extraelo completo; `assets/` y `static/` deben quedar junto al ejecutable.
 3. Ejecutá `openttdrs-client` (`openttdrs-client.exe` en Windows).

@@ -6,6 +6,42 @@ Los cambios relevantes de cada release se documentan aquí. El formato sigue
 
 ## [Unreleased]
 
+## [0.1.0-alpha.5] - 2026-10-02
+
+### Mejorado
+
+- Se reutilizan rutas de carretera y agua mientras su topología y destino
+  permanezcan vigentes; cambiar una reserva ferroviaria ya no las invalida.
+- CargoDist resuelve trabajos en workers y publica sus resultados en las fechas
+  previstas. Los saves JSON conservan los flows y trabajos pendientes.
+- Las flotas grandes reutilizan índices de vehículos, ocupación, depósitos y
+  huellas de estaciones. El renderer conserva sprites y proxies sin cambios,
+  y evita preparar el HUD técnico cuando está oculto.
+- El perfil de desarrollo usa tablas de líneas para reducir símbolos y costo
+  de recompilación, conservando archivo y línea en los backtraces.
+
+### Corregido
+
+- Trenes y vehículos de carretera conservan las distancias por píxel, fracciones
+  de movimiento y giros estacionarios de los casos nativos verificados.
+- Las formaciones respetan piezas ferroviarias cortas y mantienen distintas
+  las sucesivas visitas a un mismo tramo del recorrido.
+- Carga, descarga, espera de carga completa y horarios mantienen quietos los
+  vehículos físicos. La salida sin transferencia resuelve la siguiente ruta.
+- Se corrigen el orden de sprites de igual profundidad, detalles viales al
+  cambiar zoom y cadencias de animación de edificios y aeropuertos vanilla.
+- Los efectos de humo y chispas conservan los sprites, paleta y decisiones RNG
+  nativos verificados, incluso cuando el pool de efectos está lleno.
+- El benchmark de terminales prepara el índice del mapa clonado antes de medir
+  ticks estables, sin confundir la nueva identidad del mapa con un reescaneo
+  durante la simulación.
+
+### Compatibilidad y alcance
+
+- El protocolo propio de red es v6; cliente y servidor deben usar esta alpha.
+- Se mejora el rendimiento de flotas grandes, pero no se garantizan 30 FPS en
+  todas las partidas. La paridad con OpenTTD continúa parcial.
+
 ## [0.1.0-alpha.4] - 2026-09-26
 
 ### Mejorado
@@ -73,7 +109,8 @@ Los cambios relevantes de cada release se documentan aquí. El formato sigue
 - Los paquetes no están firmados ni notarizados.
 - La compatibilidad completa de ida y vuelta con `.sav` de OpenTTD no está garantizada.
 
-[Unreleased]: https://github.com/cavazquez/openttdrs/compare/v0.1.0-alpha.4...HEAD
+[Unreleased]: https://github.com/cavazquez/openttdrs/compare/v0.1.0-alpha.5...HEAD
+[0.1.0-alpha.5]: https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.3
 [0.1.0-alpha.1]: https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.1

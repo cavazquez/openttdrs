@@ -1,7 +1,7 @@
 # Corte V1 — aceptación acotada por área
 
-Actualizado: **2026-09-26**. Base histórica V1: `84144747`;
-base del corte alpha.4: `f1c3a5fc`.
+Actualizado: **2026-10-02**. Base histórica V1: `84144747`;
+base del corte alpha.4: `f1c3a5fc`; base de mejoras alpha.5: `2a497cab`.
 
 El corte V1 que actualizó el resumen del README, fijó tolerancias y creó tareas
 atómicas ya concluyó: los contratos #582–#604 están cerrados. El
@@ -12,12 +12,16 @@ evidencia interna. La auditoría del 26/09 abrió el corte acotado
 [alpha.4: aeronaves y menú](aircraft-render-alpha4.md), con cinco tareas
 locales y criterios independientes. No reactiva las brechas históricas V1.
 
-La entrega actual de escritorio está publicada como
-[prerelease `v0.1.0-alpha.4`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.4)
+La entrega actual de escritorio corresponde a
+[prerelease `v0.1.0-alpha.5`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.5)
 y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) para Linux amd64.
-El Snap `0.1.0-alpha.4` materializa los tiles en build, fue validado recién
-instalado con assets desde el mount SquashFS de sólo lectura y ofrece el menú
-gráfico ES/EN de nueva partida con semilla editable.
+Reúne las mejoras de flotas grandes y los casos acotados de movimiento y
+animación documentados en [el registro de implementación](performance-implementation.md).
+La compatibilidad y los 30 FPS en todas las partidas continúan abiertos.
+El Snap materializa los tiles durante el build y se comprueba con assets de
+sólo lectura y perfil efímero antes de publicarlo. La instalación nueva desde
+SquashFS y el menú ES/EN con semilla editable ya se verificaron en alpha.4;
+la evidencia histórica se conserva sin convertirla en una prueba nueva.
 
 ## Entrega alpha anterior (cumplida)
 

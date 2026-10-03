@@ -41,7 +41,7 @@ The current alpha focuses on a playable single-player experience. Multiplayer, N
 
 ## Download the alpha
 
-The current release is **[0.1.0-alpha.4](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.4)**. It is a test release, not a stability promise.
+The current release is **[0.1.0-alpha.5](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.5)**. It is a test release, not a stability promise.
 
 ### Linux Snap
 
@@ -62,7 +62,7 @@ The Snap includes the required free assets. Its default save directory is ~/snap
 
 ### Other platforms
 
-Linux x86_64, Windows x86_64, and macOS arm64 packages and SHA-256 checksums are published on the [GitHub alpha release](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.4).
+Linux x86_64, Windows x86_64, and macOS arm64 packages and SHA-256 checksums are published on the [GitHub alpha release](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.5).
 
 ## Run from source
 

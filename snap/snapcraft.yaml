@@ -1,6 +1,6 @@
 name: openttdrs
 title: openttdrs
-version: "0.1.0-alpha.4"
+version: "0.1.0-alpha.5"
 summary: Isometric transport simulation inspired by OpenTTD
 description: |
   openttdrs is an isometric transport simulation written in Rust and built with

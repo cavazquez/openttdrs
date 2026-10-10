@@ -93,6 +93,61 @@ fn skip_vehicle_order_advances_current() {
 }
 
 #[test]
+fn skipping_loading_returns_pending_reservations_for_entire_consist() {
+    let mut state = GameState::new(12, 8);
+    let source = TileCoord::new(2, 2);
+    let destination = TileCoord::new(8, 2);
+    let mut station = crate::Station::new_with_kind(source, crate::StopKind::RailStation);
+    station
+        .cargo_packets
+        .push(crate::CargoPacket::new(crate::CargoType::Coal, 8, source));
+    let mut head = Vehicle::new(1, VehicleKind::Train, source, source);
+    head.next_unit = Some(2);
+    head.awaiting_load_window = true;
+    head.orders = vec![
+        VehicleOrder::station(source),
+        VehicleOrder::station(destination),
+    ];
+    let mut wagon = Vehicle::new(2, VehicleKind::Train, source, source);
+    wagon.prev_unit = Some(1);
+    wagon.cargo_type = Some(crate::CargoType::Coal);
+    wagon.cargo_loading = true;
+    wagon
+        .cargo_packets
+        .push(crate::CargoPacket::new(crate::CargoType::Coal, 2, source));
+    wagon.cargo_packets.action_counts[2] = 2;
+    assert_eq!(
+        station.cargo_packets.reserve_for_vehicle(
+            source,
+            crate::CargoType::Coal,
+            3,
+            &[],
+            source,
+            &mut wagon.cargo_packets,
+        ),
+        3
+    );
+    wagon.sync_cargo_from_packets();
+    wagon.cargo_packets.action_counts[0] = 2;
+    wagon.cargo_packets.action_counts[2] = 0;
+    wagon.cargo_packets.staged_transfer = 2;
+    station.sync_stock_from_packets();
+    state.stations = vec![station];
+    state.vehicles = vec![head, wagon];
+    apply_command(&mut state, &Command::SkipVehicleOrder(1)).unwrap();
+    assert_eq!(state.vehicles[0].current_order, 1);
+    assert!(!state.vehicles[0].awaiting_load_window);
+    assert!(!state.vehicles[1].cargo_loading);
+    assert_eq!(state.vehicles[1].cargo_packets.reserved_count(), 0);
+    assert_eq!(state.vehicles[1].cargo, 2);
+    assert_eq!(state.vehicles[1].cargo_packets.action_counts, [0, 0, 2, 0]);
+    assert_eq!(state.vehicles[1].cargo_packets.staged_transfer, 0);
+    assert_eq!(state.vehicles[1].cargo_packets.staged_keep, 2);
+    assert_eq!(state.stations[0].cargo_stock.get(crate::CargoType::Coal), 8);
+    assert_eq!(state.stations[0].cargo_packets.reserved, 0);
+}
+
+#[test]
 fn toggle_full_load_on_station_order() {
     let mut s = GameState::new(8, 8);
     let stop = TileCoord::new(3, 3);

@@ -824,9 +824,13 @@ fn train_reservation_needs_refresh(
     {
         return false;
     }
-    vehicle
-        .movement_target()
-        .is_some_and(|next| !vehicle.reserved_steps.iter().any(|step| step.tile == next))
+    // A partial reservation can already contain the next tile while still
+    // ending before a safe waiting position. TrainLocoHandler retries the
+    // complete reservation at the stuck backoff, regardless of that tile.
+    pbs_wait_backoff_due
+        || vehicle
+            .movement_target()
+            .is_some_and(|next| !vehicle.reserved_steps.iter().any(|step| step.tile == next))
 }
 
 /// `true` si el tren no puede avanzar al `movement_target` (sin reserva en esa pista).

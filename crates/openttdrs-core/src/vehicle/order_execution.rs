@@ -276,7 +276,7 @@ impl super::model::Vehicle {
             return;
         }
         if self.kind == super::model::VehicleKind::Train
-            && !self.path.is_empty()
+            && (!self.path.is_empty() || self.train_station_stop_pending(Some(map)))
             && let crate::vehicle::order::VehicleOrder::Station { station, .. } = order
             && crate::station::rail_station_platform_tiles(map, station).contains(&self.dest)
         {

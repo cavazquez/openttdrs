@@ -47,7 +47,7 @@ pub(crate) fn rebuild_vehicle_index(mut sim: ResMut<SimWorld>, mut idx: ResMut<V
 }
 
 #[derive(Component)]
-pub(crate) struct VehicleSprite(pub(super) u32);
+pub(crate) struct VehicleSprite(pub(crate) u32);
 
 #[derive(Component)]
 pub(crate) struct AircraftShadowSprite(pub(super) u32);

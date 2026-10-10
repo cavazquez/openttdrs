@@ -1259,7 +1259,7 @@ fn hydrate_sav_vehicle_cargo(
     // saves sin referencias `CAPA`.
     vehicle.cargo_packets.action_counts = saved.cargo_action_counts;
     if vehicle.cargo_packets.reserved_count() > 0
-        && let Some(station_id) = saved.last_loading_station
+        && let Some(station_id) = saved.last_station_visited.or(saved.last_loading_station)
         && let Some(station) = station_positions.get(&station_id)
         && let Some(cargo) = cargo
     {
@@ -2345,8 +2345,6 @@ impl GameState {
             state.vehicles.push(vehicle);
         }
 
-        reconcile_sav_vehicle_cargo_reservations(&mut state);
-
         // La tabla sparse `VEHS` puede intercalar unidades de distintos
         // vehículos. Reconstruir el consist por `Vehicle::next`, no por el
         // orden de las filas: tratar un vagón huérfano como cabeza dispara PBS
@@ -2382,6 +2380,35 @@ impl GameState {
             state.vehicles[from].next_unit = Some(to_id);
             state.vehicles[to].prev_unit = Some(from_id);
         }
+
+        // ReserveConsist owns pending MTA_LOAD at the front's current
+        // station. Native wagon records need not carry that front-only ID.
+        for slot in 0..state.vehicles.len() {
+            if state.vehicles[slot].cargo_packets.reserved_count() == 0
+                || state.vehicles[slot]
+                    .cargo_packets
+                    .reservation_station
+                    .is_some()
+            {
+                continue;
+            }
+            let mut front = slot;
+            for _ in 0..256 {
+                let Some(previous) = state.vehicles[front].prev_unit else {
+                    break;
+                };
+                let Some(&previous_slot) = slots_by_sav_id.get(&previous) else {
+                    break;
+                };
+                front = previous_slot;
+            }
+            if let Some(station) = state.vehicles[front].last_station_visited {
+                let cargo = state.vehicles[slot].cargo_type;
+                state.vehicles[slot].cargo_packets.reservation_station = Some(station);
+                state.vehicles[slot].cargo_packets.reservation_cargo = cargo;
+            }
+        }
+        reconcile_sav_vehicle_cargo_reservations(&mut state);
 
         // `GVSF_MULTIHEADED` no crea por sí solo una unidad extra en el
         // runtime: el par se representa con `other_multiheaded_part`, además

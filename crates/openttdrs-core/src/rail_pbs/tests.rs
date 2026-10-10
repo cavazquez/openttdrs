@@ -273,6 +273,63 @@ fn incremental_reservations_do_not_reserve_a_train_without_pbs_path() {
 }
 
 #[test]
+fn stuck_backoff_extends_partial_reservation_even_when_next_tile_is_reserved() {
+    let mut state = GameState::new(12, 4);
+    for x in 0..=8 {
+        apply_command(&mut state, &Command::SetRailBits(TileCoord::new(x, 1), 1)).expect("rail");
+    }
+    let mut train = Vehicle::new(
+        1,
+        VehicleKind::Train,
+        TileCoord::new(2, 1),
+        TileCoord::new(8, 1),
+    );
+    train.path = (3..=8).map(|x| TileCoord::new(x, 1)).collect();
+    train.reserved_steps = (2..=5)
+        .map(|x| ReservedRailStep::new(TileCoord::new(x, 1), 1))
+        .collect();
+    train.running = true;
+    train.pbs_stuck = true;
+    train.cur_speed = 0;
+    train.wait_counter = 18;
+    state.vehicles = vec![train];
+    let settings = crate::pathfinding_settings::PathfindingSettings {
+        reserve_paths: true,
+        path_backoff_interval: 20,
+        ..Default::default()
+    };
+    let before = state.vehicles[0].reserved_steps.clone();
+    let refresh = |state: &mut GameState, allow_retry| {
+        super::train_reservation::update_train_reservations_incremental_with_wormholes_and_acceleration_phase(
+            &state.map,
+            &mut state.vehicles,
+            settings,
+            None,
+            crate::engine::TrainAccelerationModel::Original,
+            allow_retry,
+        )
+    };
+    assert_eq!(refresh(&mut state, true), 0, "backoff is not due");
+    assert_eq!(state.vehicles[0].reserved_steps, before);
+    state.vehicles[0].wait_counter = 19;
+    assert_eq!(
+        refresh(&mut state, false),
+        0,
+        "post-movement must not retry"
+    );
+    assert_eq!(state.vehicles[0].reserved_steps, before);
+    assert_eq!(refresh(&mut state, true), 1, "retry the complete path");
+    assert_eq!(
+        state.vehicles[0].reserved_steps.last().unwrap().tile,
+        TileCoord::new(8, 1)
+    );
+    assert!(reservation_ends_at_safe_wait(
+        &state.map,
+        &state.vehicles[0]
+    ));
+}
+
+#[test]
 fn sync_sets_m5_reservation_bits_on_rail_bridge_ramps() {
     let mut state = GameState::new(8, 4);
     let west = TileCoord::new(2, 1);

@@ -4179,6 +4179,55 @@ mod tests {
     }
 
     #[test]
+    fn imported_wagon_reservation_uses_fronts_current_station() {
+        let mut state = tiny_state();
+        let source = TileCoord::new(28, 39);
+        let mut station = Station::new_with_kind(source, StopKind::RailStation);
+        station
+            .cargo_packets
+            .push(crate::CargoPacket::new(crate::CargoType::Coal, 8, source));
+        let mut head = Vehicle::new(0, VehicleKind::Train, source, source);
+        head.engine_id = Some(crate::engine::ENGINE_TRAIN_SH_8P);
+        head.last_station_visited = Some(source);
+        head.next_unit = Some(1);
+        let mut wagon = Vehicle::new(1, VehicleKind::Train, source, source);
+        wagon.engine_id = Some(crate::engine::ENGINE_WAGON_GOODS);
+        wagon.prev_unit = Some(0);
+        wagon.cargo_type = Some(crate::CargoType::Coal);
+        assert_eq!(
+            station.cargo_packets.reserve_for_vehicle(
+                source,
+                crate::CargoType::Coal,
+                3,
+                &[],
+                source,
+                &mut wagon.cargo_packets,
+            ),
+            3
+        );
+        wagon.sync_cargo_from_packets();
+        state.stations = vec![station];
+        state.vehicles = vec![head, wagon];
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).unwrap();
+        let mut saved = crate::sav::load(&bytes).unwrap();
+        // Real native wagons do not need the front-only station fields.
+        let wagon = saved.vehicles.iter_mut().find(|v| v.sav_id == 1).unwrap();
+        wagon.last_loading_station = None;
+        wagon.last_station_visited = None;
+        let loaded = GameState::from_sav_game(saved);
+        let wagon = loaded.vehicles.iter().find(|v| v.id == 1).unwrap();
+        assert_eq!(wagon.cargo_packets.reservation_station, Some(source));
+        assert_eq!(wagon.cargo_packets.reserved_count(), 3);
+        assert_eq!(
+            loaded.stations[0]
+                .cargo_packets
+                .reserved_physically_by_cargo
+                .get(&crate::CargoType::Coal),
+            Some(&3)
+        );
+    }
+
+    #[test]
     fn export_roundtrip_preserves_custom_vehicle_cargo_id() {
         use crate::cargo::CargoType;
         use crate::cargo_packet::CargoPacket;

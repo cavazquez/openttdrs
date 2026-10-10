@@ -1,6 +1,6 @@
 # Corte V1 — aceptación acotada por área
 
-Actualizado: **2026-10-02**. Base histórica V1: `84144747`;
+Actualizado: **2026-10-10**. Base histórica V1: `84144747`;
 base del corte alpha.4: `f1c3a5fc`; base de mejoras alpha.5: `2a497cab`.
 
 El corte V1 que actualizó el resumen del README, fijó tolerancias y creó tareas
@@ -22,6 +22,13 @@ El Snap materializa los tiles durante el build y se comprueba con assets de
 sólo lectura y perfil efímero antes de publicarlo. La instalación nueva desde
 SquashFS y el menú ES/EN con semilla editable ya se verificaron en alpha.4;
 la evidencia histórica se conserva sin convertirla en una prueba nueva.
+
+El [recorrido controlado de Kale](kale-train-follow.md) comprueba llegada,
+transferencia y regreso de su tren 2902 con las señales originales. Corrige
+parada, reservas de carga y reintento PBS; conserva como pendientes la flota
+completa y la paridad de señalización. La migración a Bevy 0.20 se está
+verificando por separado en los seis zooms y todavía no tiene aceptación
+raster completa. No se retoma el bloque de FPS durante estas comprobaciones.
 
 ## Entrega alpha anterior (cumplida)
 

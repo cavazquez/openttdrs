@@ -1291,7 +1291,7 @@ impl super::model::Vehicle {
     /// Indica si `dest == pos` pertenece a una orden de estación que aún debe
     /// recorrer el remanente físico hasta `VehicleEnter_Station`.
     #[must_use]
-    fn train_station_stop_pending(&self, map: Option<&Map>) -> bool {
+    pub(crate) fn train_station_stop_pending(&self, map: Option<&Map>) -> bool {
         self.train_station_stop_coordinate(map).is_some()
     }
 

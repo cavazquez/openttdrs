@@ -16,6 +16,8 @@ use crate::ui::{
     KeyboardCapture, PointerCapture, RightPointerGesture, update_right_pointer_gesture,
 };
 
+mod vehicle_follow;
+
 /// Paneo con botón derecho: factor × `OrthographicProjection::scale` × delta en píxeles.
 const PAN_RMB_SCALE: f32 = 1.35;
 /// Zoom con teclado (+/-): fracción de `scale` por segundo al mantener pulsado.
@@ -316,6 +318,7 @@ pub(crate) struct CameraControlPlugin;
 
 impl Plugin for CameraControlPlugin {
     fn build(&self, app: &mut App) {
+        vehicle_follow::install(app);
         app.init_resource::<CameraVelocity>()
             .init_resource::<RightPointerGesture>()
             .init_resource::<ZoomMode>()

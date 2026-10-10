@@ -621,6 +621,10 @@ fn route_station_bound_trains(
                 // otro andén durante esa ventana: ProcessOrders nativo tampoco
                 // reescribe la orden mientras el tren está cargando.
                 && !vehicle.awaiting_load_window
+                // Reaching the final platform tile exhausts the tile path,
+                // but VehicleEnter_Station still needs its sub-tile distance.
+                // Keep that destination until the front reaches BeginLoading.
+                && !vehicle.train_station_stop_pending(Some(&state.map))
                 // Un fallo de ruta ya se registra en esta bandera. Reintentar
                 // la misma búsqueda YAPF en cada tick vuelve a congelar una
                 // partida importada hasta que cambie la red u órdenes.
@@ -1086,6 +1090,43 @@ mod tests {
     use super::*;
     use crate::rail_pbs::ReservedRailStep;
     use crate::vehicle::Vehicle;
+
+    #[test]
+    fn exhausted_platform_path_keeps_subtile_stop_until_begin_loading() {
+        let mut state = GameState::new(16, 8);
+        crate::apply_command(
+            &mut state,
+            &crate::Command::PlaceRailStationArea {
+                origin: TileCoord::new(4, 3),
+                axis_y: false,
+                platforms: 1,
+                length: 6,
+            },
+        )
+        .unwrap();
+        let end = TileCoord::new(9, 3);
+        let mut train = Vehicle::new(1, VehicleKind::Train, end, end);
+        train.engine_id = Some(crate::engine::ENGINE_TRAIN_SH_8P);
+        train.direction = crate::DIR_SW;
+        train.cur_speed = 60;
+        train.running = true;
+        train.cached_total_length = 96;
+        train.unit_length = 8;
+        train.orders = vec![crate::VehicleOrder::station(state.stations[0].pos)];
+        state.vehicles.push(train);
+        for _ in 0..100 {
+            recompute_vehicle_paths(&mut state);
+            assert_eq!(state.vehicles[0].dest, end);
+            assert!(state.vehicles[0].path.is_empty());
+            state.vehicles[0].step_with_map(Some(&state.map));
+            assert_eq!(state.vehicles[0].pos, end);
+            if state.vehicles[0].awaiting_load_window {
+                assert_eq!(state.vehicles[0].rail_pixel, 12);
+                return;
+            }
+        }
+        panic!("front engine did not reach its native stop coordinate");
+    }
 
     #[test]
     fn large_route_batch_shares_searches_and_keeps_vehicle_publication_order() {

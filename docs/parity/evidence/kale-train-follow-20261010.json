@@ -1,0 +1,181 @@
+{
+  "copy": "save/Kale_train_follow.json",
+  "destination_visited": true,
+  "emptied": true,
+  "final_tile": [
+    51,
+    6
+  ],
+  "initial_cargo": 326,
+  "passed": true,
+  "pbs_stuck": false,
+  "relative_ticks": 5601,
+  "removed_signals": 0,
+  "returned_home": true,
+  "scope": "controlled isolated consist; not a full-fleet or signalling parity certificate",
+  "source": "save/Kale_TitleGame.sav",
+  "train": 2902,
+  "units": [
+    2902,
+    2926,
+    3038,
+    3061,
+    3063,
+    3064,
+    3066,
+    3071,
+    3073,
+    3118,
+    3119,
+    3121
+  ],
+  "visited_tiles": 102,
+  "source_sha256": "584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69",
+  "trace_sha256": "7e470df0c3b8e7223fbcb724b0d8fd2690bce07b3e41fde01a7e258313c312b9",
+  "oracle_rules_commit": "c2661164bcb6cbf5ab97b56ccbee7506a3b26833",
+  "comparison": "native source-rule review plus controlled simulation; no native tick-to-tick trace",
+  "arrival_tick": 3262,
+  "departure_tick": 3270,
+  "core_tests": {
+    "passed": 3072,
+    "failed": 0,
+    "ignored": 6
+  },
+  "copy_sha256": "ef1a73cca8cd0f1d4fb908e21b7b46b288eb333425cb7d9e07b110b1e7c3a7e2",
+  "live_follow": {
+    "backend": "Vulkan/Lavapipe",
+    "bevy": "0.20.0",
+    "scope": "camera anchor and route activity; no FPS or raster parity certification",
+    "zooms": [
+      {
+        "scale": "0.25",
+        "exit": 0,
+        "frames": 359,
+        "visible_frames": 359,
+        "camera_mismatches": 0,
+        "ticks_advanced": 2837,
+        "visited_tiles": 80,
+        "directions": [
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          0.25
+        ],
+        "binary_sha256": "641e98bc7398acbc6c14b44822668ab038359aed16dabe4bd8c088cc837ec460",
+        "passed": true
+      },
+      {
+        "scale": "0.5",
+        "exit": 0,
+        "frames": 359,
+        "visible_frames": 359,
+        "camera_mismatches": 0,
+        "ticks_advanced": 2845,
+        "visited_tiles": 80,
+        "directions": [
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          0.5
+        ],
+        "binary_sha256": "641e98bc7398acbc6c14b44822668ab038359aed16dabe4bd8c088cc837ec460",
+        "passed": true
+      },
+      {
+        "scale": "1",
+        "exit": 0,
+        "frames": 1659,
+        "visible_frames": 1659,
+        "camera_mismatches": 0,
+        "ticks_advanced": 13255,
+        "visited_tiles": 102,
+        "directions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          1.0
+        ],
+        "binary_sha256": "641e98bc7398acbc6c14b44822668ab038359aed16dabe4bd8c088cc837ec460",
+        "passed": true
+      },
+      {
+        "scale": "2",
+        "exit": 0,
+        "frames": 359,
+        "visible_frames": 359,
+        "camera_mismatches": 0,
+        "ticks_advanced": 2857,
+        "visited_tiles": 81,
+        "directions": [
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          2.0
+        ],
+        "binary_sha256": "641e98bc7398acbc6c14b44822668ab038359aed16dabe4bd8c088cc837ec460",
+        "passed": true
+      },
+      {
+        "scale": "4",
+        "exit": 0,
+        "frames": 359,
+        "visible_frames": 359,
+        "camera_mismatches": 0,
+        "ticks_advanced": 2857,
+        "visited_tiles": 81,
+        "directions": [
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          4.0
+        ],
+        "binary_sha256": "641e98bc7398acbc6c14b44822668ab038359aed16dabe4bd8c088cc837ec460",
+        "passed": true
+      },
+      {
+        "scale": "8",
+        "exit": 0,
+        "frames": 359,
+        "visible_frames": 359,
+        "camera_mismatches": 0,
+        "ticks_advanced": 2857,
+        "visited_tiles": 81,
+        "directions": [
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          8.0
+        ],
+        "binary_sha256": "641e98bc7398acbc6c14b44822668ab038359aed16dabe4bd8c088cc837ec460",
+        "passed": true
+      }
+    ]
+  }
+}

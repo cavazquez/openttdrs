@@ -1042,6 +1042,9 @@ fn unload_vehicles_impl<const PROFILE: bool>(
     {
         let selection_span = profile.span::<PROFILE>(UnloadPhase::Selection);
         let order_vehicle_idx = vehicle_order_index(state, i);
+        if !train_ready_for_station_transfer(&state.vehicles[order_vehicle_idx]) {
+            continue;
+        }
         if *loaded_flag {
             continue;
         }
@@ -1570,6 +1573,9 @@ pub(super) fn load_vehicles(
         .take(state.vehicles.len())
     {
         let order_vehicle_idx = vehicle_order_index(state, i);
+        if !train_ready_for_station_transfer(&state.vehicles[order_vehicle_idx]) {
+            continue;
+        }
         // El refit de estación se evalúa antes de los filtros de capacidad y
         // de locomotora sin vagón: `HandleStationRefit` forma parte de la
         // misma fase que la carga y no depende de que haya stock disponible.
@@ -3055,6 +3061,18 @@ fn try_load_from_station_waiting_cargo(
     true
 }
 
+/// Native trains begin loading after `VehicleEnter_Station` confirms the exact
+/// stop coordinate. A wagon entering a platform is insufficient: transferring
+/// then stops the head before the other wagons can reach the platform.
+fn train_ready_for_station_transfer(head: &crate::Vehicle) -> bool {
+    head.kind != VehicleKind::Train
+        // Abstract legacy trains do not use the native front-engine controller.
+        || head.engine_id.is_none()
+        || head.awaiting_load_window
+        || head.cargo_transfer_active()
+        || (head.cur_speed == 0 && head.pos == head.dest && head.path.is_empty())
+}
+
 fn vehicle_should_unload_at_station(
     vehicle: &crate::Vehicle,
     order_vehicle: &crate::Vehicle,
@@ -3069,11 +3087,7 @@ fn vehicle_should_unload_at_station(
     };
     let at_stop = station::vehicle_at_road_stop(&state.map, vehicle)
         || vehicle.cargo_unloading
-        || station::vehicle_physically_at_station(
-            &state.map,
-            vehicle,
-            &state.stations[station_idx],
-        );
+        || vehicle_at_cached_station(state, vehicle, &state.stations[station_idx]);
     if !at_stop {
         return false;
     }
@@ -3157,6 +3171,7 @@ fn vehicle_at_cached_station(
     vehicle: &crate::Vehicle,
     station: &crate::Station,
 ) -> bool {
+    let vehicle = station_reference_vehicle(state, vehicle);
     let footprint = (vehicle.kind == VehicleKind::Train)
         .then(|| {
             state
@@ -3169,6 +3184,7 @@ fn vehicle_at_cached_station(
 }
 
 fn station_index_at_vehicle(state: &GameState, vehicle: &crate::Vehicle) -> Option<usize> {
+    let vehicle = station_reference_vehicle(state, vehicle);
     if let Some(indexed) = state
         .runtime
         .terminal_spatial_index
@@ -3211,6 +3227,27 @@ fn station_index_at_vehicle(state: &GameState, vehicle: &crate::Vehicle) -> Opti
             (station.pos.x - vehicle.pos.x).abs() + (station.pos.y - vehicle.pos.y).abs()
         })
         .map(|(idx, _)| idx)
+}
+
+/// `LoadUnloadVehicle` uses the station registered by the front engine for
+/// every unit, including wagons that extend beyond a short platform.
+fn station_reference_vehicle<'a>(
+    state: &'a GameState,
+    vehicle: &'a crate::Vehicle,
+) -> &'a crate::Vehicle {
+    if vehicle.kind == VehicleKind::Train
+        && let Some(head_id) = state.runtime.fleet_index.head_id(vehicle.id)
+        && let Some(slot) = state
+            .runtime
+            .fleet_index
+            .lookup_slot(&state.vehicles, head_id)
+        && let Some(head) = state.vehicles.get(slot)
+        && head.engine_id.is_some()
+        && (head.awaiting_load_window || head.cargo_transfer_active())
+    {
+        return head;
+    }
+    vehicle
 }
 
 /// Estación válida para cargar desde industria: en la parada o sobre la tesela de la industria.
@@ -3283,6 +3320,114 @@ fn station_has_industry_waiting(
 )] // Fixtures de mapa acotado construidos en cada prueba.
 mod tests {
     use super::*;
+
+    #[test]
+    fn wagon_on_platform_does_not_transfer_before_front_engine_begin_loading() {
+        let station = TileCoord::new(4, 3);
+        let end = TileCoord::new(7, 3);
+        let source = TileCoord::new(1, 3);
+        let mut state = GameState::new(12, 8);
+        crate::apply_command(
+            &mut state,
+            &crate::Command::PlaceRailStationArea {
+                origin: station,
+                axis_y: false,
+                platforms: 1,
+                length: 4,
+            },
+        )
+        .unwrap();
+        let anchor = state.stations[0].pos;
+        let mut head = crate::Vehicle::new(70, VehicleKind::Train, station, end);
+        head.engine_id = Some(crate::engine::ENGINE_TRAIN_SH_8P);
+        head.next_unit = Some(71);
+        head.running = true;
+        head.cur_speed = 60;
+        head.path.push_back(TileCoord::new(5, 3));
+        head.orders.push(crate::VehicleOrder::station_with_refit(
+            anchor,
+            crate::OrderLoadType::NoLoad,
+            crate::OrderUnloadType::Transfer,
+            crate::OrderNonStop::StopAtIntermediate,
+            None,
+            false,
+        ));
+        let mut wagon = crate::Vehicle::new(71, VehicleKind::Train, station, end);
+        wagon.prev_unit = Some(70);
+        wagon
+            .cargo_packets
+            .push(crate::CargoPacket::new(CargoType::Coal, 10, source));
+        wagon.sync_cargo_from_packets();
+        wagon.cargo_type = Some(CargoType::Coal);
+        state.vehicles = vec![head, wagon];
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+        let mut unloaded = vec![false; 2];
+        unload_vehicles(&mut state, 0, &[false; 2], &mut unloaded);
+        assert_eq!(state.vehicles[1].cargo, 10);
+        assert!(!state.vehicles[0].cargo_unloading);
+        assert_eq!(unloaded, [false, false]);
+
+        // VehicleEnter_Station has now accepted the exact stop coordinate.
+        state.vehicles[0].awaiting_load_window = true;
+        state.vehicles[0].cur_speed = 0;
+        assert_eq!(
+            station_index_at_vehicle(&state, &state.vehicles[1]),
+            Some(0)
+        );
+        assert!(vehicle_should_unload_at_station(
+            &state.vehicles[1],
+            &state.vehicles[0],
+            &state
+        ));
+        unload_vehicles(&mut state, 1, &[false; 2], &mut unloaded);
+        assert!(state.vehicles[1].cargo < 10);
+        assert!(unloaded[1]);
+    }
+
+    #[test]
+    fn wagon_beyond_short_platform_unloads_at_front_engines_station() {
+        let mut state = GameState::new(12, 8);
+        let first = TileCoord::new(4, 3);
+        let end = TileCoord::new(5, 3);
+        crate::apply_command(
+            &mut state,
+            &crate::Command::PlaceRailStationArea {
+                origin: first,
+                axis_y: false,
+                platforms: 1,
+                length: 2,
+            },
+        )
+        .unwrap();
+        let anchor = state.stations[0].pos;
+        let mut head = crate::Vehicle::new(70, VehicleKind::Train, end, end);
+        head.engine_id = Some(crate::engine::ENGINE_TRAIN_SH_8P);
+        head.next_unit = Some(71);
+        head.awaiting_load_window = true;
+        head.orders = vec![crate::VehicleOrder::station_with_types(
+            anchor,
+            crate::OrderLoadType::NoLoad,
+            crate::OrderUnloadType::Transfer,
+            crate::OrderNonStop::StopAtIntermediate,
+        )];
+        let mut wagon = crate::Vehicle::new(71, VehicleKind::Train, TileCoord::new(3, 3), end);
+        wagon.prev_unit = Some(70);
+        wagon.cargo_packets.push(crate::CargoPacket::new(
+            CargoType::Coal,
+            10,
+            TileCoord::new(1, 3),
+        ));
+        wagon.sync_cargo_from_packets();
+        wagon.cargo_type = Some(CargoType::Coal);
+        state.vehicles = vec![head, wagon];
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+        let mut unloaded = vec![false; 2];
+        for tick in 0..10 {
+            unload_vehicles(&mut state, tick, &[false; 2], &mut unloaded);
+        }
+        assert_eq!(state.vehicles[1].cargo, 0);
+        assert!(unloaded[1]);
+    }
 
     fn cb36_literal_runtime(value: u16) -> crate::newgrf_sprites::TrainSpriteGraphics {
         use crate::newgrf_sprites::{

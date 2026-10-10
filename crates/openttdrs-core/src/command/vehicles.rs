@@ -1440,10 +1440,49 @@ pub(super) fn skip_vehicle_order(
     let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
-    let vehicle = &mut state.vehicles[vehicle_idx];
-    if vehicle.orders.is_empty() {
+    if state.vehicles[vehicle_idx].orders.is_empty() {
         return Ok(());
     }
+    let leaving_station = state.vehicles[vehicle_idx].awaiting_load_window
+        || state.vehicles[vehicle_idx].cargo_transfer_active();
+    // CmdSkipToOrder calls LeaveStation while loading. CancelReservation
+    // returns the consist's pending MTA_LOAD before it departs.
+    for unit_id in crate::consist_unit_ids(&state.vehicles, vehicle_id) {
+        if !leaving_station {
+            break;
+        }
+        let Some(slot) = state.vehicles.iter().position(|v| v.id == unit_id) else {
+            continue;
+        };
+        let unit = &state.vehicles[slot];
+        if let Some(source) = unit.cargo_packets.reservation_station
+            && let Some(station) = state.stations.iter().position(|s| s.pos == source)
+        {
+            let amount = unit.cargo_packets.reserved_count();
+            let pos = unit.pos;
+            state.stations[station]
+                .cargo_packets
+                .return_reserved_from_vehicle(
+                    source,
+                    &mut state.vehicles[slot].cargo_packets,
+                    amount,
+                    None,
+                    pos,
+                );
+            state.stations[station].sync_stock_from_packets();
+            state.vehicles[slot].sync_cargo_from_packets();
+        }
+        let cargo = &mut state.vehicles[slot].cargo_packets;
+        let stored = cargo.stored_count();
+        cargo.action_counts = [0, 0, stored, cargo.reserved_count()];
+        cargo.staged_transfer = 0;
+        cargo.staged_deliver = 0;
+        cargo.staged_keep = stored;
+        state.vehicles[slot].cargo_loading = false;
+        state.vehicles[slot].cargo_unloading = false;
+        state.vehicles[slot].awaiting_load_window = false;
+    }
+    let vehicle = &mut state.vehicles[vehicle_idx];
     vehicle.path.clear();
     vehicle.depart_turn = 0;
     vehicle.no_network_route_to_order = false;

@@ -6,6 +6,22 @@ Los cambios relevantes de cada release se documentan aquí. El formato sigue
 
 ## [Unreleased]
 
+### Corregido
+
+- Las formaciones esperan a que la locomotora complete la parada antes de
+  transferir carga; conservan el destino durante el último tramo subtesela.
+- Los vagones usan la estación de la locomotora al descargar y recuperan el
+  propietario de sus reservas pendientes al importar una partida SAV.
+- Saltar una orden durante la carga devuelve las reservas de toda la formación.
+- Los trenes bloqueados por PBS reintentan la reserva completa al vencer la
+  espera, aunque la siguiente tesela ya estuviera reservada.
+
+### Herramientas de comprobación
+
+- Copia reproducible del tren 2902 de Kale con sus órdenes, vías y señales;
+  confirma llegada, transferencia y regreso. Alcance y comandos en
+  `docs/parity/kale-train-follow.md`.
+
 ## [0.1.0-alpha.5] - 2026-10-02
 
 ### Mejorado

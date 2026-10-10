@@ -1,6 +1,7 @@
 //! Beep al pulsar botones de UI (toolbar, menú principal, ventana guardar/cargar).
 //! Paridad `SndClickBeep` / `sound.click_beep`.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::ecs::query::Or;
 use bevy::prelude::*;
 
@@ -12,10 +13,10 @@ pub(crate) fn toolbar_click_beep(
     hud: Res<SimHudControls>,
     mut writer: MessageWriter<PlayHudSfx>,
     buttons: Query<
-        &Interaction,
+        &UiInteraction,
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Or<(With<BuildMenuUi>, With<UiClickBeep>)>,
         ),
     >,
@@ -24,7 +25,7 @@ pub(crate) fn toolbar_click_beep(
         return;
     }
     for interaction in &buttons {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             writer.write(PlayHudSfx(HudSfxKind::ClickBeep));
         }
     }

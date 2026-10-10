@@ -3,6 +3,7 @@
 //! Presenta las ocho acciones de autoridad de OpenTTD 15.3 y ejecuta el
 //! `Command::DoTownAction` determinista del dominio.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use std::collections::HashMap;
 
 use bevy::prelude::*;
@@ -111,7 +112,7 @@ fn spawn_town_authority_action_button(
     action: TownAction,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         TownAuthorityActionButton(action),
         Node {
             width: Val::Percent(100.0),
@@ -124,7 +125,7 @@ fn spawn_town_authority_action_button(
         },
         BackgroundColor(ACTION_ENABLED_BG),
         BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             TownAuthorityActionText(action),
@@ -307,8 +308,8 @@ fn authority_ratings_text_locale(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_town_authority_buttons(
     buttons: Query<
-        (&Interaction, &TownAuthorityActionButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &TownAuthorityActionButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     window: Res<TownAuthorityWindowState>,
     mut sim: ResMut<SimWorld>,
@@ -320,7 +321,7 @@ pub(crate) fn handle_town_authority_buttons(
         return;
     };
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Some(town) = sim.state.towns.iter().find(|town| town.id == town_id) else {
@@ -541,6 +542,8 @@ pub(crate) fn town_authority_window_on_closed(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use openttdrs_core::{CompanyId, GameState, Town};
@@ -630,9 +633,9 @@ mod tests {
         world.init_resource::<HudBuildFeedback>();
         world.insert_resource(Time::<()>::default());
         world.spawn((
-            Button,
+            UiButton,
             TownAuthorityActionButton(TownAction::RoadRebuild),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
 
         world

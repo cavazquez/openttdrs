@@ -121,7 +121,9 @@
     "scripts/test_aggregate_v1_reports.py",
     "scripts/test_fuzz_regression_corpus.py",
     "scripts/test_fuzz_replay_workflow.py",
-    "scripts/test_parity_docs_portability.py"
+    "scripts/test_parity_docs_portability.py",
+    "scripts/compare_renderer_upgrade.py",
+    "scripts/test_compare_renderer_upgrade.py"
   ],
   "runs": [
     "scripts/test_openttd_reference_manifest.py",
@@ -172,6 +174,7 @@
     "scripts/test_aggregate_v1_reports.py",
     "scripts/test_fuzz_regression_corpus.py",
     "scripts/test_fuzz_replay_workflow.py",
-    "scripts/test_parity_docs_portability.py"
+    "scripts/test_parity_docs_portability.py",
+    "scripts/test_compare_renderer_upgrade.py"
   ]
 }

@@ -1,5 +1,6 @@
 //! Lista global de subvenciones (ofertas y contratos activos).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{TICKS_PER_MONTH, cargo_display_name};
@@ -131,7 +132,7 @@ fn spawn_action_button(
     action: SubsidyListAction,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         action,
         Node {
             min_width: Val::Px(110.0),
@@ -144,7 +145,7 @@ fn spawn_action_button(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(Color::srgb(0.58, 0.50, 0.33)),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -253,15 +254,15 @@ pub(crate) fn open_subsidy_list_from_routes(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_subsidy_list_buttons(
     mut state: ResMut<SubsidyListState>,
-    rows: Query<(&Interaction, &SubsidyListRow), (Changed<Interaction>, With<Button>)>,
-    actions: Query<(&Interaction, &SubsidyListAction), (Changed<Interaction>, With<Button>)>,
+    rows: Query<(&UiInteraction, &SubsidyListRow), (Changed<UiInteraction>, With<UiButton>)>,
+    actions: Query<(&UiInteraction, &SubsidyListAction), (Changed<UiInteraction>, With<UiButton>)>,
     sim: Res<SimWorld>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut industry_panel: ResMut<IndustryPanelState>,
     mut station_panel: ResMut<StationCargoPanelState>,
 ) {
     for (interaction, row) in &rows {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         state.selected = Some(row.subsidy_id);
@@ -270,7 +271,7 @@ pub(crate) fn handle_subsidy_list_buttons(
         }
     }
     for (interaction, action) in &actions {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Some(id) = state.selected else {
@@ -383,7 +384,7 @@ pub(crate) fn sync_subsidy_list(
         for (subsidy_id, _awarded, label) in rows {
             let selected = Some(subsidy_id) == state.selected;
             list.spawn((
-                Button,
+                UiButton,
                 SubsidyListRow { subsidy_id },
                 Node {
                     width: Val::Percent(100.0),
@@ -400,7 +401,7 @@ pub(crate) fn sync_subsidy_list(
                     BTN_BG
                 }),
                 BorderColor::all(Color::srgb(0.50, 0.44, 0.30)),
-                Interaction::default(),
+                UiInteraction::default(),
                 BuildMenuUi,
                 children![(
                     Text::new(label),
@@ -427,6 +428,8 @@ pub(crate) fn subsidy_list_on_closed(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -479,9 +482,9 @@ mod tests {
         });
         world.spawn((Transform::from_xyz(0.0, 0.0, 0.0), PrimaryGameCamera));
         world.spawn((
-            Button,
+            UiButton,
             SubsidyListRow { subsidy_id: 1 },
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.run_system_once(handle_subsidy_list_buttons).unwrap();
         assert_eq!(world.resource::<SubsidyListState>().selected, Some(1));

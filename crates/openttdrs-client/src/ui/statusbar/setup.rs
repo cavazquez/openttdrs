@@ -1,3 +1,4 @@
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 
 use crate::ui::font::UiFontRole;
@@ -36,7 +37,7 @@ pub(crate) fn setup_status_bar(mut commands: Commands) {
         .with_children(|bar| {
             spawn_date_panel(bar, "1 ene 1950");
             bar.spawn((
-                Button,
+                UiButton,
                 StatusBarCenterButton,
                 BuildMenuUi,
                 Node {
@@ -50,7 +51,7 @@ pub(crate) fn setup_status_bar(mut commands: Commands) {
                 },
                 BackgroundColor(BAR_BG),
                 BorderColor::all(BAR_BORDER),
-                Interaction::default(),
+                UiInteraction::default(),
             ))
             .with_children(|center| {
                 center.spawn((
@@ -98,7 +99,7 @@ pub(crate) fn setup_status_bar(mut commands: Commands) {
 fn spawn_date_panel(parent: &mut ChildSpawnerCommands, label: &str) {
     parent
         .spawn((
-            Button,
+            UiButton,
             super::StatusBarDateButton,
             BuildMenuUi,
             Node {
@@ -111,7 +112,7 @@ fn spawn_date_panel(parent: &mut ChildSpawnerCommands, label: &str) {
             },
             BackgroundColor(BAR_BG),
             BorderColor::all(BAR_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
         ))
         .with_children(|panel| {
             panel.spawn((
@@ -129,7 +130,7 @@ fn spawn_date_panel(parent: &mut ChildSpawnerCommands, label: &str) {
 fn spawn_money_panel(parent: &mut ChildSpawnerCommands, label: &str) {
     parent
         .spawn((
-            Button,
+            UiButton,
             super::StatusBarMoneyButton,
             BuildMenuUi,
             Node {
@@ -142,7 +143,7 @@ fn spawn_money_panel(parent: &mut ChildSpawnerCommands, label: &str) {
             },
             BackgroundColor(BAR_BG),
             BorderColor::all(BAR_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
         ))
         .with_children(|panel| {
             panel.spawn((

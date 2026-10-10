@@ -65,7 +65,7 @@ def build_fake_snap(root: Path, *, include_grass: bool) -> None:
 
     for relative in (
         "static/fonts/DejaVuSansMono.ttf",
-        "assets/shaders/rail_glass_post_process.wgsl",
+        "assets/shaders/rail_glass_post_process.wesl",
         "assets/opengfx/atlas/tiles_atlas_0.png",
         "assets/music/test.ogg",
         "assets/sounds/test.wav",

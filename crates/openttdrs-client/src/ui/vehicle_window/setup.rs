@@ -1,5 +1,6 @@
 //! Inicialización de la ventana de vista del vehículo (setup, spawn helpers).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::camera::RenderTarget;
 use bevy::prelude::*;
 use bevy::render::render_resource::TextureFormat;
@@ -346,7 +347,7 @@ fn spawn_rename_action(
 ) {
     parent
         .spawn((
-            Button,
+            UiButton,
             action,
             Node {
                 width: Val::Px(66.0),
@@ -358,7 +359,7 @@ fn spawn_rename_action(
             },
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
         ))
         .with_children(|btn| {
@@ -381,7 +382,7 @@ fn spawn_vehicle_icon(
 ) {
     parent
         .spawn((
-            Button,
+            UiButton,
             action,
             ToolbarTooltipTarget { text: tip },
             Node {
@@ -394,7 +395,7 @@ fn spawn_vehicle_icon(
             },
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
         ))
         .with_children(|btn| {

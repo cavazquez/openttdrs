@@ -2,6 +2,7 @@
 //!
 //! Se abre al activar la herramienta Aeropuerto: clase, tipo, orientación y cobertura.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::{
@@ -268,7 +269,7 @@ fn spawn_text_button(
     min_width: f32,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         marker,
         Node {
             min_width: Val::Px(min_width),
@@ -281,7 +282,7 @@ fn spawn_text_button(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -562,7 +563,7 @@ pub(crate) fn sync_airport_picker(
             Without<AirportPickerLayoutText>,
         ),
     >,
-    mut buttons: Query<(&AirportPickerButton, &mut BackgroundColor), With<Button>>,
+    mut buttons: Query<(&AirportPickerButton, &mut BackgroundColor), With<UiButton>>,
 ) {
     let Some((_, mut visibility)) = root_q
         .iter_mut()
@@ -709,12 +710,15 @@ pub(crate) fn sync_airport_picker(
 }
 
 pub(crate) fn handle_airport_picker_buttons(
-    buttons: Query<(&Interaction, &AirportPickerButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&UiInteraction, &AirportPickerButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut station_state: ResMut<StationBuildState>,
     mut sim: ResMut<SimWorld>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match *button {
@@ -810,6 +814,8 @@ pub(crate) fn airport_picker_on_closed(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use crate::state::SimWorld;
     use bevy::ecs::system::RunSystemOnce;
@@ -847,9 +853,9 @@ mod tests {
         world.insert_resource(StationBuildState::default());
         world.insert_resource(SimWorld::default());
         world.spawn((
-            Button,
+            UiButton,
             AirportPickerButton::Spec(AirportSpecId::Commuter),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_airport_picker_buttons)
@@ -873,9 +879,9 @@ mod tests {
         });
         world.insert_resource(SimWorld::default());
         world.spawn((
-            Button,
+            UiButton,
             AirportPickerButton::Class(AirportClassId::Heliport),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_airport_picker_buttons)
@@ -955,9 +961,9 @@ mod tests {
             .push(picker_newgrf_spec(layouts.clone()));
         select_world.insert_resource(sim);
         select_world.spawn((
-            Button,
+            UiButton,
             AirportPickerButton::NewgrfSpec(10),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         select_world
             .run_system_once(handle_airport_picker_buttons)
@@ -993,9 +999,9 @@ mod tests {
         sim.state.current_airport_newgrf_id = Some(10);
         cycle_world.insert_resource(sim);
         cycle_world.spawn((
-            Button,
+            UiButton,
             AirportPickerButton::LayoutNext,
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         cycle_world
             .run_system_once(handle_airport_picker_buttons)

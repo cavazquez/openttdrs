@@ -3,6 +3,7 @@
 //! Config + parámetros runtime (`param[]` → Action2 `0x7F`). Las entradas
 //! `is_static` (p. ej. OpenGFX) no se pueden desactivar ni eliminar.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::{NewGrfEntry, format_grfid, inspect_grf_file, scan_grf_file, validate_stack};
@@ -131,7 +132,7 @@ pub(crate) fn setup_newgrf_window(mut commands: Commands, asset_server: Res<Asse
             |list| {
                 for index in 0..NEWGRF_ROWS {
                     list.spawn((
-                        Button,
+                        UiButton,
                         NewGrfRow { index },
                         Node {
                             width: Val::Percent(100.0),
@@ -143,7 +144,7 @@ pub(crate) fn setup_newgrf_window(mut commands: Commands, asset_server: Res<Asse
                         },
                         BackgroundColor(ROW_BG),
                         BorderColor::all(BTN_BORDER),
-                        Interaction::default(),
+                        UiInteraction::default(),
                         BuildMenuUi,
                     ))
                     .with_children(|row| {
@@ -208,7 +209,7 @@ fn spawn_action_btn(
 ) {
     parent
         .spawn((
-            Button,
+            UiButton,
             action,
             Node {
                 flex_grow: 1.0,
@@ -220,7 +221,7 @@ fn spawn_action_btn(
             },
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
         ))
         .with_children(|btn| {
@@ -237,7 +238,7 @@ pub(crate) fn sync_newgrf_window(
     sim: Option<Res<SimWorld>>,
     prefs: Res<ClientPreferences>,
     mut windows: Query<(&FloatingWindow, &mut Visibility)>,
-    mut rows: Query<(&NewGrfRow, &mut Node, &mut BackgroundColor), With<Button>>,
+    mut rows: Query<(&NewGrfRow, &mut Node, &mut BackgroundColor), With<UiButton>>,
     mut texts: Query<(&NewGrfRowText, &mut Text), Without<NewGrfInspectText>>,
     mut inspect_q: Query<&mut Text, With<NewGrfInspectText>>,
 ) {
@@ -321,12 +322,16 @@ pub(crate) fn sync_newgrf_window(
 
 pub(crate) fn handle_newgrf_window_buttons(
     mut row_q: Query<
-        (&Interaction, &NewGrfRow),
-        (Changed<Interaction>, With<Button>, Without<NewGrfAction>),
+        (&UiInteraction, &NewGrfRow),
+        (
+            Changed<UiInteraction>,
+            With<UiButton>,
+            Without<NewGrfAction>,
+        ),
     >,
     mut action_q: Query<
-        (&Interaction, &NewGrfAction),
-        (Changed<Interaction>, With<Button>, Without<NewGrfRow>),
+        (&UiInteraction, &NewGrfAction),
+        (Changed<UiInteraction>, With<UiButton>, Without<NewGrfRow>),
     >,
     mut state: ResMut<NewGrfWindowState>,
     mut sim: ResMut<SimWorld>,
@@ -337,7 +342,7 @@ pub(crate) fn handle_newgrf_window_buttons(
         return;
     }
     for (interaction, row) in &mut row_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         if row.index < sim.state.newgrf_stack.len() {
@@ -345,7 +350,7 @@ pub(crate) fn handle_newgrf_window_buttons(
         }
     }
     for (interaction, action) in &mut action_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         if matches!(action, NewGrfAction::AddFromDisk) {

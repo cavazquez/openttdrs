@@ -3,6 +3,7 @@
 //! Al cambiar el tipo, actualiza los iconos del toolbar como OpenTTD
 //! (`BuildRailToolbarWindow::OnInit` / `gui_sprites`).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use bevy::ui::widget::ImageNode;
 use openttdrs_core::Command;
@@ -40,7 +41,7 @@ pub(crate) fn spawn_rail_type_selector(
             RailType::Maglev => "Tipo de vía: maglev (construir / convertir)",
         };
         buttons.spawn((
-            Button,
+            UiButton,
             RailTypeSelectButton(rt),
             ToolbarTooltipTarget { text: tip },
             BuildMenuUi,
@@ -55,7 +56,7 @@ pub(crate) fn spawn_rail_type_selector(
             },
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             children![(
                 Text::new(short_label(rt)),
                 ui_text_font_loaded(asset_server, UiFontRole::Caption),
@@ -135,11 +136,14 @@ pub(crate) fn rail_toolbar_icon_path(
 }
 
 pub(crate) fn handle_rail_type_select_buttons(
-    buttons: Query<(&Interaction, &RailTypeSelectButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&UiInteraction, &RailTypeSelectButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut sim: ResMut<SimWorld>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let _ = crate::network::apply_player_command(
@@ -151,7 +155,7 @@ pub(crate) fn handle_rail_type_select_buttons(
 
 pub(crate) fn sync_rail_type_select_visuals(
     sim: Res<SimWorld>,
-    mut buttons: Query<(&RailTypeSelectButton, &mut BackgroundColor), With<Button>>,
+    mut buttons: Query<(&RailTypeSelectButton, &mut BackgroundColor), With<UiButton>>,
 ) {
     let current = sim.state.current_rail_type;
     for (button, mut bg) in &mut buttons {
@@ -192,6 +196,8 @@ pub(crate) fn sync_rail_toolbar_icons(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -202,9 +208,9 @@ mod tests {
         sim.state.current_rail_type = RailType::Rail;
         world.insert_resource(sim);
         world.spawn((
-            Button,
+            UiButton,
             RailTypeSelectButton(RailType::Electric),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_rail_type_select_buttons)

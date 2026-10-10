@@ -1,5 +1,6 @@
 //! Directorio global de pueblos — primer consumidor de `list_window`.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::text::EditableText;
@@ -125,7 +126,7 @@ pub(crate) fn setup_town_directory(mut commands: Commands, asset_server: Res<Ass
             );
         });
         body.spawn((
-            Button,
+            UiButton,
             TownDirectoryFundButton,
             Node {
                 width: Val::Percent(100.0),
@@ -138,7 +139,7 @@ pub(crate) fn setup_town_directory(mut commands: Commands, asset_server: Res<Ass
             },
             BackgroundColor(Color::srgb(0.32, 0.38, 0.28)),
             BorderColor::all(Color::srgb(0.50, 0.58, 0.40)),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
             children![(
                 TownDirectoryFundButtonText,
@@ -203,18 +204,18 @@ pub(crate) fn handle_town_directory_buttons(
     editor: Res<EditorSession>,
     mut state: ResMut<TownDirectoryState>,
     sort_buttons: Query<
-        (&Interaction, &TownDirectorySortButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &TownDirectorySortButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     fund_buttons: Query<
-        &Interaction,
+        &UiInteraction,
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             With<TownDirectoryFundButton>,
         ),
     >,
-    town_rows: Query<(&Interaction, &TownDirectoryRow), (Changed<Interaction>, With<Button>)>,
+    town_rows: Query<(&UiInteraction, &TownDirectoryRow), (Changed<UiInteraction>, With<UiButton>)>,
     mut town_window: ResMut<TownWindowState>,
     mut toolbar: ResMut<ToolbarState>,
     mut tool_state: ResMut<UiToolState>,
@@ -223,7 +224,7 @@ pub(crate) fn handle_town_directory_buttons(
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
     for (interaction, button) in &sort_buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         if state.sort == button.0 {
@@ -234,7 +235,7 @@ pub(crate) fn handle_town_directory_buttons(
         }
     }
     for interaction in &fund_buttons {
-        if *interaction != Interaction::Pressed || !editor.active {
+        if *interaction != UiInteraction::Pressed || !editor.active {
             continue;
         }
         toolbar.active_group = Some(ToolbarGroup::Landscape);
@@ -243,7 +244,7 @@ pub(crate) fn handle_town_directory_buttons(
         state.open = false;
     }
     for (interaction, row) in &town_rows {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         state.selected = Some(row.town_id);
@@ -295,8 +296,12 @@ pub(crate) fn sync_town_directory(
     asset_server: Res<AssetServer>,
     mut cache: Local<TownDirectoryCache>,
     mut sort_buttons: Query<
-        (&TownDirectorySortButton, &Interaction, &mut BackgroundColor),
-        With<Button>,
+        (
+            &TownDirectorySortButton,
+            &UiInteraction,
+            &mut BackgroundColor,
+        ),
+        With<UiButton>,
     >,
     mut fund_btn: Query<&mut Node, With<TownDirectoryFundButton>>,
 ) {
@@ -442,6 +447,8 @@ pub(crate) fn town_directory_on_closed(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use crate::state::EditorSession;
     use bevy::ecs::system::RunSystemOnce;
@@ -485,9 +492,9 @@ mod tests {
             ..SimWorld::default()
         });
         world.spawn((
-            Button,
+            UiButton,
             TownDirectoryRow { town_id: 7 },
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_town_directory_buttons)
@@ -509,7 +516,7 @@ mod tests {
             state: openttdrs_core::GameState::new(8, 8),
             ..SimWorld::default()
         });
-        world.spawn((Button, TownDirectoryFundButton, Interaction::Pressed));
+        world.spawn((UiButton, TownDirectoryFundButton, UiInteraction::Pressed));
         world
             .run_system_once(handle_town_directory_buttons)
             .unwrap();
@@ -553,9 +560,9 @@ mod tests {
         });
         world.spawn((Transform::from_xyz(0.0, 0.0, 0.0), PrimaryGameCamera));
         world.spawn((
-            Button,
+            UiButton,
             TownDirectoryRow { town_id: 3 },
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_town_directory_buttons)

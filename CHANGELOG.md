@@ -6,6 +6,12 @@ Los cambios relevantes de cada release se documentan aquí. El formato sigue
 
 ## [Unreleased]
 
+### Compatibilidad
+
+- El cliente migra a Bevy 0.20.0; se adaptan picking de UI, tiempo virtual,
+  extracción de sprites y shader WESL del vidrio. Los paquetes incluyen el
+  shader nuevo. Criterio visual y evidencia en `docs/parity/bevy-020-migration.md`.
+
 ### Corregido
 
 - Las formaciones esperan a que la locomotora complete la parada antes de

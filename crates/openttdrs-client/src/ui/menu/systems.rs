@@ -1,5 +1,6 @@
 //! Sistemas de menú: toggle, entradas, sync, Esc/teclado y clic externo.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
@@ -46,18 +47,21 @@ pub(crate) struct ToolbarMenuState {
 }
 
 pub(crate) fn handle_toolbar_navigation_button(
-    buttons: Query<(&Interaction, &ToolbarNavigationButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&UiInteraction, &ToolbarNavigationButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut menu_state: ResMut<ToolbarMenuState>,
     mut tool_state: ResMut<UiToolState>,
     prefs: Res<ClientPreferences>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction == Interaction::Hovered && menu_state.pointer_capture {
+        if *interaction == UiInteraction::Hovered && menu_state.pointer_capture {
             menu_state.open = Some(button.0);
             menu_state.focus = None;
             continue;
         }
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         menu_state.open = if menu_state.open == Some(button.0) {
@@ -77,7 +81,7 @@ pub(crate) fn handle_toolbar_navigation_button(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_toolbar_menu_entries(
-    entries: Query<(&Interaction, &ToolbarMenuEntry), With<Button>>,
+    entries: Query<(&UiInteraction, &ToolbarMenuEntry), With<UiButton>>,
     mouse: Res<ButtonInput<MouseButton>>,
     context: Res<ToolbarContext>,
     mut menu_state: ResMut<ToolbarMenuState>,
@@ -90,11 +94,11 @@ pub(crate) fn handle_toolbar_menu_entries(
     mut extra_viewport: ResMut<ExtraViewportWindowState>,
 ) {
     for (interaction, entry) in &entries {
-        let click_select = *interaction == Interaction::Pressed && !menu_state.pointer_capture;
+        let click_select = *interaction == UiInteraction::Pressed && !menu_state.pointer_capture;
         let drag_release_select = menu_state.pointer_capture
             && prefs.toolbar_dropdown_autoselect
             && mouse.just_released(MouseButton::Left)
-            && *interaction == Interaction::Hovered
+            && *interaction == UiInteraction::Hovered
             && menu_state.open == Some(entry.menu);
         if (!click_select && !drag_release_select)
             || !entry.enabled
@@ -167,12 +171,12 @@ pub(crate) fn sync_toolbar_navigation_menu(
         Query<
             (
                 &ToolbarNavigationButton,
-                &Interaction,
+                &UiInteraction,
                 &mut BackgroundColor,
                 &mut BorderColor,
             ),
             (
-                With<Button>,
+                With<UiButton>,
                 With<ToolbarNavigationButton>,
                 Without<ToolbarMenuEntry>,
             ),
@@ -181,11 +185,11 @@ pub(crate) fn sync_toolbar_navigation_menu(
             (
                 Entity,
                 &ToolbarMenuEntry,
-                &Interaction,
+                &UiInteraction,
                 &mut BackgroundColor,
                 &mut BorderColor,
             ),
-            (With<Button>, Without<ToolbarNavigationButton>),
+            (With<UiButton>, Without<ToolbarNavigationButton>),
         >,
         Query<&mut Text, With<ToolbarMenuEntryCheck>>,
         Query<
@@ -214,13 +218,13 @@ pub(crate) fn sync_toolbar_navigation_menu(
         let mut buttons = visuals.p1();
         for (button, interaction, mut bg, mut border) in &mut buttons {
             let active = menu_state.open == Some(button.0);
-            *bg = if active && *interaction == Interaction::Pressed {
+            *bg = if active && *interaction == UiInteraction::Pressed {
                 BackgroundColor(Color::srgb(0.78, 0.68, 0.43))
-            } else if active && *interaction == Interaction::Hovered {
+            } else if active && *interaction == UiInteraction::Hovered {
                 BackgroundColor(Color::srgb(0.70, 0.61, 0.38))
             } else if active {
                 BackgroundColor(Color::srgb(0.62, 0.54, 0.34))
-            } else if *interaction == Interaction::Hovered {
+            } else if *interaction == UiInteraction::Hovered {
                 BackgroundColor(Color::srgb(0.42, 0.36, 0.24))
             } else {
                 BackgroundColor(Color::srgb(0.33, 0.28, 0.19))
@@ -252,7 +256,7 @@ pub(crate) fn sync_toolbar_navigation_menu(
 
             *bg = if !enabled {
                 BackgroundColor(ENTRY_DISABLED)
-            } else if *interaction == Interaction::Hovered {
+            } else if *interaction == UiInteraction::Hovered {
                 BackgroundColor(ENTRY_HOVER)
             } else if checked {
                 BackgroundColor(ENTRY_CHECKED)
@@ -462,6 +466,8 @@ pub(crate) fn handle_toolbar_menu_keyboard(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use crate::ui::navigation::UiRoute;
     use crate::ui::toolbar::DragBuildState;
@@ -482,15 +488,15 @@ mod tests {
         world.insert_resource(MinimapLayerState::default());
         world.insert_resource(ToolbarContext::default());
         world.spawn((
-            Button,
+            UiButton,
             ToolbarNavigationButton(MenuId::Map),
-            Interaction::Hovered,
+            UiInteraction::Hovered,
             BackgroundColor(ENTRY_BG),
             BorderColor::all(ENTRY_BORDER),
         ));
         let entry = world
             .spawn((
-                Button,
+                UiButton,
                 ToolbarMenuEntry {
                     menu: MenuId::Map,
                     action: MenuAction::Client(MenuClientAction::ToggleMinimap),
@@ -498,7 +504,7 @@ mod tests {
                     availability: super::super::model::MenuAvailability::Always,
                     checkable: true,
                 },
-                Interaction::None,
+                UiInteraction::None,
                 BackgroundColor(ENTRY_BG),
                 BorderColor::all(ENTRY_BORDER),
             ))
@@ -533,9 +539,9 @@ mod tests {
             ..default()
         });
         world.spawn((
-            Button,
+            UiButton,
             ToolbarNavigationButton(MenuId::World),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_toolbar_navigation_button)
@@ -626,7 +632,7 @@ mod tests {
         world.insert_resource(ButtonInput::<MouseButton>::default());
         world.insert_resource(ToolbarContext::default());
         world.spawn((
-            Button,
+            UiButton,
             ToolbarMenuEntry {
                 menu: MenuId::Industries,
                 action: MenuAction::Route(UiRoute::LinkGraph),
@@ -634,7 +640,7 @@ mod tests {
                 availability: super::super::model::MenuAvailability::Always,
                 checkable: false,
             },
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.run_system_once(handle_toolbar_menu_entries).unwrap();
         assert!(world.resource::<ToolbarMenuState>().open.is_some());
@@ -660,7 +666,7 @@ mod tests {
             ..default()
         });
         world.spawn((
-            Button,
+            UiButton,
             ToolbarMenuEntry {
                 menu: MenuId::Economy,
                 action: MenuAction::Route(UiRoute::Goals),
@@ -668,7 +674,7 @@ mod tests {
                 availability: super::super::model::MenuAvailability::HasGoals,
                 checkable: false,
             },
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
 
         world.run_system_once(handle_toolbar_menu_entries).unwrap();
@@ -691,9 +697,9 @@ mod tests {
         world.insert_resource(ClientPreferences::default());
         world.insert_resource(UiToolState::default());
         world.spawn((
-            Button,
+            UiButton,
             ToolbarNavigationButton(MenuId::World),
-            Interaction::Hovered,
+            UiInteraction::Hovered,
         ));
 
         world
@@ -733,7 +739,7 @@ mod tests {
         mouse.release(MouseButton::Left);
         world.insert_resource(mouse);
         world.spawn((
-            Button,
+            UiButton,
             ToolbarMenuEntry {
                 menu: MenuId::Map,
                 action: MenuAction::Client(MenuClientAction::ToggleMinimap),
@@ -741,7 +747,7 @@ mod tests {
                 availability: super::super::model::MenuAvailability::Always,
                 checkable: true,
             },
-            Interaction::Hovered,
+            UiInteraction::Hovered,
         ));
 
         world.run_system_once(handle_toolbar_menu_entries).unwrap();

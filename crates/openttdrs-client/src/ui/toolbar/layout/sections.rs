@@ -1,3 +1,4 @@
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use bevy::ui::FocusPolicy;
 
@@ -34,7 +35,7 @@ pub(super) fn spawn_toolbar_group_buttons(
         BorderColor::all(Color::srgb(0.68, 0.61, 0.42)),
         FocusPolicy::Block,
         BuildMenuUi,
-        Interaction::default(),
+        UiInteraction::default(),
     ))
     .with_children(|parent| {
         parent
@@ -60,7 +61,7 @@ pub(super) fn spawn_toolbar_group_buttons(
                 ] {
                     upper
                         .spawn((
-                            Button,
+                            UiButton,
                             group,
                             ToolbarGroupButton,
                             ToolbarTooltipTarget {
@@ -88,7 +89,7 @@ pub(super) fn spawn_toolbar_group_buttons(
                             },
                             BackgroundColor(Color::srgb(0.33, 0.28, 0.19)),
                             BorderColor::all(Color::srgb(0.64, 0.57, 0.39)),
-                            Interaction::default(),
+                            UiInteraction::default(),
                         ))
                         .with_children(|p| {
                             let mut entity = p.spawn((
@@ -133,7 +134,7 @@ pub(super) fn spawn_toolbar_group_buttons(
                 spawn_sound_music_toolbar_button(lower, asset_server);
             });
         parent.spawn((
-            Button,
+            UiButton,
             ToolbarSwitchButton,
             BuildMenuUi,
             Node {
@@ -147,7 +148,7 @@ pub(super) fn spawn_toolbar_group_buttons(
             },
             BackgroundColor(Color::srgb(0.33, 0.28, 0.19)),
             BorderColor::all(Color::srgb(0.64, 0.57, 0.39)),
-            Interaction::default(),
+            UiInteraction::default(),
             children![(
                 ToolbarSwitchLabel,
                 Action5GuiIconSlot(144),
@@ -178,7 +179,7 @@ fn spawn_toolbar_separator(parent: &mut ChildSpawnerCommands) {
 fn spawn_sound_music_toolbar_button(parent: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
     parent
         .spawn((
-            Button,
+            UiButton,
             SoundMusicToolbarButton,
             ResponsiveToolbarSlot { full_width: 48.0 },
             ToolbarTooltipTarget {
@@ -195,7 +196,7 @@ fn spawn_sound_music_toolbar_button(parent: &mut ChildSpawnerCommands, asset_ser
             },
             BackgroundColor(Color::srgb(0.33, 0.28, 0.19)),
             BorderColor::all(Color::srgb(0.64, 0.57, 0.39)),
-            Interaction::default(),
+            UiInteraction::default(),
         ))
         .with_children(|p| {
             p.spawn((
@@ -787,7 +788,7 @@ fn tool_panel_node(group: ToolbarGroup, hidden: bool) -> impl Bundle {
         FocusPolicy::Block,
         BuildMenuUi,
         ToolButtonGroup(group),
-        Interaction::default(),
+        UiInteraction::default(),
     )
 }
 
@@ -806,6 +807,6 @@ fn secondary_panel_node(group: ToolbarGroup) -> impl Bundle {
         FocusPolicy::Block,
         BuildMenuUi,
         ToolButtonGroup(group),
-        Interaction::default(),
+        UiInteraction::default(),
     )
 }

@@ -1,5 +1,6 @@
 //! Ventana de configuración Off / Summary / Full por tipo de noticia (N5).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::{NewsDisplayMode, NewsType, news_type_label};
 
@@ -86,7 +87,7 @@ pub(crate) fn setup_news_settings_window(mut commands: Commands, asset_server: R
                         NewsDisplayMode::Full,
                     ] {
                         row.spawn((
-                            Button,
+                            UiButton,
                             NewsSettingsModeButton { news_type, mode },
                             Node {
                                 min_width: Val::Px(58.0),
@@ -98,7 +99,7 @@ pub(crate) fn setup_news_settings_window(mut commands: Commands, asset_server: R
                             },
                             BackgroundColor(BTN_BG),
                             BorderColor::all(BTN_BORDER),
-                            Interaction::default(),
+                            UiInteraction::default(),
                             BuildMenuUi,
                             children![(
                                 Text::new(mode_button_source(mode)),
@@ -143,10 +144,13 @@ pub(crate) fn sync_news_settings_window(
 
 pub(crate) fn handle_news_settings_buttons(
     mut prefs: ResMut<NewsDisplayPrefs>,
-    buttons: Query<(&Interaction, &NewsSettingsModeButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&UiInteraction, &NewsSettingsModeButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         prefs.0.set_display(button.news_type, button.mode);

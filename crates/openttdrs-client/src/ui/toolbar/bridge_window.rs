@@ -3,6 +3,7 @@
 //! Se abre al soltar el arrastre de un tramo válido y lista los 13 tipos
 //! vanilla con coste estimado y velocidad máxima.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
@@ -99,7 +100,7 @@ fn spawn_bridge_row(parent: &mut ChildSpawnerCommands, asset_server: &AssetServe
     parent
         .spawn((
             BridgePickerButton(bt),
-            Button,
+            UiButton,
             Node {
                 width: Val::Percent(100.0),
                 padding: UiRect::axes(Val::Px(6.0), Val::Px(4.0)),
@@ -109,7 +110,7 @@ fn spawn_bridge_row(parent: &mut ChildSpawnerCommands, asset_server: &AssetServe
             },
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
         ))
         .with_children(|row| {
@@ -129,7 +130,10 @@ fn spawn_bridge_row(parent: &mut ChildSpawnerCommands, asset_server: &AssetServe
 pub(crate) fn sync_bridge_picker(
     bridge_state: Res<BridgeBuildState>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
-    mut buttons_q: Query<(&BridgePickerButton, &Interaction, &mut BackgroundColor), With<Button>>,
+    mut buttons_q: Query<
+        (&BridgePickerButton, &UiInteraction, &mut BackgroundColor),
+        With<UiButton>,
+    >,
     sim: Res<SimWorld>,
     prefs: Res<ClientPreferences>,
     mut hint_q: Query<&mut Text, With<BridgePickerHintText>>,
@@ -159,7 +163,7 @@ pub(crate) fn sync_bridge_picker(
         let enabled = available && affordable;
         *bg = if !enabled {
             BackgroundColor(BTN_BG_DISABLED)
-        } else if *interaction == Interaction::Hovered {
+        } else if *interaction == UiInteraction::Hovered {
             BackgroundColor(BTN_BG_HOVER)
         } else {
             BackgroundColor(BTN_BG)
@@ -169,7 +173,10 @@ pub(crate) fn sync_bridge_picker(
 
 pub(crate) fn handle_bridge_picker_buttons(
     mut bridge_state: ResMut<BridgeBuildState>,
-    buttons_q: Query<(&Interaction, &BridgePickerButton), (Changed<Interaction>, With<Button>)>,
+    buttons_q: Query<
+        (&UiInteraction, &BridgePickerButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut sim: ResMut<SimWorld>,
     mut pending_remap: ResMut<RemapMapVisualsPending>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
@@ -179,7 +186,7 @@ pub(crate) fn handle_bridge_picker_buttons(
         return;
     };
     for (interaction, button) in &buttons_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         if !bridge_available_at_tick(button.0, sim.state.tick, pending.start, pending.end) {

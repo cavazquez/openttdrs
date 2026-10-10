@@ -1,3 +1,4 @@
+use crate::ui::interaction::UiInteraction;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::TileCoord;
@@ -22,7 +23,7 @@ pub(crate) fn update_cursor_tile(
     layers: Res<MinimapLayerState>,
     mut hovered: ResMut<HoveredTileCoord>,
     toolbar_pointer: Query<
-        &Interaction,
+        &UiInteraction,
         (
             With<BuildMenuUi>,
             Without<MinimapRoot>,
@@ -36,7 +37,7 @@ pub(crate) fn update_cursor_tile(
     if save_window.is_some_and(|w| w.open) {
         return;
     }
-    if toolbar_pointer.iter().any(|i| *i != Interaction::None) {
+    if toolbar_pointer.iter().any(|i| *i != UiInteraction::None) {
         return;
     }
     let Ok(window) = windows.single() else {

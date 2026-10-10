@@ -1,5 +1,6 @@
 //! Ventana de ajustes `CargoDist` (`cargo_dist.distribution`).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::flow_stat::DistributionType;
@@ -66,7 +67,7 @@ pub(crate) fn setup_cargo_dist_settings_window(
                     (DistributionType::Symmetric, "Simétrica"),
                 ] {
                     row.spawn((
-                        Button,
+                        UiButton,
                         CargoDistSettingsAction(mode),
                         Node {
                             min_width: Val::Px(96.0),
@@ -79,7 +80,7 @@ pub(crate) fn setup_cargo_dist_settings_window(
                         },
                         BackgroundColor(BTN_BG),
                         BorderColor::all(BTN_BORDER),
-                        Interaction::default(),
+                        UiInteraction::default(),
                         BuildMenuUi,
                         children![(
                             Text::new(label),
@@ -115,10 +116,13 @@ pub(crate) fn sync_cargo_dist_settings_window(
 
 pub(crate) fn handle_cargo_dist_settings_buttons(
     mut sim: ResMut<SimWorld>,
-    buttons: Query<(&Interaction, &CargoDistSettingsAction), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&UiInteraction, &CargoDistSettingsAction),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
 ) {
     for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let _ = crate::network::apply_player_command(

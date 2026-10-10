@@ -1,5 +1,6 @@
 //! Ventana de ajustes / debug de IA rival (UI-8 / #44).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::{
@@ -71,7 +72,7 @@ pub(crate) fn setup_ai_settings_window(mut commands: Commands, asset_server: Res
             },
             children![
                 (
-                    Button,
+                    UiButton,
                     AiSettingsAction::ToggleEnabled,
                     Node {
                         min_width: Val::Px(120.0),
@@ -84,7 +85,7 @@ pub(crate) fn setup_ai_settings_window(mut commands: Commands, asset_server: Res
                     },
                     BackgroundColor(BTN_BG),
                     BorderColor::all(BTN_BORDER),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     BuildMenuUi,
                     children![(
                         Text::new("IA activa"),
@@ -93,7 +94,7 @@ pub(crate) fn setup_ai_settings_window(mut commands: Commands, asset_server: Res
                     )],
                 ),
                 (
-                    Button,
+                    UiButton,
                     AiSettingsAction::ResetDefaults,
                     Node {
                         min_width: Val::Px(100.0),
@@ -106,7 +107,7 @@ pub(crate) fn setup_ai_settings_window(mut commands: Commands, asset_server: Res
                     },
                     BackgroundColor(BTN_BG),
                     BorderColor::all(BTN_BORDER),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     BuildMenuUi,
                     children![(
                         Text::new("Por defecto"),
@@ -161,7 +162,7 @@ fn spawn_money_row(body: &mut ChildSpawnerCommands, asset_server: &AssetServer) 
         .with_children(|row| {
             for &value in &MONEY_PRESETS {
                 row.spawn((
-                    Button,
+                    UiButton,
                     AiSettingsAction::MoneyThreshold(value),
                     Node {
                         min_width: Val::Px(64.0),
@@ -174,7 +175,7 @@ fn spawn_money_row(body: &mut ChildSpawnerCommands, asset_server: &AssetServer) 
                     },
                     BackgroundColor(BTN_BG),
                     BorderColor::all(BTN_BORDER),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     BuildMenuUi,
                     children![(
                         Text::new(short_money(value)),
@@ -198,7 +199,7 @@ fn spawn_routes_row(body: &mut ChildSpawnerCommands, asset_server: &AssetServer)
         .with_children(|row| {
             for &value in &ROUTE_PRESETS {
                 row.spawn((
-                    Button,
+                    UiButton,
                     AiSettingsAction::MaxRoutes(value),
                     Node {
                         min_width: Val::Px(36.0),
@@ -211,7 +212,7 @@ fn spawn_routes_row(body: &mut ChildSpawnerCommands, asset_server: &AssetServer)
                     },
                     BackgroundColor(BTN_BG),
                     BorderColor::all(BTN_BORDER),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     BuildMenuUi,
                     children![(
                         Text::new(value.to_string()),
@@ -337,10 +338,10 @@ pub(crate) fn sync_ai_settings_window(
 
 pub(crate) fn handle_ai_settings_buttons(
     mut sim: ResMut<SimWorld>,
-    buttons: Query<(&Interaction, &AiSettingsAction), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<(&UiInteraction, &AiSettingsAction), (Changed<UiInteraction>, With<UiButton>)>,
 ) {
     for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let mut next = sim.state.ai;

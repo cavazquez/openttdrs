@@ -1,5 +1,6 @@
 //! Panel de selección de señales (tipo + densidad) al activar la herramienta.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::{
     SIGTYPE_BLOCK, SIGTYPE_COMBO, SIGTYPE_ENTRY, SIGTYPE_EXIT, SIGTYPE_PATH, SIGTYPE_PATH_ONEWAY,
@@ -161,7 +162,7 @@ fn spawn_chip(
     label: &str,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         button,
         Node {
             min_width: Val::Px(52.0),
@@ -174,7 +175,7 @@ fn spawn_chip(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -193,7 +194,7 @@ pub(crate) fn sync_signal_picker(
         &crate::ui::floating_window::FloatingWindowTitleText,
         &mut Text,
     )>,
-    mut buttons: Query<(&SignalPickerButton, &mut BackgroundColor), With<Button>>,
+    mut buttons: Query<(&SignalPickerButton, &mut BackgroundColor), With<UiButton>>,
 ) {
     let Some((_, mut vis)) = root_q
         .iter_mut()
@@ -223,11 +224,11 @@ pub(crate) fn sync_signal_picker(
 }
 
 pub(crate) fn handle_signal_picker_buttons(
-    buttons: Query<(&Interaction, &SignalPickerButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<(&UiInteraction, &SignalPickerButton), (Changed<UiInteraction>, With<UiButton>)>,
     mut station_state: ResMut<StationBuildState>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match *button {
@@ -254,6 +255,8 @@ pub(crate) fn signal_picker_on_closed(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -262,9 +265,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(StationBuildState::default());
         world.spawn((
-            Button,
+            UiButton,
             SignalPickerButton::Type(SIGTYPE_BLOCK),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.run_system_once(handle_signal_picker_buttons).unwrap();
         assert_eq!(
@@ -277,7 +280,11 @@ mod tests {
     fn picking_semaphore_updates_station_state() {
         let mut world = World::new();
         world.insert_resource(StationBuildState::default());
-        world.spawn((Button, SignalPickerButton::Variant(1), Interaction::Pressed));
+        world.spawn((
+            UiButton,
+            SignalPickerButton::Variant(1),
+            UiInteraction::Pressed,
+        ));
         world.run_system_once(handle_signal_picker_buttons).unwrap();
         assert_eq!(world.resource::<StationBuildState>().signal_variant, 1);
     }

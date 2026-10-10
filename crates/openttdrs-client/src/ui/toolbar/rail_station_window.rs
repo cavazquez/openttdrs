@@ -6,6 +6,7 @@
 //! cobertura. Abajo informa qué carga aceptaría/suministraría la estación
 //! en la tesela bajo el cursor.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::EditableText;
@@ -240,7 +241,7 @@ fn spawn_catalog_dropdown(
         ))
         .with_children(|col| {
             col.spawn((
-                Button,
+                UiButton,
                 StationCatalogOpenButton(kind),
                 BuildMenuUi,
                 Node {
@@ -254,7 +255,7 @@ fn spawn_catalog_dropdown(
                 },
                 BackgroundColor(BTN_BG),
                 BorderColor::all(BTN_BORDER),
-                Interaction::default(),
+                UiInteraction::default(),
             ))
             .with_children(|btn| {
                 match kind {
@@ -337,7 +338,7 @@ fn spawn_catalog_entry<B: Component>(
 ) {
     let label = label.into();
     parent.spawn((
-        Button,
+        UiButton,
         button,
         BuildMenuUi,
         Node {
@@ -351,7 +352,7 @@ fn spawn_catalog_entry<B: Component>(
         },
         BackgroundColor(ENTRY_BG),
         BorderColor::all(BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         children![(
             Text::new(label),
             window_text_font(asset_server, UiFontRole::Caption),
@@ -369,7 +370,7 @@ fn spawn_spec_catalog_entry(
     let label = label.into();
     parent
         .spawn((
-            Button,
+            UiButton,
             StationSpecSelectButton(id),
             BuildMenuUi,
             Node {
@@ -385,7 +386,7 @@ fn spawn_spec_catalog_entry(
             },
             BackgroundColor(ENTRY_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
         ))
         .with_children(|row| {
             row.spawn((
@@ -433,7 +434,7 @@ fn spawn_axis_button(
     image_path: &'static str,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         action,
         Node {
             width: Val::Px(92.0),
@@ -445,7 +446,7 @@ fn spawn_axis_button(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             ImageNode::new(asset_server.load::<Image>(image_path)),
@@ -497,7 +498,7 @@ fn spawn_text_button(
     width: f32,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         action,
         Node {
             width: Val::Px(width),
@@ -509,7 +510,7 @@ fn spawn_text_button(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -609,11 +610,11 @@ pub(crate) fn sync_rail_station_picker(
     mut buttons_q: Query<
         (
             &RailStationPickerButton,
-            &Interaction,
+            &UiInteraction,
             &mut BackgroundColor,
             &mut BorderColor,
         ),
-        With<Button>,
+        With<UiButton>,
     >,
     mut accepts_q: Query<
         &mut Text,
@@ -691,7 +692,7 @@ pub(crate) fn sync_rail_station_picker(
         let selected = button_is_selected(*button, &station_state);
         *bg = if selected {
             BackgroundColor(BTN_BG_SELECTED)
-        } else if *interaction == Interaction::Hovered {
+        } else if *interaction == UiInteraction::Hovered {
             BackgroundColor(Color::srgb(0.44, 0.38, 0.26))
         } else {
             BackgroundColor(BTN_BG)
@@ -775,8 +776,8 @@ pub(crate) fn sync_rail_station_picker(
 
 pub(crate) fn handle_rail_station_picker_buttons(
     buttons_q: Query<
-        (&Interaction, &RailStationPickerButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &RailStationPickerButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     mut station_state: ResMut<StationBuildState>,
     sim: Res<SimWorld>,
@@ -786,7 +787,7 @@ pub(crate) fn handle_rail_station_picker_buttons(
         sim.state.current_station_spec,
     );
     for (interaction, button) in &buttons_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match *button {
@@ -809,11 +810,14 @@ pub(crate) fn handle_rail_station_picker_buttons(
 }
 
 pub(crate) fn handle_station_catalog_open_buttons(
-    buttons: Query<(&Interaction, &StationCatalogOpenButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&UiInteraction, &StationCatalogOpenButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut catalog: ResMut<StationCatalogPickerState>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         catalog.open = if catalog.open == Some(button.0) {
@@ -828,12 +832,15 @@ pub(crate) fn handle_station_catalog_open_buttons(
 }
 
 pub(crate) fn handle_station_class_select_buttons(
-    buttons: Query<(&Interaction, &StationClassSelectButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&UiInteraction, &StationClassSelectButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut sim: ResMut<SimWorld>,
     mut catalog: ResMut<StationCatalogPickerState>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let _ = crate::network::apply_player_command(
@@ -846,12 +853,15 @@ pub(crate) fn handle_station_class_select_buttons(
 }
 
 pub(crate) fn handle_station_spec_select_buttons(
-    buttons: Query<(&Interaction, &StationSpecSelectButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&UiInteraction, &StationSpecSelectButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut sim: ResMut<SimWorld>,
     mut catalog: ResMut<StationCatalogPickerState>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let _ = crate::network::apply_player_command(

@@ -1,5 +1,6 @@
 //! Selector de compañía activa (toolbar).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::CompanyId;
 
@@ -58,7 +59,10 @@ pub(crate) fn spawn_company_selector(parent: &mut ChildSpawnerCommands) {
 }
 
 pub(crate) fn handle_company_selector_buttons(
-    buttons: Query<(&Interaction, &CompanySelectorButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&UiInteraction, &CompanySelectorButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut sim: ResMut<SimWorld>,
     net: Option<Res<NetworkRuntime>>,
 ) {
@@ -72,7 +76,7 @@ pub(crate) fn handle_company_selector_buttons(
         return;
     }
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let _ = sim.state.set_active_company(button.0);
@@ -83,7 +87,10 @@ pub(crate) fn sync_company_selector(
     sim: Res<SimWorld>,
     row: Query<Entity, With<CompanySelectorRow>>,
     existing: Query<(Entity, &CompanySelectorButton)>,
-    mut styles: Query<(&CompanySelectorButton, &Interaction, &mut BackgroundColor), With<Button>>,
+    mut styles: Query<
+        (&CompanySelectorButton, &UiInteraction, &mut BackgroundColor),
+        With<UiButton>,
+    >,
     mut commands: Commands,
 ) {
     let want: Vec<(CompanyId, String, bool)> = sim
@@ -117,7 +124,7 @@ pub(crate) fn sync_company_selector(
             commands.entity(row_entity).with_children(|row| {
                 for (id, label, _) in &want {
                     row.spawn((
-                        Button,
+                        UiButton,
                         CompanySelectorButton(*id),
                         BuildMenuUi,
                         ToolbarTooltipTarget {
@@ -134,7 +141,7 @@ pub(crate) fn sync_company_selector(
                         },
                         BackgroundColor(BTN_BG),
                         BorderColor::all(BTN_BORDER),
-                        Interaction::default(),
+                        UiInteraction::default(),
                         children![(
                             Text::new(label.clone()),
                             TextFont {
@@ -152,7 +159,7 @@ pub(crate) fn sync_company_selector(
         let selected = button.0 == sim.state.active_company;
         *bg = BackgroundColor(if selected {
             BTN_ACTIVE
-        } else if *interaction == Interaction::Hovered {
+        } else if *interaction == UiInteraction::Hovered {
             Color::srgb(0.5, 0.62, 0.38)
         } else {
             BTN_BG
@@ -163,6 +170,8 @@ pub(crate) fn sync_company_selector(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -174,7 +183,11 @@ mod tests {
         sim.state.ensure_rival_transcargo();
         let rival = sim.state.companies.iter().find(|c| c.is_ai).unwrap().id;
         world.insert_resource(sim);
-        world.spawn((Button, CompanySelectorButton(rival), Interaction::Pressed));
+        world.spawn((
+            UiButton,
+            CompanySelectorButton(rival),
+            UiInteraction::Pressed,
+        ));
         world
             .run_system_once(handle_company_selector_buttons)
             .unwrap();

@@ -2,6 +2,7 @@
 //!
 //! Más simple que el picker de estación rail: clase + tipo, sin cobertura ni ejes.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::{
     Command, StopKind, list_road_stop_classes, list_road_stop_specs, road_stop_class_def,
@@ -150,7 +151,7 @@ fn spawn_text_button(
     min_width: f32,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         marker,
         Node {
             min_width: Val::Px(min_width),
@@ -163,7 +164,7 @@ fn spawn_text_button(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -305,7 +306,7 @@ pub(crate) fn sync_road_stop_picker(
     mut hint_q: Query<&mut Node, With<RoadStopPickerEmptyHint>>,
     mut buttons: Query<
         (&RoadStopPickerButton, &mut BackgroundColor, &mut Visibility),
-        (With<Button>, Without<FloatingWindow>),
+        (With<UiButton>, Without<FloatingWindow>),
     >,
 ) {
     let Some((_, mut visibility)) = root_q
@@ -374,11 +375,14 @@ pub(crate) fn sync_road_stop_picker(
 }
 
 pub(crate) fn handle_road_stop_picker_buttons(
-    buttons: Query<(&Interaction, &RoadStopPickerButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&UiInteraction, &RoadStopPickerButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut sim: ResMut<SimWorld>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match *button {
@@ -414,6 +418,8 @@ pub(crate) fn road_stop_picker_on_closed(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use crate::state::SimWorld;
     use bevy::ecs::system::RunSystemOnce;
@@ -458,7 +464,11 @@ mod tests {
             newgrf_badge_translation: Vec::new(),
         });
         world.insert_resource(sim);
-        world.spawn((Button, RoadStopPickerButton::Spec(7), Interaction::Pressed));
+        world.spawn((
+            UiButton,
+            RoadStopPickerButton::Spec(7),
+            UiInteraction::Pressed,
+        ));
         world
             .run_system_once(handle_road_stop_picker_buttons)
             .unwrap();

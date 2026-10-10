@@ -1,3 +1,4 @@
+use crate::ui::interaction::UiInteraction;
 use bevy::prelude::*;
 use bevy::ui::UiScale;
 use bevy::window::PrimaryWindow;
@@ -68,12 +69,12 @@ pub(crate) fn toolbar_layout_for_width(
 }
 
 pub(crate) fn handle_toolbar_switch(
-    interaction: Query<&Interaction, (Changed<Interaction>, With<ToolbarSwitchButton>)>,
+    interaction: Query<&UiInteraction, (Changed<UiInteraction>, With<ToolbarSwitchButton>)>,
     mut state: ResMut<ToolbarLayoutState>,
 ) {
     if interaction
         .iter()
-        .any(|value| *value == Interaction::Pressed)
+        .any(|value| *value == UiInteraction::Pressed)
     {
         state.mode = match state.mode {
             ToolbarLayoutMode::Full | ToolbarLayoutMode::Lower => ToolbarLayoutMode::Upper,
@@ -164,6 +165,8 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use std::fs;
     use std::path::Path;
 
@@ -288,7 +291,7 @@ mod tests {
         world.insert_resource(ToolbarLayoutState {
             mode: ToolbarLayoutMode::Upper,
         });
-        world.spawn((Button, ToolbarSwitchButton, Interaction::Pressed));
+        world.spawn((UiButton, ToolbarSwitchButton, UiInteraction::Pressed));
 
         world.run_system_once(handle_toolbar_switch).unwrap();
         assert_eq!(

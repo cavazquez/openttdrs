@@ -26,9 +26,11 @@ la evidencia histórica se conserva sin convertirla en una prueba nueva.
 El [recorrido controlado de Kale](kale-train-follow.md) comprueba llegada,
 transferencia y regreso de su tren 2902 con las señales originales. Corrige
 parada, reservas de carga y reintento PBS; conserva como pendientes la flota
-completa y la paridad de señalización. La migración a Bevy 0.20 se está
-verificando por separado en los seis zooms y todavía no tiene aceptación
-raster completa. No se retoma el bloque de FPS durante estas comprobaciones.
+completa y la paridad de señalización. La [migración a Bevy 0.20](bevy-020-migration.md)
+queda aceptada en los seis zooms con el presupuesto acordado de menos de
+1.000 píxeles que empeoren por imagen; Órdenes y seguimiento de cámara pasan
+sus comprobaciones. Este corte termina aquí por indicación del usuario. El
+bloque de FPS continúa aplazado.
 
 ## Entrega alpha anterior (cumplida)
 

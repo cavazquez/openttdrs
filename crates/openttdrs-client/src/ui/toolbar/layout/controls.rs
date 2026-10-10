@@ -1,3 +1,4 @@
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 
 use super::super::{
@@ -53,7 +54,7 @@ pub(super) fn spawn_panel_title(
                 )],
             ));
             title_bar.spawn((
-                Button,
+                UiButton,
                 ToolbarCloseButton,
                 ToolbarTooltipTarget { text: "Cerrar" },
                 BuildMenuUi,
@@ -66,7 +67,7 @@ pub(super) fn spawn_panel_title(
                 },
                 BackgroundColor(Color::srgb(0.2, 0.31, 0.14)),
                 BorderColor::all(Color::srgb(0.12, 0.16, 0.09)),
-                Interaction::default(),
+                UiInteraction::default(),
                 children![(
                     Text::new("X"),
                     TextFont {
@@ -87,7 +88,7 @@ pub(super) fn spawn_icon_tool_buttons(
     for (tip, icon_path, action) in defs {
         buttons
             .spawn((
-                Button,
+                UiButton,
                 *action,
                 ToolSelectButton,
                 ToolbarTooltipTarget { text: tip },
@@ -102,7 +103,7 @@ pub(super) fn spawn_icon_tool_buttons(
                 },
                 BackgroundColor(Color::srgb(0.5, 0.63, 0.35)),
                 BorderColor::all(Color::srgb(0.18, 0.25, 0.12)),
-                Interaction::default(),
+                UiInteraction::default(),
             ))
             .with_children(|p| {
                 spawn_button_icon(p, asset_server, icon_path, 42.0, 34.0, false);
@@ -299,7 +300,7 @@ fn spawn_settings_text_button(
     action: SaveMenuAction,
 ) {
     let mut entity = parent.spawn((
-        Button,
+        UiButton,
         action,
         ToolbarTooltipTarget { text: tip },
         BuildMenuUi,
@@ -313,7 +314,7 @@ fn spawn_settings_text_button(
         },
         BackgroundColor(Color::srgb(0.5, 0.63, 0.35)),
         BorderColor::all(Color::srgb(0.18, 0.25, 0.12)),
-        Interaction::default(),
+        UiInteraction::default(),
         children![(
             Text::new(label),
             TextFont {
@@ -363,7 +364,7 @@ fn spawn_company_colour_picker(buttons: &mut ChildSpawnerCommands) {
                 .with_children(|row_node| {
                     for i in (row * 8)..(row * 8 + 8) {
                         row_node.spawn((
-                            Button,
+                            UiButton,
                             CompanyColourSwatch(i),
                             ToolbarTooltipTarget {
                                 text: company_colour_tooltip(i),
@@ -377,7 +378,7 @@ fn spawn_company_colour_picker(buttons: &mut ChildSpawnerCommands) {
                             },
                             BackgroundColor(company_colour_swatch_color(i)),
                             BorderColor::all(Color::srgb(0.18, 0.25, 0.12)),
-                            Interaction::default(),
+                            UiInteraction::default(),
                         ));
                     }
                 });

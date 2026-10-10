@@ -1,3 +1,4 @@
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use bevy::ui::FocusPolicy;
 
@@ -258,7 +259,7 @@ fn spawn_order_panel_row(
     row_slot: usize,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         OrderPanelRow { slot: row_slot },
         chain_slot,
         Node {
@@ -273,7 +274,7 @@ fn spawn_order_panel_row(
         },
         BackgroundColor(Color::srgb(0.22, 0.18, 0.12)),
         BorderColor::all(Color::srgb(0.45, 0.39, 0.27)),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             OrderPanelRowText { slot: row_slot },
@@ -293,7 +294,7 @@ fn spawn_order_button(
     label: &'static str,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         action,
         chain_slot,
         Node {
@@ -308,7 +309,7 @@ fn spawn_order_button(
         },
         BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),
         BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -321,6 +322,8 @@ fn spawn_order_button(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use std::collections::HashSet;
 
     use bevy::asset::AssetPlugin;
@@ -341,11 +344,11 @@ mod tests {
         app.world_mut().run_system_once(setup_order_panel).unwrap();
 
         let world = app.world_mut();
-        let mut buttons = world.query::<(&OrderPanelButton, &Button, &Interaction, &Node)>();
+        let mut buttons = world.query::<(&OrderPanelButton, &UiButton, &UiInteraction, &Node)>();
         let controls = buttons
             .iter(world)
             .map(|(control, _, interaction, node)| {
-                assert!(matches!(*interaction, Interaction::None));
+                assert!(matches!(*interaction, UiInteraction::None));
                 assert_ne!(node.display, Display::None);
                 *control
             })

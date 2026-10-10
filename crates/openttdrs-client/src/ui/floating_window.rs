@@ -5,6 +5,7 @@
 //! clic en la barra la trae al frente. El cierre se comunica con el mensaje
 //! [`FloatingWindowClosed`] para que cada ventana limpie su estado.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use bevy::ui::UiScale;
 use bevy::ui::widget::ImageNode;
@@ -1160,12 +1161,12 @@ pub(crate) fn spawn_floating_window_keyed(
             GlobalZIndex(WINDOW_BASE_Z),
             Visibility::Hidden,
             BuildMenuUi,
-            Interaction::default(),
+            UiInteraction::default(),
         ))
         .with_children(|win| {
             win.spawn((
                 FloatingWindowTitleBar,
-                Button,
+                UiButton,
                 Node {
                     width: Val::Percent(100.0),
                     height: Val::Px(TITLE_BAR_H),
@@ -1179,7 +1180,7 @@ pub(crate) fn spawn_floating_window_keyed(
                 },
                 BackgroundColor(title_color),
                 BorderColor::all(WINDOW_BORDER),
-                Interaction::default(),
+                UiInteraction::default(),
                 BuildMenuUi,
             ))
             .with_children(|bar| {
@@ -1188,7 +1189,7 @@ pub(crate) fn spawn_floating_window_keyed(
                     ToolbarTooltipTarget {
                         text: "Cerrar ventana",
                     },
-                    Button,
+                    UiButton,
                     Node {
                         width: Val::Px(CLOSEBOX_W),
                         height: Val::Percent(100.0),
@@ -1199,7 +1200,7 @@ pub(crate) fn spawn_floating_window_keyed(
                     },
                     BackgroundColor(CLOSEBOX_IDLE),
                     BorderColor::all(WINDOW_BORDER),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     BuildMenuUi,
                     children![(
                         ImageNode::new(
@@ -1231,7 +1232,7 @@ pub(crate) fn spawn_floating_window_keyed(
                         ToolbarTooltipTarget {
                             text: "Plegar / desplegar ventana",
                         },
-                        Button,
+                        UiButton,
                         Node {
                             width: Val::Px(CHROME_BUTTON_W),
                             height: Val::Percent(100.0),
@@ -1242,7 +1243,7 @@ pub(crate) fn spawn_floating_window_keyed(
                         },
                         BackgroundColor(CLOSEBOX_IDLE),
                         BorderColor::all(WINDOW_BORDER),
-                        Interaction::default(),
+                        UiInteraction::default(),
                         BuildMenuUi,
                         children![(
                             ImageNode::new(
@@ -1263,7 +1264,7 @@ pub(crate) fn spawn_floating_window_keyed(
                         ToolbarTooltipTarget {
                             text: "Fijar / liberar ventana",
                         },
-                        Button,
+                        UiButton,
                         Node {
                             width: Val::Px(CHROME_BUTTON_W),
                             height: Val::Percent(100.0),
@@ -1274,7 +1275,7 @@ pub(crate) fn spawn_floating_window_keyed(
                         },
                         BackgroundColor(CLOSEBOX_IDLE),
                         BorderColor::all(WINDOW_BORDER),
-                        Interaction::default(),
+                        UiInteraction::default(),
                         BuildMenuUi,
                         children![(
                             ImageNode::new(
@@ -1324,7 +1325,7 @@ pub(crate) fn spawn_floating_window_keyed(
                     ToolbarTooltipTarget {
                         text: "Redimensionar ventana",
                     },
-                    Button,
+                    UiButton,
                     Node {
                         position_type: PositionType::Absolute,
                         right: Val::Px(0.0),
@@ -1336,7 +1337,7 @@ pub(crate) fn spawn_floating_window_keyed(
                         ..default()
                     },
                     BackgroundColor(CLOSEBOX_IDLE),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     BuildMenuUi,
                     children![(
                         ImageNode::new(
@@ -1408,7 +1409,7 @@ fn resize_limits_for(id: FloatingWindowId) -> (Vec2, Vec2) {
 
 /// Presionar la barra de título: inicia drag y trae la ventana al frente.
 fn begin_window_drag(
-    bars: Query<(&Interaction, &ChildOf), (Changed<Interaction>, With<FloatingWindowTitleBar>)>,
+    bars: Query<(&UiInteraction, &ChildOf), (Changed<UiInteraction>, With<FloatingWindowTitleBar>)>,
     mut windows_q: Query<(Entity, &Node, &mut GlobalZIndex), With<FloatingWindow>>,
     primary: Query<&Window, With<PrimaryWindow>>,
     screen: Res<State<ClientScreen>>,
@@ -1419,7 +1420,7 @@ fn begin_window_drag(
         return;
     };
     for (interaction, child_of) in &bars {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Ok((entity, node, mut z)) = windows_q.get_mut(child_of.parent()) else {
@@ -1524,8 +1525,8 @@ fn update_focused_window_style(
 
 fn begin_window_resize(
     buttons: Query<
-        (&Interaction, &ChildOf),
-        (Changed<Interaction>, With<FloatingWindowResizeButton>),
+        (&UiInteraction, &ChildOf),
+        (Changed<UiInteraction>, With<FloatingWindowResizeButton>),
     >,
     windows: Query<&ComputedNode, With<FloatingWindow>>,
     primary: Query<&Window, With<PrimaryWindow>>,
@@ -1538,7 +1539,7 @@ fn begin_window_resize(
         return;
     };
     for (interaction, parent) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Ok(computed) = windows.get(parent.parent()) else {
@@ -1630,20 +1631,20 @@ fn apply_saved_floating_window_positions(
     *applied = true;
 }
 
-fn closebox_color(interaction: Interaction) -> Color {
+fn closebox_color(interaction: UiInteraction) -> Color {
     match interaction {
-        Interaction::None => CLOSEBOX_IDLE,
-        Interaction::Hovered => CLOSEBOX_HOVER,
-        Interaction::Pressed => CLOSEBOX_PRESSED,
+        UiInteraction::None => CLOSEBOX_IDLE,
+        UiInteraction::Hovered => CLOSEBOX_HOVER,
+        UiInteraction::Pressed => CLOSEBOX_PRESSED,
     }
 }
 
 /// Replica el relieve visual del closebox en sus estados interactivos.
 fn update_window_chrome_button_style(
     mut buttons: Query<
-        (&Interaction, &mut BackgroundColor),
+        (&UiInteraction, &mut BackgroundColor),
         (
-            Changed<Interaction>,
+            Changed<UiInteraction>,
             Or<(
                 With<FloatingWindowCloseButton>,
                 With<FloatingWindowShadeButton>,
@@ -1661,12 +1662,12 @@ fn update_window_chrome_button_style(
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn update_window_chrome_buttons(
     shade_buttons: Query<
-        (&Interaction, &ChildOf, &Children),
-        (Changed<Interaction>, With<FloatingWindowShadeButton>),
+        (&UiInteraction, &ChildOf, &Children),
+        (Changed<UiInteraction>, With<FloatingWindowShadeButton>),
     >,
     sticky_buttons: Query<
-        (&Interaction, &ChildOf, &Children),
-        (Changed<Interaction>, With<FloatingWindowStickyButton>),
+        (&UiInteraction, &ChildOf, &Children),
+        (Changed<UiInteraction>, With<FloatingWindowStickyButton>),
     >,
     title_parents: Query<&ChildOf, With<FloatingWindowTitleBar>>,
     mut windows: Query<(&FloatingWindow, &mut FloatingWindowChromeState, &mut Node)>,
@@ -1685,7 +1686,7 @@ fn update_window_chrome_buttons(
     asset_server: Res<AssetServer>,
 ) {
     for (interaction, title, children) in &shade_buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Ok(root) = title_parents.get(title.parent()) else {
@@ -1732,7 +1733,7 @@ fn update_window_chrome_buttons(
     }
 
     for (interaction, title, children) in &sticky_buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Ok(root) = title_parents.get(title.parent()) else {
@@ -1780,15 +1781,15 @@ fn hide_window_and_descendants(
 /// Closebox: oculta la ventana (y hijas) y avisa al dueño para que limpie su estado.
 fn close_window_buttons(
     buttons: Query<
-        (&Interaction, &ChildOf),
-        (Changed<Interaction>, With<FloatingWindowCloseButton>),
+        (&UiInteraction, &ChildOf),
+        (Changed<UiInteraction>, With<FloatingWindowCloseButton>),
     >,
     bars: Query<&ChildOf, With<FloatingWindowTitleBar>>,
     mut windows_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut closed: MessageWriter<FloatingWindowClosed>,
 ) {
     for (interaction, child_of) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Ok(bar_parent) = bars.get(child_of.parent()) else {
@@ -1843,6 +1844,8 @@ pub(crate) fn close_top_visible_floating_window(
 #[cfg(test)]
 #[allow(clippy::drop_non_drop, clippy::expect_used)]
 mod tests {
+    use crate::ui::interaction::UiInteraction;
+
     use super::*;
 
     #[test]
@@ -2175,9 +2178,9 @@ mod tests {
 
     #[test]
     fn closebox_interaction_has_distinct_visual_states() {
-        assert_eq!(closebox_color(Interaction::None), CLOSEBOX_IDLE);
-        assert_eq!(closebox_color(Interaction::Hovered), CLOSEBOX_HOVER);
-        assert_eq!(closebox_color(Interaction::Pressed), CLOSEBOX_PRESSED);
+        assert_eq!(closebox_color(UiInteraction::None), CLOSEBOX_IDLE);
+        assert_eq!(closebox_color(UiInteraction::Hovered), CLOSEBOX_HOVER);
+        assert_eq!(closebox_color(UiInteraction::Pressed), CLOSEBOX_PRESSED);
         assert_ne!(CLOSEBOX_IDLE, CLOSEBOX_PRESSED);
     }
 

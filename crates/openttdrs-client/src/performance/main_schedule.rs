@@ -178,9 +178,8 @@ mod tests {
 
     #[test]
     fn timing_boundaries_preserve_custom_schedules_frames_and_ticks() {
-        let folder =
-            std::env::temp_dir().join(format!("openttdrs-main-timing-{}", std::process::id()));
-        std::fs::create_dir_all(&folder).expect("fixture folder");
+        let temp = tempfile::tempdir().expect("fixture folder");
+        let folder = temp.path();
         let normal_path = folder.join("normal.csv");
         let detail_path = folder.join("detail.csv");
         let mut app = App::new();

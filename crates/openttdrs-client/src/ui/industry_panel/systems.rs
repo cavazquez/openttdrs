@@ -1,3 +1,4 @@
+use crate::ui::interaction::UiInteraction;
 use bevy::prelude::*;
 use openttdrs_core::industry::{INDUSTRY_PRODUCE_AMOUNT, industry_produce_period_ticks};
 
@@ -64,11 +65,11 @@ pub(crate) fn industry_panel_on_closed(
 }
 
 pub(crate) fn industry_panel_center_interaction(
-    q: Query<&Interaction, (Changed<Interaction>, With<IndustryPanelCenterButton>)>,
+    q: Query<&UiInteraction, (Changed<UiInteraction>, With<IndustryPanelCenterButton>)>,
     prod_q: Query<
-        &Interaction,
+        &UiInteraction,
         (
-            Changed<Interaction>,
+            Changed<UiInteraction>,
             With<IndustryPanelProductionButton>,
             Without<IndustryPanelCenterButton>,
         ),
@@ -82,12 +83,12 @@ pub(crate) fn industry_panel_center_interaction(
         return;
     };
     for interaction in &prod_q {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             production.open = true;
         }
     }
     for interaction in &q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let height = sim.state.map.get(focus).map_or(0, |tile| tile.height);

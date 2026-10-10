@@ -1,3 +1,4 @@
+use crate::ui::interaction::UiInteraction;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
@@ -134,7 +135,7 @@ pub(crate) fn handle_ingame_escape(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn close_toolbar_button_interaction(
-    q: Query<&Interaction, (Changed<Interaction>, With<ToolbarCloseButton>)>,
+    q: Query<&UiInteraction, (Changed<UiInteraction>, With<ToolbarCloseButton>)>,
     mut toolbar_state: ResMut<ToolbarState>,
     mut tool_state: ResMut<UiToolState>,
     mut drag_state: ResMut<DragBuildState>,
@@ -144,7 +145,7 @@ pub(crate) fn close_toolbar_button_interaction(
     mut station_state: ResMut<crate::ui::toolbar::StationBuildState>,
 ) {
     for interaction in &q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         cancel_ingame_placement(
@@ -266,7 +267,7 @@ mod tests {
         assert!(matches!(
             world.resource::<NextState<ClientScreen>>(),
             NextState::Pending(ClientScreen::MainMenu)
-                | NextState::PendingIfNeq(ClientScreen::MainMenu)
+                | NextState::PendingIfDifferent(ClientScreen::MainMenu)
         ));
         assert!(world.resource::<SuspendedGameSession>().active);
     }

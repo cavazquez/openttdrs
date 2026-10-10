@@ -1,3 +1,4 @@
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::Climate;
 
@@ -17,7 +18,7 @@ pub(super) fn density_button(
     target: MainMenuDensityTarget,
 ) -> impl Bundle {
     (
-        Button,
+        UiButton,
         UiClickBeep,
         MainMenuDensityButton(density, target),
         Node {
@@ -30,7 +31,7 @@ pub(super) fn density_button(
         },
         BackgroundColor(Color::srgb(0.26, 0.24, 0.19)),
         BorderColor::all(Color::srgb(0.58, 0.54, 0.42)),
-        Interaction::default(),
+        UiInteraction::default(),
         children![(
             MainMenuDynamicText::Density(density),
             Text::new(density.menu_label()),
@@ -52,7 +53,7 @@ pub(super) fn starting_money_button(amount: i64) -> impl Bundle {
         amount.to_string()
     };
     (
-        Button,
+        UiButton,
         UiClickBeep,
         MainMenuStartingMoneyButton(amount),
         Node {
@@ -65,7 +66,7 @@ pub(super) fn starting_money_button(amount: i64) -> impl Bundle {
         },
         BackgroundColor(Color::srgb(0.26, 0.24, 0.19)),
         BorderColor::all(Color::srgb(0.58, 0.54, 0.42)),
-        Interaction::default(),
+        UiInteraction::default(),
         children![(
             Text::new(label),
             TextFont {
@@ -79,7 +80,7 @@ pub(super) fn starting_money_button(amount: i64) -> impl Bundle {
 
 pub(super) fn roughness_button(roughness: TerrainRoughness) -> impl Bundle {
     (
-        Button,
+        UiButton,
         UiClickBeep,
         MainMenuRoughnessButton(roughness),
         Node {
@@ -92,7 +93,7 @@ pub(super) fn roughness_button(roughness: TerrainRoughness) -> impl Bundle {
         },
         BackgroundColor(Color::srgb(0.26, 0.24, 0.19)),
         BorderColor::all(Color::srgb(0.58, 0.54, 0.42)),
-        Interaction::default(),
+        UiInteraction::default(),
         children![(
             MainMenuDynamicText::Roughness(roughness),
             Text::new(roughness.menu_label()),
@@ -113,7 +114,7 @@ pub(super) fn map_size_button(btn: MainMenuMapSizeButton) -> impl Bundle {
         }
     };
     (
-        Button,
+        UiButton,
         UiClickBeep,
         btn,
         Node {
@@ -126,7 +127,7 @@ pub(super) fn map_size_button(btn: MainMenuMapSizeButton) -> impl Bundle {
         },
         BackgroundColor(Color::srgb(0.28, 0.26, 0.2)),
         BorderColor::all(Color::srgb(0.62, 0.58, 0.44)),
-        Interaction::default(),
+        UiInteraction::default(),
         children![(
             Text::new(label),
             TextFont {
@@ -140,7 +141,7 @@ pub(super) fn map_size_button(btn: MainMenuMapSizeButton) -> impl Bundle {
 
 pub(super) fn start_year_button(year: u32) -> impl Bundle {
     (
-        Button,
+        UiButton,
         UiClickBeep,
         MainMenuStartYearButton(year),
         Node {
@@ -153,7 +154,7 @@ pub(super) fn start_year_button(year: u32) -> impl Bundle {
         },
         BackgroundColor(Color::srgb(0.26, 0.24, 0.19)),
         BorderColor::all(Color::srgb(0.58, 0.54, 0.42)),
-        Interaction::default(),
+        UiInteraction::default(),
         children![(
             Text::new(year.to_string()),
             TextFont {
@@ -167,7 +168,7 @@ pub(super) fn start_year_button(year: u32) -> impl Bundle {
 
 pub(super) fn seed_adjust_button(marker: impl Component, label: &str) -> impl Bundle {
     (
-        Button,
+        UiButton,
         UiClickBeep,
         marker,
         Node {
@@ -180,7 +181,7 @@ pub(super) fn seed_adjust_button(marker: impl Component, label: &str) -> impl Bu
         },
         BackgroundColor(Color::srgb(0.24, 0.22, 0.17)),
         BorderColor::all(Color::srgb(0.55, 0.5, 0.38)),
-        Interaction::default(),
+        UiInteraction::default(),
         children![(
             Text::new(label),
             TextFont {
@@ -194,7 +195,7 @@ pub(super) fn seed_adjust_button(marker: impl Component, label: &str) -> impl Bu
 
 pub(super) fn climate_button(climate: Climate) -> impl Bundle {
     (
-        Button,
+        UiButton,
         UiClickBeep,
         MainMenuClimateButton(climate),
         Node {
@@ -207,7 +208,7 @@ pub(super) fn climate_button(climate: Climate) -> impl Bundle {
         },
         BackgroundColor(Color::srgb(0.28, 0.26, 0.2)),
         BorderColor::all(Color::srgb(0.62, 0.58, 0.44)),
-        Interaction::default(),
+        UiInteraction::default(),
         children![(
             MainMenuDynamicText::Climate(climate),
             Text::new(climate_label(climate)),
@@ -226,7 +227,7 @@ pub(super) fn toggle_button(
     width: f32,
 ) -> impl Bundle {
     (
-        Button,
+        UiButton,
         UiClickBeep,
         toggle,
         Node {
@@ -239,7 +240,7 @@ pub(super) fn toggle_button(
         },
         BackgroundColor(Color::srgb(0.24, 0.22, 0.17)),
         BorderColor::all(Color::srgb(0.55, 0.5, 0.38)),
-        Interaction::default(),
+        UiInteraction::default(),
         children![(
             MainMenuLocalizedText(label),
             Text::new(label),
@@ -258,7 +259,7 @@ pub(super) fn primary_button(
     height: f32,
 ) -> impl Bundle {
     (
-        Button,
+        UiButton,
         UiClickBeep,
         marker,
         Node {
@@ -271,7 +272,7 @@ pub(super) fn primary_button(
         },
         BackgroundColor(Color::srgb(0.35, 0.33, 0.24)),
         BorderColor::all(Color::srgb(0.7, 0.66, 0.5)),
-        Interaction::default(),
+        UiInteraction::default(),
         children![(
             MainMenuLocalizedText(label),
             Text::new(label),
@@ -290,7 +291,7 @@ pub(super) fn secondary_button(
     height: f32,
 ) -> impl Bundle {
     (
-        Button,
+        UiButton,
         UiClickBeep,
         marker,
         Node {
@@ -303,7 +304,7 @@ pub(super) fn secondary_button(
         },
         BackgroundColor(Color::srgb(0.24, 0.22, 0.16)),
         BorderColor::all(Color::srgb(0.58, 0.54, 0.4)),
-        Interaction::default(),
+        UiInteraction::default(),
         children![(
             MainMenuLocalizedText(label),
             Text::new(label),
@@ -316,46 +317,46 @@ pub(super) fn secondary_button(
     )
 }
 
-pub(super) fn option_button_bg(selected: bool, interaction: Interaction) -> BackgroundColor {
+pub(super) fn option_button_bg(selected: bool, interaction: UiInteraction) -> BackgroundColor {
     if selected {
         BackgroundColor(Color::srgb(0.48, 0.42, 0.28))
-    } else if interaction == Interaction::Hovered {
+    } else if interaction == UiInteraction::Hovered {
         BackgroundColor(Color::srgb(0.36, 0.32, 0.22))
     } else {
         BackgroundColor(Color::srgb(0.28, 0.26, 0.2))
     }
 }
 
-pub(super) fn toggle_button_bg(on: bool, interaction: Interaction) -> BackgroundColor {
+pub(super) fn toggle_button_bg(on: bool, interaction: UiInteraction) -> BackgroundColor {
     if on {
         BackgroundColor(Color::srgb(0.38, 0.44, 0.32))
-    } else if interaction == Interaction::Hovered {
+    } else if interaction == UiInteraction::Hovered {
         BackgroundColor(Color::srgb(0.3, 0.28, 0.2))
     } else {
         BackgroundColor(Color::srgb(0.24, 0.22, 0.17))
     }
 }
 
-pub(super) fn seed_button_bg(interaction: Interaction) -> BackgroundColor {
+pub(super) fn seed_button_bg(interaction: UiInteraction) -> BackgroundColor {
     match interaction {
-        Interaction::Hovered => BackgroundColor(Color::srgb(0.32, 0.3, 0.22)),
-        Interaction::Pressed => BackgroundColor(Color::srgb(0.38, 0.34, 0.24)),
-        Interaction::None => BackgroundColor(Color::srgb(0.24, 0.22, 0.17)),
+        UiInteraction::Hovered => BackgroundColor(Color::srgb(0.32, 0.3, 0.22)),
+        UiInteraction::Pressed => BackgroundColor(Color::srgb(0.38, 0.34, 0.24)),
+        UiInteraction::None => BackgroundColor(Color::srgb(0.24, 0.22, 0.17)),
     }
 }
 
-pub(super) fn hover_primary(interaction: &Interaction, bg: &mut BackgroundColor) {
+pub(super) fn hover_primary(interaction: &UiInteraction, bg: &mut BackgroundColor) {
     match *interaction {
-        Interaction::Hovered => *bg = BackgroundColor(Color::srgb(0.46, 0.42, 0.3)),
-        Interaction::None => *bg = BackgroundColor(Color::srgb(0.35, 0.33, 0.24)),
-        Interaction::Pressed => {}
+        UiInteraction::Hovered => *bg = BackgroundColor(Color::srgb(0.46, 0.42, 0.3)),
+        UiInteraction::None => *bg = BackgroundColor(Color::srgb(0.35, 0.33, 0.24)),
+        UiInteraction::Pressed => {}
     }
 }
 
-pub(super) fn hover_secondary(interaction: &Interaction, bg: &mut BackgroundColor) {
+pub(super) fn hover_secondary(interaction: &UiInteraction, bg: &mut BackgroundColor) {
     match *interaction {
-        Interaction::Hovered => *bg = BackgroundColor(Color::srgb(0.34, 0.3, 0.22)),
-        Interaction::None => *bg = BackgroundColor(Color::srgb(0.24, 0.22, 0.16)),
-        Interaction::Pressed => {}
+        UiInteraction::Hovered => *bg = BackgroundColor(Color::srgb(0.34, 0.3, 0.22)),
+        UiInteraction::None => *bg = BackgroundColor(Color::srgb(0.24, 0.22, 0.16)),
+        UiInteraction::Pressed => {}
     }
 }

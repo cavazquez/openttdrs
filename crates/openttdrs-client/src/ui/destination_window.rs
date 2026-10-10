@@ -2,6 +2,7 @@
 //!
 //! Multi-instancia (#244): un picker por chain slot, abierto desde su panel Órdenes.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 
@@ -162,7 +163,7 @@ fn spawn_destination_content(
             |list| {
                 for row_slot in 0..DEST_ROWS {
                     list.spawn((
-                        Button,
+                        UiButton,
                         DestinationPickerRow { slot: row_slot },
                         chain,
                         Node {
@@ -177,7 +178,7 @@ fn spawn_destination_content(
                         },
                         BackgroundColor(BTN_BG),
                         BorderColor::all(BTN_BORDER),
-                        Interaction::default(),
+                        UiInteraction::default(),
                         BuildMenuUi,
                         children![(
                             DestinationPickerRowText { slot: row_slot },
@@ -193,7 +194,7 @@ fn spawn_destination_content(
         );
         panel
             .spawn((
-                Button,
+                UiButton,
                 DestinationPickerButton::PickOnMap,
                 chain,
                 Node {
@@ -207,7 +208,7 @@ fn spawn_destination_content(
                 },
                 BackgroundColor(BTN_BG),
                 BorderColor::all(BTN_BORDER),
-                Interaction::default(),
+                UiInteraction::default(),
                 BuildMenuUi,
             ))
             .with_children(|b| {
@@ -290,11 +291,11 @@ pub(crate) fn sync_destination_picker(
         (
             &VehicleChainSlot,
             &DestinationPickerRow,
-            &Interaction,
+            &UiInteraction,
             &mut Node,
             &mut BackgroundColor,
         ),
-        (With<Button>, With<DestinationPickerRow>),
+        (With<UiButton>, With<DestinationPickerRow>),
     >,
     mut row_text_q: Query<(&VehicleChainSlot, &DestinationPickerRowText, &mut Text)>,
     sim: Res<SimWorld>,
@@ -334,7 +335,7 @@ pub(crate) fn sync_destination_picker(
                 continue;
             }
             node.display = Display::Flex;
-            *bg = if *interaction == Interaction::Hovered {
+            *bg = if *interaction == UiInteraction::Hovered {
                 BackgroundColor(BTN_BG_HOVER)
             } else {
                 BackgroundColor(BTN_BG)
@@ -360,18 +361,18 @@ pub(crate) fn handle_destination_picker_buttons(
     mut next_pick: ResMut<NextState<OrderPickState>>,
     mut button_q: ParamSet<(
         Query<
-            (&Interaction, &DestinationPickerRow, &VehicleChainSlot),
+            (&UiInteraction, &DestinationPickerRow, &VehicleChainSlot),
             (
-                Changed<Interaction>,
-                With<Button>,
+                Changed<UiInteraction>,
+                With<UiButton>,
                 With<DestinationPickerRow>,
             ),
         >,
         Query<
-            (&Interaction, &DestinationPickerButton, &VehicleChainSlot),
+            (&UiInteraction, &DestinationPickerButton, &VehicleChainSlot),
             (
-                Changed<Interaction>,
-                With<Button>,
+                Changed<UiInteraction>,
+                With<UiButton>,
                 With<DestinationPickerButton>,
             ),
         >,
@@ -387,7 +388,7 @@ pub(crate) fn handle_destination_picker_buttons(
         return;
     }
     for (interaction, row, chain_slot) in button_q.p0().iter() {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let idx = chain_slot.0 as usize;
@@ -414,7 +415,7 @@ pub(crate) fn handle_destination_picker_buttons(
         }
     }
     for (interaction, _, chain_slot) in button_q.p1().iter() {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let idx = chain_slot.0 as usize;

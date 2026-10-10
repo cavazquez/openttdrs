@@ -90,7 +90,7 @@ for required in \
   "$launcher" \
   "$client" \
   "${snap_root}/static/fonts/DejaVuSansMono.ttf" \
-  "${snap_root}/assets/shaders/rail_glass_post_process.wgsl" \
+  "${snap_root}/assets/shaders/rail_glass_post_process.wesl" \
   "${snap_root}/assets/opengfx/tiles/grass.png" \
   "${snap_root}/assets/opengfx/atlas/tiles_atlas_0.png"; do
   if [[ ! -s "$required" ]]; then

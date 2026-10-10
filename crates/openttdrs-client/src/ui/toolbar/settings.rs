@@ -1,3 +1,4 @@
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
@@ -21,8 +22,8 @@ use super::{CompanyColourSwatch, SaveMenuAction, ZoomButton};
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_settings_menu_buttons(
     mut q: Query<
-        (&Interaction, &SaveMenuAction),
-        (Changed<Interaction>, With<Button>, Without<ZoomButton>),
+        (&UiInteraction, &SaveMenuAction),
+        (Changed<UiInteraction>, With<UiButton>, Without<ZoomButton>),
     >,
     mut hud: ResMut<SimHudControls>,
     mut save_window: ResMut<SaveWindowState>,
@@ -55,7 +56,7 @@ pub(crate) fn handle_settings_menu_buttons(
     )>,
 ) {
     for (interaction, action) in &mut q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match action {
@@ -211,8 +212,8 @@ pub(crate) fn handle_settings_menu_buttons(
 /// que ambos handlers procesen el mismo clic.
 pub(crate) fn handle_settings_zoom_buttons(
     buttons: Query<
-        (&Interaction, &SaveMenuAction),
-        (Changed<Interaction>, With<Button>, With<ZoomButton>),
+        (&UiInteraction, &SaveMenuAction),
+        (Changed<UiInteraction>, With<UiButton>, With<ZoomButton>),
     >,
     sim: Option<Res<SimWorld>>,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -235,7 +236,7 @@ pub(crate) fn handle_settings_zoom_buttons(
         .unwrap_or((1280.0, 720.0));
 
     for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let zoom_in = match action {
@@ -279,11 +280,11 @@ fn faster_sim_speed(current: f32) -> f32 {
 
 /// Abre la ventana de cheats desde Ajustes (separado por límite de SystemParam).
 pub(crate) fn handle_cheats_menu_button(
-    mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
+    mut q: Query<(&UiInteraction, &SaveMenuAction), (Changed<UiInteraction>, With<UiButton>)>,
     mut cheat_window: ResMut<crate::ui::cheat_window::CheatWindowState>,
 ) {
     for (interaction, action) in &mut q {
-        if *interaction == Interaction::Pressed && matches!(action, SaveMenuAction::Cheats) {
+        if *interaction == UiInteraction::Pressed && matches!(action, SaveMenuAction::Cheats) {
             cheat_window.open = true;
         }
     }
@@ -291,11 +292,11 @@ pub(crate) fn handle_cheats_menu_button(
 
 /// Cicla la dificultad de averías mediante un comando determinista de partida.
 pub(crate) fn handle_vehicle_breakdowns_menu_button(
-    mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
+    mut q: Query<(&UiInteraction, &SaveMenuAction), (Changed<UiInteraction>, With<UiButton>)>,
     mut sim: ResMut<SimWorld>,
 ) {
     for (interaction, action) in &mut q {
-        if *interaction != Interaction::Pressed
+        if *interaction != UiInteraction::Pressed
             || !matches!(action, SaveMenuAction::CycleVehicleBreakdowns)
         {
             continue;
@@ -316,7 +317,7 @@ pub(crate) fn handle_vehicle_breakdowns_menu_button(
 
 pub(crate) fn sync_vehicle_breakdowns_button_label(
     sim: Res<SimWorld>,
-    buttons: Query<(&SaveMenuAction, &Children), With<Button>>,
+    buttons: Query<(&SaveMenuAction, &Children), With<UiButton>>,
     mut texts: Query<&mut Text>,
 ) {
     let label = match sim.state.vehicle_breakdowns.min(2) {
@@ -346,11 +347,11 @@ const FREIGHT_TRAIN_PRESETS: &[u8] = &[1, 2, 4, 8, 16, 32, 64, 128, 255];
 /// más habituales en una secuencia corta y conserva el rango completo en el
 /// comando del core.
 pub(crate) fn handle_freight_trains_menu_button(
-    mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
+    mut q: Query<(&UiInteraction, &SaveMenuAction), (Changed<UiInteraction>, With<UiButton>)>,
     mut sim: ResMut<SimWorld>,
 ) {
     for (interaction, action) in &mut q {
-        if *interaction != Interaction::Pressed
+        if *interaction != UiInteraction::Pressed
             || !matches!(action, SaveMenuAction::CycleFreightTrains)
         {
             continue;
@@ -372,7 +373,7 @@ pub(crate) fn handle_freight_trains_menu_button(
 
 pub(crate) fn sync_freight_trains_button_label(
     sim: Res<SimWorld>,
-    buttons: Query<(&SaveMenuAction, &Children), With<Button>>,
+    buttons: Query<(&SaveMenuAction, &Children), With<UiButton>>,
     mut texts: Query<&mut Text>,
 ) {
     let label = format!("Carga trenes: x{}", sim.state.freight_trains.max(1));
@@ -392,11 +393,11 @@ pub(crate) fn sync_freight_trains_button_label(
 
 /// Cicla circulación vial izquierda/derecha (`construction.road_vehicle_driving_side`).
 pub(crate) fn handle_road_driving_side_menu_button(
-    mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
+    mut q: Query<(&UiInteraction, &SaveMenuAction), (Changed<UiInteraction>, With<UiButton>)>,
     mut sim: ResMut<SimWorld>,
 ) {
     for (interaction, action) in &mut q {
-        if *interaction != Interaction::Pressed
+        if *interaction != UiInteraction::Pressed
             || !matches!(action, SaveMenuAction::ToggleRoadDrivingSide)
         {
             continue;
@@ -421,7 +422,7 @@ pub(crate) fn handle_road_driving_side_menu_button(
 
 pub(crate) fn sync_road_driving_side_button_label(
     sim: Res<SimWorld>,
-    buttons: Query<(&SaveMenuAction, &Children), With<Button>>,
+    buttons: Query<(&SaveMenuAction, &Children), With<UiButton>>,
     mut texts: Query<&mut Text>,
 ) {
     let label = if sim.state.construction.road_drive_on_right() {
@@ -444,11 +445,11 @@ pub(crate) fn sync_road_driving_side_button_label(
 }
 
 pub(crate) fn handle_company_colour_swatches(
-    mut q: Query<(&Interaction, &CompanyColourSwatch), (Changed<Interaction>, With<Button>)>,
+    mut q: Query<(&UiInteraction, &CompanyColourSwatch), (Changed<UiInteraction>, With<UiButton>)>,
     mut sim: ResMut<SimWorld>,
 ) {
     for (interaction, swatch) in &mut q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let colour = swatch.0 % openttdrs_core::COMPANY_COLOUR_SLOTS;
@@ -480,9 +481,9 @@ pub(crate) fn sync_company_colour_swatch_visuals(
             &CompanyColourSwatch,
             &mut BorderColor,
             &mut BackgroundColor,
-            &Interaction,
+            &UiInteraction,
         ),
-        (With<Button>, Without<SaveMenuAction>),
+        (With<UiButton>, Without<SaveMenuAction>),
     >,
 ) {
     use crate::sprites::company_colour_swatch_color;
@@ -509,7 +510,7 @@ pub(crate) fn sync_company_colour_swatch_visuals(
             BorderColor::all(Color::srgb(0.98, 0.92, 0.35))
         } else if taken {
             BorderColor::all(Color::srgb(0.35, 0.35, 0.32))
-        } else if *interaction == Interaction::Hovered {
+        } else if *interaction == UiInteraction::Hovered {
             BorderColor::all(Color::srgb(0.86, 0.86, 0.72))
         } else {
             BorderColor::all(Color::srgb(0.18, 0.25, 0.12))
@@ -520,6 +521,8 @@ pub(crate) fn sync_company_colour_swatch_visuals(
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
 
@@ -547,10 +550,10 @@ mod tests {
             Projection::Orthographic(OrthographicProjection::default_2d()),
         ));
         world.spawn((
-            Button,
+            UiButton,
             ZoomButton,
             SaveMenuAction::ZoomOut,
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
 
         world.run_system_once(handle_settings_zoom_buttons).unwrap();
@@ -593,7 +596,7 @@ mod tests {
         world.insert_resource(NextState::<ClientScreen>::default());
         world.insert_resource(SuspendedGameSession::default());
 
-        world.spawn((Button, SaveMenuAction::SaveAs, Interaction::Pressed));
+        world.spawn((UiButton, SaveMenuAction::SaveAs, UiInteraction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
         {
             let w = world.resource::<SaveWindowState>();
@@ -601,7 +604,7 @@ mod tests {
             assert_eq!(w.mode, SaveWindowMode::Save);
         }
 
-        world.spawn((Button, SaveMenuAction::LoadFrom, Interaction::Pressed));
+        world.spawn((UiButton, SaveMenuAction::LoadFrom, UiInteraction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
         let w = world.resource::<SaveWindowState>();
         assert!(w.open);
@@ -643,15 +646,15 @@ mod tests {
         crate::state::insert_test_sim_run_state(&mut world);
 
         world.spawn((
-            Button,
+            UiButton,
             SaveMenuAction::ReturnToMainMenu,
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
         assert!(matches!(
             world.resource::<NextState<ClientScreen>>(),
             NextState::Pending(ClientScreen::MainMenu)
-                | NextState::PendingIfNeq(ClientScreen::MainMenu)
+                | NextState::PendingIfDifferent(ClientScreen::MainMenu)
         ));
     }
 
@@ -662,7 +665,7 @@ mod tests {
         sim.state.ensure_companies();
         world.insert_resource(sim);
 
-        world.spawn((Button, CompanyColourSwatch(6), Interaction::Pressed));
+        world.spawn((UiButton, CompanyColourSwatch(6), UiInteraction::Pressed));
         world
             .run_system_once(handle_company_colour_swatches)
             .unwrap();
@@ -686,9 +689,9 @@ mod tests {
         world.insert_resource(sim);
 
         world.spawn((
-            Button,
+            UiButton,
             CompanyColourSwatch(rival_colour),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_company_colour_swatches)
@@ -705,9 +708,9 @@ mod tests {
         for expected in [1, 0, 2] {
             let entity = world
                 .spawn((
-                    Button,
+                    UiButton,
                     SaveMenuAction::CycleVehicleBreakdowns,
-                    Interaction::Pressed,
+                    UiInteraction::Pressed,
                 ))
                 .id();
             world
@@ -731,9 +734,9 @@ mod tests {
         for expected in [2, 4, 8] {
             let entity = world
                 .spawn((
-                    Button,
+                    UiButton,
                     SaveMenuAction::CycleFreightTrains,
-                    Interaction::Pressed,
+                    UiInteraction::Pressed,
                 ))
                 .id();
             world
@@ -746,9 +749,9 @@ mod tests {
         world.resource_mut::<SimWorld>().state.freight_trains = 255;
         let entity = world
             .spawn((
-                Button,
+                UiButton,
                 SaveMenuAction::CycleFreightTrains,
-                Interaction::Pressed,
+                UiInteraction::Pressed,
             ))
             .id();
         world
@@ -797,9 +800,9 @@ mod tests {
         ] {
             let entity = world
                 .spawn((
-                    Button,
+                    UiButton,
                     SaveMenuAction::CycleCatenaryDisplay,
-                    Interaction::Pressed,
+                    UiInteraction::Pressed,
                 ))
                 .id();
             world.run_system_once(handle_settings_menu_buttons).unwrap();

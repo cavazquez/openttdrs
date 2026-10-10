@@ -1,5 +1,6 @@
 //! Manejo de renombrado de vehículos (botones, teclado, editable).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
@@ -48,8 +49,8 @@ fn apply_vehicle_rename(
 
 pub(crate) fn handle_vehicle_rename_buttons(
     mut buttons: Query<
-        (&Interaction, &VehicleWindowRenameButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &VehicleWindowRenameButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     mut window_state: ResMut<VehicleWindowState>,
     chain: Res<VehicleChainRegistry>,
@@ -59,7 +60,7 @@ pub(crate) fn handle_vehicle_rename_buttons(
     time: Res<Time>,
 ) {
     for (interaction, action) in &mut buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match action {

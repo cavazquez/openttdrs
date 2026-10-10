@@ -88,7 +88,7 @@ fn init_sim_fixed_timestep(
     mut virtual_time: ResMut<Time<Virtual>>,
 ) {
     fixed.set_timestep_hz(SIM_TICK_HZ);
-    // Como máximo un tick de sim por frame render: evita saltos de varias teselas tras lag.
+    // Limitar el tiempo real recuperado por frame a un tick, a velocidad normal.
     virtual_time.set_max_delta(Duration::from_secs_f64(1.0 / SIM_TICK_HZ));
 }
 
@@ -102,7 +102,11 @@ fn unpause_virtual_time(mut virtual_time: ResMut<Time<Virtual>>) {
 
 /// Velocidad de la simulación vía `Time<Virtual>` (antes del bucle FixedUpdate).
 fn sync_sim_time_controls(hud: Res<SimHudControls>, mut virtual_time: ResMut<Time<Virtual>>) {
-    virtual_time.set_relative_speed(hud.sim_speed.max(0.1));
+    let speed = hud.sim_speed.max(0.1);
+    virtual_time.set_relative_speed(speed);
+    // Bevy 0.20 limita el delta después de aplicar la velocidad. Escalar el
+    // límite conserva tanto el avance rápido como el tope de lag de 0.19.
+    virtual_time.set_max_delta(Duration::from_secs_f64(1.0 / SIM_TICK_HZ).mul_f32(speed));
 }
 
 /// Un paso de simulación por tick fijo (~37 Hz, paridad OpenTTD).
@@ -345,6 +349,39 @@ mod tests {
             .as_secs_f64()
             .recip();
         assert!((hz - SIM_TICK_HZ).abs() < 0.01);
+    }
+
+    #[test]
+    fn virtual_time_preserves_speed_and_limits_recovery_after_a_slow_frame() {
+        use std::time::Duration;
+
+        let raw_limit = Duration::from_secs_f64(1.0 / SIM_TICK_HZ);
+        for speed in [0.5, 1.0, 4.0, 8.0] {
+            for raw_delta in [Duration::from_millis(16), Duration::from_secs(1)] {
+                let mut world = World::new();
+                world.init_resource::<Time<Fixed>>();
+                world.init_resource::<Time<Virtual>>();
+                world.insert_resource(SimHudControls {
+                    sim_speed: speed,
+                    ..default()
+                });
+                world.run_system_once(init_sim_fixed_timestep).unwrap();
+                world.run_system_once(sync_sim_time_controls).unwrap();
+                let mut real = Time::<Real>::default();
+                real.advance_by(raw_delta);
+                let mut virtual_time = *world.resource::<Time<Virtual>>();
+                let mut game_time = Time::<()>::default();
+                bevy::time::update_virtual_time(&mut game_time, &mut virtual_time, &real);
+                assert_eq!(
+                    virtual_time.delta(),
+                    raw_delta.min(raw_limit).mul_f32(speed),
+                    "speed={speed}, raw_delta={raw_delta:?}"
+                );
+                virtual_time.pause();
+                bevy::time::update_virtual_time(&mut game_time, &mut virtual_time, &real);
+                assert!(virtual_time.delta().is_zero());
+            }
+        }
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! Ventana formal de cheats (#45), paridad ligera con `CheatWindow` de OpenTTD.
 //! Mutaciones solo vía `Command::Cheat*`. Abrir: Ctrl+Alt+C / Ajustes → Trucos…
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
@@ -116,7 +117,7 @@ fn spawn_cheat_btn(
 ) {
     parent
         .spawn((
-            Button,
+            UiButton,
             action,
             Node {
                 min_width: Val::Px(72.0),
@@ -129,7 +130,7 @@ fn spawn_cheat_btn(
             },
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
         ))
         .with_children(|btn| {
@@ -147,7 +148,7 @@ pub(crate) fn sync_cheat_window(
     prefs: Res<ClientPreferences>,
     mut windows: Query<(&FloatingWindow, &mut Visibility)>,
     mut status_q: Query<&mut Text, With<CheatWindowStatusText>>,
-    mut buttons: Query<(&CheatWindowAction, &mut BackgroundColor), With<Button>>,
+    mut buttons: Query<(&CheatWindowAction, &mut BackgroundColor), With<UiButton>>,
 ) {
     for (w, mut vis) in &mut windows {
         if w.id == FloatingWindowId::CheatWindow {
@@ -183,8 +184,12 @@ pub(crate) fn handle_cheat_window_buttons(
     state: Res<CheatWindowState>,
     mut sim: Option<ResMut<SimWorld>>,
     buttons: Query<
-        (&Interaction, &CheatWindowAction),
-        (Changed<Interaction>, With<Button>, With<CheatWindowAction>),
+        (&UiInteraction, &CheatWindowAction),
+        (
+            Changed<UiInteraction>,
+            With<UiButton>,
+            With<CheatWindowAction>,
+        ),
     >,
 ) {
     if !state.open {
@@ -194,7 +199,7 @@ pub(crate) fn handle_cheat_window_buttons(
         return;
     };
     for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let cmd = match *action {

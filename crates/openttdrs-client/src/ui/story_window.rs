@@ -1,5 +1,6 @@
 //! Libro de historia GameScript-lite (#43).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 
 use crate::i18n::localized_text;
@@ -111,7 +112,7 @@ fn spawn_nav(
 ) {
     parent
         .spawn((
-            Button,
+            UiButton,
             action,
             Node {
                 min_width: Val::Px(96.0),
@@ -124,7 +125,7 @@ fn spawn_nav(
             },
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
         ))
         .with_children(|btn| {
@@ -152,8 +153,8 @@ pub(crate) fn handle_story_nav_buttons(
     mut state: ResMut<StoryWindowState>,
     sim: Option<Res<SimWorld>>,
     buttons: Query<
-        (&Interaction, &StoryNavAction),
-        (Changed<Interaction>, With<Button>, With<StoryNavAction>),
+        (&UiInteraction, &StoryNavAction),
+        (Changed<UiInteraction>, With<UiButton>, With<StoryNavAction>),
     >,
 ) {
     if !state.open {
@@ -167,7 +168,7 @@ pub(crate) fn handle_story_nav_buttons(
     }
     let n = sim.state.gs.story_pages.len();
     for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match *action {

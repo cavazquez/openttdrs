@@ -1,3 +1,4 @@
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::camera::RenderTarget;
 use bevy::prelude::*;
 use bevy::render::render_resource::TextureFormat;
@@ -67,7 +68,7 @@ pub(crate) fn setup_industry_panel(
             .with_children(|row| {
                 row.spawn((
                     IndustryPanelCenterButton,
-                    Button,
+                    UiButton,
                     Node {
                         width: Val::Px(36.0),
                         height: Val::Px(22.0),
@@ -78,7 +79,7 @@ pub(crate) fn setup_industry_panel(
                     },
                     BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),
                     BorderColor::all(Color::srgb(0.7, 0.62, 0.42)),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     BuildMenuUi,
                     children![(
                         Text::new("Loc"),
@@ -88,7 +89,7 @@ pub(crate) fn setup_industry_panel(
                 ));
                 row.spawn((
                     IndustryPanelProductionButton,
-                    Button,
+                    UiButton,
                     Node {
                         width: Val::Px(40.0),
                         height: Val::Px(22.0),
@@ -99,7 +100,7 @@ pub(crate) fn setup_industry_panel(
                     },
                     BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),
                     BorderColor::all(Color::srgb(0.7, 0.62, 0.42)),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     BuildMenuUi,
                     children![(
                         Text::new("Prod"),

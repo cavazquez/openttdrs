@@ -1,5 +1,6 @@
 //! Lista global de estaciones: filtros por compañía, facility y carga.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::CargoType;
 use openttdrs_core::prelude::*;
@@ -307,28 +308,28 @@ pub(crate) fn open_station_directory_from_routes(
 pub(crate) fn handle_station_directory_buttons(
     mut state: ResMut<StationDirectoryState>,
     sort_buttons: Query<
-        (&Interaction, &StationDirectorySortButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &StationDirectorySortButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     company_buttons: Query<
-        (&Interaction, &StationCompanyFilterButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &StationCompanyFilterButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     facility_buttons: Query<
-        (&Interaction, &StationFacilityFilterButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &StationFacilityFilterButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     cargo_buttons: Query<
-        (&Interaction, &StationCargoFilterButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &StationCargoFilterButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
-    rows: Query<(&Interaction, &StationDirectoryRow), (Changed<Interaction>, With<Button>)>,
+    rows: Query<(&UiInteraction, &StationDirectoryRow), (Changed<UiInteraction>, With<UiButton>)>,
     mut station_panel: ResMut<StationCargoPanelState>,
     sim: Res<SimWorld>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
     for (interaction, button) in &sort_buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         if state.sort == button.0 {
@@ -342,22 +343,22 @@ pub(crate) fn handle_station_directory_buttons(
         }
     }
     for (interaction, button) in &company_buttons {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             state.company = button.0;
         }
     }
     for (interaction, button) in &facility_buttons {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             state.facility = button.0;
         }
     }
     for (interaction, button) in &cargo_buttons {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             state.cargo = button.0;
         }
     }
     for (interaction, row) in &rows {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         station_panel.station_pos = Some(row.pos);
@@ -422,11 +423,11 @@ pub(crate) fn sync_station_directory(
     mut sort_buttons: Query<
         (
             &StationDirectorySortButton,
-            &Interaction,
+            &UiInteraction,
             &mut BackgroundColor,
         ),
         (
-            With<Button>,
+            With<UiButton>,
             Without<StationCompanyFilterButton>,
             Without<StationFacilityFilterButton>,
             Without<StationCargoFilterButton>,
@@ -435,11 +436,11 @@ pub(crate) fn sync_station_directory(
     mut company_buttons: Query<
         (
             &StationCompanyFilterButton,
-            &Interaction,
+            &UiInteraction,
             &mut BackgroundColor,
         ),
         (
-            With<Button>,
+            With<UiButton>,
             Without<StationDirectorySortButton>,
             Without<StationFacilityFilterButton>,
             Without<StationCargoFilterButton>,
@@ -448,11 +449,11 @@ pub(crate) fn sync_station_directory(
     mut facility_buttons: Query<
         (
             &StationFacilityFilterButton,
-            &Interaction,
+            &UiInteraction,
             &mut BackgroundColor,
         ),
         (
-            With<Button>,
+            With<UiButton>,
             Without<StationDirectorySortButton>,
             Without<StationCompanyFilterButton>,
             Without<StationCargoFilterButton>,
@@ -461,11 +462,11 @@ pub(crate) fn sync_station_directory(
     mut cargo_buttons: Query<
         (
             &StationCargoFilterButton,
-            &Interaction,
+            &UiInteraction,
             &mut BackgroundColor,
         ),
         (
-            With<Button>,
+            With<UiButton>,
             Without<StationDirectorySortButton>,
             Without<StationCompanyFilterButton>,
             Without<StationFacilityFilterButton>,
@@ -642,6 +643,8 @@ pub(crate) fn station_directory_on_closed(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -667,7 +670,11 @@ mod tests {
             ..SimWorld::default()
         });
         let pos = TileCoord::new(6, 7);
-        world.spawn((Button, StationDirectoryRow { pos }, Interaction::Pressed));
+        world.spawn((
+            UiButton,
+            StationDirectoryRow { pos },
+            UiInteraction::Pressed,
+        ));
         world
             .run_system_once(handle_station_directory_buttons)
             .unwrap();
@@ -687,14 +694,14 @@ mod tests {
             ..SimWorld::default()
         });
         world.spawn((
-            Button,
+            UiButton,
             StationCompanyFilterButton(StationCompanyFilter::Active),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.spawn((
-            Button,
+            UiButton,
             StationFacilityFilterButton(StationFacilityFilter::Rail),
-            Interaction::None,
+            UiInteraction::None,
         ));
         world
             .run_system_once(handle_station_directory_buttons)
@@ -713,14 +720,14 @@ mod tests {
             ..SimWorld::default()
         });
         world.spawn((
-            Button,
+            UiButton,
             StationFacilityFilterButton(StationFacilityFilter::Rail),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.spawn((
-            Button,
+            UiButton,
             StationCargoFilterButton(StationCargoFilter::Coal),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_station_directory_buttons)

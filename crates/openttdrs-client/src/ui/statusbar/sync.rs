@@ -1,3 +1,4 @@
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::{
     Command, NewsDisplayMode, NewsReference, NewsType, PendingNewsEvent, format_money,
@@ -438,7 +439,7 @@ fn spawn_news_popup(
                             ),
                             (
                                 super::NewsPopupCloseButton,
-                                Button,
+                                UiButton,
                                 Node {
                                     min_width: Val::Px(22.0),
                                     min_height: Val::Px(22.0),
@@ -447,7 +448,7 @@ fn spawn_news_popup(
                                     ..default()
                                 },
                                 BackgroundColor(Color::NONE),
-                                Interaction::default(),
+                                UiInteraction::default(),
                                 children![(
                                     Text::new("×"),
                                     TextFont {
@@ -464,7 +465,7 @@ fn spawn_news_popup(
             popup
                 .spawn((
                     super::NewsPopupFocusButton,
-                    Button,
+                    UiButton,
                     Node {
                         flex_direction: FlexDirection::Column,
                         row_gap: Val::Px(6.0),
@@ -472,7 +473,7 @@ fn spawn_news_popup(
                         ..default()
                     },
                     BackgroundColor(Color::NONE),
-                    Interaction::default(),
+                    UiInteraction::default(),
                 ))
                 .with_children(|focus| {
                     focus.spawn((
@@ -498,7 +499,7 @@ fn spawn_news_popup(
                 popup
                     .spawn((
                         super::NewsPopupAcceptButton,
-                        Button,
+                        UiButton,
                         crate::ui::toolbar::BuildMenuUi,
                         Node {
                             align_self: AlignSelf::FlexEnd,
@@ -511,7 +512,7 @@ fn spawn_news_popup(
                         },
                         BackgroundColor(Color::srgb(0.48, 0.43, 0.25)),
                         BorderColor::all(Color::srgb(0.15, 0.13, 0.08)),
-                        Interaction::default(),
+                        UiInteraction::default(),
                     ))
                     .with_children(|button| {
                         button.spawn((
@@ -612,10 +613,13 @@ pub(crate) fn handle_news_popup_focus(
     mut focus: ResMut<CameraFocusRequest>,
     mut selected: ResMut<SelectedTileInfo>,
     mut buy_state: ResMut<BuyVehicleWindowState>,
-    interaction_q: Query<&Interaction, (Changed<Interaction>, With<super::NewsPopupFocusButton>)>,
+    interaction_q: Query<
+        &UiInteraction,
+        (Changed<UiInteraction>, With<super::NewsPopupFocusButton>),
+    >,
 ) {
     for interaction in &interaction_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Some(popup) = news_ui.popup.as_ref() else {
@@ -637,13 +641,13 @@ pub(crate) fn handle_news_popup_focus(
 pub(crate) fn handle_news_popup_close(
     mut news_ui: ResMut<NewsUiState>,
     mut interaction_q: Query<
-        &Interaction,
-        (Changed<Interaction>, With<super::NewsPopupCloseButton>),
+        &UiInteraction,
+        (Changed<UiInteraction>, With<super::NewsPopupCloseButton>),
     >,
     mut commands: Commands,
 ) {
     for interaction in &mut interaction_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Some(popup) = news_ui.popup.take() else {
@@ -661,10 +665,13 @@ pub(crate) fn handle_news_popup_accept(
     mut sim: ResMut<SimWorld>,
     mut feedback: ResMut<HudBuildFeedback>,
     time: Res<Time>,
-    interaction_q: Query<&Interaction, (Changed<Interaction>, With<super::NewsPopupAcceptButton>)>,
+    interaction_q: Query<
+        &UiInteraction,
+        (Changed<UiInteraction>, With<super::NewsPopupAcceptButton>),
+    >,
 ) {
     for interaction in &interaction_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Some(popup) = news_ui.popup.as_ref() else {
@@ -697,8 +704,8 @@ pub(crate) fn handle_news_popup_accept(
 pub(crate) fn handle_status_bar_center_click(
     mut news_ui: ResMut<NewsUiState>,
     mut interaction_q: Query<
-        &Interaction,
-        (Changed<Interaction>, With<super::StatusBarCenterButton>),
+        &UiInteraction,
+        (Changed<UiInteraction>, With<super::StatusBarCenterButton>),
     >,
     sim: Res<SimWorld>,
     news_prefs: Res<NewsDisplayPrefs>,
@@ -708,7 +715,7 @@ pub(crate) fn handle_status_bar_center_click(
     mut buy_state: ResMut<BuyVehicleWindowState>,
 ) {
     for interaction in &mut interaction_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         if let Some(ticker) = &news_ui.ticker
@@ -748,6 +755,8 @@ pub(crate) fn handle_status_bar_center_click(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
     use openttdrs_core::{
@@ -934,8 +943,8 @@ mod tests {
         let button = world
             .spawn((
                 super::super::NewsPopupAcceptButton,
-                Button,
-                Interaction::Pressed,
+                UiButton,
+                UiInteraction::Pressed,
             ))
             .id();
         world.insert_resource(SimWorld {

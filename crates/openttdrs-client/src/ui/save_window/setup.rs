@@ -1,8 +1,8 @@
 //! Spawn del modal de guardar/cargar partidas (oculto hasta abrirse).
 //!
-//! Estructura modular (`save_window_panel`, filas, acciones) lista para `bsn!`
-//! cuando `bevy_scene` 0.19 esté publicado en crates.io.
+//! Estructura modular: `save_window_panel`, filas y acciones.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use bevy::text::{EditableText, TextCursorStyle};
 use bevy::ui::{FocusPolicy, GlobalZIndex};
@@ -40,7 +40,7 @@ pub(crate) fn setup_save_window(
             Visibility::Hidden,
             FocusPolicy::Block,
             BuildMenuUi,
-            Interaction::default(),
+            UiInteraction::default(),
         ))
         .with_children(|overlay| {
             spawn_save_window_panel(overlay, &asset_server);
@@ -142,7 +142,7 @@ fn spawn_save_window_panel(parent: &mut ChildSpawnerCommands, asset_server: &Ass
                         BackgroundColor(Color::srgb(0.1, 0.08, 0.06)),
                         BorderColor::all(Color::srgb(0.6, 0.53, 0.36)),
                         BuildMenuUi,
-                        Interaction::default(),
+                        UiInteraction::default(),
                         FocusPolicy::Block,
                         EditableText {
                             max_characters: Some(40),
@@ -206,7 +206,7 @@ fn spawn_save_window_panel(parent: &mut ChildSpawnerCommands, asset_server: &Ass
 fn spawn_save_row(parent: &mut ChildSpawnerCommands, asset_server: &AssetServer, slot: usize) {
     parent.spawn((
         SaveWindowRow { slot },
-        Button,
+        UiButton,
         Node {
             width: Val::Percent(100.0),
             height: Val::Px(24.0),
@@ -218,7 +218,7 @@ fn spawn_save_row(parent: &mut ChildSpawnerCommands, asset_server: &AssetServer,
         },
         BackgroundColor(Color::srgb(0.22, 0.18, 0.12)),
         BorderColor::all(Color::srgb(0.45, 0.39, 0.27)),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             SaveWindowRowText { slot },
@@ -236,7 +236,7 @@ fn spawn_small_button(
     label: &'static str,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         action,
         Node {
             width: Val::Px(28.0),
@@ -248,7 +248,7 @@ fn spawn_small_button(
         },
         BackgroundColor(Color::srgb(0.34, 0.29, 0.2)),
         BorderColor::all(Color::srgb(0.62, 0.55, 0.38)),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -267,7 +267,7 @@ fn spawn_action_button(
     confirm_marker: Option<SaveWindowConfirmText>,
 ) {
     let mut entity = parent.spawn((
-        Button,
+        UiButton,
         action,
         Node {
             min_width: Val::Px(96.0),
@@ -280,7 +280,7 @@ fn spawn_action_button(
         },
         BackgroundColor(bg),
         BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
     ));
     entity.with_children(|b| {

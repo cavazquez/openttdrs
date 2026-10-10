@@ -1,5 +1,6 @@
 //! Ventana GenLand del scenario editor (#42): regenerar paisaje in-place.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::Climate;
 
@@ -129,7 +130,7 @@ fn spawn_btn(
 ) {
     parent
         .spawn((
-            Button,
+            UiButton,
             action,
             Node {
                 min_width: Val::Px(72.0),
@@ -146,7 +147,7 @@ fn spawn_btn(
                 BTN_BG
             }),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
         ))
         .with_children(|btn| {
@@ -163,7 +164,7 @@ pub(crate) fn sync_genland_window(
     mut windows: Query<(&FloatingWindow, &mut Visibility)>,
     mut seed_q: Query<&mut Text, (With<GenLandSeedText>, Without<GenLandStatusText>)>,
     mut status_q: Query<&mut Text, (With<GenLandStatusText>, Without<GenLandSeedText>)>,
-    mut buttons: Query<(&GenLandAction, &mut BackgroundColor), With<Button>>,
+    mut buttons: Query<(&GenLandAction, &mut BackgroundColor), With<UiButton>>,
 ) {
     for (w, mut vis) in &mut windows {
         if w.id == FloatingWindowId::GenLand {
@@ -207,15 +208,15 @@ pub(crate) fn handle_genland_buttons(
     mut feedback: ResMut<HudBuildFeedback>,
     time: Res<Time>,
     buttons: Query<
-        (&Interaction, &GenLandAction),
-        (Changed<Interaction>, With<Button>, With<GenLandAction>),
+        (&UiInteraction, &GenLandAction),
+        (Changed<UiInteraction>, With<UiButton>, With<GenLandAction>),
     >,
 ) {
     if !state.open {
         return;
     }
     for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match *action {

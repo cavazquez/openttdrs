@@ -1,3 +1,4 @@
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
@@ -105,20 +106,20 @@ pub(crate) fn cancel_order_destination_pick(next_pick: &mut NextState<OrderPickS
 pub(crate) fn begin_order_list_drag(
     mut row_q: Query<
         (
-            &Interaction,
+            &UiInteraction,
             &OrderPanelRow,
             &crate::ui::vehicle_chain::VehicleChainSlot,
         ),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<OrderPanelButton>,
         ),
     >,
     mut order_state: ResMut<OrderEditState>,
 ) {
     for (interaction, row, chain_slot) in &mut row_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let idx = chain_slot.0 as usize;
@@ -141,7 +142,7 @@ pub(crate) fn begin_order_list_drag(
 pub(crate) fn finish_order_list_drag(
     mouse: Res<ButtonInput<MouseButton>>,
     mut order_state: ResMut<OrderEditState>,
-    row_q: Query<(&OrderPanelRow, &Interaction), With<Button>>,
+    row_q: Query<(&OrderPanelRow, &UiInteraction), With<UiButton>>,
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
@@ -156,7 +157,10 @@ pub(crate) fn finish_order_list_drag(
     order_state.set_list_drag_from(None);
     let drop_slot = row_q.iter().find_map(|(row, interaction)| {
         (row.slot < order_state.orders().len()
-            && matches!(*interaction, Interaction::Hovered | Interaction::Pressed))
+            && matches!(
+                *interaction,
+                UiInteraction::Hovered | UiInteraction::Pressed
+            ))
         .then_some(row.slot)
     });
     if let Some(to_slot) = drop_slot
@@ -182,11 +186,15 @@ pub(crate) fn finish_order_list_drag(
 pub(crate) fn handle_order_panel_buttons(
     mut btn_q: Query<
         (
-            &Interaction,
+            &UiInteraction,
             &OrderPanelButton,
             &crate::ui::vehicle_chain::VehicleChainSlot,
         ),
-        (Changed<Interaction>, With<Button>, Without<OrderPanelRow>),
+        (
+            Changed<UiInteraction>,
+            With<UiButton>,
+            Without<OrderPanelRow>,
+        ),
     >,
     mut order_state: ResMut<OrderEditState>,
     chain: Res<crate::ui::vehicle_chain::VehicleChainRegistry>,
@@ -201,7 +209,7 @@ pub(crate) fn handle_order_panel_buttons(
     time: Res<Time>,
 ) {
     for (interaction, button, chain_slot) in &mut btn_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         // Enfocar el panel del botón pulsado (#244).
@@ -839,6 +847,8 @@ pub(crate) fn handle_order_destination_click(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -883,10 +893,10 @@ mod tests {
         world.insert_resource(Time::<()>::default());
         world.insert_resource(NextState::<OrderPickState>::default());
         world.spawn((
-            Button,
+            UiButton,
             OrderPanelButton::MoveOrderDown,
             crate::ui::vehicle_chain::VehicleChainSlot(0),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.run_system_once(handle_order_panel_buttons).unwrap();
         let order_state = world.resource::<OrderEditState>();
@@ -930,10 +940,10 @@ mod tests {
             VehicleOrder::station(TileCoord::new(3, 3)),
         ]);
         world.spawn((
-            Button,
+            UiButton,
             OrderPanelRow { slot: 1 },
             crate::ui::vehicle_chain::VehicleChainSlot(0),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.run_system_once(begin_order_list_drag).unwrap();
         let order_state = world.resource::<OrderEditState>();
@@ -952,10 +962,10 @@ mod tests {
             .resource_mut::<OrderEditState>()
             .set_list_drag_from(Some(0));
         world.spawn((
-            Button,
+            UiButton,
             OrderPanelRow { slot: 2 },
             crate::ui::vehicle_chain::VehicleChainSlot(0),
-            Interaction::Hovered,
+            UiInteraction::Hovered,
         ));
         // LMB no presionado → soltar.
         world.run_system_once(finish_order_list_drag).unwrap();
@@ -983,10 +993,10 @@ mod tests {
             .resource_mut::<OrderEditState>()
             .set_list_drag_from(Some(1));
         world.spawn((
-            Button,
+            UiButton,
             OrderPanelRow { slot: 1 },
             crate::ui::vehicle_chain::VehicleChainSlot(0),
-            Interaction::Hovered,
+            UiInteraction::Hovered,
         ));
         world.run_system_once(finish_order_list_drag).unwrap();
         let order_state = world.resource::<OrderEditState>();

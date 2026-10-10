@@ -11,7 +11,7 @@ use std::{
 use bevy::render::render_resource::TextureFormat;
 use bevy::render::view::screenshot::Screenshot;
 use bevy::render::view::screenshot::ScreenshotCaptured;
-use bevy::sprite::{Anchor, SpriteMesh};
+use bevy::sprite::Anchor;
 use bevy::{asset::AssetId, prelude::*, render::sync_world::RenderEntity};
 use serde_json::{Value, json};
 
@@ -154,19 +154,16 @@ fn entity_inputs(world: &World, entity: Entity) -> Value {
 
 fn capture_inputs(world: &mut World) -> (Value, TraceAssets) {
     let mut assets = TraceAssets::default();
-    let mut sprites_query =
-        world.query::<(Entity, &Sprite, &GlobalTransform, &Anchor, &ViewVisibility)>();
+    let mut sprites_query = world.query_filtered::<
+        (Entity, &Sprite, &GlobalTransform, &Anchor, &ViewVisibility),
+        Without<RailGlassMaskProxy>,
+    >();
     let sprites: Vec<_> = sprites_query.iter(world).map(|(entity, sprite, ..)| {
         json!({"inputs": entity_inputs(world, entity), "sprite": assets.sprite(sprite)})
     }).collect();
-    let mut meshes_query = world.query::<(Entity, &SpriteMesh)>();
+    let mut meshes_query = world.query_filtered::<(Entity, &Sprite), With<RailGlassMaskProxy>>();
     let meshes: Vec<_> = meshes_query.iter(world).map(|(entity, mesh)| {
-        let sprite = Sprite {
-            image: mesh.image.clone(), texture_atlas: mesh.texture_atlas.clone(),
-            color: mesh.color, flip_x: mesh.flip_x, flip_y: mesh.flip_y,
-            custom_size: mesh.custom_size, rect: mesh.rect, image_mode: mesh.image_mode.clone(),
-        };
-        json!({"inputs": entity_inputs(world, entity), "sprite": assets.sprite(&sprite), "alpha_mode": format!("{:?}", mesh.alpha_mode)})
+        json!({"inputs": entity_inputs(world, entity), "sprite": assets.sprite(mesh), "alpha_mode": format!("{:?}", mesh.alpha_mode)})
     }).collect();
     let mut cameras_query = world.query::<(Entity, &Camera, &Projection)>();
     let cameras: Vec<_> = cameras_query

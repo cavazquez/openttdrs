@@ -5,6 +5,7 @@ use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
 use bevy::text::EditableText;
 
+mod interaction;
 mod lifecycle;
 mod plugins;
 mod pointer;
@@ -129,6 +130,7 @@ pub(crate) struct ClientUiPlugin;
 impl Plugin for ClientUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
+            interaction::UiInteractionPlugin,
             floating_window::FloatingWindowPlugin,
             scrollbar::ClassicScrollbarPlugin,
             windows_shot::WindowsShotPlugin,

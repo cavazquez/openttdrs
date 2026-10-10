@@ -1,5 +1,6 @@
 //! Ventana flotante de horario por orden (Sprint F4).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use std::collections::HashMap;
 
 use bevy::prelude::*;
@@ -279,7 +280,7 @@ fn spawn_row_btn(
     width: f32,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         TimetableRowAction { index, kind },
         chain_slot,
         Node {
@@ -292,7 +293,7 @@ fn spawn_row_btn(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -310,7 +311,7 @@ fn spawn_tt_button(
     label: &str,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         action,
         chain_slot,
         Node {
@@ -323,7 +324,7 @@ fn spawn_tt_button(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label.to_string()),
@@ -447,7 +448,7 @@ pub(crate) fn sync_timetable_window(
     >,
     mut row_strip_q: Query<
         (&VehicleChainSlot, &TimetableOrderRowStrip, &mut Node),
-        (Without<Button>, Without<TimetableOrderRowLabel>),
+        (Without<UiButton>, Without<TimetableOrderRowLabel>),
     >,
     mut row_label_q: Query<
         (&VehicleChainSlot, &TimetableOrderRowLabel, &mut Text),
@@ -547,14 +548,14 @@ pub(crate) fn timetable_window_on_closed(
 #[allow(clippy::too_many_arguments)] // sistema ECS: dos queries y recursos de UI/sim.
 pub(crate) fn handle_timetable_window_buttons(
     mut btn_q: Query<
-        (&Interaction, &TimetableWindowButton, &VehicleChainSlot),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &TimetableWindowButton, &VehicleChainSlot),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     mut row_btn_q: Query<
-        (&Interaction, &TimetableRowAction, &VehicleChainSlot),
+        (&UiInteraction, &TimetableRowAction, &VehicleChainSlot),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<TimetableWindowButton>,
         ),
     >,
@@ -566,7 +567,7 @@ pub(crate) fn handle_timetable_window_buttons(
     time: Res<Time>,
 ) {
     for (interaction, action, chain_slot) in &mut row_btn_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let idx = chain_slot.0 as usize;
@@ -606,7 +607,7 @@ pub(crate) fn handle_timetable_window_buttons(
     }
 
     for (interaction, button, chain_slot) in &mut btn_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let idx = chain_slot.0 as usize;
@@ -651,6 +652,8 @@ pub(crate) fn handle_timetable_window_buttons(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use crate::i18n::LocalizationPlugin;
     use crate::render::RemapMapVisualsPending;
@@ -902,10 +905,10 @@ mod tests {
         world.init_resource::<HudBuildFeedback>();
         world.insert_resource(Time::<()>::default());
         world.spawn((
-            Button,
+            UiButton,
             TimetableWindowButton::ToggleSeconds,
             VehicleChainSlot(0),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
 
         world

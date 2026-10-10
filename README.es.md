@@ -14,7 +14,7 @@
 [![codecov](https://codecov.io/gh/cavazquez/openttdrs/graph/badge.svg)](https://codecov.io/gh/cavazquez/openttdrs)
 [![Licencia GPL-2.0-only](https://img.shields.io/badge/licencia-GPL--2.0--only-blue.svg)](LICENSE)
 [![Rust MSRV](https://img.shields.io/badge/rust-1.98%2B-orange.svg)](https://doc.rust-lang.org/stable/releases.html)
-[![Bevy](https://img.shields.io/badge/Bevy-0.19.0-C659D4.svg)](https://bevyengine.org/)
+[![Bevy](https://img.shields.io/badge/Bevy-0.20.0-C659D4.svg)](https://bevyengine.org/)
 [![Snap Store](https://snapcraft.io/openttdrs/badge.svg)](https://snapcraft.io/openttdrs)
 [![Inspiración OpenTTD](https://img.shields.io/badge/inspiración-OpenTTD-5a3.svg)](https://www.openttd.org/)
 
@@ -177,7 +177,7 @@ predeterminada vive en `~/snap/openttdrs/common/save/`.
 
 ## Desarrollo
 
-> Actualizado: 2026-09-19.
+> Actualizado: 2026-10-10.
 
 Flujo de PRs y DoD: [CONTRIBUTING.md](CONTRIBUTING.md). Capas: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -237,7 +237,7 @@ comando en `stable` sin una decisión de release independiente.
 
 ### Caché de compilación (`sccache`)
 
-> Actualizado: 2026-09-19.
+> Actualizado: 2026-10-10.
 
 GitHub Actions activa `sccache` con el backend de caché de Actions en todos los
 jobs que compilan Rust. En local es opcional: `./scripts/check.sh` lo detecta y
@@ -277,7 +277,7 @@ Detalle: [docs/PARIDAD.md](docs/PARIDAD.md).
 
 ## CI y calidad
 
-> Actualizado: 2026-09-19.
+> Actualizado: 2026-10-10.
 
 Un job en [.github/workflows/ci.yml](.github/workflows/ci.yml) (sccache + caché Cargo + APT):
 
@@ -414,12 +414,12 @@ Detalle de planos/chunks: [docs/MAPA_Y_FERROCARRIL.md](docs/MAPA_Y_FERROCARRIL.m
 
 ## Stack
 
-> Actualizado: 2026-09-19.
+> Actualizado: 2026-10-10.
 
 | Tecnología | Rol |
 |------------|-----|
 | Rust 2024 (MSRV **1.98**) | Workspace `openttdrs-core` + `openttdrs-client` + `openttdrs-net` |
-| Bevy **0.19** | ECS, ventana, render 2D, UI |
+| Bevy **0.20** | ECS, ventana, render 2D, UI |
 | serde / JSON | Save/load del core |
 | Python 3 + Pillow | `parse_sav`, goldens, recorte OpenGFX |
 | OpenGFX / OpenSFX / OpenMSX | Arte, SFX y música |
@@ -430,7 +430,7 @@ Detalle de planos/chunks: [docs/MAPA_Y_FERROCARRIL.md](docs/MAPA_Y_FERROCARRIL.m
 
 ## Estructura del repo
 
-> Actualizado: 2026-09-19.
+> Actualizado: 2026-10-10.
 
 ```
 Cargo.toml                 # Workspace
@@ -449,6 +449,6 @@ reference/                 # Clon OpenTTD (gitignored)
 
 ## Licencia
 
-> Actualizado: 2026-09-19.
+> Actualizado: 2026-10-10.
 
 **GPL-2.0-only** (ver `LICENSE`). El código de OpenTTD usado como referencia conserva su propia licencia y copyright.

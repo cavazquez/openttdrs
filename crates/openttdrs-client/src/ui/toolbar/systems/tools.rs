@@ -1,3 +1,4 @@
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::{Command, StopKind, first_matching_road_stop_spec};
 
@@ -13,7 +14,7 @@ use crate::ui::toolbar::{
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub(crate) fn build_menu_interaction(
     editor: Res<EditorSession>,
-    mut q: Query<(&Interaction, &BuildMenuAction), (Changed<Interaction>, With<Button>)>,
+    mut q: Query<(&UiInteraction, &BuildMenuAction), (Changed<UiInteraction>, With<UiButton>)>,
     mut tool_state: ResMut<UiToolState>,
     mut drag_state: ResMut<DragBuildState>,
     mut station_state: ResMut<crate::ui::toolbar::StationBuildState>,
@@ -23,7 +24,7 @@ pub(crate) fn build_menu_interaction(
     mut next_pick: ResMut<NextState<OrderPickState>>,
 ) {
     for (interaction, action) in &mut q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         if action.is_editor_only() && !editor.active {
@@ -75,7 +76,7 @@ pub(crate) fn update_tool_button_visuals(
     mut q: Query<
         (
             &BuildMenuAction,
-            &Interaction,
+            &UiInteraction,
             &mut BackgroundColor,
             &mut BorderColor,
         ),
@@ -86,13 +87,13 @@ pub(crate) fn update_tool_button_visuals(
         let is_active = tool_state
             .active_tool
             .is_some_and(|active| active == *action);
-        *bg = if is_active && *interaction == Interaction::Pressed {
+        *bg = if is_active && *interaction == UiInteraction::Pressed {
             BackgroundColor(Color::srgb(0.76, 0.67, 0.42))
-        } else if is_active && *interaction == Interaction::Hovered {
+        } else if is_active && *interaction == UiInteraction::Hovered {
             BackgroundColor(Color::srgb(0.68, 0.59, 0.37))
         } else if is_active {
             BackgroundColor(Color::srgb(0.6, 0.52, 0.33))
-        } else if *interaction == Interaction::Hovered {
+        } else if *interaction == UiInteraction::Hovered {
             BackgroundColor(Color::srgb(0.4, 0.34, 0.23))
         } else {
             BackgroundColor(Color::srgb(0.28, 0.24, 0.16))

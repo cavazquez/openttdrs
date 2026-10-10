@@ -1,5 +1,6 @@
 //! Ventana de finanzas de la compañía (clic en dinero de la barra inferior).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::{
@@ -107,7 +108,7 @@ pub(crate) fn setup_finances_window(mut commands: Commands, asset_server: Res<As
                     FinancesWindowButton::OpenAiSettings,
                 ] {
                     row.spawn((
-                        Button,
+                        UiButton,
                         button,
                         Node {
                             flex_grow: 1.0,
@@ -119,7 +120,7 @@ pub(crate) fn setup_finances_window(mut commands: Commands, asset_server: Res<As
                         },
                         BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),
                         BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
-                        Interaction::default(),
+                        UiInteraction::default(),
                         BuildMenuUi,
                         children![(
                             FinancesWindowButtonText(button),
@@ -147,29 +148,32 @@ pub(crate) fn open_finances_from_routes(
 pub(crate) fn handle_open_finances_window(
     mut finances: ResMut<FinancesWindowState>,
     interaction_q: Query<
-        &Interaction,
+        &UiInteraction,
         (
-            Changed<Interaction>,
+            Changed<UiInteraction>,
             With<crate::ui::statusbar::StatusBarMoneyButton>,
         ),
     >,
 ) {
     for interaction in &interaction_q {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             finances.open = true;
         }
     }
 }
 
 pub(crate) fn handle_finances_window_buttons(
-    buttons: Query<(&Interaction, &FinancesWindowButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&UiInteraction, &FinancesWindowButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut sim: ResMut<SimWorld>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
     mut ai_settings: ResMut<crate::ui::ai_settings_window::AiSettingsWindowState>,
     time: Res<Time>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let cmd = match button {

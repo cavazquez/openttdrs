@@ -1,3 +1,4 @@
+use crate::ui::interaction::UiButton;
 use std::collections::HashMap;
 
 use bevy::prelude::*;
@@ -35,7 +36,7 @@ type MinimapCellFilter = (
 );
 type MinimapToggleFilter = (
     With<MinimapLayerToggle>,
-    With<Button>,
+    With<UiButton>,
     Without<MinimapCell>,
     Without<MinimapRoot>,
     Without<MinimapViewport>,

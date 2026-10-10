@@ -1,5 +1,6 @@
 //! Directorio global de industrias: cadenas I/O y fundación desde el menú.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::text::EditableText;
@@ -302,14 +303,14 @@ pub(crate) fn industry_directory_search_keyboard(
 pub(crate) fn handle_industry_directory_buttons(
     mut state: ResMut<IndustryDirectoryState>,
     sort_buttons: Query<
-        (&Interaction, &IndustryDirectorySortButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &IndustryDirectorySortButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     fund_buttons: Query<
-        (&Interaction, &IndustryDirectoryFundButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &IndustryDirectoryFundButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
-    rows: Query<(&Interaction, &IndustryDirectoryRow), (Changed<Interaction>, With<Button>)>,
+    rows: Query<(&UiInteraction, &IndustryDirectoryRow), (Changed<UiInteraction>, With<UiButton>)>,
     mut panel: ResMut<IndustryPanelState>,
     mut toolbar: ResMut<ToolbarState>,
     mut tool_state: ResMut<UiToolState>,
@@ -318,7 +319,7 @@ pub(crate) fn handle_industry_directory_buttons(
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
     for (interaction, button) in &sort_buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         if state.sort == button.0 {
@@ -332,7 +333,7 @@ pub(crate) fn handle_industry_directory_buttons(
         }
     }
     for (interaction, button) in &fund_buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         toolbar.active_group = Some(ToolbarGroup::Economy);
@@ -341,7 +342,7 @@ pub(crate) fn handle_industry_directory_buttons(
         state.open = false;
     }
     for (interaction, row) in &rows {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         panel.open = true;
@@ -381,10 +382,10 @@ pub(crate) fn sync_industry_directory(
     mut sort_buttons: Query<
         (
             &IndustryDirectorySortButton,
-            &Interaction,
+            &UiInteraction,
             &mut BackgroundColor,
         ),
-        With<Button>,
+        With<UiButton>,
     >,
 ) {
     let locale = prefs.locale();
@@ -424,7 +425,7 @@ pub(crate) fn sync_industry_directory(
         commands.entity(fund_root).with_children(|row| {
             for (action, label) in actions {
                 row.spawn((
-                    Button,
+                    UiButton,
                     IndustryDirectoryFundButton(action),
                     Node {
                         min_width: Val::Px(78.0),
@@ -437,7 +438,7 @@ pub(crate) fn sync_industry_directory(
                     },
                     BackgroundColor(Color::srgb(0.32, 0.38, 0.28)),
                     BorderColor::all(Color::srgb(0.50, 0.58, 0.40)),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     BuildMenuUi,
                     children![(
                         Text::new(localized_fund_label(locale, label)),
@@ -563,6 +564,8 @@ pub(crate) fn industry_directory_on_closed(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use openttdrs_core::CargoType;
@@ -592,7 +595,11 @@ mod tests {
             ..SimWorld::default()
         });
         let pos = TileCoord::new(3, 4);
-        world.spawn((Button, IndustryDirectoryRow { pos }, Interaction::Pressed));
+        world.spawn((
+            UiButton,
+            IndustryDirectoryRow { pos },
+            UiInteraction::Pressed,
+        ));
         world
             .run_system_once(handle_industry_directory_buttons)
             .unwrap();
@@ -617,9 +624,9 @@ mod tests {
             ..SimWorld::default()
         });
         world.spawn((
-            Button,
+            UiButton,
             IndustryDirectoryFundButton(BuildMenuAction::BuildFactory),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_industry_directory_buttons)

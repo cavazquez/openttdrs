@@ -4,6 +4,7 @@
 //! Drag a zonas «Vender» / «Vender cadena»; en vía, Ctrl+drag mueve la cola
 //! (`MoveRailVehicle.move_chain`). Barra: Nuevos / Clonar / Centrar (+ secundarios).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
@@ -327,7 +328,7 @@ fn spawn_depot_rename_action(
 ) {
     parent
         .spawn((
-            Button,
+            UiButton,
             action,
             Node {
                 min_width: Val::Px(36.0),
@@ -339,7 +340,7 @@ fn spawn_depot_rename_action(
             },
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
         ))
         .with_children(|button| {
@@ -376,7 +377,7 @@ fn spawn_depot_vehicle_row(
         ))
         .with_children(|row| {
             row.spawn((
-                Button,
+                UiButton,
                 DepotRunningButton { slot },
                 Node {
                     width: Val::Px(22.0),
@@ -389,7 +390,7 @@ fn spawn_depot_vehicle_row(
                 },
                 BackgroundColor(Color::srgb(0.28, 0.32, 0.22)),
                 BorderColor::all(BTN_BORDER),
-                Interaction::default(),
+                UiInteraction::default(),
                 BuildMenuUi,
             ))
             .with_children(|btn| {
@@ -415,7 +416,7 @@ fn spawn_depot_vehicle_row(
             .with_children(|strip| {
                 for unit_idx in 0..CONSIST_STRIP_MAX_UNITS {
                     strip.spawn((
-                        Button,
+                        UiButton,
                         DepotConsistUnitSprite { slot, unit_idx },
                         ImageNode::new(asset_server.load::<Image>(PLACEHOLDER_SPRITE)),
                         Node {
@@ -427,13 +428,13 @@ fn spawn_depot_vehicle_row(
                         },
                         BorderColor::all(Color::NONE),
                         BackgroundColor(Color::NONE),
-                        Interaction::default(),
+                        UiInteraction::default(),
                         BuildMenuUi,
                     ));
                 }
             });
             row.spawn((
-                Button,
+                UiButton,
                 DepotVehicleRow { slot },
                 Node {
                     flex_grow: 1.0,
@@ -444,7 +445,7 @@ fn spawn_depot_vehicle_row(
                     ..default()
                 },
                 BackgroundColor(Color::NONE),
-                Interaction::default(),
+                UiInteraction::default(),
                 BuildMenuUi,
             ))
             .with_children(|inner| {
@@ -456,7 +457,7 @@ fn spawn_depot_vehicle_row(
                 ));
             });
             row.spawn((
-                Button,
+                UiButton,
                 DepotSellButton { slot },
                 Node {
                     width: Val::Px(26.0),
@@ -468,7 +469,7 @@ fn spawn_depot_vehicle_row(
                 },
                 BackgroundColor(SELL_BG),
                 BorderColor::all(SELL_BORDER),
-                Interaction::default(),
+                UiInteraction::default(),
                 BuildMenuUi,
                 children![(
                     ImageNode::new(
@@ -492,7 +493,7 @@ fn spawn_depot_sell_drop(
 ) {
     parent
         .spawn((
-            Button,
+            UiButton,
             kind,
             Node {
                 width: Val::Percent(100.0),
@@ -505,7 +506,7 @@ fn spawn_depot_sell_drop(
             },
             BackgroundColor(SELL_BG),
             BorderColor::all(SELL_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
         ))
         .with_children(|btn| {
@@ -539,12 +540,12 @@ fn spawn_depot_button(
     }
     parent
         .spawn((
-            Button,
+            UiButton,
             action,
             node,
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
         ))
         .with_children(|btn| {
@@ -694,8 +695,8 @@ pub(crate) fn sync_depot_panel(
         (Without<DepotConsistUnitSprite>, Without<DepotRenameRow>),
     >,
     row_interaction_q: Query<
-        (&DepotVehicleRow, &Interaction),
-        (With<Button>, Without<DepotConsistUnitSprite>),
+        (&DepotVehicleRow, &UiInteraction),
+        (With<UiButton>, Without<DepotConsistUnitSprite>),
     >,
     mut row_text_q: Query<(&DepotVehicleRowText, &mut Text), Without<FloatingWindowTitleText>>,
     mut clone_label_q: Query<
@@ -720,10 +721,10 @@ pub(crate) fn sync_depot_panel(
             &DepotSellDrop,
             &mut BackgroundColor,
             &mut BorderColor,
-            &Interaction,
+            &UiInteraction,
         ),
         (
-            With<Button>,
+            With<UiButton>,
             Without<DepotRowContainer>,
             Without<DepotConsistUnitSprite>,
         ),
@@ -766,7 +767,11 @@ pub(crate) fn sync_depot_panel(
     let vehicles_here = vehicles_at_depot(&sim, depot_pos);
     let drag_from = depot_state.list_drag_from;
     let hovered_slot = row_interaction_q.iter().find_map(|(row, interaction)| {
-        matches!(*interaction, Interaction::Hovered | Interaction::Pressed).then_some(row.slot)
+        matches!(
+            *interaction,
+            UiInteraction::Hovered | UiInteraction::Pressed
+        )
+        .then_some(row.slot)
     });
     for (container, mut node, mut bg, mut border) in &mut container_q {
         let Some(vehicle) = vehicles_here.get(container.slot) else {
@@ -815,7 +820,11 @@ pub(crate) fn sync_depot_panel(
     }
     let dragging = drag_from.is_some();
     for (_kind, mut bg, mut border, interaction) in &mut sell_drop_q {
-        let hot = dragging && matches!(*interaction, Interaction::Hovered | Interaction::Pressed);
+        let hot = dragging
+            && matches!(
+                *interaction,
+                UiInteraction::Hovered | UiInteraction::Pressed
+            );
         *bg = BackgroundColor(if hot {
             Color::srgb(0.78, 0.28, 0.22)
         } else {
@@ -844,7 +853,7 @@ pub(crate) fn sync_depot_panel_consist(
             &mut ImageNode,
             &mut Node,
             &mut BorderColor,
-            &Interaction,
+            &UiInteraction,
         ),
         (Without<DepotRowContainer>, Without<DepotSellDrop>),
     >,
@@ -884,7 +893,7 @@ pub(crate) fn sync_depot_panel_consist(
             );
             let dragging_this =
                 drag_from == Some(sprite.slot) && drag_unit == Some(sprite.unit_idx);
-            *border = if dragging_this || *interaction == Interaction::Hovered {
+            *border = if dragging_this || *interaction == UiInteraction::Hovered {
                 BorderColor::all(Color::srgb(0.9, 0.78, 0.48))
             } else {
                 BorderColor::all(Color::NONE)
@@ -915,19 +924,19 @@ pub(crate) fn depot_panel_on_closed(
 /// Inicia drag al pulsar una fila o un sprite de unidad del consist.
 pub(crate) fn begin_depot_list_drag(
     mut row_q: Query<
-        (&Interaction, &DepotVehicleRow),
+        (&UiInteraction, &DepotVehicleRow),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<DepotPanelButton>,
             Without<DepotConsistUnitSprite>,
         ),
     >,
     mut unit_q: Query<
-        (&Interaction, &DepotConsistUnitSprite, &Node),
+        (&UiInteraction, &DepotConsistUnitSprite, &Node),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<DepotPanelButton>,
             Without<DepotVehicleRow>,
         ),
@@ -939,7 +948,7 @@ pub(crate) fn begin_depot_list_drag(
         return;
     };
     for (interaction, unit, node) in &mut unit_q {
-        if *interaction != Interaction::Pressed || node.display == Display::None {
+        if *interaction != UiInteraction::Pressed || node.display == Display::None {
             continue;
         }
         let vehicles = vehicles_at_depot(&sim, depot_pos);
@@ -952,7 +961,7 @@ pub(crate) fn begin_depot_list_drag(
         return;
     }
     for (interaction, row) in &mut row_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Some(vehicle_id) = vehicles_at_depot(&sim, depot_pos)
@@ -973,9 +982,9 @@ pub(crate) fn finish_depot_list_drag(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     mut depot_state: ResMut<DepotPanelState>,
-    row_q: Query<(&DepotVehicleRow, &Interaction), With<Button>>,
-    unit_q: Query<(&DepotConsistUnitSprite, &Interaction, &Node), With<Button>>,
-    sell_drop_q: Query<(&DepotSellDrop, &Interaction), With<Button>>,
+    row_q: Query<(&DepotVehicleRow, &UiInteraction), With<UiButton>>,
+    unit_q: Query<(&DepotConsistUnitSprite, &UiInteraction, &Node), With<UiButton>>,
+    sell_drop_q: Query<(&DepotSellDrop, &UiInteraction), With<UiButton>>,
     mut vehicle_window: ResMut<VehicleWindowState>,
     mut vehicle_chain: ResMut<VehicleChainRegistry>,
     mut order_state: ResMut<OrderEditState>,
@@ -999,7 +1008,11 @@ pub(crate) fn finish_depot_list_drag(
     let now = time.elapsed_secs();
 
     let sell_drop = sell_drop_q.iter().find_map(|(kind, interaction)| {
-        matches!(*interaction, Interaction::Hovered | Interaction::Pressed).then_some(*kind)
+        matches!(
+            *interaction,
+            UiInteraction::Hovered | UiInteraction::Pressed
+        )
+        .then_some(*kind)
     });
     if let Some(kind) = sell_drop
         && let Some(vehicle_id) =
@@ -1022,12 +1035,19 @@ pub(crate) fn finish_depot_list_drag(
     let drop_slot = row_q
         .iter()
         .find_map(|(row, interaction)| {
-            matches!(*interaction, Interaction::Hovered | Interaction::Pressed).then_some(row.slot)
+            matches!(
+                *interaction,
+                UiInteraction::Hovered | UiInteraction::Pressed
+            )
+            .then_some(row.slot)
         })
         .or_else(|| {
             unit_q.iter().find_map(|(unit, interaction, node)| {
                 (node.display != Display::None
-                    && matches!(*interaction, Interaction::Hovered | Interaction::Pressed))
+                    && matches!(
+                        *interaction,
+                        UiInteraction::Hovered | UiInteraction::Pressed
+                    ))
                 .then_some(unit.slot)
             })
         });
@@ -1268,22 +1288,22 @@ fn activate_depot_row_click(
 
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn handle_depot_panel_buttons(
-    mut q: Query<(&Interaction, &DepotPanelButton), (Changed<Interaction>, With<Button>)>,
+    mut q: Query<(&UiInteraction, &DepotPanelButton), (Changed<UiInteraction>, With<UiButton>)>,
     mut sell_q: Query<
-        (&Interaction, &DepotSellButton),
+        (&UiInteraction, &DepotSellButton),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<DepotPanelButton>,
             Without<DepotVehicleRow>,
             Without<DepotRunningButton>,
         ),
     >,
     mut running_q: Query<
-        (&Interaction, &DepotRunningButton),
+        (&UiInteraction, &DepotRunningButton),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<DepotPanelButton>,
             Without<DepotVehicleRow>,
             Without<DepotSellButton>,
@@ -1302,7 +1322,7 @@ pub(crate) fn handle_depot_panel_buttons(
     time: Res<Time>,
 ) {
     for (interaction, sell) in &mut sell_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Some(depot_pos) = depot_state.depot_pos else {
@@ -1332,7 +1352,7 @@ pub(crate) fn handle_depot_panel_buttons(
     }
 
     for (interaction, running) in &mut running_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Some(depot_pos) = depot_state.depot_pos else {
@@ -1364,7 +1384,7 @@ pub(crate) fn handle_depot_panel_buttons(
     }
 
     for (interaction, button) in &mut q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Some(depot_pos) = depot_state.depot_pos else {
@@ -1501,7 +1521,10 @@ fn apply_depot_rename(
 
 /// Aplica o cancela el nombre desde los botones del editor del depósito.
 pub(crate) fn handle_depot_rename_buttons(
-    mut buttons: Query<(&Interaction, &DepotRenameButton), (Changed<Interaction>, With<Button>)>,
+    mut buttons: Query<
+        (&UiInteraction, &DepotRenameButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut depot_state: ResMut<DepotPanelState>,
     rename_input_q: Query<&EditableText, With<DepotRenameInput>>,
     mut sim: ResMut<SimWorld>,
@@ -1509,7 +1532,7 @@ pub(crate) fn handle_depot_rename_buttons(
     time: Res<Time>,
 ) {
     for (interaction, action) in &mut buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match action {
@@ -1592,6 +1615,8 @@ pub(crate) fn depot_rename_editable_keyboard(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -1634,7 +1659,11 @@ mod tests {
         let mut world = World::new();
         insert_depot_resources(&mut world, sim, depot);
         world.resource_mut::<DepotPanelState>().selected_vehicle = Some(source_id);
-        world.spawn((Button, DepotPanelButton::CloneVehicle, Interaction::Pressed));
+        world.spawn((
+            UiButton,
+            DepotPanelButton::CloneVehicle,
+            UiInteraction::Pressed,
+        ));
 
         world.run_system_once(handle_depot_panel_buttons).unwrap();
 
@@ -1652,7 +1681,11 @@ mod tests {
         let (sim, depot, _) = world_with_bus();
         let mut world = World::new();
         insert_depot_resources(&mut world, sim, depot);
-        world.spawn((Button, DepotSellButton { slot: 0 }, Interaction::Pressed));
+        world.spawn((
+            UiButton,
+            DepotSellButton { slot: 0 },
+            UiInteraction::Pressed,
+        ));
 
         world.run_system_once(handle_depot_panel_buttons).unwrap();
 
@@ -1665,7 +1698,11 @@ mod tests {
         let (sim, depot, _) = world_with_bus();
         let mut world = World::new();
         insert_depot_resources(&mut world, sim, depot);
-        world.spawn((Button, DepotPanelButton::NewVehicles, Interaction::Pressed));
+        world.spawn((
+            UiButton,
+            DepotPanelButton::NewVehicles,
+            UiInteraction::Pressed,
+        ));
 
         world.run_system_once(handle_depot_panel_buttons).unwrap();
 
@@ -1681,7 +1718,7 @@ mod tests {
         let mut world = World::new();
         insert_depot_resources(&mut world, sim, depot);
         world.spawn((DepotRenameInput, EditableText::new("Terminal Central")));
-        world.spawn((Button, DepotRenameButton::Apply, Interaction::Pressed));
+        world.spawn((UiButton, DepotRenameButton::Apply, UiInteraction::Pressed));
 
         world.run_system_once(handle_depot_rename_buttons).unwrap();
 
@@ -1695,7 +1732,11 @@ mod tests {
         let (sim, depot, vehicle_id) = world_with_bus();
         let mut world = World::new();
         insert_depot_resources(&mut world, sim, depot);
-        world.spawn((Button, DepotRunningButton { slot: 0 }, Interaction::Pressed));
+        world.spawn((
+            UiButton,
+            DepotRunningButton { slot: 0 },
+            UiInteraction::Pressed,
+        ));
 
         world.run_system_once(handle_depot_panel_buttons).unwrap();
 

@@ -1,6 +1,7 @@
 //! Toolbar del scenario editor (#42 Fase 2): 19 botones al estilo OpenTTD.
 //! Visible solo con [`EditorSession::active`].
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use bevy::ui::FocusPolicy;
 use bevy::ui::UiScale;
@@ -433,7 +434,7 @@ pub(crate) fn setup_editor_toolbar(mut commands: Commands, asset_server: Res<Ass
                 BorderColor::all(Color::srgb(0.68, 0.61, 0.42)),
                 FocusPolicy::Block,
                 BuildMenuUi,
-                Interaction::default(),
+                UiInteraction::default(),
             ))
             .with_children(|bar| {
                 bar.spawn((EditorToolbarHalf::Controls, editor_half_node()))
@@ -522,7 +523,7 @@ pub(crate) fn setup_editor_toolbar(mut commands: Commands, asset_server: Res<Ass
                         );
                     });
                 bar.spawn((
-                    Button,
+                    UiButton,
                     EditorToolbarSwitchButton,
                     Node {
                         display: Display::None,
@@ -535,7 +536,7 @@ pub(crate) fn setup_editor_toolbar(mut commands: Commands, asset_server: Res<Ass
                     },
                     BackgroundColor(BTN_BG),
                     BorderColor::all(BTN_BORDER),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     children![(
                         ImageNode::new(asset_server.load::<Image>(ToolbarIcon::Switch.path())),
                         Node {
@@ -564,7 +565,7 @@ pub(crate) fn setup_editor_toolbar(mut commands: Commands, asset_server: Res<Ass
             },
             BackgroundColor(Color::srgba(0.04, 0.03, 0.02, 0.72)),
             GlobalZIndex(4000),
-            Interaction::default(),
+            UiInteraction::default(),
         ))
         .with_children(|overlay| {
             overlay
@@ -618,7 +619,7 @@ fn spawn_exit_confirm_button(
     label: &'static str,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         action,
         Node {
             height: Val::Px(30.0),
@@ -630,7 +631,7 @@ fn spawn_exit_confirm_button(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         children![(
             Text::new(label),
             TextFont {
@@ -668,13 +669,16 @@ pub(crate) fn sync_editor_exit_confirmation(
 
 pub(crate) fn handle_editor_exit_confirmation(
     mut document: ResMut<EditorDocumentState>,
-    buttons: Query<(&Interaction, &EditorExitConfirmButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&UiInteraction, &EditorExitConfirmButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut next_screen: ResMut<NextState<crate::state::ClientScreen>>,
     mut suspended: ResMut<crate::state::SuspendedGameSession>,
     mut exit: MessageWriter<AppExit>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match button {
@@ -711,11 +715,11 @@ fn editor_layout_is_compact(window_width: f32, ui_scale: f32) -> bool {
 
 pub(crate) fn handle_editor_toolbar_switch(
     mut state: ResMut<EditorToolbarLayoutState>,
-    buttons: Query<&Interaction, (Changed<Interaction>, With<EditorToolbarSwitchButton>)>,
+    buttons: Query<&UiInteraction, (Changed<UiInteraction>, With<EditorToolbarSwitchButton>)>,
 ) {
     if buttons
         .iter()
-        .any(|interaction| *interaction == Interaction::Pressed)
+        .any(|interaction| *interaction == UiInteraction::Pressed)
     {
         state.show_construction = !state.show_construction;
     }
@@ -784,7 +788,7 @@ fn spawn_editor_btn(
 ) {
     parent
         .spawn((
-            Button,
+            UiButton,
             action,
             ToolbarTooltipTarget {
                 text: action.tooltip(),
@@ -801,7 +805,7 @@ fn spawn_editor_btn(
             },
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
         ))
         .with_children(|btn| {
             if let Some(icon) = action.icon() {
@@ -840,7 +844,7 @@ fn spawn_editor_town_btn(parent: &mut ChildSpawnerCommands, asset_server: &Asset
         ))
         .with_children(|wrap| {
             wrap.spawn((
-                Button,
+                UiButton,
                 action,
                 ToolbarTooltipTarget {
                     text: "Fundar pueblo / colocar casa",
@@ -857,7 +861,7 @@ fn spawn_editor_town_btn(parent: &mut ChildSpawnerCommands, asset_server: &Asset
                 },
                 BackgroundColor(BTN_BG),
                 BorderColor::all(BTN_BORDER),
-                Interaction::default(),
+                UiInteraction::default(),
                 children![
                     (
                         ImageNode::new(asset_server.load::<Image>(ToolbarIcon::Town.path())),
@@ -912,7 +916,7 @@ fn spawn_town_choice(
 ) {
     parent
         .spawn((
-            Button,
+            UiButton,
             choice,
             BuildMenuUi,
             Node {
@@ -926,7 +930,7 @@ fn spawn_town_choice(
             },
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
         ))
         .with_children(|btn| {
             btn.spawn((
@@ -1007,7 +1011,7 @@ pub(crate) fn sync_editor_toolbar_button_visuals(
     town_menu: Res<EditorTownMenuState>,
     road_picker: Res<RoadTypePickerState>,
     sim: Option<Res<SimWorld>>,
-    mut q: Query<(&EditorToolbarAction, &Interaction, &mut BackgroundColor), With<Button>>,
+    mut q: Query<(&EditorToolbarAction, &UiInteraction, &mut BackgroundColor), With<UiButton>>,
 ) {
     if !editor.active {
         return;
@@ -1049,7 +1053,7 @@ pub(crate) fn sync_editor_toolbar_button_visuals(
         };
         *bg = BackgroundColor(if active {
             BTN_ACTIVE
-        } else if *interaction == Interaction::Hovered {
+        } else if *interaction == UiInteraction::Hovered {
             Color::srgb(0.42, 0.36, 0.24)
         } else {
             BTN_BG
@@ -1063,10 +1067,10 @@ pub(crate) fn handle_editor_toolbar_control_buttons(
     editor: Res<EditorSession>,
     scenario_directory: Option<Res<ScenarioDirectory>>,
     buttons: Query<
-        (&Interaction, &EditorToolbarAction),
+        (&UiInteraction, &EditorToolbarAction),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             With<EditorToolbarAction>,
         ),
     >,
@@ -1089,7 +1093,7 @@ pub(crate) fn handle_editor_toolbar_control_buttons(
     }
     let zoom_mode = zoom_mode.map_or(ZoomMode::Fixed, |mode| *mode);
     for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         if !editor_action_available_in_sim(*action, sim.as_deref()) {
@@ -1175,10 +1179,10 @@ pub(crate) fn handle_editor_toolbar_control_buttons(
 pub(crate) fn handle_editor_toolbar_tool_buttons(
     editor: Res<EditorSession>,
     buttons: Query<
-        (&Interaction, &EditorToolbarAction),
+        (&UiInteraction, &EditorToolbarAction),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             With<EditorToolbarAction>,
         ),
     >,
@@ -1201,7 +1205,7 @@ pub(crate) fn handle_editor_toolbar_tool_buttons(
         return;
     }
     for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match *action {
@@ -1262,10 +1266,10 @@ pub(crate) fn handle_editor_toolbar_tool_buttons(
 pub(crate) fn handle_editor_toolbar_build_buttons(
     editor: Res<EditorSession>,
     buttons: Query<
-        (&Interaction, &EditorToolbarAction),
+        (&UiInteraction, &EditorToolbarAction),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             With<EditorToolbarAction>,
         ),
     >,
@@ -1279,7 +1283,7 @@ pub(crate) fn handle_editor_toolbar_build_buttons(
         return;
     }
     for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         if !editor_action_available_in_sim(*action, sim.as_deref()) {
@@ -1346,15 +1350,19 @@ pub(crate) fn handle_editor_town_dropdown(
     mut tool: ResMut<UiToolState>,
     mut drag: ResMut<DragBuildState>,
     choices: Query<
-        (&Interaction, &EditorTownChoice),
-        (Changed<Interaction>, With<Button>, With<EditorTownChoice>),
+        (&UiInteraction, &EditorTownChoice),
+        (
+            Changed<UiInteraction>,
+            With<UiButton>,
+            With<EditorTownChoice>,
+        ),
     >,
 ) {
     if !editor.active || !state.open {
         return;
     }
     for (interaction, choice) in &choices {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         open_group(&mut toolbar, &mut tool, ToolbarGroup::Landscape);
@@ -1380,6 +1388,8 @@ fn open_group(toolbar: &mut ToolbarState, tool: &mut UiToolState, group: Toolbar
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
 
     use bevy::app::AppExit;
@@ -1456,7 +1466,7 @@ mod tests {
     }
 
     fn press_save_window_button(world: &mut World, button: SaveWindowButton) -> Entity {
-        world.spawn((Button, button, Interaction::Pressed)).id()
+        world.spawn((UiButton, button, UiInteraction::Pressed)).id()
     }
 
     #[test]
@@ -1679,7 +1689,7 @@ mod tests {
         assert!(matches!(
             world.resource::<NextState<ClientScreen>>(),
             NextState::Pending(ClientScreen::MainMenu)
-                | NextState::PendingIfNeq(ClientScreen::MainMenu)
+                | NextState::PendingIfDifferent(ClientScreen::MainMenu)
         ));
         assert!(world.resource::<SuspendedGameSession>().active);
 
@@ -1689,9 +1699,9 @@ mod tests {
         world.insert_resource(State::new(ClientScreen::MainMenu));
         world.insert_resource(NextState::<ClientScreen>::default());
         world.spawn((
-            Button,
+            UiButton,
             MainMenuScenariosButton,
-            Interaction::Pressed,
+            UiInteraction::Pressed,
             BackgroundColor(Color::BLACK),
         ));
         world
@@ -1699,9 +1709,9 @@ mod tests {
             .unwrap();
         assert_eq!(*world.resource::<MainMenuPanel>(), MainMenuPanel::Scenarios);
         world.spawn((
-            Button,
+            UiButton,
             MainMenuOpenScenariosDirButton,
-            Interaction::Pressed,
+            UiInteraction::Pressed,
             BackgroundColor(Color::BLACK),
         ));
         world
@@ -1715,7 +1725,7 @@ mod tests {
             assert_eq!(save_window.entries[0].name, "editor-v1.json");
         }
 
-        world.spawn((Button, SaveWindowRow { slot: 0 }, Interaction::Pressed));
+        world.spawn((UiButton, SaveWindowRow { slot: 0 }, UiInteraction::Pressed));
         let load = press_save_window_button(&mut world, SaveWindowButton::Confirm);
         world.run_system_once(handle_save_window_buttons).unwrap();
         world.despawn(load);
@@ -1725,7 +1735,7 @@ mod tests {
         assert!(matches!(
             world.resource::<NextState<ClientScreen>>(),
             NextState::Pending(ClientScreen::InGame)
-                | NextState::PendingIfNeq(ClientScreen::InGame)
+                | NextState::PendingIfDifferent(ClientScreen::InGame)
         ));
         world.insert_resource(State::new(ClientScreen::InGame));
 

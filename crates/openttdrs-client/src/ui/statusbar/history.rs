@@ -1,5 +1,6 @@
 //! Ventana flotante «Historial de noticias» (N4 — Message history).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::NewsDisplayMode;
 
@@ -98,10 +99,13 @@ pub(crate) fn setup_news_history_window(mut commands: Commands, asset_server: Re
 
 pub(crate) fn handle_open_news_history(
     mut history: ResMut<NewsHistoryState>,
-    interaction_q: Query<&Interaction, (Changed<Interaction>, With<super::StatusBarDateButton>)>,
+    interaction_q: Query<
+        &UiInteraction,
+        (Changed<UiInteraction>, With<super::StatusBarDateButton>),
+    >,
 ) {
     for interaction in &interaction_q {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             history.open = true;
         }
     }
@@ -171,7 +175,7 @@ pub(crate) fn sync_news_history_window(
             let headline = truncate_headline(&item.headline);
             let mode = display_mode_tag(display);
             list.spawn((
-                Button,
+                UiButton,
                 NewsHistoryRow { item_id: id },
                 Node {
                     width: Val::Percent(100.0),
@@ -184,7 +188,7 @@ pub(crate) fn sync_news_history_window(
                 },
                 BackgroundColor(Color::srgb(0.30, 0.25, 0.17)),
                 BorderColor::all(Color::srgb(0.50, 0.44, 0.30)),
-                Interaction::default(),
+                UiInteraction::default(),
                 BuildMenuUi,
                 children![(
                     Text::new(format!("{date}  {mode}  {headline}")),
@@ -206,13 +210,13 @@ pub(crate) fn handle_news_history_row_click(
     mut selected: ResMut<crate::ui::hud::SelectedTileInfo>,
     mut buy_state: ResMut<BuyVehicleWindowState>,
     mut feedback: ResMut<crate::ui::hud::HudBuildFeedback>,
-    rows: Query<(&Interaction, &NewsHistoryRow), (Changed<Interaction>, With<Button>)>,
+    rows: Query<(&UiInteraction, &NewsHistoryRow), (Changed<UiInteraction>, With<UiButton>)>,
 ) {
     if !history.open {
         return;
     }
     for (interaction, row) in &rows {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Some(item) = sim.state.news.get(row.item_id).cloned() else {
@@ -270,6 +274,8 @@ fn display_mode_tag(display: NewsDisplayMode) -> &'static str {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use openttdrs_core::{
@@ -341,7 +347,11 @@ mod tests {
         world.init_resource::<BuyVehicleWindowState>();
         world.init_resource::<HudBuildFeedback>();
         let row = world
-            .spawn((Button, NewsHistoryRow { item_id: 7 }, Interaction::Pressed))
+            .spawn((
+                UiButton,
+                NewsHistoryRow { item_id: 7 },
+                UiInteraction::Pressed,
+            ))
             .id();
 
         world
@@ -350,7 +360,7 @@ mod tests {
         assert!(world.resource::<NewsUiState>().waiting_full.is_empty());
 
         world.resource_mut::<NewsDisplayPrefs>().0.company_info = NewsDisplayMode::Full;
-        world.entity_mut(row).insert(Interaction::Pressed);
+        world.entity_mut(row).insert(UiInteraction::Pressed);
         world
             .run_system_once(handle_news_history_row_click)
             .unwrap();

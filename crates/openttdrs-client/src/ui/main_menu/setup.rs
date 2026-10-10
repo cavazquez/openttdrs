@@ -1,3 +1,4 @@
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use bevy::text::{EditableText, TextCursorStyle};
 use bevy::ui::FocusPolicy;
@@ -549,7 +550,7 @@ fn spawn_seed_options(panel: &mut ChildSpawnerCommands) {
                 },
                 BackgroundColor(Color::srgb(0.1, 0.08, 0.06)),
                 BorderColor::all(Color::srgb(0.6, 0.53, 0.36)),
-                Interaction::default(),
+                UiInteraction::default(),
                 FocusPolicy::Block,
                 TextCursorStyle::default(),
                 TextFont {
@@ -596,7 +597,7 @@ fn spawn_scenarios_panel(parent: &mut ChildSpawnerCommands) {
             ));
             for slot in 0..6 {
                 panel.spawn((
-                    Button,
+                    UiButton,
                     MainMenuHeightmapSlot(slot),
                     Node {
                         width: Val::Percent(100.0),
@@ -609,7 +610,7 @@ fn spawn_scenarios_panel(parent: &mut ChildSpawnerCommands) {
                     },
                     BackgroundColor(Color::srgb(0.26, 0.24, 0.19)),
                     BorderColor::all(Color::srgb(0.58, 0.54, 0.42)),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     children![(
                         Text::new(""),
                         TextFont {
@@ -652,7 +653,7 @@ fn spawn_preferences_panel(parent: &mut ChildSpawnerCommands) {
                 .with_children(|row| {
                     for (w, h) in [(1280_u32, 720_u32), (1600, 900), (1920, 1080)] {
                         row.spawn((
-                            Button,
+                            UiButton,
                             crate::ui::hud::UiClickBeep,
                             MainMenuResolutionButton {
                                 width: w,
@@ -668,7 +669,7 @@ fn spawn_preferences_panel(parent: &mut ChildSpawnerCommands) {
                             },
                             BackgroundColor(Color::srgb(0.26, 0.24, 0.19)),
                             BorderColor::all(Color::srgb(0.58, 0.54, 0.42)),
-                            Interaction::default(),
+                            UiInteraction::default(),
                             children![(
                                 Text::new(format!("{w}×{h}")),
                                 TextFont {
@@ -700,7 +701,7 @@ fn spawn_preferences_panel(parent: &mut ChildSpawnerCommands) {
                 .with_children(|row| {
                     for locale in crate::i18n::Locale::ALL {
                         row.spawn((
-                            Button,
+                            UiButton,
                             crate::ui::hud::UiClickBeep,
                             MainMenuLanguageButton(locale),
                             Node {
@@ -713,7 +714,7 @@ fn spawn_preferences_panel(parent: &mut ChildSpawnerCommands) {
                             },
                             BackgroundColor(Color::srgb(0.26, 0.24, 0.19)),
                             BorderColor::all(Color::srgb(0.58, 0.54, 0.42)),
-                            Interaction::default(),
+                            UiInteraction::default(),
                             children![(
                                 Text::new(locale.label()),
                                 TextFont {

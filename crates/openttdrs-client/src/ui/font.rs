@@ -36,7 +36,7 @@ impl UiFontRole {
     }
 }
 
-/// `TextFont` con handle y tamaño en píxeles (Bevy 0.19: `FontSource` + `FontSize`).
+/// `TextFont` con handle y tamaño en píxeles (`FontSource` + `FontSize`).
 #[must_use]
 #[allow(dead_code)]
 pub(crate) fn text_font(font: Handle<Font>, size: f32) -> TextFont {

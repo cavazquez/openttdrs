@@ -1,3 +1,4 @@
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 
 use crate::ui::toolbar::BuildMenuUi;
@@ -11,7 +12,7 @@ use super::{
 pub(crate) fn setup_minimap(mut commands: Commands) {
     let root = commands
         .spawn((
-            Button,
+            UiButton,
             Node {
                 position_type: PositionType::Absolute,
                 right: Val::Px(MINIMAP_RIGHT),
@@ -30,7 +31,7 @@ pub(crate) fn setup_minimap(mut commands: Commands) {
             BorderColor::all(Color::srgb(0.55, 0.5, 0.34)),
             BuildMenuUi,
             MinimapRoot,
-            Interaction::default(),
+            UiInteraction::default(),
             GlobalZIndex(1200),
         ))
         .id();
@@ -70,7 +71,7 @@ pub(crate) fn setup_minimap(mut commands: Commands) {
                                 ..default()
                             },
                             BackgroundColor(Color::srgb(0.12, 0.2, 0.09)),
-                            Interaction::default(),
+                            UiInteraction::default(),
                             BuildMenuUi,
                         ));
                     }
@@ -120,7 +121,7 @@ pub(crate) fn setup_minimap(mut commands: Commands) {
 
 fn spawn_layer_toggle(parent: &mut ChildSpawnerCommands, toggle: MinimapLayerToggle, label: &str) {
     parent.spawn((
-        Button,
+        UiButton,
         toggle,
         BuildMenuUi,
         Node {
@@ -134,7 +135,7 @@ fn spawn_layer_toggle(parent: &mut ChildSpawnerCommands, toggle: MinimapLayerTog
         },
         BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),
         BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
-        Interaction::default(),
+        UiInteraction::default(),
         children![(
             Text::new(label),
             TextFont {
@@ -147,11 +148,11 @@ fn spawn_layer_toggle(parent: &mut ChildSpawnerCommands, toggle: MinimapLayerTog
 }
 
 pub(crate) fn handle_minimap_layer_buttons(
-    buttons: Query<(&Interaction, &MinimapLayerToggle), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<(&UiInteraction, &MinimapLayerToggle), (Changed<UiInteraction>, With<UiButton>)>,
     mut layers: ResMut<MinimapLayerState>,
 ) {
     for (interaction, toggle) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match *toggle {

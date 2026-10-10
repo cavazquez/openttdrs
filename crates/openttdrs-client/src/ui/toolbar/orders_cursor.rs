@@ -1,5 +1,6 @@
 //! Cursor al elegir destinos en el mapa (modo «Agregar destino»).
 
+use crate::ui::interaction::UiInteraction;
 use bevy::prelude::*;
 use bevy::window::{CursorIcon, PrimaryWindow, SystemCursorIcon};
 
@@ -15,12 +16,12 @@ pub(crate) fn sync_orders_pick_cursor(
     pick_state: Res<State<OrderPickState>>,
     hovered: Res<HoveredTileCoord>,
     sim: Res<SimWorld>,
-    menu_pointer: Query<&Interaction, With<BuildMenuUi>>,
+    menu_pointer: Query<&UiInteraction, With<BuildMenuUi>>,
     mut commands: Commands,
     windows: Query<Entity, With<PrimaryWindow>>,
     mut prev: Local<Option<(bool, bool)>>,
 ) {
-    let over_menu = menu_pointer.iter().any(|i| *i != Interaction::None);
+    let over_menu = menu_pointer.iter().any(|i| *i != UiInteraction::None);
     let picking =
         order_pick_active(&pick_state) || tool_state.active_tool == Some(BuildMenuAction::Orders);
     let active = picking && order_state.vehicle_id().is_some() && !over_menu;

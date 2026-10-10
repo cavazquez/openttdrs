@@ -129,7 +129,7 @@ class ReleaseDryRunWorkflowTest(unittest.TestCase):
             )
             for relative in (
                 "static/fonts/DejaVuSansMono.ttf",
-                "assets/shaders/rail_glass_post_process.wgsl",
+                "assets/shaders/rail_glass_post_process.wesl",
                 "assets/opengfx/tiles/grass.png",
                 "assets/opengfx/atlas/tiles_atlas_0.png",
                 "assets/music/test.ogg",
@@ -209,7 +209,7 @@ class ReleaseDryRunWorkflowTest(unittest.TestCase):
             )
             for relative in (
                 "static/fonts/DejaVuSansMono.ttf",
-                "assets/shaders/rail_glass_post_process.wgsl",
+                "assets/shaders/rail_glass_post_process.wesl",
                 "assets/opengfx/tiles/grass.png",
                 "assets/opengfx/atlas/tiles_atlas_0.png",
                 "assets/music/test.ogg",

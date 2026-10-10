@@ -30,7 +30,7 @@ use bevy::render::texture::GpuImage;
 use bevy::render::view::{ExtractedView, ViewTarget};
 use bevy::render::{ExtractSchedule, Render, RenderApp, RenderStartup, RenderSystems};
 use bevy::shader::Shader;
-use bevy::sprite::{Anchor, SpriteAlphaMode, SpriteMesh};
+use bevy::sprite::{Anchor, SpriteAlphaMode};
 use bevy::window::PrimaryWindow;
 use openttdrs_core::newgrf_sprites::{
     PALETTE_LOOKUP_TEXTURE_HEIGHT, PALETTE_LOOKUP_TEXTURE_WIDTH, palette_to_transparent_lut_rgba8,
@@ -52,10 +52,11 @@ pub(crate) const RAIL_GLASS_RENDER_LAYER: usize = 1;
 /// delante de los sprites opacos del mapa.
 const RAIL_GLASS_OCCLUSION_RENDER_LAYER: usize = 2;
 
-const RAIL_GLASS_SHADER_PATH: &str = "assets/shaders/rail_glass_post_process.wgsl";
+const RAIL_GLASS_SHADER_PATH: &str = "assets/shaders/rail_glass_post_process.wesl";
 
 /// Marca la cámara principal cuyo framebuffer necesita el pass de vidrio.
 #[derive(Component, Clone, Copy, Default, ExtractComponent)]
+#[extract_app(RenderApp)]
 pub(crate) struct RailGlassPostProcessSettings;
 
 #[derive(Component)]
@@ -72,8 +73,8 @@ struct RailGlassOcclusionCamera;
 pub(crate) struct RailGlassMaskSource;
 
 #[derive(Component, Clone, Copy)]
-struct RailGlassMaskProxy {
-    source: Entity,
+pub(crate) struct RailGlassMaskProxy {
+    pub(crate) source: Entity,
 }
 
 struct CachedMaskProxy {
@@ -93,7 +94,7 @@ struct RailGlassMaskProxyCache {
 type ChangedMaskProxyFilter = (
     With<RailGlassMaskProxy>,
     Or<(
-        Changed<SpriteMesh>,
+        Changed<Sprite>,
         Changed<Anchor>,
         Changed<Transform>,
         Changed<Visibility>,
@@ -104,7 +105,7 @@ type ChangedMaskProxyFilter = (
 type MaskProxyData = (
     Entity,
     &'static RailGlassMaskProxy,
-    &'static mut SpriteMesh,
+    &'static mut Sprite,
     &'static mut Anchor,
     &'static mut Transform,
     &'static mut Visibility,
@@ -113,6 +114,7 @@ type MaskProxyData = (
 
 /// Handles compartidos entre el mundo principal y el render world.
 #[derive(Resource, Clone, ExtractResource)]
+#[extract_app(RenderApp)]
 struct RailGlassPostProcessAssets {
     mask: Handle<Image>,
     visibility: Handle<Image>,
@@ -120,6 +122,9 @@ struct RailGlassPostProcessAssets {
 }
 
 pub(crate) struct RailGlassCompositorPlugin;
+
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(super) struct RailGlassProxySync;
 
 impl Plugin for RailGlassCompositorPlugin {
     fn build(&self, app: &mut App) {
@@ -132,7 +137,9 @@ impl Plugin for RailGlassCompositorPlugin {
             Update,
             (
                 sync_rail_glass_mask_camera,
-                sync_rail_glass_mask_proxies.after(crate::bevy_app::UpdateSet::RenderRefresh),
+                sync_rail_glass_mask_proxies
+                    .after(crate::bevy_app::UpdateSet::RenderRefresh)
+                    .in_set(RailGlassProxySync),
             ),
         );
 
@@ -176,8 +183,8 @@ impl Plugin for RailGlassCompositorPlugin {
     }
 }
 
-fn mask_sprite_from_source(source: &Sprite, is_glass: bool) -> SpriteMesh {
-    SpriteMesh {
+fn mask_sprite_from_source(source: &Sprite, is_glass: bool) -> Sprite {
+    Sprite {
         image: source.image.clone(),
         texture_atlas: source.texture_atlas.clone(),
         color: if is_glass {
@@ -196,7 +203,7 @@ fn mask_sprite_from_source(source: &Sprite, is_glass: bool) -> SpriteMesh {
     }
 }
 
-fn mask_sprite_matches_source(mask: &SpriteMesh, source: &Sprite, is_glass: bool) -> bool {
+fn mask_sprite_matches_source(mask: &Sprite, source: &Sprite, is_glass: bool) -> bool {
     mask.image == source.image
         && mask.texture_atlas == source.texture_atlas
         && mask.color
@@ -446,9 +453,10 @@ fn physical_window_size(window: &Window) -> (u32, u32) {
 }
 
 fn sync_rail_glass_mask_camera(
-    windows: Query<&Window, With<PrimaryWindow>>,
     targets: Option<Res<RailGlassPostProcessAssets>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
     mut images: ResMut<Assets<Image>>,
+    proxies: Query<(&Transform, &Visibility), (With<RailGlassMaskProxy>, Without<Camera>)>,
     mut cameras: ParamSet<(
         Query<(&Transform, &Projection), With<crate::render::PrimaryGameCamera>>,
         Query<(&mut Camera, &mut Transform, &mut Projection), With<RailGlassMaskCamera>>,
@@ -507,6 +515,38 @@ fn sync_rail_glass_mask_camera(
         occlusion_camera.is_active = true;
         *occlusion_transform = primary_transform;
         *occlusion_projection = primary_projection;
+        fit_occlusion_depth(
+            &mut occlusion_transform,
+            &mut occlusion_projection,
+            proxies
+                .iter()
+                .filter(|(_, visibility)| **visibility != Visibility::Hidden)
+                .map(|(transform, _)| transform.translation.z),
+        );
+    }
+}
+
+/// Mask parents and children can be only a few float steps apart. The main
+/// camera's large depth range and translation collapse them to the same GPU
+/// depth, making alpha-mask batching determine which one wins. Keep X/Y and
+/// zoom unchanged while fitting this auxiliary camera to the mask geometry.
+fn fit_occlusion_depth(
+    transform: &mut Transform,
+    projection: &mut Projection,
+    depths: impl Iterator<Item = f32>,
+) {
+    let Projection::Orthographic(projection) = projection else {
+        return;
+    };
+    let (min, max) = depths
+        .filter(|depth| depth.is_finite())
+        .fold((f32::INFINITY, f32::NEG_INFINITY), |(min, max), z| {
+            (min.min(z), max.max(z))
+        });
+    if min.is_finite() && max.is_finite() {
+        transform.translation.z = max + 1.0;
+        projection.near = 0.0;
+        projection.far = max - min + 2.0;
     }
 }
 
@@ -720,12 +760,60 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn fitted_mask_depth_preserves_xy_zoom_and_distinguishes_close_surfaces() {
+        use bevy::camera::CameraProjection;
+
+        let mut transform = Transform::from_xyz(120.0, -80.0, 999.9);
+        let mut projection = Projection::Orthographic(OrthographicProjection {
+            scale: 8.0,
+            ..OrthographicProjection::default_2d()
+        });
+        let parent = 1.031;
+        let child = parent + 0.000_005;
+        fit_occlusion_depth(&mut transform, &mut projection, [parent, child].into_iter());
+        let Projection::Orthographic(projection) = projection else {
+            unreachable!();
+        };
+        assert_eq!(transform.translation.truncate(), Vec2::new(120.0, -80.0));
+        assert_eq!(projection.scale, 8.0);
+        assert_eq!(projection.near, 0.0);
+        let clip_from_world = projection.get_clip_from_view() * transform.to_matrix().inverse();
+        let parent_depth = (clip_from_world * Vec4::new(120.0, -80.0, parent, 1.0)).z;
+        let child_depth = (clip_from_world * Vec4::new(120.0, -80.0, child, 1.0)).z;
+        assert!(child_depth > parent_depth);
+        for z in [parent, child] {
+            let distance = transform.translation.z - z;
+            assert!(distance > projection.near && distance < projection.far);
+        }
+    }
+
+    #[test]
+    fn empty_or_invalid_mask_depths_keep_the_primary_projection() {
+        let original_transform = Transform::from_xyz(1.0, 2.0, 999.9);
+        let original_projection = Projection::Orthographic(OrthographicProjection::default_2d());
+        for depths in [vec![], vec![f32::NAN, f32::INFINITY]] {
+            let mut transform = original_transform;
+            let mut projection = original_projection.clone();
+            fit_occlusion_depth(&mut transform, &mut projection, depths.into_iter());
+            assert_eq!(transform, original_transform);
+            let Projection::Orthographic(projection) = projection else {
+                unreachable!();
+            };
+            let Projection::Orthographic(original) = &original_projection else {
+                unreachable!();
+            };
+            assert_eq!(projection.near, original.near);
+            assert_eq!(projection.far, original.far);
+        }
+    }
+
     #[derive(Component)]
     struct SourceId(u32);
 
     #[derive(Debug, PartialEq)]
     struct MaskState {
-        sprite: SpriteMesh,
+        sprite: Sprite,
         anchor: Anchor,
         transform: Transform,
         visibility: Visibility,
@@ -851,7 +939,7 @@ mod tests {
     fn mask_states(world: &mut World) -> BTreeMap<u32, MaskState> {
         let mut query = world.query::<(
             &RailGlassMaskProxy,
-            &SpriteMesh,
+            &Sprite,
             &Anchor,
             &Transform,
             &Visibility,
@@ -1011,7 +1099,7 @@ mod tests {
         app.world_mut().spawn((
             RailGlassMaskProxy { source },
             MapVisualLayer,
-            SpriteMesh::default(),
+            Sprite::default(),
             MapTileChunk { cx: 0, cy: 3 },
             RenderLayers::layer(RAIL_GLASS_OCCLUSION_RENDER_LAYER),
         ));
@@ -1023,7 +1111,7 @@ mod tests {
             .single(app.world())
             .unwrap();
         {
-            let mut mask = app.world_mut().get_mut::<SpriteMesh>(proxy).unwrap();
+            let mut mask = app.world_mut().get_mut::<Sprite>(proxy).unwrap();
             mask.color = Color::WHITE;
             mask.alpha_mode = SpriteAlphaMode::Blend;
             mask.flip_x = true;
@@ -1043,7 +1131,7 @@ mod tests {
             .query_filtered::<Entity, (
                 With<RailGlassMaskProxy>,
                 Or<(
-                    Changed<SpriteMesh>,
+                    Changed<Sprite>,
                     Changed<Anchor>,
                     Changed<Transform>,
                     Changed<Visibility>,
@@ -1074,7 +1162,7 @@ mod tests {
                         MapTileChunk { cx: 99, cy: 88 };
                 }
                 1 => {
-                    app.world_mut().get_mut::<SpriteMesh>(proxy).unwrap().flip_y = true;
+                    app.world_mut().get_mut::<Sprite>(proxy).unwrap().flip_y = true;
                 }
                 2 => {
                     *app.world_mut().get_mut::<Anchor>(proxy).unwrap() = Anchor::TOP_LEFT;
@@ -1113,7 +1201,7 @@ mod tests {
         mut proxies: Query<(
             Entity,
             &RailGlassMaskProxy,
-            &mut SpriteMesh,
+            &mut Sprite,
             &mut Anchor,
             &mut Transform,
             &mut Visibility,

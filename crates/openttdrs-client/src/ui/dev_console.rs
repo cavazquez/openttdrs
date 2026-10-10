@@ -1,5 +1,6 @@
 //! Consola y herramientas de desarrollo (UI-8): FPS, toggles y comandos cortos.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
@@ -133,7 +134,7 @@ fn spawn_action_btn(
 ) {
     parent
         .spawn((
-            Button,
+            UiButton,
             action,
             Node {
                 flex_grow: 1.0,
@@ -145,7 +146,7 @@ fn spawn_action_btn(
             },
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
         ))
         .with_children(|btn| {
@@ -178,7 +179,7 @@ pub(crate) fn sync_dev_console(
     >,
     mut overlay_btn: Query<
         (&DevConsoleAction, &mut BackgroundColor),
-        (With<Button>, With<DevConsoleAction>),
+        (With<UiButton>, With<DevConsoleAction>),
     >,
 ) {
     for (w, mut vis) in &mut windows {
@@ -220,8 +221,12 @@ pub(crate) fn sync_dev_console(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_dev_console_buttons(
     buttons: Query<
-        (&Interaction, &DevConsoleAction),
-        (Changed<Interaction>, With<Button>, With<DevConsoleAction>),
+        (&UiInteraction, &DevConsoleAction),
+        (
+            Changed<UiInteraction>,
+            With<UiButton>,
+            With<DevConsoleAction>,
+        ),
     >,
     mut state: ResMut<DevConsoleState>,
     mut prefs: ResMut<ClientPreferences>,
@@ -232,7 +237,7 @@ pub(crate) fn handle_dev_console_buttons(
         return;
     }
     for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match *action {

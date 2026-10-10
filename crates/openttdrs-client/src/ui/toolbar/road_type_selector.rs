@@ -2,6 +2,7 @@
 //!
 //! Catálogo dinámico: vanilla + Action0 RoadTypes; preview Action1/3 si hay sprite.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use std::collections::HashMap;
 
 use bevy::input::ButtonState;
@@ -131,7 +132,7 @@ fn spawn_class_dropdown(
         ))
         .with_children(|col| {
             col.spawn((
-                Button,
+                UiButton,
                 RoadTypeClassButton(class),
                 ToolbarTooltipTarget { text: tip },
                 BuildMenuUi,
@@ -147,7 +148,7 @@ fn spawn_class_dropdown(
                 },
                 BackgroundColor(BTN_BG),
                 BorderColor::all(BTN_BORDER),
-                Interaction::default(),
+                UiInteraction::default(),
                 children![
                     (
                         RoadTypeClassLabel(class),
@@ -219,7 +220,7 @@ fn spawn_road_type_entry(
     label: &str,
 ) {
     menu.spawn((
-        Button,
+        UiButton,
         RoadTypeSelectButton { class, id },
         BuildMenuUi,
         Node {
@@ -235,7 +236,7 @@ fn spawn_road_type_entry(
         },
         BackgroundColor(ENTRY_BG),
         BorderColor::all(Color::srgb(0.45, 0.55, 0.35)),
-        Interaction::default(),
+        UiInteraction::default(),
     ))
     .with_children(|row| {
         row.spawn((
@@ -277,11 +278,14 @@ pub(crate) fn close_road_type_picker_on_escape(
 }
 
 pub(crate) fn handle_road_type_class_buttons(
-    buttons: Query<(&Interaction, &RoadTypeClassButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&UiInteraction, &RoadTypeClassButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut picker: ResMut<RoadTypePickerState>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         picker.open = if picker.open == Some(button.0) {
@@ -296,12 +300,15 @@ pub(crate) fn handle_road_type_class_buttons(
 }
 
 pub(crate) fn handle_road_type_select_buttons(
-    buttons: Query<(&Interaction, &RoadTypeSelectButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&UiInteraction, &RoadTypeSelectButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut sim: ResMut<SimWorld>,
     mut picker: ResMut<RoadTypePickerState>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let cmd = match button.class {
@@ -449,7 +456,7 @@ pub(crate) fn sync_road_type_entry_previews(
 pub(crate) fn sync_road_type_class_labels(
     sim: Res<SimWorld>,
     mut labels: Query<(&RoadTypeClassLabel, &mut Text)>,
-    mut buttons: Query<(&RoadTypeClassButton, &mut BackgroundColor), With<Button>>,
+    mut buttons: Query<(&RoadTypeClassButton, &mut BackgroundColor), With<UiButton>>,
     picker: Res<RoadTypePickerState>,
 ) {
     for (label, mut text) in &mut labels {
@@ -478,6 +485,8 @@ pub(crate) fn sync_road_type_class_labels(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -492,12 +501,12 @@ mod tests {
             filter: String::new(),
         });
         world.spawn((
-            Button,
+            UiButton,
             RoadTypeSelectButton {
                 class: RoadTramType::Road,
                 id: RoadType::Road,
             },
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_road_type_select_buttons)

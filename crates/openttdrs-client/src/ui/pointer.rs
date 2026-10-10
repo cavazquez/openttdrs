@@ -1,5 +1,6 @@
 //! Shared pointer ownership policy for world input and camera navigation.
 
+use crate::ui::interaction::UiInteraction;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -11,7 +12,7 @@ use super::save_window::SaveWindowState;
 use super::toolbar::editor_toolbar::EditorExitConfirmRoot;
 use super::toolbar::{MinimapLayerState, minimap_contains_cursor};
 
-/// Interactions are resolved by Bevy's UI focus pass before Update. Do not
+/// Interactions are resolved by the picking pass before Update. Do not
 /// consume the wheel here: the focused list still needs to receive it.
 #[derive(SystemParam)]
 pub(crate) struct PointerCapture<'w, 's> {
@@ -19,7 +20,7 @@ pub(crate) struct PointerCapture<'w, 's> {
         'w,
         's,
         (
-            &'static Interaction,
+            &'static UiInteraction,
             &'static Node,
             Option<&'static Visibility>,
         ),
@@ -47,7 +48,7 @@ impl PointerCapture<'_, '_> {
     pub(crate) fn active(&self) -> bool {
         self.modal_active()
             || self.nodes.iter().any(|(interaction, node, visibility)| {
-                *interaction != Interaction::None
+                *interaction != UiInteraction::None
                     && node.display != Display::None
                     && visibility != Some(&Visibility::Hidden)
             })
@@ -129,6 +130,8 @@ pub(crate) fn update_right_pointer_gesture(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 pub(super) mod tests {
+    use crate::ui::interaction::UiInteraction;
+
     use super::*;
     use crate::camera::{CameraVelocity, move_camera};
     use crate::render::PrimaryGameCamera;
@@ -248,9 +251,9 @@ pub(super) mod tests {
         for interrupt in 0..3 {
             let (mut world, camera) = gesture_world(1.0);
             let orientation = world.resource::<StationBuildState>().orientation;
-            let ui = world.spawn((Node::default(), Interaction::None)).id();
+            let ui = world.spawn((Node::default(), UiInteraction::None)).id();
             if interrupt == 0 {
-                *world.get_mut::<Interaction>(ui).unwrap() = Interaction::Hovered;
+                *world.get_mut::<UiInteraction>(ui).unwrap() = UiInteraction::Hovered;
             }
             world
                 .resource_mut::<ButtonInput<MouseButton>>()
@@ -270,7 +273,7 @@ pub(super) mod tests {
                 });
             }
             gesture_frame(&mut world, Vec2::ZERO);
-            *world.get_mut::<Interaction>(ui).unwrap() = Interaction::None;
+            *world.get_mut::<UiInteraction>(ui).unwrap() = UiInteraction::None;
             world.get_mut::<Window>(window).unwrap().focused = true;
             world.remove_resource::<SaveWindowState>();
             gesture_frame(&mut world, Vec2::new(20.0, 0.0));
@@ -317,7 +320,7 @@ pub(super) mod tests {
                 if modal {
                     world.spawn((EditorExitConfirmRoot, Node::default()));
                 } else {
-                    world.spawn((Node::default(), Interaction::Hovered));
+                    world.spawn((Node::default(), UiInteraction::Hovered));
                 }
                 world
                     .resource_mut::<ButtonInput<MouseButton>>()
@@ -349,9 +352,9 @@ pub(super) mod tests {
                 display: Display::None,
                 ..default()
             },
-            Interaction::Hovered,
+            UiInteraction::Hovered,
         ));
-        world.spawn((Node::default(), Interaction::Hovered, Visibility::Hidden));
+        world.spawn((Node::default(), UiInteraction::Hovered, Visibility::Hidden));
         world.insert_resource(AccumulatedMouseScroll {
             unit: MouseScrollUnit::Line,
             delta: Vec2::Y,

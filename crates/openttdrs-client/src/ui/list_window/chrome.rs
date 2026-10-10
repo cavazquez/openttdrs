@@ -1,5 +1,6 @@
 //! Chrome visual compartido: chips de sort, scroll y filas.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 
 use crate::ui::floating_window::{WINDOW_TEXT, window_text_font};
@@ -23,7 +24,7 @@ pub(crate) fn spawn_list_sort_button<M: Component>(
     min_width: f32,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         marker,
         Node {
             min_width: Val::Px(min_width),
@@ -36,7 +37,7 @@ pub(crate) fn spawn_list_sort_button<M: Component>(
         },
         BackgroundColor(LIST_BTN_BG),
         BorderColor::all(LIST_BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -92,10 +93,10 @@ pub(crate) fn spawn_list_scroll_area(
 
 /// Color de chip: activo / hover / idle.
 #[must_use]
-pub(crate) fn list_chip_bg(active: bool, interaction: Interaction) -> BackgroundColor {
+pub(crate) fn list_chip_bg(active: bool, interaction: UiInteraction) -> BackgroundColor {
     if active {
         BackgroundColor(LIST_BTN_ACTIVE)
-    } else if interaction == Interaction::Hovered {
+    } else if interaction == UiInteraction::Hovered {
         BackgroundColor(LIST_BTN_HOVER)
     } else {
         BackgroundColor(LIST_BTN_BG)
@@ -104,7 +105,7 @@ pub(crate) fn list_chip_bg(active: bool, interaction: Interaction) -> Background
 
 /// Colorea chips de sort: activo / hover / idle.
 pub(crate) fn sync_list_sort_colors<M: Component + Copy + PartialEq>(
-    buttons: &mut Query<(&M, &Interaction, &mut BackgroundColor), With<Button>>,
+    buttons: &mut Query<(&M, &UiInteraction, &mut BackgroundColor), With<UiButton>>,
     active: M,
 ) {
     for (button, interaction, mut bg) in buttons.iter_mut() {
@@ -149,7 +150,7 @@ pub(crate) fn spawn_list_row_button(
     selected: bool,
 ) {
     list.spawn((
-        Button,
+        UiButton,
         row_marker,
         Node {
             width: Val::Percent(100.0),
@@ -166,7 +167,7 @@ pub(crate) fn spawn_list_row_button(
             LIST_BTN_BG
         }),
         BorderColor::all(Color::srgb(0.50, 0.44, 0.30)),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),

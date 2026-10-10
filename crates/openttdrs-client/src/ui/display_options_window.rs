@@ -1,5 +1,6 @@
 //! Opciones de visualización (Display Options) persistidas en `ClientPreferences`.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 
 use crate::render::RemapMapVisualsPending;
@@ -186,7 +187,7 @@ fn spawn_toggle_row(
                 TextColor(WINDOW_TEXT),
             ));
             row.spawn((
-                Button,
+                UiButton,
                 toggle,
                 Node {
                     min_width: Val::Px(48.0),
@@ -198,7 +199,7 @@ fn spawn_toggle_row(
                 },
                 BackgroundColor(BTN_BG),
                 BorderColor::all(BTN_BORDER),
-                Interaction::default(),
+                UiInteraction::default(),
                 BuildMenuUi,
                 children![(
                     Text::new("ON"),
@@ -217,7 +218,7 @@ fn spawn_preset_btn(
 ) {
     parent
         .spawn((
-            Button,
+            UiButton,
             preset,
             Node {
                 flex_grow: 1.0,
@@ -229,7 +230,7 @@ fn spawn_preset_btn(
             },
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
         ))
         .with_children(|btn| {
@@ -283,7 +284,7 @@ fn spawn_transparency_row(
                         TransparencyMode::Hidden => "O",
                     };
                     btns.spawn((
-                        Button,
+                        UiButton,
                         DisplayOptionsToggle::Transparency { option, mode },
                         Node {
                             min_width: Val::Px(28.0),
@@ -295,7 +296,7 @@ fn spawn_transparency_row(
                         },
                         BackgroundColor(BTN_BG),
                         BorderColor::all(BTN_BORDER),
-                        Interaction::default(),
+                        UiInteraction::default(),
                         BuildMenuUi,
                         children![(
                             Text::new(short),
@@ -310,18 +311,18 @@ fn spawn_transparency_row(
 
 pub(crate) fn handle_display_options_buttons(
     buttons: Query<
-        (&Interaction, &DisplayOptionsToggle),
+        (&UiInteraction, &DisplayOptionsToggle),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<DisplayOptionsPreset>,
         ),
     >,
     presets: Query<
-        (&Interaction, &DisplayOptionsPreset),
+        (&UiInteraction, &DisplayOptionsPreset),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<DisplayOptionsToggle>,
         ),
     >,
@@ -330,7 +331,7 @@ pub(crate) fn handle_display_options_buttons(
     mut pending_remap: Option<ResMut<RemapMapVisualsPending>>,
 ) {
     for (interaction, preset) in &presets {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let mapped = match *preset {
@@ -348,7 +349,7 @@ pub(crate) fn handle_display_options_buttons(
         request_full_remap(pending_remap.as_deref_mut());
     }
     for (interaction, toggle) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match *toggle {
@@ -414,7 +415,7 @@ pub(crate) fn sync_display_options_window(
     state: Res<DisplayOptionsWindowState>,
     prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility), Without<DisplayOptionsToggle>>,
-    mut buttons: Query<(&DisplayOptionsToggle, &mut BackgroundColor, &Children), With<Button>>,
+    mut buttons: Query<(&DisplayOptionsToggle, &mut BackgroundColor, &Children), With<UiButton>>,
     mut texts: Query<&mut Text>,
 ) {
     let Some((_, mut vis)) = root_q
@@ -514,6 +515,8 @@ pub(crate) fn display_options_window_on_closed(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -528,7 +531,11 @@ mod tests {
             minimap_visible: true,
             ..Default::default()
         });
-        world.spawn((Button, DisplayOptionsToggle::Minimap, Interaction::Pressed));
+        world.spawn((
+            UiButton,
+            DisplayOptionsToggle::Minimap,
+            UiInteraction::Pressed,
+        ));
         world
             .run_system_once(handle_display_options_buttons)
             .unwrap();
@@ -544,9 +551,9 @@ mod tests {
         world.insert_resource(RemapMapVisualsPending::default());
 
         world.spawn((
-            Button,
+            UiButton,
             DisplayOptionsToggle::FullAnimation,
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_display_options_buttons)
@@ -561,9 +568,9 @@ mod tests {
             world.entity_mut(e).despawn();
         }
         world.spawn((
-            Button,
+            UiButton,
             DisplayOptionsToggle::FullDetail,
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_display_options_buttons)
@@ -579,12 +586,12 @@ mod tests {
         world.insert_resource(SimHudControls::default());
         world.insert_resource(RemapMapVisualsPending::default());
         world.spawn((
-            Button,
+            UiButton,
             DisplayOptionsToggle::Transparency {
                 option: TransparencyOption::Trees,
                 mode: TransparencyMode::Hidden,
             },
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_display_options_buttons)

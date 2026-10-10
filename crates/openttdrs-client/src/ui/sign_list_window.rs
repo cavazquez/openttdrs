@@ -1,5 +1,6 @@
 //! Lista de carteles del mapa (SignList) con centrar / renombrar / borrar.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
@@ -77,13 +78,13 @@ pub(crate) fn setup_sign_list_window(mut commands: Commands, asset_server: Res<A
     );
     commands.entity(content).with_children(|panel| {
         panel.spawn((
-            Button,
+            UiButton,
             SignListBodyText,
             Text::new(""),
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
             BuildMenuUi,
-            Interaction::default(),
+            UiInteraction::default(),
             Node {
                 width: Val::Percent(100.0),
                 min_height: Val::Px(120.0),
@@ -148,7 +149,7 @@ fn spawn_action_btn(
     action: SignListAction,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         action,
         BuildMenuUi,
         Node {
@@ -162,7 +163,7 @@ fn spawn_action_btn(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
-        Interaction::default(),
+        UiInteraction::default(),
         children![(
             Text::new(label),
             window_text_font(asset_server, UiFontRole::Caption),
@@ -244,7 +245,7 @@ pub(crate) fn sync_sign_list_window(
 }
 
 pub(crate) fn handle_sign_list_buttons(
-    buttons: Query<(&Interaction, &SignListAction), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<(&UiInteraction, &SignListAction), (Changed<UiInteraction>, With<UiButton>)>,
     mut state: ResMut<SignListWindowState>,
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
@@ -252,7 +253,7 @@ pub(crate) fn handle_sign_list_buttons(
     mut rename_q: Query<&mut Text, With<SignListRenameInput>>,
 ) {
     for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match *action {
@@ -336,13 +337,13 @@ pub(crate) fn handle_sign_list_buttons(
 /// Selección por clic en el cuerpo de texto (parsea la línea bajo el cursor de forma simple:
 /// cicla al siguiente cartel al pulsar el cuerpo).
 pub(crate) fn handle_sign_list_body_click(
-    body: Query<&Interaction, (Changed<Interaction>, With<SignListBodyText>)>,
+    body: Query<&UiInteraction, (Changed<UiInteraction>, With<SignListBodyText>)>,
     sim: Res<SimWorld>,
     mut state: ResMut<SignListWindowState>,
     mut rename_q: Query<&mut Text, With<SignListRenameInput>>,
 ) {
     for interaction in &body {
-        if *interaction != Interaction::Pressed || sim.state.signs.is_empty() {
+        if *interaction != UiInteraction::Pressed || sim.state.signs.is_empty() {
             continue;
         }
         let ids: Vec<u32> = sim.state.signs.iter().map(|s| s.id).collect();

@@ -1,5 +1,6 @@
 //! Scrollbar vertical común con chrome OpenGFX/OpenTTD.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy::ui::widget::ImageNode;
@@ -130,7 +131,7 @@ pub(crate) fn spawn_classic_scroll_area_with(
                     viewport_marker,
                     Node { ..viewport_node },
                     ScrollPosition::default(),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     BackgroundColor(viewport_bg),
                     BorderColor::all(viewport_border),
                     BuildMenuUi,
@@ -169,7 +170,7 @@ pub(crate) fn spawn_classic_scroll_area_with(
                         ClassicScrollThumb {
                             viewport: viewport_entity,
                         },
-                        Button,
+                        UiButton,
                         Node {
                             position_type: PositionType::Absolute,
                             left: Val::Px(1.0),
@@ -179,7 +180,7 @@ pub(crate) fn spawn_classic_scroll_area_with(
                             ..default()
                         },
                         BackgroundColor(BUTTON_IDLE),
-                        Interaction::default(),
+                        UiInteraction::default(),
                         BuildMenuUi,
                     )],
                 ));
@@ -201,7 +202,7 @@ fn spawn_arrow_button(
             viewport,
             direction,
         },
-        Button,
+        UiButton,
         Node {
             width: Val::Px(BAR_WIDTH),
             height: Val::Px(BAR_WIDTH),
@@ -210,7 +211,7 @@ fn spawn_arrow_button(
             ..default()
         },
         BackgroundColor(BUTTON_IDLE),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             ImageNode::new(asset_server.load::<Image>(format!("assets/opengfx/tiles/{icon}"))),
@@ -234,12 +235,12 @@ fn scroll_limit_from_sizes(viewport: f32, content: f32) -> f32 {
 }
 
 fn scroll_with_arrow_buttons(
-    buttons: Query<(&Interaction, &ClassicScrollButton), Changed<Interaction>>,
+    buttons: Query<(&UiInteraction, &ClassicScrollButton), Changed<UiInteraction>>,
     mut viewports: Query<(&mut ScrollPosition, &ComputedNode, Option<&Children>)>,
     computed: Query<&ComputedNode>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Ok((mut position, viewport, children)) = viewports.get_mut(button.viewport) else {
@@ -257,7 +258,7 @@ fn scroll_with_wheel(
     mut wheel: MessageReader<MouseWheel>,
     mut viewports: Query<
         (
-            &Interaction,
+            &UiInteraction,
             &mut ScrollPosition,
             &ComputedNode,
             Option<&Children>,
@@ -277,7 +278,7 @@ fn scroll_with_wheel(
         return;
     }
     for (interaction, mut position, viewport, children) in &mut viewports {
-        if *interaction != Interaction::Hovered {
+        if *interaction != UiInteraction::Hovered {
             continue;
         }
         let content = children
@@ -289,24 +290,24 @@ fn scroll_with_wheel(
 
 fn update_scroll_button_style(
     mut buttons: Query<
-        (&Interaction, &mut BackgroundColor),
+        (&UiInteraction, &mut BackgroundColor),
         (
-            Changed<Interaction>,
+            Changed<UiInteraction>,
             Or<(With<ClassicScrollButton>, With<ClassicScrollThumb>)>,
         ),
     >,
 ) {
     for (interaction, mut background) in &mut buttons {
         background.0 = match interaction {
-            Interaction::None => BUTTON_IDLE,
-            Interaction::Hovered => BUTTON_HOVER,
-            Interaction::Pressed => BUTTON_PRESSED,
+            UiInteraction::None => BUTTON_IDLE,
+            UiInteraction::Hovered => BUTTON_HOVER,
+            UiInteraction::Pressed => BUTTON_PRESSED,
         };
     }
 }
 
 fn begin_thumb_drag(
-    thumbs: Query<(Entity, &Interaction, &ClassicScrollThumb), Changed<Interaction>>,
+    thumbs: Query<(Entity, &UiInteraction, &ClassicScrollThumb), Changed<UiInteraction>>,
     primary: Query<&Window, With<bevy::window::PrimaryWindow>>,
     viewports: Query<&ScrollPosition>,
     mut drag: ResMut<ScrollThumbDrag>,
@@ -318,7 +319,7 @@ fn begin_thumb_drag(
         return;
     };
     for (entity, interaction, thumb) in &thumbs {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Ok(position) = viewports.get(thumb.viewport) else {
@@ -421,6 +422,7 @@ fn sync_scroll_thumbs(
 
 #[cfg(test)]
 mod tests {
+
     use super::scroll_limit_from_sizes;
 
     #[test]
@@ -440,7 +442,7 @@ mod tests {
             .spawn((
                 Node::default(),
                 ClassicScrollViewport,
-                Interaction::Hovered,
+                UiInteraction::Hovered,
                 ScrollPosition::default(),
                 ComputedNode {
                     size: Vec2::new(100.0, 100.0),

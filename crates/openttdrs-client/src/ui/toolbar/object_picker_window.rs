@@ -1,5 +1,6 @@
 //! Ventana «Selección de objeto» (vanilla faro/transmisor + NewGRF W×H).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::{
     Command, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_TRANSMITTER, ObjectFundMoreText,
@@ -155,7 +156,7 @@ fn spawn_text_button(
     min_width: f32,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         marker,
         Node {
             min_width: Val::Px(min_width),
@@ -168,7 +169,7 @@ fn spawn_text_button(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -328,7 +329,7 @@ pub(crate) fn sync_object_picker(
             Without<FloatingWindowTitleText>,
         ),
     >,
-    mut buttons: Query<(&ObjectPickerButton, &mut BackgroundColor), With<Button>>,
+    mut buttons: Query<(&ObjectPickerButton, &mut BackgroundColor), With<UiButton>>,
 ) {
     let Some((_, mut visibility)) = root_q
         .iter_mut()
@@ -376,11 +377,11 @@ pub(crate) fn sync_object_picker(
 }
 
 pub(crate) fn handle_object_picker_buttons(
-    buttons: Query<(&Interaction, &ObjectPickerButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<(&UiInteraction, &ObjectPickerButton), (Changed<UiInteraction>, With<UiButton>)>,
     mut sim: ResMut<SimWorld>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let _ = crate::network::apply_player_command(
@@ -404,6 +405,8 @@ pub(crate) fn object_picker_on_closed(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use crate::state::SimWorld;
     use bevy::ecs::system::RunSystemOnce;
@@ -412,7 +415,7 @@ mod tests {
     fn picking_vanilla_updates_current_object_spec() {
         let mut world = World::new();
         world.insert_resource(SimWorld::default());
-        world.spawn((Button, ObjectPickerButton(1), Interaction::Pressed));
+        world.spawn((UiButton, ObjectPickerButton(1), UiInteraction::Pressed));
         world.run_system_once(handle_object_picker_buttons).unwrap();
         assert_eq!(world.resource::<SimWorld>().state.current_object_spec, 1);
     }

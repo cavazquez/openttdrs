@@ -1,3 +1,4 @@
+use crate::ui::interaction::UiInteraction;
 use bevy::prelude::*;
 
 use crate::i18n::{Locale, localized_text};
@@ -7,12 +8,12 @@ use crate::ui::toolbar::{ToolbarTooltipTarget, TooltipBox, TooltipText};
 pub(crate) fn update_toolbar_tooltip(
     mut tooltip_q: Query<&mut Node, With<TooltipBox>>,
     mut text_q: Query<&mut Text, With<TooltipText>>,
-    target_q: Query<(&Interaction, &ToolbarTooltipTarget)>,
+    target_q: Query<(&UiInteraction, &ToolbarTooltipTarget)>,
     prefs: Option<Res<ClientPreferences>>,
 ) {
     let mut hovered: Option<&'static str> = None;
     for (interaction, tip) in &target_q {
-        if *interaction == Interaction::Hovered {
+        if *interaction == UiInteraction::Hovered {
             hovered = Some(tip.text);
             break;
         }
@@ -37,6 +38,8 @@ pub(crate) fn update_toolbar_tooltip(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::UiInteraction;
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -50,7 +53,7 @@ mod tests {
         let tooltip = world.spawn((TooltipText, Text::new(""))).id();
         world.spawn((TooltipBox, Node::default()));
         world.spawn((
-            Interaction::Hovered,
+            UiInteraction::Hovered,
             ToolbarTooltipTarget { text: "Cerrar" },
         ));
 

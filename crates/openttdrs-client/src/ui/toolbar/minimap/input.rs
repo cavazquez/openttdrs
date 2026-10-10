@@ -1,3 +1,4 @@
+use crate::ui::interaction::UiInteraction;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::TileCoord;
@@ -61,7 +62,7 @@ pub(crate) fn handle_minimap_click(
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut selected: ResMut<SelectedTileInfo>,
     toolbar_pointer: Query<
-        &Interaction,
+        &UiInteraction,
         (
             With<BuildMenuUi>,
             Without<MinimapRoot>,
@@ -72,7 +73,7 @@ pub(crate) fn handle_minimap_click(
     if !hud.minimap_visible || !mouse.just_pressed(MouseButton::Left) {
         return;
     }
-    if toolbar_pointer.iter().any(|i| *i != Interaction::None) {
+    if toolbar_pointer.iter().any(|i| *i != UiInteraction::None) {
         return;
     }
     let Ok(window) = windows.single() else {

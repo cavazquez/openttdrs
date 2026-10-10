@@ -1,3 +1,4 @@
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::ecs::system::SystemParam;
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
@@ -267,7 +268,7 @@ fn spawn_rename_action(
     label: &'static str,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         action,
         Node {
             min_width: Val::Px(36.0),
@@ -280,7 +281,7 @@ fn spawn_rename_action(
         },
         BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),
         BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -298,7 +299,7 @@ fn spawn_station_button(
     tip: &'static str,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         action,
         ToolbarTooltipTarget { text: tip },
         Node {
@@ -312,7 +313,7 @@ fn spawn_station_button(
         },
         BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),
         BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -468,7 +469,7 @@ pub(crate) fn sync_station_cargo_panel(
     mut rename_row_q: Query<(Entity, &mut Node), With<StationCargoRenameRow>>,
     mut panel_buttons_q: Query<
         (Entity, &StationCargoPanelButton, &mut Visibility),
-        (With<Button>, Without<FloatingWindow>),
+        (With<UiButton>, Without<FloatingWindow>),
     >,
     windows: Query<&FloatingWindow>,
     parents: Query<&ChildOf>,
@@ -764,8 +765,8 @@ fn apply_station_rename(
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn handle_station_cargo_panel_buttons(
     mut q: Query<
-        (Entity, &Interaction, &StationCargoPanelButton),
-        (Changed<Interaction>, With<Button>),
+        (Entity, &UiInteraction, &StationCargoPanelButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     mut station_panel: ResMut<StationCargoPanelState>,
     mut order_state: ResMut<OrderEditState>,
@@ -784,7 +785,7 @@ pub(crate) fn handle_station_cargo_panel_buttons(
     mut window_ctx: StationWindowContext,
 ) {
     for (entity, interaction, button) in &mut q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let keyed_pos = window_key_for_descendant(entity, &window_ctx.windows, &window_ctx.parents)
@@ -944,8 +945,8 @@ pub(crate) fn handle_station_cargo_panel_buttons(
 
 pub(crate) fn handle_station_rename_buttons(
     mut buttons: Query<
-        (&Interaction, &StationCargoRenameButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &StationCargoRenameButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     mut station_panel: ResMut<StationCargoPanelState>,
     rename_input_q: Query<&EditableText, With<StationCargoRenameInput>>,
@@ -954,7 +955,7 @@ pub(crate) fn handle_station_rename_buttons(
     time: Res<Time>,
 ) {
     for (interaction, action) in &mut buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match action {
@@ -1041,6 +1042,8 @@ pub(crate) fn station_rename_editable_keyboard(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -1082,9 +1085,9 @@ mod tests {
         fixture_resources(&mut world);
         world.spawn((Transform::from_xyz(0.0, 0.0, 0.0), PrimaryGameCamera));
         world.spawn((
-            Button,
+            UiButton,
             StationCargoPanelButton::CenterCamera,
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_station_cargo_panel_buttons)
@@ -1117,9 +1120,9 @@ mod tests {
         });
         fixture_resources(&mut world);
         world.spawn((
-            Button,
+            UiButton,
             StationCargoPanelButton::ViewVehicles,
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_station_cargo_panel_buttons)
@@ -1152,9 +1155,9 @@ mod tests {
         world.insert_resource(Time::<()>::default());
         world.spawn((StationCargoRenameInput, EditableText::new("Central")));
         world.spawn((
-            Button,
+            UiButton,
             StationCargoRenameButton::Apply,
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world
             .run_system_once(handle_station_rename_buttons)

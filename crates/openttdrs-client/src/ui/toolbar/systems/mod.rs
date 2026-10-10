@@ -19,6 +19,8 @@ pub(crate) use tooltip::update_toolbar_tooltip;
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
@@ -123,7 +125,7 @@ mod tests {
         world.insert_resource(SimWorld::default());
         world.insert_resource(SelectedTileInfo::default());
         world.init_resource::<crate::ui::toolbar::MinimapLayerState>();
-        world.spawn((BuildMenuUi, Interaction::Pressed));
+        world.spawn((BuildMenuUi, UiInteraction::Pressed));
         world.run_system_once(handle_minimap_click).unwrap();
     }
 
@@ -267,10 +269,10 @@ mod tests {
         world.insert_resource(Time::<()>::default());
         insert_order_pick_test_resources(&mut world);
         world.spawn((
-            Button,
+            UiButton,
             crate::ui::toolbar::OrderPanelButton::PickDestOnMap,
             crate::ui::vehicle_chain::VehicleChainSlot(0),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.run_system_once(handle_order_panel_buttons).unwrap();
         assert!(
@@ -320,11 +322,11 @@ mod tests {
         world.insert_resource(crate::state::SuspendedGameSession::default());
         crate::state::insert_test_sim_run_state(&mut world);
 
-        world.spawn((Button, SaveMenuAction::SaveAs, Interaction::Pressed));
+        world.spawn((UiButton, SaveMenuAction::SaveAs, UiInteraction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
         assert!(world.resource::<SaveWindowState>().open);
 
-        world.spawn((Button, SaveMenuAction::LoadFrom, Interaction::Pressed));
+        world.spawn((UiButton, SaveMenuAction::LoadFrom, UiInteraction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
         assert!(world.resource::<SaveWindowState>().open);
     }
@@ -371,22 +373,27 @@ mod tests {
             Projection::Orthographic(OrthographicProjection::default_2d()),
         ));
 
-        world.spawn((Button, SaveMenuAction::PauseResume, Interaction::Pressed));
+        world.spawn((
+            UiButton,
+            SaveMenuAction::PauseResume,
+            UiInteraction::Pressed,
+        ));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
         assert!(matches!(
             world.resource::<NextState<SimRunState>>(),
-            NextState::Pending(SimRunState::Paused) | NextState::PendingIfNeq(SimRunState::Paused)
+            NextState::Pending(SimRunState::Paused)
+                | NextState::PendingIfDifferent(SimRunState::Paused)
         ));
 
-        world.spawn((Button, SaveMenuAction::SpeedUp, Interaction::Pressed));
+        world.spawn((UiButton, SaveMenuAction::SpeedUp, UiInteraction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
         assert_eq!(world.resource::<SimHudControls>().sim_speed, 2.0);
 
-        world.spawn((Button, SaveMenuAction::Normalize, Interaction::Pressed));
+        world.spawn((UiButton, SaveMenuAction::Normalize, UiInteraction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
         assert_eq!(world.resource::<SimHudControls>().sim_speed, 1.0);
 
-        world.spawn((Button, SaveMenuAction::SlowDown, Interaction::Pressed));
+        world.spawn((UiButton, SaveMenuAction::SlowDown, UiInteraction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
         assert_eq!(world.resource::<SimHudControls>().sim_speed, 0.5);
         let mut q_norm =
@@ -436,7 +443,7 @@ mod tests {
             Transform::default(),
             Projection::Orthographic(OrthographicProjection::default_2d()),
         ));
-        world_zoom_in.spawn((Button, SaveMenuAction::ZoomIn, Interaction::Pressed));
+        world_zoom_in.spawn((UiButton, SaveMenuAction::ZoomIn, UiInteraction::Pressed));
         world_zoom_in
             .run_system_once(handle_settings_menu_buttons)
             .unwrap();
@@ -483,7 +490,7 @@ mod tests {
             Transform::default(),
             Projection::Orthographic(OrthographicProjection::default_2d()),
         ));
-        world_zoom_out.spawn((Button, SaveMenuAction::ZoomOut, Interaction::Pressed));
+        world_zoom_out.spawn((UiButton, SaveMenuAction::ZoomOut, UiInteraction::Pressed));
         world_zoom_out
             .run_system_once(handle_settings_menu_buttons)
             .unwrap();

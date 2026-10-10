@@ -1,5 +1,6 @@
 //! Ventana de ajustes PBS / pathfinding (`pf.wait_for_pbs_path`, etc.).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::{
@@ -129,7 +130,7 @@ pub(crate) fn setup_pathfinding_settings_window(
             },
             children![
                 (
-                    Button,
+                    UiButton,
                     PathfindingSettingsAction::ToggleReverse,
                     Node {
                         min_width: Val::Px(160.0),
@@ -142,7 +143,7 @@ pub(crate) fn setup_pathfinding_settings_window(
                     },
                     BackgroundColor(BTN_BG),
                     BorderColor::all(BTN_BORDER),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     BuildMenuUi,
                     children![(
                         Text::new("Girar en señales"),
@@ -151,7 +152,7 @@ pub(crate) fn setup_pathfinding_settings_window(
                     )],
                 ),
                 (
-                    Button,
+                    UiButton,
                     PathfindingSettingsAction::ToggleReservePaths,
                     Node {
                         min_width: Val::Px(160.0),
@@ -164,7 +165,7 @@ pub(crate) fn setup_pathfinding_settings_window(
                     },
                     BackgroundColor(BTN_BG),
                     BorderColor::all(BTN_BORDER),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     BuildMenuUi,
                     children![(
                         Text::new("Siempre reservar"),
@@ -173,7 +174,7 @@ pub(crate) fn setup_pathfinding_settings_window(
                     )],
                 ),
                 (
-                    Button,
+                    UiButton,
                     PathfindingSettingsAction::ResetDefaults,
                     Node {
                         min_width: Val::Px(100.0),
@@ -186,7 +187,7 @@ pub(crate) fn setup_pathfinding_settings_window(
                     },
                     BackgroundColor(BTN_BG),
                     BorderColor::all(BTN_BORDER),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     BuildMenuUi,
                     children![(
                         Text::new("Por defecto"),
@@ -230,7 +231,7 @@ fn spawn_preset_row<T: Copy>(
             ));
             for &value in presets {
                 row.spawn((
-                    Button,
+                    UiButton,
                     action(value),
                     Node {
                         min_width: Val::Px(48.0),
@@ -243,7 +244,7 @@ fn spawn_preset_row<T: Copy>(
                     },
                     BackgroundColor(BTN_BG),
                     BorderColor::all(BTN_BORDER),
-                    Interaction::default(),
+                    UiInteraction::default(),
                     BuildMenuUi,
                     children![(
                         Text::new(value_label(value)),
@@ -316,12 +317,12 @@ pub(crate) fn sync_pathfinding_settings_window(
 pub(crate) fn handle_pathfinding_settings_buttons(
     mut sim: ResMut<SimWorld>,
     buttons: Query<
-        (&Interaction, &PathfindingSettingsAction),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &PathfindingSettingsAction),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
 ) {
     for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let mut next = sim.state.pathfinding;

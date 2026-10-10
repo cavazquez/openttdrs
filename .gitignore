@@ -28,6 +28,9 @@ target-agent
 
 # Assets descargados por los scripts (gráficos y sonidos)
 /assets/*
+!/assets/shaders/
+/assets/shaders/*
+!/assets/shaders/rail_glass_post_process.wesl
 !/assets/sounds/
 /assets/sounds/*
 !/assets/sounds/*.wav

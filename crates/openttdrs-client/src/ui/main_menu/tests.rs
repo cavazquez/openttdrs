@@ -1,5 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
+use crate::ui::interaction::UiInteraction;
+
 use super::labels::{adjust_seed, cycle_density, summary_text, summary_text_for};
 use super::{
     MainMenuDemoButton, MainMenuDynamicText, MainMenuLanguageButton, MainMenuLocalizedText,
@@ -65,7 +67,7 @@ fn seed_input_accepts_a_player_supplied_number() {
         .spawn((
             MainMenuSeedInput,
             MainMenuSeedInputState::default(),
-            bevy::prelude::Interaction::default(),
+            UiInteraction::default(),
             EditableText::new(""),
         ))
         .id();
@@ -114,12 +116,12 @@ fn preferences_sync_runs_with_resolution_and_language_buttons() {
             height: 720,
         },
         bevy::prelude::BackgroundColor::default(),
-        bevy::prelude::Interaction::default(),
+        UiInteraction::default(),
     ));
     world.spawn((
         MainMenuLanguageButton(crate::i18n::Locale::Es),
         bevy::prelude::BackgroundColor::default(),
-        bevy::prelude::Interaction::default(),
+        UiInteraction::default(),
     ));
 
     world
@@ -135,7 +137,7 @@ fn preferences_interaction_accepts_all_button_queries_without_query_conflict() {
     world.spawn((
         MainMenuPreferencesButton,
         bevy::prelude::BackgroundColor::default(),
-        bevy::prelude::Interaction::default(),
+        UiInteraction::default(),
     ));
     world.spawn((
         MainMenuResolutionButton {
@@ -143,12 +145,12 @@ fn preferences_interaction_accepts_all_button_queries_without_query_conflict() {
             height: 720,
         },
         bevy::prelude::BackgroundColor::default(),
-        bevy::prelude::Interaction::default(),
+        UiInteraction::default(),
     ));
     world.spawn((
         MainMenuLanguageButton(crate::i18n::Locale::Es),
         bevy::prelude::BackgroundColor::default(),
-        bevy::prelude::Interaction::default(),
+        UiInteraction::default(),
     ));
 
     world

@@ -1544,7 +1544,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 
 | Crate | Versión | Uso |
 |-------|---------|-----|
-| `bevy` | 0.19 | Motor (2d, UI, state, **audio**, wav, png) |
+| `bevy` | 0.20 | Motor (2d, UI, state, **audio**, wav, png) |
 | `openttdrs-core` | path | Simulación sin gráficos |
 | `serde` / `serde_json` | 1.0 | Saves |
 | `flate2` / `lzma-rs` | — | Descompresión `.sav` |

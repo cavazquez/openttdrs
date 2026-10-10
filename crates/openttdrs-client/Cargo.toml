@@ -15,7 +15,8 @@ path = "src/main.rs"
 # `wayland` + `x11`: en Ubuntu GNOME el dock usa app_id / .desktop; sin wayland
 # la ventana va por XWayland y a menudo muestra el icono genérico (engranaje).
 # Si falta `libwayland-client`, quita `wayland` y deja solo `x11`.
-bevy = { version = "0.19.0", default-features = false, features = [
+# The pixel renderer uses the retained quad extraction API and shader layout.
+bevy = { version = "=0.20.0", default-features = false, features = [
     "default_app",
     "std",
     "multi_threaded",
@@ -27,6 +28,7 @@ bevy = { version = "0.19.0", default-features = false, features = [
     "bevy_state",
     "bevy_ui",
     "bevy_ui_render",
+    "ui_picking",
     "bevy_input_focus",
     "bevy_audio",
     "bevy_settings",

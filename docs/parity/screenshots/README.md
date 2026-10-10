@@ -120,7 +120,7 @@ menú real en español y exige que esté compuesto a 1280×720 con contenido no
 plano. [`check_release_graphical_smoke.py`](../../../scripts/check_release_graphical_smoke.py)
 rechaza pantalla vacía, timeout, panic o captura ausente. El
 smoke también exige el shader
-`assets/shaders/rail_glass_post_process.wgsl`, además de fuente, OpenGFX,
+`assets/shaders/rail_glass_post_process.wesl`, además de fuente, OpenGFX,
 música y sonidos, por lo que un paquete incompleto falla antes de llamarse
 usable.
 

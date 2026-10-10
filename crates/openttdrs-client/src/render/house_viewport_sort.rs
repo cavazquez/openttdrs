@@ -903,6 +903,9 @@ fn colors_have_same_bits(left: Color, right: Color) -> bool {
             Color::Lcha(value) => value.to_f32_array(),
             Color::Oklaba(value) => value.to_f32_array(),
             Color::Oklcha(value) => value.to_f32_array(),
+            Color::Okhsla(value) => value.to_f32_array(),
+            Color::Okhsva(value) => value.to_f32_array(),
+            Color::Okhwba(value) => value.to_f32_array(),
             Color::Xyza(value) => value.to_f32_array(),
         };
         values.map(f32::to_bits)

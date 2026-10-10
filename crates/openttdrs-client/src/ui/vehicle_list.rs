@@ -1,5 +1,6 @@
 //! Lista global de flota (tren / carretera / barco / avión).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
@@ -436,7 +437,7 @@ fn spawn_vehicle_list_sort_button<M: Component>(
 ) {
     parent
         .spawn((
-            Button,
+            UiButton,
             marker,
             Node {
                 min_width: Val::Px(min_width),
@@ -449,7 +450,7 @@ fn spawn_vehicle_list_sort_button<M: Component>(
             },
             BackgroundColor(LIST_BTN_BG),
             BorderColor::all(LIST_BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
         ))
         .with_children(|button| {
@@ -470,7 +471,7 @@ fn spawn_action_button(
     toggle_label: bool,
 ) {
     let mut entity = parent.spawn((
-        Button,
+        UiButton,
         VehicleListActionButton(action),
         Node {
             min_width: Val::Px(88.0),
@@ -483,7 +484,7 @@ fn spawn_action_button(
         },
         BackgroundColor(LIST_BTN_BG),
         BorderColor::all(Color::srgb(0.58, 0.50, 0.33)),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
     ));
     entity.with_children(|btn| {
@@ -582,22 +583,22 @@ fn vehicle_visits_station(vehicle: &openttdrs_core::Vehicle, station_pos: TileCo
 pub(crate) fn handle_vehicle_list_buttons(
     mut state: ResMut<VehicleListState>,
     kind_buttons: Query<
-        (&Interaction, &VehicleListKindButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &VehicleListKindButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     company_filter_buttons: Query<
-        (&Interaction, &VehicleCompanyFilterButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &VehicleCompanyFilterButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     sort_buttons: Query<
-        (&Interaction, &VehicleListSortButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &VehicleListSortButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     action_buttons: Query<
-        (&Interaction, &VehicleListActionButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &VehicleListActionButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
-    rows: Query<(&Interaction, &VehicleListRow), (Changed<Interaction>, With<Button>)>,
+    rows: Query<(&UiInteraction, &VehicleListRow), (Changed<UiInteraction>, With<UiButton>)>,
     mut vehicle_window: ResMut<VehicleWindowState>,
     mut vehicle_chain: ResMut<VehicleChainRegistry>,
     mut sim: ResMut<SimWorld>,
@@ -607,18 +608,18 @@ pub(crate) fn handle_vehicle_list_buttons(
     time: Res<Time>,
 ) {
     for (interaction, button) in &kind_buttons {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             state.kind = button.0;
             state.selected = None;
         }
     }
     for (interaction, button) in &company_filter_buttons {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             state.company = button.0;
         }
     }
     for (interaction, button) in &sort_buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         if state.sort == button.0 {
@@ -632,13 +633,13 @@ pub(crate) fn handle_vehicle_list_buttons(
         }
     }
     for (interaction, row) in &rows {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             state.selected = Some(row.vehicle_id);
             vehicle_window.open_or_focus(&mut vehicle_chain, row.vehicle_id);
         }
     }
     for (interaction, action) in &action_buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         if matches!(action.0, VehicleListAction::ClearStationFilter) {
@@ -774,8 +775,8 @@ pub(crate) fn center_vehicle_list_camera(
     mut cache: Option<ResMut<NewGrfTrainSpriteCache>>,
     mut images: Option<ResMut<Assets<Image>>>,
     action_buttons: Query<
-        (&Interaction, &VehicleListActionButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &VehicleListActionButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
@@ -783,7 +784,7 @@ pub(crate) fn center_vehicle_list_camera(
         return;
     };
     for (interaction, action) in &action_buttons {
-        if *interaction != Interaction::Pressed || action.0 != VehicleListAction::CenterCamera {
+        if *interaction != UiInteraction::Pressed || action.0 != VehicleListAction::CenterCamera {
             continue;
         }
         let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) else {
@@ -829,25 +830,29 @@ pub(crate) fn sync_vehicle_list(
     asset_server: Res<AssetServer>,
     mut cache: Local<VehicleListCache>,
     mut kind_buttons: Query<
-        (&VehicleListKindButton, &Interaction, &mut BackgroundColor),
+        (&VehicleListKindButton, &UiInteraction, &mut BackgroundColor),
         (
-            With<Button>,
+            With<UiButton>,
             Without<VehicleListSortButton>,
             Without<VehicleListActionButton>,
         ),
     >,
     mut sort_buttons: Query<
-        (&VehicleListSortButton, &Interaction, &mut BackgroundColor),
+        (&VehicleListSortButton, &UiInteraction, &mut BackgroundColor),
         (
-            With<Button>,
+            With<UiButton>,
             Without<VehicleListKindButton>,
             Without<VehicleListActionButton>,
         ),
     >,
     mut action_buttons: Query<
-        (&VehicleListActionButton, &Interaction, &mut BackgroundColor),
         (
-            With<Button>,
+            &VehicleListActionButton,
+            &UiInteraction,
+            &mut BackgroundColor,
+        ),
+        (
+            With<UiButton>,
             Without<VehicleListKindButton>,
             Without<VehicleListSortButton>,
         ),
@@ -870,7 +875,7 @@ pub(crate) fn sync_vehicle_list(
     mut row_buttons: Query<
         (&VehicleListRow, &mut BackgroundColor),
         (
-            With<Button>,
+            With<UiButton>,
             Without<VehicleListKindButton>,
             Without<VehicleListSortButton>,
             Without<VehicleListActionButton>,
@@ -927,7 +932,7 @@ pub(crate) fn sync_vehicle_list(
         };
         *bg = if !enabled {
             BackgroundColor(Color::srgb(0.28, 0.24, 0.17))
-        } else if *interaction == Interaction::Hovered {
+        } else if *interaction == UiInteraction::Hovered {
             BackgroundColor(LIST_BTN_HOVER)
         } else {
             BackgroundColor(LIST_BTN_BG)
@@ -1079,8 +1084,8 @@ pub(crate) fn sync_vehicle_list(
 /// Entrada de texto del nombre de grupo; el botón Guardar aplica el comando.
 pub(crate) fn handle_vehicle_group_rename_buttons(
     mut buttons: Query<
-        (&Interaction, &VehicleListActionButton),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &VehicleListActionButton),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     mut state: ResMut<VehicleListState>,
     mut input_q: Query<&mut EditableText, With<VehicleListGroupRenameInput>>,
@@ -1090,7 +1095,7 @@ pub(crate) fn handle_vehicle_group_rename_buttons(
     time: Res<Time>,
 ) {
     for (interaction, action) in &mut buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match action.0 {
@@ -1200,7 +1205,7 @@ fn spawn_vehicle_list_row(
         })
         .unwrap_or_else(|| asset_server.load::<Image>(PLACEHOLDER_SPRITE));
     list.spawn((
-        Button,
+        UiButton,
         VehicleListRow { vehicle_id },
         Node {
             width: Val::Percent(100.0),
@@ -1218,7 +1223,7 @@ fn spawn_vehicle_list_row(
             LIST_BTN_BG
         }),
         BorderColor::all(Color::srgb(0.50, 0.44, 0.30)),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
     ))
     .with_children(|row| {
@@ -1293,6 +1298,8 @@ pub(crate) fn vehicle_list_on_closed(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -1332,9 +1339,9 @@ mod tests {
         fixture_resources(&mut world);
         world.insert_resource(sim_with(GameState::new(8, 8)));
         world.spawn((
-            Button,
+            UiButton,
             VehicleListRow { vehicle_id: 42 },
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.run_system_once(handle_vehicle_list_buttons).unwrap();
         assert_eq!(world.resource::<VehicleWindowState>().vehicle_id, Some(42));
@@ -1347,9 +1354,9 @@ mod tests {
         fixture_resources(&mut world);
         world.insert_resource(sim_with(GameState::new(8, 8)));
         world.spawn((
-            Button,
+            UiButton,
             VehicleListKindButton(VehicleListKind::Aircraft),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.run_system_once(handle_vehicle_list_buttons).unwrap();
         assert_eq!(
@@ -1375,9 +1382,9 @@ mod tests {
         world.insert_resource(sim_with(state));
         world.resource_mut::<VehicleListState>().selected = Some(7);
         world.spawn((
-            Button,
+            UiButton,
             VehicleListActionButton(VehicleListAction::ToggleRunning),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.run_system_once(handle_vehicle_list_buttons).unwrap();
         let sim = world.resource::<SimWorld>();
@@ -1410,9 +1417,9 @@ mod tests {
         world.resource_mut::<VehicleListState>().selected = Some(3);
         world.spawn((Transform::from_xyz(0.0, 0.0, 0.0), PrimaryGameCamera));
         world.spawn((
-            Button,
+            UiButton,
             VehicleListActionButton(VehicleListAction::CenterCamera),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.run_system_once(handle_vehicle_list_buttons).unwrap();
         world.run_system_once(center_vehicle_list_camera).unwrap();
@@ -1440,9 +1447,9 @@ mod tests {
         world.insert_resource(sim_with(GameState::new(8, 8)));
         world.resource_mut::<VehicleListState>().station_filter = Some(TileCoord::new(1, 1));
         world.spawn((
-            Button,
+            UiButton,
             VehicleListActionButton(VehicleListAction::ClearStationFilter),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.run_system_once(handle_vehicle_list_buttons).unwrap();
         assert!(

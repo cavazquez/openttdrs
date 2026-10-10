@@ -1,5 +1,6 @@
 //! Pantalla de fin de partida + highscore local (UI-8).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{GameScore, format_money, retire_game};
@@ -93,7 +94,7 @@ pub(crate) fn setup_endscreen(mut commands: Commands, asset_server: Res<AssetSer
                 ));
                 panel
                     .spawn((
-                        Button,
+                        UiButton,
                         EndScreenMenuButton,
                         Node {
                             min_width: Val::Px(180.0),
@@ -106,7 +107,7 @@ pub(crate) fn setup_endscreen(mut commands: Commands, asset_server: Res<AssetSer
                         },
                         BackgroundColor(BTN_BG),
                         BorderColor::all(BTN_BORDER),
-                        Interaction::default(),
+                        UiInteraction::default(),
                     ))
                     .with_children(|btn| {
                         btn.spawn((
@@ -220,10 +221,10 @@ pub(crate) fn process_retire_game_request(
 
 pub(crate) fn handle_endscreen_menu_button(
     buttons: Query<
-        &Interaction,
+        &UiInteraction,
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             With<EndScreenMenuButton>,
         ),
     >,
@@ -233,7 +234,7 @@ pub(crate) fn handle_endscreen_menu_button(
     mut sim: ResMut<SimWorld>,
 ) {
     for interaction in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         endscreen.open = false;

@@ -1,3 +1,4 @@
+use crate::ui::interaction::UiInteraction;
 use bevy::app::AppExit;
 use bevy::prelude::*;
 use openttdrs_core::Climate;
@@ -156,8 +157,8 @@ pub(crate) fn main_menu_continue_interaction(
     q_menu_cam: Query<Entity, With<MainMenuCamera>>,
     intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
     mut buttons: Query<
-        (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<MainMenuContinueButton>),
+        (&UiInteraction, &mut BackgroundColor),
+        (Changed<UiInteraction>, With<MainMenuContinueButton>),
     >,
     mut commands: Commands,
 ) {
@@ -165,7 +166,7 @@ pub(crate) fn main_menu_continue_interaction(
         return;
     }
     for (interaction, mut bg) in &mut buttons {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             resume_suspended_game(
                 &mut commands,
                 &q_menu,
@@ -191,8 +192,8 @@ pub(crate) fn main_menu_editor_interaction(
     q_menu_cam: Query<Entity, With<MainMenuCamera>>,
     intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
     mut buttons: Query<
-        (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<MainMenuEditorButton>),
+        (&UiInteraction, &mut BackgroundColor),
+        (Changed<UiInteraction>, With<MainMenuEditorButton>),
     >,
     mut commands: Commands,
 ) {
@@ -200,7 +201,7 @@ pub(crate) fn main_menu_editor_interaction(
         return;
     }
     for (interaction, mut bg) in &mut buttons {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             enter_editor(
                 &mut commands,
                 &q_menu,
@@ -230,36 +231,36 @@ pub(crate) fn main_menu_interaction(
     intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
     mut button_sets: ParamSet<(
         Query<
-            (&Interaction, &mut BackgroundColor),
-            (Changed<Interaction>, With<MainMenuNewGameButton>),
+            (&UiInteraction, &mut BackgroundColor),
+            (Changed<UiInteraction>, With<MainMenuNewGameButton>),
         >,
         Query<
-            (&Interaction, &mut BackgroundColor),
-            (Changed<Interaction>, With<MainMenuLoadButton>),
+            (&UiInteraction, &mut BackgroundColor),
+            (Changed<UiInteraction>, With<MainMenuLoadButton>),
         >,
         Query<
-            (&Interaction, &mut BackgroundColor),
-            (Changed<Interaction>, With<MainMenuDemoButton>),
+            (&UiInteraction, &mut BackgroundColor),
+            (Changed<UiInteraction>, With<MainMenuDemoButton>),
         >,
         Query<
-            (&Interaction, &mut BackgroundColor),
-            (Changed<Interaction>, With<MainMenuQuitButton>),
+            (&UiInteraction, &mut BackgroundColor),
+            (Changed<UiInteraction>, With<MainMenuQuitButton>),
         >,
         Query<
-            (&Interaction, &mut BackgroundColor),
-            (Changed<Interaction>, With<MainMenuBackButton>),
+            (&UiInteraction, &mut BackgroundColor),
+            (Changed<UiInteraction>, With<MainMenuBackButton>),
         >,
         Query<
-            (&Interaction, &mut BackgroundColor),
-            (Changed<Interaction>, With<MainMenuStartButton>),
+            (&UiInteraction, &mut BackgroundColor),
+            (Changed<UiInteraction>, With<MainMenuStartButton>),
         >,
         Query<
-            (&Interaction, &mut BackgroundColor),
-            (Changed<Interaction>, With<MainMenuQuitConfirmYes>),
+            (&UiInteraction, &mut BackgroundColor),
+            (Changed<UiInteraction>, With<MainMenuQuitConfirmYes>),
         >,
         Query<
-            (&Interaction, &mut BackgroundColor),
-            (Changed<Interaction>, With<MainMenuQuitConfirmNo>),
+            (&UiInteraction, &mut BackgroundColor),
+            (Changed<UiInteraction>, With<MainMenuQuitConfirmNo>),
         >,
     )>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -302,7 +303,7 @@ pub(crate) fn main_menu_interaction(
     match *panel {
         MainMenuPanel::Root => {
             for (interaction, mut bg) in &mut button_sets.p0() {
-                if *interaction == Interaction::Pressed {
+                if *interaction == UiInteraction::Pressed {
                     settings.0.seed = auto_seeds.next_seed();
                     *panel = MainMenuPanel::NewGame;
                     return;
@@ -310,7 +311,7 @@ pub(crate) fn main_menu_interaction(
                 hover_primary(interaction, &mut bg);
             }
             for (interaction, mut bg) in &mut button_sets.p1() {
-                if *interaction == Interaction::Pressed {
+                if *interaction == UiInteraction::Pressed {
                     save_window
                         .open_in_mode(SaveWindowMode::Load, &save_dir_from(&hud.json_save_path));
                     return;
@@ -318,7 +319,7 @@ pub(crate) fn main_menu_interaction(
                 hover_primary(interaction, &mut bg);
             }
             for (interaction, mut bg) in &mut button_sets.p2() {
-                if *interaction == Interaction::Pressed {
+                if *interaction == UiInteraction::Pressed {
                     settings.0 = NewGameSettings {
                         climate: Climate::Temperate,
                         map_size: MapSizePreset::Compact,
@@ -351,7 +352,7 @@ pub(crate) fn main_menu_interaction(
                 hover_secondary(interaction, &mut bg);
             }
             for (interaction, mut bg) in &mut button_sets.p3() {
-                if *interaction == Interaction::Pressed {
+                if *interaction == UiInteraction::Pressed {
                     *panel = MainMenuPanel::QuitConfirm;
                     return;
                 }
@@ -363,7 +364,7 @@ pub(crate) fn main_menu_interaction(
                 keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space);
             let mut start_requested = start_via_key;
             for (interaction, mut bg) in &mut button_sets.p5() {
-                if *interaction == Interaction::Pressed {
+                if *interaction == UiInteraction::Pressed {
                     start_requested = true;
                 }
                 hover_primary(interaction, &mut bg);
@@ -383,7 +384,7 @@ pub(crate) fn main_menu_interaction(
                 return;
             }
             for (interaction, mut bg) in &mut button_sets.p4() {
-                if *interaction == Interaction::Pressed {
+                if *interaction == UiInteraction::Pressed {
                     *panel = MainMenuPanel::Root;
                     return;
                 }
@@ -392,14 +393,14 @@ pub(crate) fn main_menu_interaction(
         }
         MainMenuPanel::QuitConfirm => {
             for (interaction, mut bg) in &mut button_sets.p6() {
-                if *interaction == Interaction::Pressed {
+                if *interaction == UiInteraction::Pressed {
                     exit.write(AppExit::Success);
                     return;
                 }
                 hover_primary(interaction, &mut bg);
             }
             for (interaction, mut bg) in &mut button_sets.p7() {
-                if *interaction == Interaction::Pressed {
+                if *interaction == UiInteraction::Pressed {
                     *panel = MainMenuPanel::Root;
                     return;
                 }
@@ -408,7 +409,7 @@ pub(crate) fn main_menu_interaction(
         }
         MainMenuPanel::Highscores | MainMenuPanel::Scenarios | MainMenuPanel::Preferences => {
             for (interaction, mut bg) in &mut button_sets.p4() {
-                if *interaction == Interaction::Pressed {
+                if *interaction == UiInteraction::Pressed {
                     *panel = MainMenuPanel::Root;
                     return;
                 }

@@ -5,6 +5,7 @@
 //!
 //! Multi-instancia (#244): hasta [`MAX_VEHICLE_CHAIN_SLOTS`] Details concurrentes.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 mod details;
 
 use bevy::prelude::*;
@@ -319,7 +320,7 @@ fn spawn_details_tab(
     label: &'static str,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         VehicleDetailsTabButton(tab),
         chain_slot,
         Node {
@@ -333,7 +334,7 @@ fn spawn_details_tab(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -351,7 +352,7 @@ fn spawn_details_action(
     label: &'static str,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         action,
         chain_slot,
         Node {
@@ -366,7 +367,7 @@ fn spawn_details_action(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -378,18 +379,18 @@ fn spawn_details_action(
 
 pub(crate) fn handle_vehicle_details_buttons(
     mut tab_buttons: Query<
-        (&Interaction, &VehicleDetailsTabButton, &VehicleChainSlot),
+        (&UiInteraction, &VehicleDetailsTabButton, &VehicleChainSlot),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<VehicleDetailsAction>,
         ),
     >,
     mut action_buttons: Query<
-        (&Interaction, &VehicleDetailsAction, &VehicleChainSlot),
+        (&UiInteraction, &VehicleDetailsAction, &VehicleChainSlot),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<VehicleDetailsTabButton>,
         ),
     >,
@@ -398,7 +399,7 @@ pub(crate) fn handle_vehicle_details_buttons(
     mut refit_window: ResMut<RefitWindowState>,
 ) {
     for (interaction, tab, chain_slot) in &mut tab_buttons {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             let idx = chain_slot.0 as usize;
             if idx < MAX_VEHICLE_CHAIN_SLOTS {
                 details_state.slots[idx].details_tab = tab.0;
@@ -409,7 +410,7 @@ pub(crate) fn handle_vehicle_details_buttons(
         }
     }
     for (interaction, action, chain_slot) in &mut action_buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match action {
@@ -473,10 +474,10 @@ pub(crate) fn sync_vehicle_details_window(
         (
             &VehicleChainSlot,
             &VehicleDetailsTabButton,
-            &Interaction,
+            &UiInteraction,
             &mut BackgroundColor,
         ),
-        (With<Button>, Without<VehicleDetailsAction>),
+        (With<UiButton>, Without<VehicleDetailsAction>),
     >,
 ) {
     let locale = prefs.locale();
@@ -578,7 +579,7 @@ pub(crate) fn sync_vehicle_details_window(
             }
             *bg = if tab.0 == slot_state.details_tab {
                 BackgroundColor(BTN_ACTIVE)
-            } else if *interaction == Interaction::Hovered {
+            } else if *interaction == UiInteraction::Hovered {
                 BackgroundColor(BTN_HOVER)
             } else {
                 BackgroundColor(BTN_BG)

@@ -221,6 +221,7 @@ pub(crate) fn build_client_app(
 
     let mut app = App::new();
     app.add_plugins(default_plugins);
+    crate::render::install_pixel_sprite_renderer(&mut app);
     {
         use std::path::Path;
 

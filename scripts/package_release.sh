@@ -69,7 +69,7 @@ done
 for required in \
   assets/music \
   assets/sounds \
-  assets/shaders/rail_glass_post_process.wgsl \
+  assets/shaders/rail_glass_post_process.wesl \
   assets/opengfx/tiles \
   assets/opengfx/atlas \
   static/fonts/DejaVuSansMono.ttf \

@@ -1,3 +1,4 @@
+use crate::ui::interaction::UiInteraction;
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input_focus::{FocusCause, InputFocus};
@@ -67,15 +68,15 @@ pub(crate) fn main_menu_seed_input_interaction(
     mut input_q: Query<
         (
             Entity,
-            Ref<Interaction>,
+            Ref<UiInteraction>,
             &mut EditableText,
             &mut MainMenuSeedInputState,
         ),
         With<MainMenuSeedInput>,
     >,
     mut randomize_q: Query<
-        (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<MainMenuSeedRandomButton>),
+        (&UiInteraction, &mut BackgroundColor),
+        (Changed<UiInteraction>, With<MainMenuSeedRandomButton>),
     >,
 ) {
     if *panel != MainMenuPanel::NewGame {
@@ -87,7 +88,7 @@ pub(crate) fn main_menu_seed_input_interaction(
         return;
     };
 
-    if interaction.is_changed() && *interaction == Interaction::Pressed {
+    if interaction.is_changed() && *interaction == UiInteraction::Pressed {
         edit_state.draft = settings.0.seed.to_string();
         edit_state.replace_on_next_edit = true;
         editable.editor_mut().set_text(&edit_state.draft);
@@ -95,7 +96,7 @@ pub(crate) fn main_menu_seed_input_interaction(
     }
 
     for (interaction, mut background) in &mut randomize_q {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             settings.0.seed = auto_seeds.next_seed();
             edit_state.draft = settings.0.seed.to_string();
             edit_state.replace_on_next_edit = false;
@@ -165,15 +166,19 @@ pub(crate) fn main_menu_options_interaction(
     input_focus: Option<Res<InputFocus>>,
     seed_inputs: Query<(), With<MainMenuSeedInput>>,
     mut button_sets: ParamSet<(
-        Query<(&Interaction, &MainMenuClimateButton, &mut BackgroundColor)>,
-        Query<(&Interaction, &MainMenuMapSizeButton, &mut BackgroundColor)>,
-        Query<(&Interaction, &MainMenuStartYearButton, &mut BackgroundColor)>,
-        Query<(&Interaction, &MainMenuToggle, &mut BackgroundColor)>,
-        Query<(&Interaction, &mut BackgroundColor), With<MainMenuSeedDecButton>>,
-        Query<(&Interaction, &mut BackgroundColor), With<MainMenuSeedIncButton>>,
-        Query<(&Interaction, &MainMenuDensityButton, &mut BackgroundColor)>,
+        Query<(&UiInteraction, &MainMenuClimateButton, &mut BackgroundColor)>,
+        Query<(&UiInteraction, &MainMenuMapSizeButton, &mut BackgroundColor)>,
         Query<(
-            &Interaction,
+            &UiInteraction,
+            &MainMenuStartYearButton,
+            &mut BackgroundColor,
+        )>,
+        Query<(&UiInteraction, &MainMenuToggle, &mut BackgroundColor)>,
+        Query<(&UiInteraction, &mut BackgroundColor), With<MainMenuSeedDecButton>>,
+        Query<(&UiInteraction, &mut BackgroundColor), With<MainMenuSeedIncButton>>,
+        Query<(&UiInteraction, &MainMenuDensityButton, &mut BackgroundColor)>,
+        Query<(
+            &UiInteraction,
             &MainMenuStartingMoneyButton,
             &mut BackgroundColor,
         )>,
@@ -216,14 +221,14 @@ pub(crate) fn main_menu_options_interaction(
     }
 
     for (interaction, btn, mut bg) in &mut button_sets.p0() {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             settings.0.climate = btn.0;
         }
         *bg = option_button_bg(settings.0.climate == btn.0, *interaction);
     }
 
     for (interaction, btn, mut bg) in &mut button_sets.p1() {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             match *btn {
                 MainMenuMapSizeButton::Compact => {
                     settings.0.map_size = MapSizePreset::Compact;
@@ -256,14 +261,14 @@ pub(crate) fn main_menu_options_interaction(
     }
 
     for (interaction, btn, mut bg) in &mut button_sets.p2() {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             settings.0.start_year = btn.0;
         }
         *bg = option_button_bg(settings.0.start_year == btn.0, *interaction);
     }
 
     for (interaction, toggle, mut bg) in &mut button_sets.p3() {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             match toggle {
                 MainMenuToggle::WorldGen => settings.0.world_gen = !settings.0.world_gen,
                 MainMenuToggle::Island => settings.0.island = !settings.0.island,
@@ -291,20 +296,20 @@ pub(crate) fn main_menu_options_interaction(
     }
 
     for (interaction, mut bg) in &mut button_sets.p4() {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             adjust_seed(&mut settings.0.seed, -1);
         }
         *bg = seed_button_bg(*interaction);
     }
     for (interaction, mut bg) in &mut button_sets.p5() {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             adjust_seed(&mut settings.0.seed, 1);
         }
         *bg = seed_button_bg(*interaction);
     }
 
     for (interaction, btn, mut bg) in &mut button_sets.p6() {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             match btn.1 {
                 MainMenuDensityTarget::Town => settings.0.town_density = btn.0,
                 MainMenuDensityTarget::Industry => settings.0.industry_density = btn.0,
@@ -318,7 +323,7 @@ pub(crate) fn main_menu_options_interaction(
     }
 
     for (interaction, btn, mut bg) in &mut button_sets.p7() {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             settings.0.starting_money = btn.0;
         }
         *bg = option_button_bg(settings.0.starting_money == btn.0, *interaction);
@@ -329,13 +334,17 @@ pub(crate) fn main_menu_options_interaction(
 pub(crate) fn main_menu_roughness_interaction(
     panel: Res<MainMenuPanel>,
     mut settings: ResMut<NewGameSettingsResource>,
-    mut roughness_q: Query<(&Interaction, &MainMenuRoughnessButton, &mut BackgroundColor)>,
+    mut roughness_q: Query<(
+        &UiInteraction,
+        &MainMenuRoughnessButton,
+        &mut BackgroundColor,
+    )>,
 ) {
     if *panel != MainMenuPanel::NewGame {
         return;
     }
     for (interaction, btn, mut bg) in &mut roughness_q {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             settings.0.terrain_roughness = btn.0;
         }
         *bg = option_button_bg(settings.0.terrain_roughness == btn.0, *interaction);

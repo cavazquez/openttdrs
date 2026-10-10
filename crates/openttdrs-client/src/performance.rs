@@ -16,8 +16,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::render::RailGlassMaskProxy;
 use bevy::prelude::*;
-use bevy::sprite::SpriteMesh;
 
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::simulation::VisualCaptureFreeze;
@@ -199,9 +199,12 @@ fn finish_frame(capture: &mut FrameCapture, world: &mut World) {
     let timings = TIMINGS.lock().map(|timings| *timings).unwrap_or_default();
     let tick = world.resource::<SimWorld>().state.tick.get();
     // Register counter queries only after the scene has completed warmup.
-    let sprites = world.query_filtered::<(), With<Sprite>>().iter(world).len();
+    let sprites = world
+        .query_filtered::<(), (With<Sprite>, Without<RailGlassMaskProxy>)>()
+        .iter(world)
+        .len();
     let meshes = world
-        .query_filtered::<(), With<SpriteMesh>>()
+        .query_filtered::<(), (With<Sprite>, With<RailGlassMaskProxy>)>()
         .iter(world)
         .len();
     let result = (|| -> std::io::Result<()> {
@@ -266,7 +269,7 @@ mod tests {
                 app.world()
                     .components()
                     .iter_registered()
-                    .map(|info| info.name().to_string())
+                    .map(|(_, info)| info.name().to_string())
                     .collect::<Vec<_>>()
             };
             assert_eq!(registry(&app), registry(&control));
@@ -280,7 +283,7 @@ mod tests {
         assert!(
             app.world()
                 .components()
-                .get_id(std::any::TypeId::of::<SpriteMesh>())
+                .get_id(std::any::TypeId::of::<RailGlassMaskProxy>())
                 .is_none()
         );
         assert!(
@@ -302,7 +305,12 @@ mod tests {
         });
         app.world_mut().spawn(Sprite::default());
         app.world_mut().spawn(Sprite::default());
-        app.world_mut().spawn(SpriteMesh::default());
+        app.world_mut().spawn((
+            Sprite::default(),
+            RailGlassMaskProxy {
+                source: Entity::PLACEHOLDER,
+            },
+        ));
         let components = app.world().components().len();
         app.world_mut().run_schedule(First);
         app.world_mut().run_schedule(Last);

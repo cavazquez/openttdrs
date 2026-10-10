@@ -1,3 +1,4 @@
+use crate::ui::interaction::UiInteraction;
 use bevy::prelude::*;
 
 use crate::render::{MapVisualLayer, ShoreTile, WaterTile};
@@ -57,9 +58,9 @@ pub(crate) fn main_menu_scenarios_interaction(
     q_menu_cam: Query<Entity, With<MainMenuCamera>>,
     intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
     mut root_btn: Query<
-        (&Interaction, &mut BackgroundColor),
+        (&UiInteraction, &mut BackgroundColor),
         (
-            Changed<Interaction>,
+            Changed<UiInteraction>,
             With<MainMenuScenariosButton>,
             Without<MainMenuOpenScenariosDirButton>,
             Without<MainMenuOpenHeightmapsDirButton>,
@@ -67,9 +68,9 @@ pub(crate) fn main_menu_scenarios_interaction(
         ),
     >,
     mut open_scn: Query<
-        (&Interaction, &mut BackgroundColor),
+        (&UiInteraction, &mut BackgroundColor),
         (
-            Changed<Interaction>,
+            Changed<UiInteraction>,
             With<MainMenuOpenScenariosDirButton>,
             Without<MainMenuScenariosButton>,
             Without<MainMenuOpenHeightmapsDirButton>,
@@ -77,9 +78,9 @@ pub(crate) fn main_menu_scenarios_interaction(
         ),
     >,
     mut open_hmap: Query<
-        (&Interaction, &mut BackgroundColor),
+        (&UiInteraction, &mut BackgroundColor),
         (
-            Changed<Interaction>,
+            Changed<UiInteraction>,
             With<MainMenuOpenHeightmapsDirButton>,
             Without<MainMenuScenariosButton>,
             Without<MainMenuOpenScenariosDirButton>,
@@ -87,7 +88,7 @@ pub(crate) fn main_menu_scenarios_interaction(
         ),
     >,
     mut slots: Query<
-        (&Interaction, &MainMenuHeightmapSlot, &mut BackgroundColor),
+        (&UiInteraction, &MainMenuHeightmapSlot, &mut BackgroundColor),
         (
             Without<MainMenuScenariosButton>,
             Without<MainMenuOpenScenariosDirButton>,
@@ -99,7 +100,7 @@ pub(crate) fn main_menu_scenarios_interaction(
     let scenario_directory = scenario_directory.as_deref();
     if *panel == MainMenuPanel::Root {
         for (interaction, mut bg) in &mut root_btn {
-            if *interaction == Interaction::Pressed {
+            if *interaction == UiInteraction::Pressed {
                 let _ = std::fs::create_dir_all(scenarios_dir(scenario_directory));
                 let _ = std::fs::create_dir_all(heightmaps_dir());
                 *panel = MainMenuPanel::Scenarios;
@@ -113,7 +114,7 @@ pub(crate) fn main_menu_scenarios_interaction(
         return;
     }
     for (interaction, mut bg) in &mut open_scn {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             let dir = scenarios_dir(scenario_directory);
             let _ = std::fs::create_dir_all(&dir);
             let path = dir.join("_menu.json");
@@ -126,7 +127,7 @@ pub(crate) fn main_menu_scenarios_interaction(
         hover_primary(interaction, &mut bg);
     }
     for (interaction, mut bg) in &mut open_hmap {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             let dir = heightmaps_dir();
             let _ = std::fs::create_dir_all(&dir);
             let path = dir.join("README.txt");
@@ -140,7 +141,7 @@ pub(crate) fn main_menu_scenarios_interaction(
     }
     let files = list_heightmap_files();
     for (interaction, slot, mut bg) in &mut slots {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             hover_secondary(interaction, &mut bg);
             continue;
         }

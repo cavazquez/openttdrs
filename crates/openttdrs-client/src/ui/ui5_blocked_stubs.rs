@@ -1,5 +1,6 @@
 //! Ventana Link Graph (flujos observados y planificados).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::{ALL_CARGO_TYPES, CargoType};
 
@@ -75,7 +76,7 @@ pub(crate) fn setup_link_graph_window(mut commands: Commands, asset_server: Res<
             },))
             .with_children(|row| {
                 row.spawn((
-                    Button,
+                    UiButton,
                     LinkGraphFilterButton,
                     Node {
                         padding: UiRect::axes(Val::Px(6.0), Val::Px(2.0)),
@@ -91,7 +92,7 @@ pub(crate) fn setup_link_graph_window(mut commands: Commands, asset_server: Res<
                     )],
                 ));
                 row.spawn((
-                    Button,
+                    UiButton,
                     LinkGraphViewButton,
                     Node {
                         padding: UiRect::axes(Val::Px(6.0), Val::Px(2.0)),
@@ -226,12 +227,15 @@ pub(crate) fn open_link_graph_from_routes(
 }
 
 pub(crate) fn handle_link_graph_filter_button(
-    mut q: Query<(&Interaction, &Children), (Changed<Interaction>, With<LinkGraphFilterButton>)>,
+    mut q: Query<
+        (&UiInteraction, &Children),
+        (Changed<UiInteraction>, With<LinkGraphFilterButton>),
+    >,
     mut text_q: Query<&mut Text>,
     mut state: ResMut<LinkGraphWindowState>,
 ) {
     for (interaction, children) in &mut q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         state.cargo_filter = next_cargo_filter(state.cargo_filter);
@@ -245,12 +249,12 @@ pub(crate) fn handle_link_graph_filter_button(
 }
 
 pub(crate) fn handle_link_graph_view_button(
-    mut q: Query<(&Interaction, &Children), (Changed<Interaction>, With<LinkGraphViewButton>)>,
+    mut q: Query<(&UiInteraction, &Children), (Changed<UiInteraction>, With<LinkGraphViewButton>)>,
     mut text_q: Query<&mut Text>,
     mut state: ResMut<LinkGraphWindowState>,
 ) {
     for (interaction, children) in &mut q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         state.view = state.view.next();

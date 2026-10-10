@@ -1,5 +1,6 @@
 //! Pickers greenfield de construcción (#270): dock, buoy, waypoints, landscaping, depósitos.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 
 use crate::i18n::{Locale, localized_text};
@@ -104,7 +105,7 @@ fn spawn_chip<B: Component + Clone>(
     label: &str,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         button,
         Node {
             min_width: Val::Px(52.0),
@@ -117,7 +118,7 @@ fn spawn_chip<B: Component + Clone>(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -208,7 +209,7 @@ pub(crate) fn sync_dock_picker(
     prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
-    mut buttons: Query<(&DockOrientButton, &mut BackgroundColor), With<Button>>,
+    mut buttons: Query<(&DockOrientButton, &mut BackgroundColor), With<UiButton>>,
 ) {
     let open = tool_state.active_tool == Some(BuildMenuAction::Dock);
     let Some((_, mut visibility)) = root_q
@@ -241,7 +242,7 @@ pub(crate) fn sync_dock_picker(
 }
 
 pub(crate) fn handle_dock_picker_buttons(
-    buttons: Query<(&Interaction, &DockOrientButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<(&UiInteraction, &DockOrientButton), (Changed<UiInteraction>, With<UiButton>)>,
     mut station_state: ResMut<StationBuildState>,
     tool_state: Res<UiToolState>,
 ) {
@@ -249,7 +250,7 @@ pub(crate) fn handle_dock_picker_buttons(
         return;
     }
     for (interaction, btn) in &buttons {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             station_state.orientation = btn.as_orientation();
         }
     }
@@ -572,7 +573,7 @@ pub(crate) fn sync_depot_build_picker(
     prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
-    mut buttons: Query<(&DepotKindButton, &mut BackgroundColor), With<Button>>,
+    mut buttons: Query<(&DepotKindButton, &mut BackgroundColor), With<UiButton>>,
 ) {
     let open = matches!(
         tool_state.active_tool,
@@ -610,7 +611,7 @@ pub(crate) fn sync_depot_build_picker(
 }
 
 pub(crate) fn handle_depot_build_picker_buttons(
-    buttons: Query<(&Interaction, &DepotKindButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<(&UiInteraction, &DepotKindButton), (Changed<UiInteraction>, With<UiButton>)>,
     mut tool_state: ResMut<UiToolState>,
 ) {
     let open = matches!(
@@ -623,7 +624,7 @@ pub(crate) fn handle_depot_build_picker_buttons(
         return;
     }
     for (interaction, btn) in &buttons {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             tool_state.active_tool = Some(btn.as_tool());
         }
     }

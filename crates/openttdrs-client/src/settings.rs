@@ -1,4 +1,4 @@
-//! Preferencias del cliente persistidas en TOML (`SettingsPlugin` de Bevy 0.19).
+//! Preferencias del cliente persistidas en TOML (`SettingsPlugin` de Bevy).
 
 use std::time::Duration;
 

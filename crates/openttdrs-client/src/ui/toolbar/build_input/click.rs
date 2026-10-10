@@ -1,5 +1,6 @@
 //! Sistema Bevy delgado que recopila contexto de clic y delega resolución/aplicación.
 
+use crate::ui::interaction::UiInteraction;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::TileKind;
@@ -40,7 +41,7 @@ pub(crate) fn handle_tile_click(
     panels: PanelStates,
     mut apply_ctx: IntentApplyContext,
     toolbar_pointer: Query<
-        &Interaction,
+        &UiInteraction,
         (
             With<BuildMenuUi>,
             Without<MinimapRoot>,
@@ -67,7 +68,7 @@ pub(crate) fn handle_tile_click(
     // Cancel before any early exit: a lost release must never leave a latent
     // construction that can be confirmed by a later, unrelated click.
     if pointer_capture.active()
-        || toolbar_pointer.iter().any(|i| *i != Interaction::None)
+        || toolbar_pointer.iter().any(|i| *i != UiInteraction::None)
         || !windows
             .single()
             .is_ok_and(|w| w.focused && w.cursor_position().is_some())

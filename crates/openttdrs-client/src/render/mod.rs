@@ -24,6 +24,7 @@ mod label_spatial_index;
 mod lighthouse_anim;
 pub(crate) mod newgrf_cache;
 pub(crate) mod object_newgrf;
+mod pixel_sprite;
 mod radio_blink;
 mod rail_glass_compositor;
 mod refinery_fire;
@@ -46,6 +47,8 @@ mod viewport;
 pub(crate) mod viewport_sort;
 mod water;
 mod world;
+
+pub(crate) use pixel_sprite::install_pixel_sprite_renderer;
 pub(crate) mod world_draw_trace;
 
 pub(crate) use airport_radar_anim::{AirportStationAnim, AirportStationAnimPlugin};
@@ -91,8 +94,8 @@ pub(crate) use label_spatial_index::{MapLabelCandidates, MapLabelSpatialIndex};
 pub(crate) use lighthouse_anim::{LighthouseAnim, LighthouseAnimPlugin};
 pub(crate) use radio_blink::{RADIO_BLINK_FRAME_COUNT, RadioBlinkAnim, RadioBlinkAnimPlugin};
 pub(crate) use rail_glass_compositor::{
-    MapSpriteTraceRequest, RAIL_GLASS_RENDER_LAYER, RailGlassCompositorPlugin, RailGlassMaskSource,
-    RailGlassPostProcessSettings,
+    MapSpriteTraceRequest, RAIL_GLASS_RENDER_LAYER, RailGlassCompositorPlugin, RailGlassMaskProxy,
+    RailGlassMaskSource, RailGlassPostProcessSettings,
 };
 pub(crate) use refinery_fire::{RefineryFireAnim, RefineryFireAnimPlugin};
 pub(crate) use sign_labels::SignLabel;

@@ -1,5 +1,6 @@
 //! Ventana unificada de sonido: volúmenes, flags SFX y jukebox OpenMSX.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::input::mouse::MouseButton;
 use bevy::prelude::*;
 use bevy::ui::RelativeCursorPosition;
@@ -115,7 +116,7 @@ fn spawn_volume_slider(
                 TextColor(WINDOW_TEXT),
             ));
             col.spawn((
-                Button,
+                UiButton,
                 kind,
                 Node {
                     width: Val::Percent(100.0),
@@ -126,7 +127,7 @@ fn spawn_volume_slider(
                 },
                 BackgroundColor(SLIDER_TRACK),
                 BorderColor::all(BTN_BORDER),
-                Interaction::default(),
+                UiInteraction::default(),
                 RelativeCursorPosition::default(),
                 BuildMenuUi,
             ))
@@ -184,7 +185,7 @@ fn spawn_jukebox_section(parent: &mut ChildSpawnerCommands, asset_server: &Asset
                 .with_children(|row| {
                     for playlist in MusicPlaylist::CHOICES {
                         row.spawn((
-                            Button,
+                            UiButton,
                             MusicWindowButton::Playlist(playlist),
                             Node {
                                 min_width: Val::Px(52.0),
@@ -197,7 +198,7 @@ fn spawn_jukebox_section(parent: &mut ChildSpawnerCommands, asset_server: &Asset
                             },
                             BackgroundColor(BTN_BG),
                             BorderColor::all(BTN_BORDER),
-                            Interaction::default(),
+                            UiInteraction::default(),
                             BuildMenuUi,
                             children![(
                                 Text::new(playlist.label()),
@@ -226,7 +227,7 @@ fn spawn_jukebox_section(parent: &mut ChildSpawnerCommands, asset_server: &Asset
                             label
                         };
                         row.spawn((
-                            Button,
+                            UiButton,
                             button,
                             Node {
                                 flex_grow: 1.0,
@@ -238,7 +239,7 @@ fn spawn_jukebox_section(parent: &mut ChildSpawnerCommands, asset_server: &Asset
                             },
                             BackgroundColor(BTN_BG),
                             BorderColor::all(BTN_BORDER),
-                            Interaction::default(),
+                            UiInteraction::default(),
                             BuildMenuUi,
                             children![(
                                 Text::new(label),
@@ -288,7 +289,7 @@ pub(crate) fn setup_sound_music_window(
             ("Clic toolbar", AudioSettingsButton::ClickBeep),
         ] {
             body.spawn((
-                Button,
+                UiButton,
                 button,
                 Node {
                     width: Val::Percent(100.0),
@@ -301,7 +302,7 @@ pub(crate) fn setup_sound_music_window(
                 },
                 BackgroundColor(BTN_BG),
                 BorderColor::all(BTN_BORDER),
-                Interaction::default(),
+                UiInteraction::default(),
                 BuildMenuUi,
                 children![(
                     Text::new(label),
@@ -320,11 +321,11 @@ fn volume_from_cursor(rel: &RelativeCursorPosition) -> Option<f32> {
 }
 
 pub(crate) fn handle_sound_music_toolbar_button(
-    q: Query<&Interaction, (Changed<Interaction>, With<SoundMusicToolbarButton>)>,
+    q: Query<&UiInteraction, (Changed<UiInteraction>, With<SoundMusicToolbarButton>)>,
     mut state: ResMut<SoundMusicWindowState>,
 ) {
     for interaction in &q {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             state.open = true;
         }
     }
@@ -358,13 +359,13 @@ pub(crate) fn sync_sound_music_window(
             With<MusicTrackTitleText>,
             Without<MusicTrackStatusText>,
             Without<VolumeSliderLabel>,
-            Without<Button>,
+            Without<UiButton>,
         ),
     >,
     mut playlist_btns: Query<
         (&MusicWindowButton, &mut BorderColor),
         (
-            With<Button>,
+            With<UiButton>,
             Without<FloatingWindow>,
             Without<AudioSettingsButton>,
         ),
@@ -372,7 +373,7 @@ pub(crate) fn sync_sound_music_window(
     mut play_btn: Query<
         (&MusicWindowButton, &mut Text),
         (
-            With<Button>,
+            With<UiButton>,
             Without<MusicTrackStatusText>,
             Without<MusicTrackTitleText>,
             Without<VolumeSliderLabel>,
@@ -450,13 +451,15 @@ pub(crate) fn sync_sound_music_window(
 pub(crate) fn handle_volume_sliders(
     mut hud: ResMut<SimHudControls>,
     mouse: Res<ButtonInput<MouseButton>>,
-    sliders: Query<(&VolumeSliderKind, &Interaction, &RelativeCursorPosition)>,
+    sliders: Query<(&VolumeSliderKind, &UiInteraction, &RelativeCursorPosition)>,
 ) {
     let dragging = mouse.pressed(MouseButton::Left);
     for (kind, interaction, rel) in &sliders {
-        let active = matches!(*interaction, Interaction::Pressed | Interaction::Hovered)
-            && dragging
-            || *interaction == Interaction::Pressed;
+        let active = matches!(
+            *interaction,
+            UiInteraction::Pressed | UiInteraction::Hovered
+        ) && dragging
+            || *interaction == UiInteraction::Pressed;
         if !active {
             continue;
         }
@@ -473,16 +476,16 @@ pub(crate) fn handle_volume_sliders(
 pub(crate) fn handle_audio_settings_buttons(
     mut hud: ResMut<SimHudControls>,
     buttons: Query<
-        (&Interaction, &AudioSettingsButton),
+        (&UiInteraction, &AudioSettingsButton),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<MusicWindowButton>,
         ),
     >,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match button {
@@ -502,17 +505,17 @@ pub(crate) fn handle_music_window_buttons(
     mut music: ResMut<MusicState>,
     players: Query<Entity, With<MusicPlayer>>,
     buttons: Query<
-        (&Interaction, &MusicWindowButton),
+        (&UiInteraction, &MusicWindowButton),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<AudioSettingsButton>,
         ),
     >,
 ) {
     let screen = *screen.get();
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match button {

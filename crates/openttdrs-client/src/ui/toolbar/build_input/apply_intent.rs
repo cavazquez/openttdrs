@@ -501,6 +501,8 @@ fn confirm_drag_placement(
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use crate::state::insert_test_order_pick_state;
     use crate::ui::refit_window::RefitWindowState;
@@ -759,7 +761,7 @@ mod tests {
                 window.set_cursor_position(None);
             }
             if interrupt == 2 || interrupt == 4 {
-                world.spawn((Node::default(), Interaction::Hovered));
+                world.spawn((Node::default(), UiInteraction::Hovered));
             }
             world.spawn((window, PrimaryWindow));
             world.run_system_once(handle_tile_click).unwrap();
@@ -795,7 +797,7 @@ mod tests {
             block_map_click: true,
             ..default()
         });
-        world.spawn((Node::default(), Interaction::Pressed));
+        world.spawn((Node::default(), UiInteraction::Pressed));
         world.run_system_once(handle_tile_click).unwrap();
         assert!(!world.resource::<UiToolState>().block_map_click);
         assert!(!world.resource::<DragBuildState>().armed);
@@ -807,7 +809,11 @@ mod tests {
 
     fn press_vehicle_orders_button(world: &mut World) {
         let button = world
-            .spawn((Button, VehicleWindowButton::Orders, Interaction::Pressed))
+            .spawn((
+                UiButton,
+                VehicleWindowButton::Orders,
+                UiInteraction::Pressed,
+            ))
             .id();
         world
             .run_system_once(handle_vehicle_window_buttons)
@@ -817,7 +823,12 @@ mod tests {
 
     fn press_order_panel_button(world: &mut World, button: OrderPanelButton) {
         let button = world
-            .spawn((Button, button, VehicleChainSlot(0), Interaction::Pressed))
+            .spawn((
+                UiButton,
+                button,
+                VehicleChainSlot(0),
+                UiInteraction::Pressed,
+            ))
             .id();
         world
             .run_system_once(handle_order_panel_buttons)

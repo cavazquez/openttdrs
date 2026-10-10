@@ -1,3 +1,4 @@
+use crate::ui::interaction::UiInteraction;
 use bevy::prelude::*;
 use openttdrs_core::CargoType;
 use openttdrs_core::prelude::*;
@@ -41,7 +42,7 @@ pub(crate) fn sync_order_panel(
         &mut Node,
         &mut BackgroundColor,
         &mut BorderColor,
-        &Interaction,
+        &UiInteraction,
     )>,
     mut row_text_q: Query<
         (&VehicleChainSlot, &OrderPanelRowText, &mut Text),
@@ -126,7 +127,10 @@ pub(crate) fn sync_order_panel(
             let is_drop_target = drag_from.is_some_and(|from| {
                 from != row.slot
                     && row.slot < slot_state.orders.len()
-                    && matches!(*interaction, Interaction::Hovered | Interaction::Pressed)
+                    && matches!(
+                        *interaction,
+                        UiInteraction::Hovered | UiInteraction::Pressed
+                    )
             });
             *bg = if is_drop_target {
                 BackgroundColor(Color::srgb(0.42, 0.48, 0.28))
@@ -224,7 +228,7 @@ fn hide_order_rows_for_slot(
         &mut Node,
         &mut BackgroundColor,
         &mut BorderColor,
-        &Interaction,
+        &UiInteraction,
     )>,
     chain_slot: u8,
 ) {

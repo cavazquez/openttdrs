@@ -1,5 +1,6 @@
 //! Interacción de la ventana de partidas: lista, nombre, guardar/cargar/borrar.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input_focus::{FocusCause, InputFocus};
@@ -79,13 +80,13 @@ pub(crate) fn save_window_editable_keyboard(
 pub(crate) fn save_window_name_click_focus(
     state: Res<SaveWindowState>,
     mut input_focus: ResMut<InputFocus>,
-    q: Query<(Entity, &Interaction), (With<SaveWindowNameText>, Changed<Interaction>)>,
+    q: Query<(Entity, &UiInteraction), (With<SaveWindowNameText>, Changed<UiInteraction>)>,
 ) {
     if !state.open || state.mode != SaveWindowMode::Save {
         return;
     }
     for (entity, interaction) in &q {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             input_focus.set(entity, FocusCause::Pressed);
         }
     }
@@ -119,8 +120,8 @@ pub(crate) fn prepare_save_window_name(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_save_window_buttons(
     mut state: ResMut<SaveWindowState>,
-    buttons: Query<(&Interaction, &SaveWindowButton), (Changed<Interaction>, With<Button>)>,
-    rows: Query<(&Interaction, &SaveWindowRow), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<(&UiInteraction, &SaveWindowButton), (Changed<UiInteraction>, With<UiButton>)>,
+    rows: Query<(&UiInteraction, &SaveWindowRow), (Changed<UiInteraction>, With<UiButton>)>,
     mut name_q: Query<&mut EditableText, With<SaveWindowNameText>>,
     mut hud: ResMut<SimHudControls>,
     mut sim: ResMut<SimWorld>,
@@ -145,7 +146,7 @@ pub(crate) fn handle_save_window_buttons(
     let mut loaded_from_menu = false;
 
     for (interaction, row) in &rows {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let idx = state.page * SAVE_WINDOW_ROWS + row.slot;
@@ -172,7 +173,7 @@ pub(crate) fn handle_save_window_buttons(
     }
 
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match button {
@@ -398,6 +399,8 @@ pub(crate) fn sync_save_window(
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
     use bevy::text::EditableText;
@@ -435,7 +438,7 @@ mod tests {
     }
 
     fn press(world: &mut World, button: SaveWindowButton) {
-        world.spawn((Button, button, Interaction::Pressed));
+        world.spawn((UiButton, button, UiInteraction::Pressed));
     }
 
     #[test]
@@ -457,7 +460,7 @@ mod tests {
             .resource_mut::<SaveWindowState>()
             .open_in_mode(SaveWindowMode::Load, &save_dir_from(&save_path));
         assert_eq!(world.resource::<SaveWindowState>().entries.len(), 1);
-        world.spawn((Button, SaveWindowRow { slot: 0 }, Interaction::Pressed));
+        world.spawn((UiButton, SaveWindowRow { slot: 0 }, UiInteraction::Pressed));
         press(&mut world, SaveWindowButton::Confirm);
         world.run_system_once(handle_save_window_buttons).unwrap();
 

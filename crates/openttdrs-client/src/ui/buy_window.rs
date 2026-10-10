@@ -4,6 +4,7 @@
 //! trenes, carretera → buses/camiones/tranvías), con panel de stats del modelo
 //! seleccionado y botón de compra (`BuildVehicleAtDepot`).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
@@ -308,7 +309,7 @@ pub(crate) fn setup_buy_window(mut commands: Commands, asset_server: Res<AssetSe
             .with_children(|list| {
                 for slot in 0..BUY_ROWS {
                     list.spawn((
-                        Button,
+                        UiButton,
                         BuyVehicleRow { slot },
                         Node {
                             width: Val::Percent(100.0),
@@ -323,7 +324,7 @@ pub(crate) fn setup_buy_window(mut commands: Commands, asset_server: Res<AssetSe
                         },
                         BackgroundColor(Color::srgb(0.22, 0.18, 0.12)),
                         BorderColor::all(Color::srgb(0.45, 0.39, 0.27)),
-                        Interaction::default(),
+                        UiInteraction::default(),
                         BuildMenuUi,
                     ))
                     .with_children(|row| {
@@ -408,7 +409,7 @@ pub(crate) fn setup_buy_window(mut commands: Commands, asset_server: Res<AssetSe
             },
         ));
         panel.spawn((
-            Button,
+            UiButton,
             BuyVehicleBuyButton,
             Node {
                 width: Val::Percent(100.0),
@@ -420,7 +421,7 @@ pub(crate) fn setup_buy_window(mut commands: Commands, asset_server: Res<AssetSe
             },
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
             children![(
                 Text::new("Comprar vehículo"),
@@ -438,7 +439,7 @@ fn spawn_toolbar_button(
     label: &'static str,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         action,
         Node {
             min_width: Val::Px(52.0),
@@ -451,7 +452,7 @@ fn spawn_toolbar_button(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -791,18 +792,22 @@ pub(crate) fn sync_buy_window(
         ),
     >,
     mut toolbar_btn_q: Query<
-        (&BuyVehicleToolbarButton, &Interaction, &mut BackgroundColor),
-        (With<Button>, Without<BuyVehicleRow>),
+        (
+            &BuyVehicleToolbarButton,
+            &UiInteraction,
+            &mut BackgroundColor,
+        ),
+        (With<UiButton>, Without<BuyVehicleRow>),
     >,
     mut row_q: Query<
         (
             &BuyVehicleRow,
-            &Interaction,
+            &UiInteraction,
             &mut Node,
             &mut BackgroundColor,
         ),
         (
-            With<Button>,
+            With<UiButton>,
             With<BuyVehicleRow>,
             Without<BuyVehiclePreviewImage>,
             Without<BuyVehicleRoadToolbar>,
@@ -812,7 +817,7 @@ pub(crate) fn sync_buy_window(
     mut row_text_q: Query<(&BuyVehicleRowText, &mut Text), Without<FloatingWindowTitleText>>,
     mut row_sprite_q: Query<
         (&BuyVehicleRowSprite, &mut ImageNode),
-        (Without<BuyVehiclePreviewImage>, Without<Button>),
+        (Without<BuyVehiclePreviewImage>, Without<UiButton>),
     >,
     mut stats_q: Query<
         &mut Text,
@@ -859,7 +864,7 @@ pub(crate) fn sync_buy_window(
     for (button, interaction, mut bg) in &mut toolbar_btn_q {
         *bg = if toolbar_button_active(&buy_state, *button) {
             BackgroundColor(BTN_ACTIVE)
-        } else if *interaction == Interaction::Hovered {
+        } else if *interaction == UiInteraction::Hovered {
             BackgroundColor(Color::srgb(0.47, 0.41, 0.28))
         } else {
             BackgroundColor(BTN_BG)
@@ -882,7 +887,7 @@ pub(crate) fn sync_buy_window(
         let selected = buy_state.selected_engine == Some(engine.id);
         *bg = if selected {
             BackgroundColor(Color::srgb(0.48, 0.41, 0.27))
-        } else if *interaction == Interaction::Hovered {
+        } else if *interaction == UiInteraction::Hovered {
             BackgroundColor(Color::srgb(0.34, 0.29, 0.2))
         } else {
             BackgroundColor(Color::srgb(0.22, 0.18, 0.12))
@@ -957,7 +962,7 @@ pub(crate) fn sync_buy_window_preview(
             Without<BuyVehicleRoadToolbar>,
             Without<BuyVehicleRailToolbar>,
             Without<BuyVehiclePreviewFrame>,
-            Without<Button>,
+            Without<UiButton>,
         ),
     >,
     mut preview_body_q: Query<
@@ -1126,21 +1131,21 @@ pub(crate) fn buy_window_search_keyboard(
 
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn handle_buy_window_buttons(
-    mut row_q: Query<(&Interaction, &BuyVehicleRow), (Changed<Interaction>, With<Button>)>,
+    mut row_q: Query<(&UiInteraction, &BuyVehicleRow), (Changed<UiInteraction>, With<UiButton>)>,
     mut toolbar_q: Query<
-        (&Interaction, &BuyVehicleToolbarButton),
+        (&UiInteraction, &BuyVehicleToolbarButton),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<BuyVehicleRow>,
             Without<BuyVehicleBuyButton>,
         ),
     >,
     mut buy_q: Query<
-        &Interaction,
+        &UiInteraction,
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             With<BuyVehicleBuyButton>,
             Without<BuyVehicleRow>,
             Without<BuyVehicleToolbarButton>,
@@ -1157,7 +1162,7 @@ pub(crate) fn handle_buy_window_buttons(
     };
     let kind = depot_kind_at(&sim, depot_pos);
     for (interaction, button) in &mut toolbar_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match button {
@@ -1194,7 +1199,7 @@ pub(crate) fn handle_buy_window_buttons(
         buy_state.selected_engine = None;
     }
     for (interaction, row) in &mut row_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         if let Some(engine) = engines_for_buy_window(
@@ -1211,7 +1216,7 @@ pub(crate) fn handle_buy_window_buttons(
         }
     }
     for interaction in &mut buy_q {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Some(engine_id) = buy_state.selected_engine else {
@@ -1290,6 +1295,8 @@ pub(crate) fn buy_window_on_closed(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -1416,7 +1423,7 @@ mod tests {
             buy.depot_pos = Some(depot);
             buy.selected_engine = Some(openttdrs_core::ENGINE_BUS_MPS);
         }
-        world.spawn((Button, BuyVehicleBuyButton, Interaction::Pressed));
+        world.spawn((UiButton, BuyVehicleBuyButton, UiInteraction::Pressed));
 
         world.run_system_once(handle_buy_window_buttons).unwrap();
 
@@ -1446,7 +1453,7 @@ mod tests {
             buy.depot_pos = Some(depot);
             buy.selected_engine = Some(openttdrs_core::ENGINE_WAGON_PASSENGER);
         }
-        world.spawn((Button, BuyVehicleBuyButton, Interaction::Pressed));
+        world.spawn((UiButton, BuyVehicleBuyButton, UiInteraction::Pressed));
 
         world.run_system_once(handle_buy_window_buttons).unwrap();
 
@@ -1494,7 +1501,7 @@ mod tests {
             buy.depot_pos = Some(depot);
             buy.selected_engine = Some(custom_id);
         }
-        world.spawn((Button, BuyVehicleBuyButton, Interaction::Pressed));
+        world.spawn((UiButton, BuyVehicleBuyButton, UiInteraction::Pressed));
 
         world.run_system_once(handle_buy_window_buttons).unwrap();
 

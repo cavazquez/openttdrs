@@ -1,5 +1,6 @@
 //! Spawn de anclas y popovers desde [`MenuSpec`].
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use bevy::ui::RelativeCursorPosition;
 
@@ -100,7 +101,7 @@ pub(crate) fn spawn_menu_anchor_button_sized(
         ))
         .with_children(|wrap| {
             wrap.spawn((
-                Button,
+                UiButton,
                 ToolbarNavigationButton(id),
                 ToolbarTooltipTarget { text: id.label() },
                 RelativeCursorPosition::default(),
@@ -115,7 +116,7 @@ pub(crate) fn spawn_menu_anchor_button_sized(
                 },
                 BackgroundColor(Color::srgb(0.33, 0.28, 0.19)),
                 BorderColor::all(MENU_BORDER),
-                Interaction::default(),
+                UiInteraction::default(),
                 children![(
                     ImageNode::new(asset_server.load::<Image>(menu_icon(id).path())),
                     Node {
@@ -174,7 +175,7 @@ pub(crate) fn spawn_menu_from_spec(
             },
             BackgroundColor(MENU_BG),
             BorderColor::all(MENU_OUTER_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             GlobalZIndex(2150),
         ))
         .with_children(|menu| {
@@ -217,7 +218,7 @@ fn spawn_menu_entry(
     };
     parent
         .spawn((
-            Button,
+            UiButton,
             ToolbarMenuEntry {
                 menu,
                 action,
@@ -243,7 +244,7 @@ fn spawn_menu_entry(
                 ENTRY_DISABLED
             }),
             BorderColor::all(ENTRY_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
         ))
         .with_children(|row| {
             row.spawn((

@@ -1,5 +1,6 @@
 //! Ventana de reglas de autoreemplazo de motores.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
@@ -175,12 +176,12 @@ fn spawn_labeled_list(
             if rules {
                 for slot in 0..RULE_ROWS {
                     list.spawn((
-                        Button,
+                        UiButton,
                         AutoreplaceRuleRow { slot },
                         row_style(),
                         BackgroundColor(BTN_BG),
                         BorderColor::all(BTN_BORDER),
-                        Interaction::default(),
+                        UiInteraction::default(),
                         BuildMenuUi,
                         children![(
                             AutoreplaceRuleRowText { slot },
@@ -251,12 +252,12 @@ fn spawn_engine_column(
                     for slot in 0..ENGINE_ROWS {
                         if is_from {
                             list.spawn((
-                                Button,
+                                UiButton,
                                 AutoreplaceFromRow { slot },
                                 row_style(),
                                 BackgroundColor(BTN_BG),
                                 BorderColor::all(BTN_BORDER),
-                                Interaction::default(),
+                                UiInteraction::default(),
                                 BuildMenuUi,
                                 children![(
                                     AutoreplaceFromRowText { slot },
@@ -267,12 +268,12 @@ fn spawn_engine_column(
                             ));
                         } else {
                             list.spawn((
-                                Button,
+                                UiButton,
                                 AutoreplaceToRow { slot },
                                 row_style(),
                                 BackgroundColor(BTN_BG),
                                 BorderColor::all(BTN_BORDER),
-                                Interaction::default(),
+                                UiInteraction::default(),
                                 BuildMenuUi,
                                 children![(
                                     AutoreplaceToRowText { slot },
@@ -309,7 +310,7 @@ fn spawn_action(
     label: &'static str,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         action,
         Node {
             min_width: Val::Px(88.0),
@@ -322,7 +323,7 @@ fn spawn_action(
         },
         BackgroundColor(BTN_BG),
         BorderColor::all(BTN_BORDER),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             Text::new(label),
@@ -411,7 +412,7 @@ pub(crate) fn sync_autoreplace_window(
     >,
     mut rule_rows: Query<(
         &AutoreplaceRuleRow,
-        &Interaction,
+        &UiInteraction,
         &mut Node,
         &mut BackgroundColor,
     )>,
@@ -427,7 +428,7 @@ pub(crate) fn sync_autoreplace_window(
     mut from_rows: Query<
         (
             &AutoreplaceFromRow,
-            &Interaction,
+            &UiInteraction,
             &mut Node,
             &mut BackgroundColor,
         ),
@@ -445,7 +446,7 @@ pub(crate) fn sync_autoreplace_window(
     mut to_rows: Query<
         (
             &AutoreplaceToRow,
-            &Interaction,
+            &UiInteraction,
             &mut Node,
             &mut BackgroundColor,
         ),
@@ -505,7 +506,7 @@ pub(crate) fn sync_autoreplace_window(
         let selected = state.selected_rule_from == Some(rule.from_engine_id);
         *bg = if selected {
             BackgroundColor(BTN_ACTIVE)
-        } else if *interaction == Interaction::Hovered {
+        } else if *interaction == UiInteraction::Hovered {
             BackgroundColor(BTN_HOVER)
         } else {
             BackgroundColor(BTN_BG)
@@ -532,7 +533,7 @@ pub(crate) fn sync_autoreplace_window(
         let selected = state.from_engine == Some(engine_id);
         *bg = if selected {
             BackgroundColor(BTN_ACTIVE)
-        } else if *interaction == Interaction::Hovered {
+        } else if *interaction == UiInteraction::Hovered {
             BackgroundColor(BTN_HOVER)
         } else {
             BackgroundColor(BTN_BG)
@@ -556,7 +557,7 @@ pub(crate) fn sync_autoreplace_window(
         let selected = state.to_engine == Some(engine_id);
         *bg = if selected {
             BackgroundColor(BTN_ACTIVE)
-        } else if *interaction == Interaction::Hovered {
+        } else if *interaction == UiInteraction::Hovered {
             BackgroundColor(BTN_HOVER)
         } else {
             BackgroundColor(BTN_BG)
@@ -575,29 +576,32 @@ pub(crate) fn sync_autoreplace_window(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_autoreplace_buttons(
-    mut rule_rows: Query<(&Interaction, &AutoreplaceRuleRow), (Changed<Interaction>, With<Button>)>,
+    mut rule_rows: Query<
+        (&UiInteraction, &AutoreplaceRuleRow),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut from_rows: Query<
-        (&Interaction, &AutoreplaceFromRow),
+        (&UiInteraction, &AutoreplaceFromRow),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<AutoreplaceRuleRow>,
         ),
     >,
     mut to_rows: Query<
-        (&Interaction, &AutoreplaceToRow),
+        (&UiInteraction, &AutoreplaceToRow),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<AutoreplaceRuleRow>,
             Without<AutoreplaceFromRow>,
         ),
     >,
     mut buttons: Query<
-        (&Interaction, &AutoreplaceButton),
+        (&UiInteraction, &AutoreplaceButton),
         (
-            Changed<Interaction>,
-            With<Button>,
+            Changed<UiInteraction>,
+            With<UiButton>,
             Without<AutoreplaceRuleRow>,
             Without<AutoreplaceFromRow>,
             Without<AutoreplaceToRow>,
@@ -624,7 +628,7 @@ pub(crate) fn handle_autoreplace_buttons(
         .unwrap_or_default();
 
     for (interaction, row) in &mut rule_rows {
-        if *interaction == Interaction::Pressed
+        if *interaction == UiInteraction::Pressed
             && let Some(&from) = rules.get(row.slot)
         {
             state.selected_rule_from = Some(from);
@@ -640,21 +644,21 @@ pub(crate) fn handle_autoreplace_buttons(
         }
     }
     for (interaction, row) in &mut from_rows {
-        if *interaction == Interaction::Pressed
+        if *interaction == UiInteraction::Pressed
             && let Some(&id) = engines.get(row.slot)
         {
             state.from_engine = Some(id);
         }
     }
     for (interaction, row) in &mut to_rows {
-        if *interaction == Interaction::Pressed
+        if *interaction == UiInteraction::Pressed
             && let Some(&id) = engines.get(row.slot)
         {
             state.to_engine = Some(id);
         }
     }
     for (interaction, button) in &mut buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match button {
@@ -751,6 +755,8 @@ pub(crate) fn autoreplace_window_on_closed(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use openttdrs_core::ENGINE_TRUCK_MPS;
@@ -776,7 +782,7 @@ mod tests {
         world.init_resource::<RemapMapVisualsPending>();
         world.init_resource::<HudBuildFeedback>();
         world.insert_resource(Time::<()>::default());
-        world.spawn((Button, AutoreplaceButton::AddRule, Interaction::Pressed));
+        world.spawn((UiButton, AutoreplaceButton::AddRule, UiInteraction::Pressed));
         world.run_system_once(handle_autoreplace_buttons).unwrap();
         assert!(
             world

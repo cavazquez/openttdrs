@@ -14,7 +14,7 @@
 [![codecov](https://codecov.io/gh/cavazquez/openttdrs/graph/badge.svg)](https://codecov.io/gh/cavazquez/openttdrs)
 [![GPL-2.0-only](https://img.shields.io/badge/license-GPL--2.0--only-blue.svg)](LICENSE)
 [![Rust MSRV](https://img.shields.io/badge/rust-1.98%2B-orange.svg)](https://doc.rust-lang.org/stable/releases.html)
-[![Bevy](https://img.shields.io/badge/Bevy-0.19.0-C659D4.svg)](https://bevyengine.org/)
+[![Bevy](https://img.shields.io/badge/Bevy-0.20.0-C659D4.svg)](https://bevyengine.org/)
 [![Snap Store](https://snapcraft.io/openttdrs/badge.svg)](https://snapcraft.io/openttdrs)
 
 An independent isometric transport simulation inspired by [OpenTTD](https://www.openttd.org/), built with **Rust** and [Bevy](https://bevyengine.org/). It is an early, playable alpha: expect rough edges and incomplete OpenTTD compatibility.

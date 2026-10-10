@@ -90,7 +90,7 @@ def main() -> None:
         "el binario no ofrece smoke --network-smoke",
     )
     for marker in (
-        "assets/shaders/rail_glass_post_process.wgsl",
+        "assets/shaders/rail_glass_post_process.wesl",
         "OPENTTDRS_RELEASE_GRAPHICAL_SMOKE",
         "check_release_graphical_smoke.py",
     ):
@@ -99,7 +99,7 @@ def main() -> None:
             f"smoke_release_package.sh no cubre {marker!r}",
         )
     require(
-        "assets/shaders/rail_glass_post_process.wgsl" in package_builder,
+        "assets/shaders/rail_glass_post_process.wesl" in package_builder,
         "package_release.sh no incluye el shader requerido por el cliente",
     )
     materialize_tiles = 'OPENTTDRS_ASSET_ROOT="$CRAFT_PART_SRC"'

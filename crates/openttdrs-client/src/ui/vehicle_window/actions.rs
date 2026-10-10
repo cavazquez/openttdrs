@@ -1,5 +1,6 @@
 //! Manejo de acciones de botones de la ventana de vista del vehículo.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use bevy::text::EditableText;
 use openttdrs_core::{Command, station::resolve_order_destination};
@@ -23,7 +24,10 @@ use super::{VehicleWindowButton, VehicleWindowRenameInput, VehicleWindowState};
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_vehicle_window_buttons(
-    mut buttons: Query<(&Interaction, &VehicleWindowButton), (Changed<Interaction>, With<Button>)>,
+    mut buttons: Query<
+        (&UiInteraction, &VehicleWindowButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut window_state: ResMut<VehicleWindowState>,
     mut chain: ResMut<VehicleChainRegistry>,
     mut details_state: ResMut<VehicleDetailsWindowState>,
@@ -43,7 +47,7 @@ pub(crate) fn handle_vehicle_window_buttons(
     time: Res<Time>,
 ) {
     for (interaction, button) in &mut buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let Some(vehicle_id) = window_state.vehicle_id else {
@@ -168,14 +172,17 @@ pub(crate) fn center_vehicle_window_camera(
     trucks: Option<Res<TruckHandles>>,
     mut cache: Option<ResMut<NewGrfTrainSpriteCache>>,
     mut images: Option<ResMut<Assets<Image>>>,
-    buttons: Query<(&Interaction, &VehicleWindowButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&UiInteraction, &VehicleWindowButton),
+        (Changed<UiInteraction>, With<UiButton>),
+    >,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
     let Some(vehicle_id) = window_state.vehicle_id else {
         return;
     };
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed
+        if *interaction != UiInteraction::Pressed
             || !matches!(*button, VehicleWindowButton::CenterCamera)
         {
             continue;

@@ -4,6 +4,7 @@
 //! pueblo. Muestra habitantes, casas y la demanda de pasajeros/correo del
 //! último período, con botón para centrar la cámara en el pueblo.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::{
     Command, GameState, TileCoord, TileKind, format_money,
@@ -88,7 +89,7 @@ fn spawn_town_action_button(
     button: TownWindowButton,
 ) {
     parent.spawn((
-        Button,
+        UiButton,
         button,
         Node {
             flex_grow: 1.0,
@@ -101,7 +102,7 @@ fn spawn_town_action_button(
         },
         BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),
         BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
-        Interaction::default(),
+        UiInteraction::default(),
         BuildMenuUi,
         children![(
             TownWindowActionText(button),
@@ -351,7 +352,7 @@ pub(crate) fn sync_town_window(
 }
 
 pub(crate) fn handle_town_window_buttons(
-    buttons: Query<(&Interaction, &TownWindowButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<(&UiInteraction, &TownWindowButton), (Changed<UiInteraction>, With<UiButton>)>,
     town_state: Res<TownWindowState>,
     mut authority: ResMut<crate::ui::town_authority_window::TownAuthorityWindowState>,
     mut sim: ResMut<SimWorld>,
@@ -360,7 +361,7 @@ pub(crate) fn handle_town_window_buttons(
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match button {

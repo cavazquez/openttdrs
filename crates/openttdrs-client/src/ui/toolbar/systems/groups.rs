@@ -1,3 +1,4 @@
+use crate::ui::interaction::UiInteraction;
 use bevy::prelude::*;
 
 use crate::state::{EditorSession, SimWorld};
@@ -10,14 +11,17 @@ use crate::ui::toolbar::{
 };
 
 pub(crate) fn toolbar_group_interaction(
-    mut q: Query<(&Interaction, &ToolbarGroup), (Changed<Interaction>, With<ToolbarGroupButton>)>,
+    mut q: Query<
+        (&UiInteraction, &ToolbarGroup),
+        (Changed<UiInteraction>, With<ToolbarGroupButton>),
+    >,
     mut toolbar_state: ResMut<ToolbarState>,
     mut tool_state: ResMut<UiToolState>,
     mut drag_state: ResMut<DragBuildState>,
     mut navigation_menu: Option<ResMut<ToolbarMenuState>>,
 ) {
     for (interaction, group) in &mut q {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             if let Some(menu) = navigation_menu.as_deref_mut() {
                 menu.open = None;
                 menu.focus = None;
@@ -39,7 +43,7 @@ pub(crate) fn update_toolbar_group_visuals(
     mut q: Query<
         (
             &ToolbarGroup,
-            &Interaction,
+            &UiInteraction,
             &mut BackgroundColor,
             &mut BorderColor,
         ),
@@ -48,13 +52,13 @@ pub(crate) fn update_toolbar_group_visuals(
 ) {
     for (group, interaction, mut bg, mut border) in &mut q {
         let is_active = Some(*group) == toolbar_state.active_group;
-        *bg = if is_active && *interaction == Interaction::Pressed {
+        *bg = if is_active && *interaction == UiInteraction::Pressed {
             BackgroundColor(Color::srgb(0.78, 0.68, 0.43))
-        } else if is_active && *interaction == Interaction::Hovered {
+        } else if is_active && *interaction == UiInteraction::Hovered {
             BackgroundColor(Color::srgb(0.7, 0.61, 0.38))
         } else if Some(*group) == toolbar_state.active_group {
             BackgroundColor(Color::srgb(0.62, 0.54, 0.34))
-        } else if *interaction == Interaction::Hovered {
+        } else if *interaction == UiInteraction::Hovered {
             BackgroundColor(Color::srgb(0.42, 0.36, 0.24))
         } else {
             BackgroundColor(Color::srgb(0.33, 0.28, 0.19))

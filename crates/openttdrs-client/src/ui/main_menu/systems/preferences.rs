@@ -1,3 +1,4 @@
+use crate::ui::interaction::UiInteraction;
 use bevy::prelude::*;
 
 use super::super::widgets::{hover_secondary, option_button_bg};
@@ -10,15 +11,15 @@ use super::super::{
 pub(crate) fn main_menu_highscores_interaction(
     mut panel: ResMut<MainMenuPanel>,
     mut buttons: Query<
-        (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<MainMenuHighscoresButton>),
+        (&UiInteraction, &mut BackgroundColor),
+        (Changed<UiInteraction>, With<MainMenuHighscoresButton>),
     >,
 ) {
     if *panel != MainMenuPanel::Root {
         return;
     }
     for (interaction, mut bg) in &mut buttons {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             *panel = MainMenuPanel::Highscores;
             return;
         }
@@ -72,9 +73,9 @@ pub(crate) fn main_menu_preferences_interaction(
     mut windows: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
     mut button_sets: ParamSet<(
         Query<
-            (&Interaction, &mut BackgroundColor),
+            (&UiInteraction, &mut BackgroundColor),
             (
-                Changed<Interaction>,
+                Changed<UiInteraction>,
                 With<MainMenuPreferencesButton>,
                 Without<MainMenuResolutionButton>,
                 Without<MainMenuLanguageButton>,
@@ -82,7 +83,7 @@ pub(crate) fn main_menu_preferences_interaction(
         >,
         Query<
             (
-                &Interaction,
+                &UiInteraction,
                 &MainMenuResolutionButton,
                 &mut BackgroundColor,
             ),
@@ -92,7 +93,11 @@ pub(crate) fn main_menu_preferences_interaction(
             ),
         >,
         Query<
-            (&Interaction, &MainMenuLanguageButton, &mut BackgroundColor),
+            (
+                &UiInteraction,
+                &MainMenuLanguageButton,
+                &mut BackgroundColor,
+            ),
             (
                 Without<MainMenuPreferencesButton>,
                 Without<MainMenuResolutionButton>,
@@ -102,7 +107,7 @@ pub(crate) fn main_menu_preferences_interaction(
 ) {
     if *panel == MainMenuPanel::Root {
         for (interaction, mut bg) in button_sets.p0().iter_mut() {
-            if *interaction == Interaction::Pressed {
+            if *interaction == UiInteraction::Pressed {
                 *panel = MainMenuPanel::Preferences;
                 return;
             }
@@ -115,7 +120,7 @@ pub(crate) fn main_menu_preferences_interaction(
     }
     for (interaction, btn, mut bg) in button_sets.p1().iter_mut() {
         let selected = prefs.window_width == btn.width && prefs.window_height == btn.height;
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             prefs.window_width = btn.width;
             prefs.window_height = btn.height;
             prefs.set_changed();
@@ -124,12 +129,12 @@ pub(crate) fn main_menu_preferences_interaction(
             }
         }
         *bg = option_button_bg(
-            selected || (*interaction == Interaction::Pressed),
+            selected || (*interaction == UiInteraction::Pressed),
             *interaction,
         );
     }
     for (interaction, btn, mut bg) in button_sets.p2().iter_mut() {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             prefs.language = btn.0.code().to_owned();
             prefs.set_changed();
         }
@@ -142,7 +147,7 @@ pub(crate) fn sync_main_menu_preferences(
     prefs: Res<crate::settings::ClientPreferences>,
     mut buttons: Query<(
         &mut BackgroundColor,
-        &Interaction,
+        &UiInteraction,
         Option<&MainMenuResolutionButton>,
         Option<&MainMenuLanguageButton>,
     )>,
@@ -174,15 +179,15 @@ pub(crate) fn main_menu_sound_interaction(
     panel: Res<MainMenuPanel>,
     mut sound: ResMut<crate::ui::audio_settings_window::SoundMusicWindowState>,
     mut buttons: Query<
-        (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<MainMenuSoundButton>),
+        (&UiInteraction, &mut BackgroundColor),
+        (Changed<UiInteraction>, With<MainMenuSoundButton>),
     >,
 ) {
     if *panel != MainMenuPanel::Root {
         return;
     }
     for (interaction, mut bg) in &mut buttons {
-        if *interaction == Interaction::Pressed {
+        if *interaction == UiInteraction::Pressed {
             sound.open = true;
             return;
         }

@@ -129,7 +129,7 @@ dedicated="${package_dir}/openttdrs-dedicated${suffix}"
 
 for required in "$client" "$dedicated" \
   "${package_dir}/static/fonts/DejaVuSansMono.ttf" \
-  "${package_dir}/assets/shaders/rail_glass_post_process.wgsl" \
+  "${package_dir}/assets/shaders/rail_glass_post_process.wesl" \
   "${package_dir}/assets/opengfx/tiles/grass.png" \
   "${package_dir}/assets/opengfx/atlas/tiles_atlas_0.png"; do
   if [[ ! -s "$required" ]]; then

@@ -1,0 +1,600 @@
+{
+  "schema_version": 1,
+  "kind": "bevy-020-migration",
+  "status": "accepted-with-documented-pixel-budget",
+  "local_date": "2026-10-10",
+  "acceptance_authority": "Usuario: Contar los que empeoran; aceptar las mejoras. Menos de 1000 píxeles por imagen.",
+  "source_base_commit": "708fb7eac49e86ff13a87d307859114a3ab8f157",
+  "candidate_binary_sha256": "0d76b768d788d1c10a44f026a88198e2f05557e123b0def2dcdb602c8d7def3f",
+  "baseline_binary_sha256": "0e5edbc4a17c9de32bb05f025b33c7cef6ff9849689de3e13cb8de73ae789391",
+  "bevy": {
+    "baseline": "0.19.1",
+    "candidate": "0.20.0"
+  },
+  "build_command": "cargo build --locked --release -p openttdrs-client -j2",
+  "source_sha256": {
+    "Cargo.lock": "7fc6d68d0a9a4a6102dd81329a9b8bca57227280d8662b8ba7a524b69f9d297b",
+    "assets/shaders/rail_glass_post_process.wesl": "9f9101505332f8f0ba8c59476c7843ab768dc61df51a517241333f50c20a6aed",
+    "crates/openttdrs-client/Cargo.toml": "98472140a6e3940832c693865ca9f47edc5d4fba01189b6e64c9e636019e0e49",
+    "crates/openttdrs-client/src/bevy_app.rs": "07b42f2bcd59d10ff0471f77a7cb22d626b302cd0bb1a21fc6c2bd33ba1d613d",
+    "crates/openttdrs-client/src/performance.rs": "cfb57d89444358f51a58b166fd9f614e1c2aa26c17b79c7aab475fd6f516486d",
+    "crates/openttdrs-client/src/performance/main_schedule.rs": "007288172e743b3dbb3b0e1cdb91439e31731a8c04c084e690ef28c45a660f1a",
+    "crates/openttdrs-client/src/render/house_viewport_sort.rs": "3b705fc559fdf599cce8dd7573dd8ef3be72ae67e9321c046d9341a81f24dc21",
+    "crates/openttdrs-client/src/render/mod.rs": "e32d75594a68f2f385732acd4f5e2cd55534a22cb70032d2126ec801784b47b7",
+    "crates/openttdrs-client/src/render/pixel_sprite.rs": "333550039d079fe751fd11d28e80a86aa7c40473df0b639a2c27f3b0a6209273",
+    "crates/openttdrs-client/src/render/rail_glass_compositor.rs": "ed175ceabfa3f960f8eae066b38a2130bbd5da962fc9387471c1af475b8cb1bf",
+    "crates/openttdrs-client/src/render/rail_glass_compositor/draw_order_trace.rs": "a7acbea7c597f5f5e1f3bb0113d6344a6f5da206a71708779e467902d2125f68",
+    "crates/openttdrs-client/src/render/rail_glass_compositor/sprite_trace.rs": "3519721c04e3cdb4e1cc30d292ccaa9731bbce9247851b1f621916d0d4bc90ad",
+    "crates/openttdrs-client/src/settings.rs": "6066b97d79d58d18704f8b752d2e68d3966b7aec9809590c1b347dd9d5d008c2",
+    "crates/openttdrs-client/src/simulation.rs": "dea68443703250b0529296e1810ed363a333be036e8cc4e06156af8c6614e032",
+    "crates/openttdrs-client/src/ui.rs": "0eda0d8be38a70941ecfbd6ab6cf1981791262423b702b47bc9b490a36b93a52",
+    "crates/openttdrs-client/src/ui/ai_settings_window.rs": "9db4a7ca0611121b513ee8d61542d1da915eddd3f46632305c012f080cc6e239",
+    "crates/openttdrs-client/src/ui/audio_settings_window.rs": "6403daf87ccafccf930116c452ff4605fb74a1fc7a0d2482434fcaf6760bd714",
+    "crates/openttdrs-client/src/ui/autoreplace_window.rs": "a48c2f94051f977198d42c1f40f827a47c273df40b0e1d5c775cae751b158074",
+    "crates/openttdrs-client/src/ui/buy_window.rs": "10bfc53935bac1b56303c583ad2509888e1514b3c302a92b113f7ad9f2ac6272",
+    "crates/openttdrs-client/src/ui/cargo_dist_settings_window.rs": "f1c1437b6c2fb0692adbc2f8d66b496a7fa3d0f79e6bd93b0cfa8dafb4a97d8f",
+    "crates/openttdrs-client/src/ui/cheat_window.rs": "f721d30f449700106d64a5cc0d736e12da4003ddafe16fc690baa50cc83f99fb",
+    "crates/openttdrs-client/src/ui/company_view_window.rs": "0cb24b1cd2021e2060563a0ae9af5e3889b7ae2ed3a699215483e27cdb4c99f3",
+    "crates/openttdrs-client/src/ui/destination_window.rs": "44bd13ffb39a0e39e514ff86f8cd5ba17a511505f47636a28216b5eaaae2e30b",
+    "crates/openttdrs-client/src/ui/dev_console.rs": "0be3e08a2d8144f8f2c05189f675bf33cd826791c7a4eb8baefee6d3078ad964",
+    "crates/openttdrs-client/src/ui/display_options_window.rs": "c1ebdd7801ce976df78b6ee4cfdbffa8ea37255a79ed94f3dc49d13216bbfed0",
+    "crates/openttdrs-client/src/ui/endscreen.rs": "59fb55af424917f97892da450d10250ef43b48e81bc75a26016cf1d865742eab",
+    "crates/openttdrs-client/src/ui/finances_window.rs": "b2c787a167d1a6af493a37923b9363ac101a46b3a5f764c1b18b4b343cfb6ae8",
+    "crates/openttdrs-client/src/ui/floating_window.rs": "f806faea99b80c56a8477495cf78544eb4ea97651ac283747d3b09e59cc6ae71",
+    "crates/openttdrs-client/src/ui/font.rs": "da987f932d8e1f05fecd5da6cecb4ebbe995341423e41c049c22be4e0eeb8d6b",
+    "crates/openttdrs-client/src/ui/genland_window.rs": "9f10631e3c2bcbe2bf92f517d341813cb3841c3479c366ad0a48a8b94cc1bf93",
+    "crates/openttdrs-client/src/ui/industry_directory.rs": "0be94185b157196a3640a4909984699eb7c111c219a06154b7f5763f51d0470a",
+    "crates/openttdrs-client/src/ui/industry_panel/setup.rs": "c7a8099be43d941d7476845a1ed87a9b0bbdfaa336c0c5c4ce34bd5cc0f75f1f",
+    "crates/openttdrs-client/src/ui/industry_panel/systems.rs": "b3959aef0b1bd8c04c6b70cb6b971d439e6d0dee9b096a33550df5650964c8c6",
+    "crates/openttdrs-client/src/ui/interaction.rs": "0125e4f33795ca3434085bfb576d24003659b2ba521f932b06d83d4102b28eb0",
+    "crates/openttdrs-client/src/ui/list_window/chrome.rs": "6d25779a57f98706bbbc92284b0e3bc840423125619f1ecea2494ea061fb9342",
+    "crates/openttdrs-client/src/ui/main_menu/setup.rs": "c6198135f8ed83397527f734bfa3b2b4879848846f933a4b333fa0cf6f305eaa",
+    "crates/openttdrs-client/src/ui/main_menu/systems/navigation.rs": "13f4a20fa8b44188fb1bbc98d3966eff0db15dcc0bfbe758b0b075e6dab448c5",
+    "crates/openttdrs-client/src/ui/main_menu/systems/new_game_options.rs": "a3bc789fa7ecee160940fcce43306318d8410eacf1e0e529da248c6f9fe3ba35",
+    "crates/openttdrs-client/src/ui/main_menu/systems/preferences.rs": "643b8ec6265e4332fa9c79ab67b4cea27c09d45573be8fa6ff884a85a929516e",
+    "crates/openttdrs-client/src/ui/main_menu/systems/scenarios.rs": "3aba8998cb4612ae1429bdbac10f7a24636131c4226687f6a021b925e1112efb",
+    "crates/openttdrs-client/src/ui/main_menu/tests.rs": "5f0a3487e3f27f496bf83562a947f910bc36ae58a2307bafd26b1348eefd71a8",
+    "crates/openttdrs-client/src/ui/main_menu/widgets.rs": "7e180c332e005bdab02c3fc3cba6ab8f1cb7e0039ef03fd406152202571a32cf",
+    "crates/openttdrs-client/src/ui/menu/chrome.rs": "e7bfa93c91083079abb496940ef61616dcfa2517b18ccd19a999826d48096761",
+    "crates/openttdrs-client/src/ui/menu/systems.rs": "5a48834dbbb0388a29e5603b54a14b6e770fbcae622a0faef5f3b33a115be6e8",
+    "crates/openttdrs-client/src/ui/newgrf_window.rs": "418d189dff888a35cb08094ddad1d9f26d08683e8ec98d3fcfacfb0e4ace223a",
+    "crates/openttdrs-client/src/ui/news_settings_window.rs": "ba3f3caeffeca2c4fb99f92042c8336207ce9ba123cca4589d5a0faedbcf80d7",
+    "crates/openttdrs-client/src/ui/pathfinding_settings_window.rs": "af77c14e47e52e56f9aa0bc47dab4d79ab40caafeb30fb72730e7555d3c3fb13",
+    "crates/openttdrs-client/src/ui/pointer.rs": "ab7d24c902e1bbd68ba51306258c1c1668fcf33d17334009d8675544f407b34c",
+    "crates/openttdrs-client/src/ui/refit_window.rs": "c3b3272bffb8943fab5eecd5434a2a96f841c4b7cc8df8cca9fa28be871c9fd1",
+    "crates/openttdrs-client/src/ui/save_window/setup.rs": "fd754797eefc557cbf7b99fc452f2d561813f481ed6a93db47107f1e88bf4878",
+    "crates/openttdrs-client/src/ui/save_window/systems.rs": "e70248aeae740f1b8fd3c9a6de6c66df401612f8eff9f129abc9dcfa4939979f",
+    "crates/openttdrs-client/src/ui/scrollbar.rs": "f5d5a4b70a2c85fb919b883e49451087f74a265e8569a459ad493b5683247044",
+    "crates/openttdrs-client/src/ui/shared_orders_window.rs": "cebcd6c1bbf6baa197892ccb0ba0458cb580ce1f981889d2d2fe7a472530a08f",
+    "crates/openttdrs-client/src/ui/sign_list_window.rs": "5076c389b610fb1ee190b241d48c9e345d6c4229afb56fccb64e8fae95a4d385",
+    "crates/openttdrs-client/src/ui/station_directory.rs": "687d54740c6554240adc7b781d16570488db9b9905bb31e0cd37946538ad166e",
+    "crates/openttdrs-client/src/ui/statusbar/history.rs": "81d162923d2fca2025bbe6d29bbfe5803fe0feabfabf27107da576dfe1b517d0",
+    "crates/openttdrs-client/src/ui/statusbar/setup.rs": "a3f0a85ff815ed2db09a0a89eeec58c230ad464207d93042f13f0530d9f2f9ea",
+    "crates/openttdrs-client/src/ui/statusbar/sync.rs": "3390ff2e90ea7f0b158b8a1667f94b483efbf8c8ac8aa192cc9ef43b3a2751b8",
+    "crates/openttdrs-client/src/ui/story_window.rs": "136b102420856261f209127faa9026f3ca45f6a1060a1a39dc02493d9da00e72",
+    "crates/openttdrs-client/src/ui/subsidy_list.rs": "d0373fd7baff8f03860e9ce167e6a11e3ed8f9c87cb606b6c68628e790586a9f",
+    "crates/openttdrs-client/src/ui/timetable_window.rs": "ace7cf30a2b88a241556ea657ef4c7a9cd00aef0f58ddb40278ac863c4e23824",
+    "crates/openttdrs-client/src/ui/toolbar/airport_picker_window.rs": "65f1e27b2e2e246a71460fe36249caf9f2b39726afeed32ea01aef960ef81a76",
+    "crates/openttdrs-client/src/ui/toolbar/bridge_window.rs": "7ceefdd76b336c9288689a8db658a37dd7b89e10b77f632a20408230eeca907b",
+    "crates/openttdrs-client/src/ui/toolbar/build_input/apply_intent.rs": "365b482e11823977c47fe8188cb8f468b7694b1ba5654527ed954cbefb53e884",
+    "crates/openttdrs-client/src/ui/toolbar/build_input/click.rs": "0085bebff4868cf56a559bf865cca8ce60f4ddd32a217da0f9710608d1708f00",
+    "crates/openttdrs-client/src/ui/toolbar/build_input/cursor.rs": "1c091330d54f84919e2820e5096be3cfc66a60e4c21c4e4bb707d08894df1375",
+    "crates/openttdrs-client/src/ui/toolbar/company_selector.rs": "2e28672578174dbb088a42b5766718384f1bde26e1d6c7535af7810a2a14b99d",
+    "crates/openttdrs-client/src/ui/toolbar/construction_picker_windows.rs": "0ffee6d59f47285233ae46b3d8ee0ca743eb077eca5c4080288e97d849f5fac9",
+    "crates/openttdrs-client/src/ui/toolbar/depot_panel.rs": "1521555cd0a7bd4c95cd553d5e02ca4616738669a2b0f1eb9de1c7da542043d1",
+    "crates/openttdrs-client/src/ui/toolbar/editor_toolbar.rs": "92db9bb2bebc4b5eb2a48140420f73ace918a24649b21d5976392424330e1501",
+    "crates/openttdrs-client/src/ui/toolbar/layout/controls.rs": "a383474c4c1577712e83ffc56e7d88dd23ba710ed93012eeb29dea361464b2a0",
+    "crates/openttdrs-client/src/ui/toolbar/layout/mod.rs": "37340e5bc1248fe9b0fe8859f080efd193bf85bfbb38c46ca5ac06b946b63bf0",
+    "crates/openttdrs-client/src/ui/toolbar/layout/sections.rs": "44bdb926a24394d545353d516fc6d5e24c50cf2b050610948ed8e316d28720fb",
+    "crates/openttdrs-client/src/ui/toolbar/minimap/input.rs": "b8f9d603659f09319393bda71423bd7b738bfcb759278985fd8f9313a764c937",
+    "crates/openttdrs-client/src/ui/toolbar/minimap/setup.rs": "3fabcfeb1d2b48add2d8b9c1c422a62fb3b9af57ae590257f36e02cef68d74ec",
+    "crates/openttdrs-client/src/ui/toolbar/minimap/sync.rs": "a85a6889132c5b5143738a54fd8c4e7d2a49d7c496b6042f7e26b1d23c98d243",
+    "crates/openttdrs-client/src/ui/toolbar/object_picker_window.rs": "e9a05abbee54dd2d0c52ab0eb6727f8a8deb399942570b9aacefb052e1bd8757",
+    "crates/openttdrs-client/src/ui/toolbar/order_panel/handlers.rs": "5516d32322c1a37a2bf86159616133f6c150876010b529669bb6dc706e16371f",
+    "crates/openttdrs-client/src/ui/toolbar/order_panel/setup.rs": "b94d6eb8369d42b666402932a2c443cdb085c6cff75ab48630552e1c6c32fe00",
+    "crates/openttdrs-client/src/ui/toolbar/order_panel/sync.rs": "ee213ec2b478dcfcf2aa68a50cca112cbcbbef2fa41e7855b48b44a278dbb830",
+    "crates/openttdrs-client/src/ui/toolbar/orders_cursor.rs": "1673c1347c01b69a8ea329cefc3089ae63f2a34960bb96eb37de71f210a35c8f",
+    "crates/openttdrs-client/src/ui/toolbar/rail_station_window.rs": "2845b6b430e8c583a4029e8aed0959aa2152b591145cadc31ebeb55d896ddaf6",
+    "crates/openttdrs-client/src/ui/toolbar/rail_type_selector.rs": "3a1f948bf7c60e769f8b98ba60c1bf384c70e49ed99827c3301cd1dfc6e8ee08",
+    "crates/openttdrs-client/src/ui/toolbar/road_stop_picker_window.rs": "08987f15ef14e8e19e61717aed0e6e5134466d0622eff44d05d961a09129ed62",
+    "crates/openttdrs-client/src/ui/toolbar/road_type_selector.rs": "75eddc6081281a74b458175dc766d5fa7ffd12e67125d866263fdaa081637cf6",
+    "crates/openttdrs-client/src/ui/toolbar/settings.rs": "81f8b5aaca9e5425000f5359f401c47995a0d5ea18b35be187cc946fe2f08a4e",
+    "crates/openttdrs-client/src/ui/toolbar/signal_picker_window.rs": "9f22711d36798a73852d09e4d4740aacdb802c3a56a5de79a1cc9b85bea8defb",
+    "crates/openttdrs-client/src/ui/toolbar/station_panel.rs": "7524431175a5d96e2851115f46d5732b7d34adff4bdea5d6c0146289b58ca31c",
+    "crates/openttdrs-client/src/ui/toolbar/systems/click_beep.rs": "3137e88fff1b430d5091d18444082f6a41f4e482f8783883740a8362b8f1c177",
+    "crates/openttdrs-client/src/ui/toolbar/systems/close.rs": "c88cfccf3b80978704f668c44f2f667d7d2d2eca542af3611be545341d2eddd7",
+    "crates/openttdrs-client/src/ui/toolbar/systems/groups.rs": "ca9405f708f2cd553ef044f622b0f1068621309cb3628e22c9e38fdc5f02207d",
+    "crates/openttdrs-client/src/ui/toolbar/systems/mod.rs": "5e0ea8316c1d98ccedbd9ce8651bb973c1baa2fc27a58b09a0a4f81cc8c3734b",
+    "crates/openttdrs-client/src/ui/toolbar/systems/tools.rs": "77da270f7cab2ff9d8dff3747e74265587748b287f25580618e7430220b6ffca",
+    "crates/openttdrs-client/src/ui/toolbar/systems/tooltip.rs": "696c85ecf891e610413dea1ced297a1406af5ba223d6530b861a686629bf4c0b",
+    "crates/openttdrs-client/src/ui/town_authority_window.rs": "641213ba7f4da22e2d414a12acd0034fb2f88a2af8347793e49e00e6b56ee100",
+    "crates/openttdrs-client/src/ui/town_directory.rs": "5a18d3f715924524594a52665d64f99713e2258c9640e3e6406e81f7087e753a",
+    "crates/openttdrs-client/src/ui/town_window.rs": "de287130c296b1cd1e15231ef9762429b4f1c2bcae482d3df3e910d5a49fe5de",
+    "crates/openttdrs-client/src/ui/ui5_blocked_stubs.rs": "a284dd362299b4d0385306947f8ea841cdd8e6a53f37e62878d304dc57862696",
+    "crates/openttdrs-client/src/ui/vehicle_details_window/mod.rs": "725a82a705e19c102217f4c837a7698d54a7eb119d59c79568a81dcb2354b9e3",
+    "crates/openttdrs-client/src/ui/vehicle_list.rs": "907fa0548a9a3870565578df2456817e8605cce76fa2d0b1490fac3ac3b9431c",
+    "crates/openttdrs-client/src/ui/vehicle_window/actions.rs": "eea106f06b8102d12c5de58995dde4aa3c06d0b04a7e9e1a6ac72c6a75e7e2f1",
+    "crates/openttdrs-client/src/ui/vehicle_window/rename.rs": "1ddb3acd3b11b607aab21cf7cec473d996cef4c0628b03216231eec0a6e9b749",
+    "crates/openttdrs-client/src/ui/vehicle_window/setup.rs": "9742e2108dc726bdca8e3f9b39fbdcafb69c94170473dd6891eb2566f9ca0ab5",
+    "scripts/check_release_metadata.py": "c348f95d27500485229f556836194eb3990b2393125c853af7bce832618610b9",
+    "scripts/ci_python_manifest.json": "ce15bf849c79b4eb727adf45a673af958e89137c756576adf65fa6e562b9f915",
+    "scripts/compare_renderer_upgrade.py": "f854ec7f491daf4c4d6b46924f38c75d96df724ee5f9f0ef3c1863bf8a460ac3",
+    "scripts/package_release.sh": "5c2e70d87a1609511ad8188900d8e2b86b39159f4595c099f3915381aa9c9f13",
+    "scripts/smoke_release_package.sh": "d985ca78e0f86bc49e41b3d0a5c5eb042e225c5687ac1c3618854fcc26b51858",
+    "scripts/smoke_snap_package.sh": "11c4300644aa4eb6ec0095204240519cd78177b18c0b0025a15f59635cd89c88",
+    "scripts/test_compare_renderer_upgrade.py": "2c8f8a774ede022db55e6b93aba5b93d5f33490a8716752cd3a93af604d2b055",
+    "scripts/test_release_dry_run_workflow.py": "6348a1213da06300a534cf59324fab8074d9cfa4b7a6439d7ff105c4cc4b2a4b",
+    "scripts/test_snap_package_smoke.py": "a566b1a91dc7204f5d5b56d807f38bb7e9e8fffd2376095639e47cfc1fbce6e0"
+  },
+  "removed_source_paths": [
+    "assets/shaders/rail_glass_post_process.wgsl"
+  ],
+  "fixture_sha256": "584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69",
+  "controlled_train_fixture_sha256": "ef1a73cca8cd0f1d4fb908e21b7b46b288eb333425cb7d9e07b110b1e7c3a7e2",
+  "oracle_commit": "c2661164bcb6cbf5ab97b56ccbee7506a3b26833",
+  "oracle_role": "instrumented world-export checkout; not a pristine upstream build",
+  "world_capture": {
+    "resolution": [
+      800,
+      600
+    ],
+    "center": [
+      132,
+      2
+    ],
+    "profile": "clean-static",
+    "native_zoom": true,
+    "settle_frames": 180,
+    "backend": "Vulkan/RADV AMD Radeon RX 7600",
+    "artifact_directory": "artifacts/bevy020/fitted-final-hw"
+  },
+  "world": {
+    "schema": 1,
+    "alignment": [
+      0,
+      0
+    ],
+    "passed": false,
+    "zooms": [
+      {
+        "scale": "0.25",
+        "changed_pixels": 2800,
+        "worsened_pixels": 0,
+        "improved_pixels": 2800,
+        "equally_wrong_changed_pixels": 0,
+        "native_before": 3424,
+        "native_after": 624,
+        "lost_correct_pixels": 0,
+        "gained_correct_pixels": 2800,
+        "changed_blocks_4x4": 175,
+        "total_pixels": 480000,
+        "passed": true,
+        "baseline_sha256": "fe693fafe217119d76ad6d980a262178153957527a2e4613b4290992b862113b",
+        "candidate_sha256": "0e38c89dd087ff19612c43c4f084c075770ebe31de08fa11d8e96b7920187a3e",
+        "oracle_sha256": "9529d553e3aa6bb7f402e11f18d6f7243b2942fbc16159f15d91ec536944cd7b",
+        "budget_passed": true
+      },
+      {
+        "scale": "0.5",
+        "changed_pixels": 1568,
+        "worsened_pixels": 0,
+        "improved_pixels": 1568,
+        "equally_wrong_changed_pixels": 0,
+        "native_before": 1740,
+        "native_after": 172,
+        "lost_correct_pixels": 0,
+        "gained_correct_pixels": 1568,
+        "changed_blocks_4x4": 223,
+        "total_pixels": 480000,
+        "passed": true,
+        "baseline_sha256": "432945f2b607a0ecc95d676aff451ff360f97dd3760eee6f56cac05576ea3f71",
+        "candidate_sha256": "03457586015153c449247165c3b233b445684973c2992e28c563f7e2f1a41748",
+        "oracle_sha256": "d025ab6d5c142207b33554378b4f298eb8fadba118cc5fc5b6af84693d99f7e6",
+        "budget_passed": true
+      },
+      {
+        "scale": "1",
+        "changed_pixels": 0,
+        "worsened_pixels": 0,
+        "improved_pixels": 0,
+        "equally_wrong_changed_pixels": 0,
+        "native_before": 45,
+        "native_after": 45,
+        "lost_correct_pixels": 0,
+        "gained_correct_pixels": 0,
+        "changed_blocks_4x4": 0,
+        "total_pixels": 480000,
+        "passed": true,
+        "baseline_sha256": "6eb808c54266c118374ab882692604af801fd6b1df9380c63acd3f8f88c70eb5",
+        "candidate_sha256": "6eb808c54266c118374ab882692604af801fd6b1df9380c63acd3f8f88c70eb5",
+        "oracle_sha256": "81f49dd2e245475d6dec35b1ab4d857a49014ddb7526e40d0363b029ce3d4155",
+        "budget_passed": true
+      },
+      {
+        "scale": "2",
+        "changed_pixels": 96,
+        "worsened_pixels": 0,
+        "improved_pixels": 96,
+        "equally_wrong_changed_pixels": 0,
+        "native_before": 3959,
+        "native_after": 3863,
+        "lost_correct_pixels": 0,
+        "gained_correct_pixels": 96,
+        "changed_blocks_4x4": 37,
+        "total_pixels": 480000,
+        "passed": true,
+        "baseline_sha256": "e7d568f535656679fb55a9e70fc2f56e88dac2ca1f1457f35a764f6c2e990dbc",
+        "candidate_sha256": "d3b856eb621c6205a8a4b8873a468c491a1aafb6944bcd7bb4cc72f68b9faa51",
+        "oracle_sha256": "35309213f2ea11c3be0ccb39ca4c0cff260428d342763ab401739fc6eb68b92b",
+        "budget_passed": true
+      },
+      {
+        "scale": "4",
+        "changed_pixels": 1330,
+        "worsened_pixels": 512,
+        "improved_pixels": 818,
+        "equally_wrong_changed_pixels": 0,
+        "native_before": 87235,
+        "native_after": 87162,
+        "lost_correct_pixels": 390,
+        "gained_correct_pixels": 463,
+        "changed_blocks_4x4": 391,
+        "total_pixels": 480000,
+        "passed": false,
+        "baseline_sha256": "c07f565140c7fdb721f016718fdbcf65915cb9d21622c1e96dd2887638c2cfd9",
+        "candidate_sha256": "679b7096682f80b389f7301df3429f2374c55370f579cce724bf7fd4919cd118",
+        "oracle_sha256": "7e3854e82d482286409dba3d8c32daac6090cf4ec0e038482e5df712ab98ac84",
+        "budget_passed": true
+      },
+      {
+        "scale": "8",
+        "changed_pixels": 685,
+        "worsened_pixels": 447,
+        "improved_pixels": 237,
+        "equally_wrong_changed_pixels": 1,
+        "native_before": 70831,
+        "native_after": 71007,
+        "lost_correct_pixels": 382,
+        "gained_correct_pixels": 206,
+        "changed_blocks_4x4": 301,
+        "total_pixels": 480000,
+        "passed": false,
+        "baseline_sha256": "03de8c2b5e689bc2583629f3d85dcfa8cb7a48b769a62e363f9469a912c8df9f",
+        "candidate_sha256": "8e1e86ac545f663ce112558c390f0804fb01548659827c1af5f3a7cf7fe586ce",
+        "oracle_sha256": "5112108334311ec6accae507f9b564c89f10d50112663fa47b0322ccdd438ac5",
+        "budget_passed": true
+      }
+    ],
+    "acceptance": {
+      "metric": "worsened_pixels",
+      "exclusive_limit": 1000
+    },
+    "budget_passed": true
+  },
+  "normal_frozen_budget": {
+    "changed_pixels": 45,
+    "pixels_over_channel_delta_64": 5,
+    "mean_absolute_rgba_channel_delta": 0.0024390625,
+    "outside_candidate_pixels": 0,
+    "sample_count": 1,
+    "v1_recertification": false,
+    "within_frozen_normal_budget": true
+  },
+  "orders": {
+    "artifact_directory": "artifacts/bevy020/orders-fitted",
+    "baseline_directory": "artifacts/bevy020/orders-baseline",
+    "profiles": [
+      {
+        "id": "OrdersEs",
+        "profile": "1280x720-1x",
+        "roi": {
+          "x": 888,
+          "y": 80,
+          "width": 384,
+          "height": 310
+        },
+        "roi_pixels": 119040,
+        "pixel_delta_threshold": 8,
+        "pixels_over_rgba_delta_threshold": 0,
+        "pixels_over_rgba_delta_threshold_ratio": 0.0,
+        "mean_abs_channel_delta": 0.0,
+        "passed": true,
+        "baseline_sha256": "e766b318f02ae80ff1747d88647d46dc19e6517d02cc8cbef6dfb38a1b635987",
+        "candidate_sha256": "e766b318f02ae80ff1747d88647d46dc19e6517d02cc8cbef6dfb38a1b635987"
+      },
+      {
+        "id": "OrdersEs",
+        "profile": "1280x720-2x",
+        "roi": {
+          "x": 496,
+          "y": 44,
+          "width": 768,
+          "height": 620
+        },
+        "roi_pixels": 476160,
+        "pixel_delta_threshold": 8,
+        "pixels_over_rgba_delta_threshold": 0,
+        "pixels_over_rgba_delta_threshold_ratio": 0.0,
+        "mean_abs_channel_delta": 0.0,
+        "passed": true,
+        "baseline_sha256": "46ec193e569e9ec4e4124fb3512f5d010478dc89809c985ae40caab27321900c",
+        "candidate_sha256": "46ec193e569e9ec4e4124fb3512f5d010478dc89809c985ae40caab27321900c"
+      },
+      {
+        "id": "OrdersEs",
+        "profile": "1920x1080-1x",
+        "roi": {
+          "x": 1528,
+          "y": 80,
+          "width": 384,
+          "height": 310
+        },
+        "roi_pixels": 119040,
+        "pixel_delta_threshold": 8,
+        "pixels_over_rgba_delta_threshold": 0,
+        "pixels_over_rgba_delta_threshold_ratio": 0.0,
+        "mean_abs_channel_delta": 0.0,
+        "passed": true,
+        "baseline_sha256": "d00b75f15f2e4a6544c9cfb1fd91aeb670ab052569a6a63c3d9d22d8491b9d2b",
+        "candidate_sha256": "d00b75f15f2e4a6544c9cfb1fd91aeb670ab052569a6a63c3d9d22d8491b9d2b"
+      },
+      {
+        "id": "OrdersEs",
+        "profile": "1920x1080-2x",
+        "roi": {
+          "x": 1136,
+          "y": 160,
+          "width": 768,
+          "height": 620
+        },
+        "roi_pixels": 476160,
+        "pixel_delta_threshold": 8,
+        "pixels_over_rgba_delta_threshold": 0,
+        "pixels_over_rgba_delta_threshold_ratio": 0.0,
+        "mean_abs_channel_delta": 0.0,
+        "passed": true,
+        "baseline_sha256": "41f9ab4bebd1341c296b6d0555d8ae44d9c40472a2fd6ae5cc7c12e5d1a8b12f",
+        "candidate_sha256": "41f9ab4bebd1341c296b6d0555d8ae44d9c40472a2fd6ae5cc7c12e5d1a8b12f"
+      },
+      {
+        "id": "OrdersEn",
+        "profile": "1280x720-1x",
+        "roi": {
+          "x": 888,
+          "y": 80,
+          "width": 384,
+          "height": 310
+        },
+        "roi_pixels": 119040,
+        "pixel_delta_threshold": 8,
+        "pixels_over_rgba_delta_threshold": 0,
+        "pixels_over_rgba_delta_threshold_ratio": 0.0,
+        "mean_abs_channel_delta": 0.0,
+        "passed": true,
+        "baseline_sha256": "de22b423a20cebe9b80d122bcfca6ddb362dedb05304f59d4bf51e3f987d8a11",
+        "candidate_sha256": "de22b423a20cebe9b80d122bcfca6ddb362dedb05304f59d4bf51e3f987d8a11"
+      },
+      {
+        "id": "OrdersEn",
+        "profile": "1280x720-2x",
+        "roi": {
+          "x": 496,
+          "y": 44,
+          "width": 768,
+          "height": 620
+        },
+        "roi_pixels": 476160,
+        "pixel_delta_threshold": 8,
+        "pixels_over_rgba_delta_threshold": 0,
+        "pixels_over_rgba_delta_threshold_ratio": 0.0,
+        "mean_abs_channel_delta": 0.0,
+        "passed": true,
+        "baseline_sha256": "4a61e8936d431edce6343a7d5f562b7fc493e0d05ed949a905e273a9149036d8",
+        "candidate_sha256": "4a61e8936d431edce6343a7d5f562b7fc493e0d05ed949a905e273a9149036d8"
+      },
+      {
+        "id": "OrdersEn",
+        "profile": "1920x1080-1x",
+        "roi": {
+          "x": 1528,
+          "y": 80,
+          "width": 384,
+          "height": 310
+        },
+        "roi_pixels": 119040,
+        "pixel_delta_threshold": 8,
+        "pixels_over_rgba_delta_threshold": 0,
+        "pixels_over_rgba_delta_threshold_ratio": 0.0,
+        "mean_abs_channel_delta": 0.0,
+        "passed": true,
+        "baseline_sha256": "fe8bccd7d4ca3ebd5b677984fd3e0165425a9ce1c189f775456d1ba453a280bf",
+        "candidate_sha256": "fe8bccd7d4ca3ebd5b677984fd3e0165425a9ce1c189f775456d1ba453a280bf"
+      },
+      {
+        "id": "OrdersEn",
+        "profile": "1920x1080-2x",
+        "roi": {
+          "x": 1136,
+          "y": 160,
+          "width": 768,
+          "height": 620
+        },
+        "roi_pixels": 476160,
+        "pixel_delta_threshold": 8,
+        "pixels_over_rgba_delta_threshold": 0,
+        "pixels_over_rgba_delta_threshold_ratio": 0.0,
+        "mean_abs_channel_delta": 0.0,
+        "passed": true,
+        "baseline_sha256": "fa7fe712cbd902a19c711af5134e1aa78bdbe188f289291bc72b62160c5c4bc6",
+        "candidate_sha256": "fa7fe712cbd902a19c711af5134e1aa78bdbe188f289291bc72b62160c5c4bc6"
+      }
+    ],
+    "v1_recertification": false
+  },
+  "live_follow": {
+    "artifact_directory": "artifacts/bevy020/live-follow-fitted",
+    "frames": 3454,
+    "camera_mismatches": 0,
+    "zooms": [
+      {
+        "scale": "0.25",
+        "exit": 0,
+        "frames": 359,
+        "visible_frames": 359,
+        "camera_mismatches": 0,
+        "ticks_advanced": 2856,
+        "visited_tiles": 81,
+        "directions": [
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          0.25
+        ],
+        "binary_sha256": "0d76b768d788d1c10a44f026a88198e2f05557e123b0def2dcdb602c8d7def3f",
+        "passed": true
+      },
+      {
+        "scale": "0.5",
+        "exit": 0,
+        "frames": 359,
+        "visible_frames": 359,
+        "camera_mismatches": 0,
+        "ticks_advanced": 2856,
+        "visited_tiles": 81,
+        "directions": [
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          0.5
+        ],
+        "binary_sha256": "0d76b768d788d1c10a44f026a88198e2f05557e123b0def2dcdb602c8d7def3f",
+        "passed": true
+      },
+      {
+        "scale": "1",
+        "exit": 0,
+        "frames": 1659,
+        "visible_frames": 1659,
+        "camera_mismatches": 0,
+        "ticks_advanced": 13256,
+        "visited_tiles": 102,
+        "directions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          1.0
+        ],
+        "binary_sha256": "0d76b768d788d1c10a44f026a88198e2f05557e123b0def2dcdb602c8d7def3f",
+        "passed": true
+      },
+      {
+        "scale": "2",
+        "exit": 0,
+        "frames": 359,
+        "visible_frames": 359,
+        "camera_mismatches": 0,
+        "ticks_advanced": 2857,
+        "visited_tiles": 81,
+        "directions": [
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          2.0
+        ],
+        "binary_sha256": "0d76b768d788d1c10a44f026a88198e2f05557e123b0def2dcdb602c8d7def3f",
+        "passed": true
+      },
+      {
+        "scale": "4",
+        "exit": 0,
+        "frames": 359,
+        "visible_frames": 359,
+        "camera_mismatches": 0,
+        "ticks_advanced": 2857,
+        "visited_tiles": 81,
+        "directions": [
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          4.0
+        ],
+        "binary_sha256": "0d76b768d788d1c10a44f026a88198e2f05557e123b0def2dcdb602c8d7def3f",
+        "passed": true
+      },
+      {
+        "scale": "8",
+        "exit": 0,
+        "frames": 359,
+        "visible_frames": 359,
+        "camera_mismatches": 0,
+        "ticks_advanced": 2857,
+        "visited_tiles": 81,
+        "directions": [
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          8.0
+        ],
+        "binary_sha256": "0d76b768d788d1c10a44f026a88198e2f05557e123b0def2dcdb602c8d7def3f",
+        "passed": true
+      }
+    ]
+  },
+  "validation": {
+    "core": {
+      "passed": 3072,
+      "failed": 0,
+      "ignored": 6,
+      "all_targets_clippy": "passed",
+      "source_scope": "unchanged since the Kale train fix"
+    },
+    "client": {
+      "passed": 1718,
+      "failed": 0,
+      "ignored": 2,
+      "all_targets_clippy": "passed"
+    },
+    "python_unit_tests": 15,
+    "python_manifest_compile": "passed",
+    "asset_smoke": "passed",
+    "release_metadata": "passed",
+    "fmt": "passed",
+    "parity_docs": "passed",
+    "git_diff_check": "passed",
+    "remote_ci": "not asserted"
+  },
+  "scope_exclusions": [
+    "global OpenTTD parity",
+    "complete Kale fleet",
+    "30 FPS target",
+    "new alpha or Snap publication",
+    "fresh V1 certification for this source SHA"
+  ]
+}

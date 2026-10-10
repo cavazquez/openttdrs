@@ -1,5 +1,6 @@
 //! Ventana de refit: lista de cargas con coste/capacidad (#178).
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::Command;
 #[cfg(test)]
@@ -175,7 +176,7 @@ fn spawn_refit_content(
             .with_children(|row| {
                 for unit_slot in 0..CONSIST_SLOTS {
                     row.spawn((
-                        Button,
+                        UiButton,
                         RefitUnitRow { slot: unit_slot },
                         chain,
                         Node {
@@ -190,7 +191,7 @@ fn spawn_refit_content(
                         },
                         BackgroundColor(BTN_BG),
                         BorderColor::all(BTN_BORDER),
-                        Interaction::default(),
+                        UiInteraction::default(),
                         BuildMenuUi,
                         children![(
                             RefitUnitRowText { slot: unit_slot },
@@ -224,7 +225,7 @@ fn spawn_refit_content(
             |list| {
                 for cargo_slot in 0..REFIT_ROWS {
                     list.spawn((
-                        Button,
+                        UiButton,
                         RefitCargoRow { slot: cargo_slot },
                         chain,
                         Node {
@@ -239,7 +240,7 @@ fn spawn_refit_content(
                         },
                         BackgroundColor(BTN_BG),
                         BorderColor::all(BTN_BORDER),
-                        Interaction::default(),
+                        UiInteraction::default(),
                         BuildMenuUi,
                         children![(
                             RefitCargoRowText { slot: cargo_slot },
@@ -329,7 +330,7 @@ pub(crate) fn sync_refit_window(
         (
             &VehicleChainSlot,
             &RefitCargoRow,
-            &Interaction,
+            &UiInteraction,
             &mut Node,
             &mut BackgroundColor,
         ),
@@ -347,7 +348,7 @@ pub(crate) fn sync_refit_window(
         (
             &VehicleChainSlot,
             &RefitUnitRow,
-            &Interaction,
+            &UiInteraction,
             &mut Node,
             &mut BackgroundColor,
         ),
@@ -466,7 +467,7 @@ pub(crate) fn sync_refit_window(
                 || slot_state.selected_unit_ids.contains(&unit_id);
             *bg = if selected {
                 BackgroundColor(BTN_ACTIVE)
-            } else if *interaction == Interaction::Hovered {
+            } else if *interaction == UiInteraction::Hovered {
                 BackgroundColor(BTN_HOVER)
             } else {
                 BackgroundColor(BTN_BG)
@@ -502,7 +503,7 @@ pub(crate) fn sync_refit_window(
                 BackgroundColor(Color::srgb(0.28, 0.24, 0.17))
             } else if selected {
                 BackgroundColor(BTN_ACTIVE)
-            } else if *interaction == Interaction::Hovered {
+            } else if *interaction == UiInteraction::Hovered {
                 BackgroundColor(BTN_HOVER)
             } else {
                 BackgroundColor(BTN_BG)
@@ -529,12 +530,12 @@ pub(crate) fn sync_refit_window(
 
 pub(crate) fn handle_refit_window_buttons(
     mut rows: Query<
-        (&Interaction, &RefitCargoRow, &VehicleChainSlot),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &RefitCargoRow, &VehicleChainSlot),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     mut units: Query<
-        (&Interaction, &RefitUnitRow, &VehicleChainSlot),
-        (Changed<Interaction>, With<Button>),
+        (&UiInteraction, &RefitUnitRow, &VehicleChainSlot),
+        (Changed<UiInteraction>, With<UiButton>),
     >,
     mut state: ResMut<RefitWindowState>,
     mut sim: ResMut<SimWorld>,
@@ -543,7 +544,7 @@ pub(crate) fn handle_refit_window_buttons(
     time: Res<Time>,
 ) {
     for (interaction, row, chain_slot) in &mut units {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let idx = chain_slot.0 as usize;
@@ -570,7 +571,7 @@ pub(crate) fn handle_refit_window_buttons(
     }
 
     for (interaction, row, chain_slot) in &mut rows {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         let idx = chain_slot.0 as usize;
@@ -631,6 +632,8 @@ pub(crate) fn refit_window_on_closed(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -675,10 +678,10 @@ mod tests {
                 .position(|&c| c == CargoType::Coal)
                 .unwrap();
         world.spawn((
-            Button,
+            UiButton,
             RefitCargoRow { slot: coal_slot },
             VehicleChainSlot(0),
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.run_system_once(handle_refit_window_buttons).unwrap();
         let sim = world.resource::<SimWorld>();

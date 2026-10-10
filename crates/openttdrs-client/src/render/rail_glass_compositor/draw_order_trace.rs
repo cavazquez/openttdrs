@@ -65,7 +65,7 @@ fn bin_key(key: &AlphaMask2dBinKey) -> Value {
         "pipeline": format!("{:?}", key.pipeline),
         "draw_function": format!("{:?}", key.draw_function),
         "mesh_asset": format!("{:?}", key.asset_id),
-        "material_bind_group": format!("{:?}", key.material_bind_group_id),
+        "material_bind_group": format!("{:?}", key.material_bind_group_index),
     })
 }
 

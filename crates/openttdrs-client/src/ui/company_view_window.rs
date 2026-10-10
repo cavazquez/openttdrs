@@ -3,6 +3,7 @@
 //! Muestra datos de compañía existentes (nombre, dinero, préstamo, flota).
 //! Livery / ManagerFace / Infrastructure detallado: residual.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::format_money;
 
@@ -54,7 +55,7 @@ pub(crate) fn setup_company_view_window(mut commands: Commands, asset_server: Re
             BuildMenuUi,
         ));
         panel.spawn((
-            Button,
+            UiButton,
             CompanyViewButton::OpenFinances,
             Node {
                 margin: UiRect::top(Val::Px(6.0)),
@@ -67,7 +68,7 @@ pub(crate) fn setup_company_view_window(mut commands: Commands, asset_server: Re
             },
             BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),
             BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
             children![(
                 CompanyViewButtonText,
@@ -91,11 +92,11 @@ pub(crate) fn open_company_view_from_routes(
 }
 
 pub(crate) fn handle_company_view_buttons(
-    buttons: Query<(&Interaction, &CompanyViewButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<(&UiInteraction, &CompanyViewButton), (Changed<UiInteraction>, With<UiButton>)>,
     mut finances: ResMut<FinancesWindowState>,
 ) {
     for (interaction, button) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match button {

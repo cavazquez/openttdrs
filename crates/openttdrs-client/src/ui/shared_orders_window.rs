@@ -1,5 +1,6 @@
 //! Lista de pools de órdenes compartidas.
 
+use crate::ui::interaction::{UiButton, UiInteraction};
 use bevy::prelude::*;
 use openttdrs_core::Command;
 
@@ -110,7 +111,7 @@ pub(crate) fn setup_shared_orders_window(mut commands: Commands, asset_server: R
             |list| {
                 for slot in 0..POOL_ROWS {
                     list.spawn((
-                        Button,
+                        UiButton,
                         SharedOrdersRow { slot },
                         Node {
                             width: Val::Percent(100.0),
@@ -124,7 +125,7 @@ pub(crate) fn setup_shared_orders_window(mut commands: Commands, asset_server: R
                         },
                         BackgroundColor(BTN_BG),
                         BorderColor::all(BTN_BORDER),
-                        Interaction::default(),
+                        UiInteraction::default(),
                         BuildMenuUi,
                         children![(
                             SharedOrdersRowText { slot },
@@ -138,7 +139,7 @@ pub(crate) fn setup_shared_orders_window(mut commands: Commands, asset_server: R
             220.0,
         );
         panel.spawn((
-            Button,
+            UiButton,
             SharedOrdersButton::LinkSelected,
             Node {
                 min_width: Val::Px(140.0),
@@ -151,7 +152,7 @@ pub(crate) fn setup_shared_orders_window(mut commands: Commands, asset_server: R
             },
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
-            Interaction::default(),
+            UiInteraction::default(),
             BuildMenuUi,
             children![(
                 Text::new("Vincular vehículo"),
@@ -180,7 +181,7 @@ pub(crate) fn sync_shared_orders_window(
     >,
     mut row_q: Query<(
         &SharedOrdersRow,
-        &Interaction,
+        &UiInteraction,
         &mut Node,
         &mut BackgroundColor,
     )>,
@@ -214,7 +215,7 @@ pub(crate) fn sync_shared_orders_window(
         let selected = state.selected_shared_id == Some(pool.id);
         *bg = if selected {
             BackgroundColor(BTN_ACTIVE)
-        } else if *interaction == Interaction::Hovered {
+        } else if *interaction == UiInteraction::Hovered {
             BackgroundColor(BTN_HOVER)
         } else {
             BackgroundColor(BTN_BG)
@@ -320,10 +321,14 @@ fn sync_shared_orders_texts(
 }
 
 pub(crate) fn handle_shared_orders_buttons(
-    mut rows: Query<(&Interaction, &SharedOrdersRow), (Changed<Interaction>, With<Button>)>,
+    mut rows: Query<(&UiInteraction, &SharedOrdersRow), (Changed<UiInteraction>, With<UiButton>)>,
     mut buttons: Query<
-        (&Interaction, &SharedOrdersButton),
-        (Changed<Interaction>, With<Button>, Without<SharedOrdersRow>),
+        (&UiInteraction, &SharedOrdersButton),
+        (
+            Changed<UiInteraction>,
+            With<UiButton>,
+            Without<SharedOrdersRow>,
+        ),
     >,
     mut state: ResMut<SharedOrdersWindowState>,
     mut sim: ResMut<SimWorld>,
@@ -336,14 +341,14 @@ pub(crate) fn handle_shared_orders_buttons(
     }
     let pools: Vec<u32> = sim.state.shared_order_lists.iter().map(|p| p.id).collect();
     for (interaction, row) in &mut rows {
-        if *interaction == Interaction::Pressed
+        if *interaction == UiInteraction::Pressed
             && let Some(&id) = pools.get(row.slot)
         {
             state.selected_shared_id = Some(id);
         }
     }
     for (interaction, button) in &mut buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != UiInteraction::Pressed {
             continue;
         }
         match button {
@@ -384,6 +389,8 @@ pub(crate) fn shared_orders_window_on_closed(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::ui::interaction::{UiButton, UiInteraction};
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use openttdrs_core::SharedOrderList;
@@ -421,9 +428,9 @@ mod tests {
         world.init_resource::<HudBuildFeedback>();
         world.insert_resource(Time::<()>::default());
         world.spawn((
-            Button,
+            UiButton,
             SharedOrdersButton::LinkSelected,
-            Interaction::Pressed,
+            UiInteraction::Pressed,
         ));
         world.run_system_once(handle_shared_orders_buttons).unwrap();
         assert_eq!(

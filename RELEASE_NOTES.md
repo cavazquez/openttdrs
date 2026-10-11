@@ -19,6 +19,8 @@ el servidor dedicado lockstep y los assets libres necesarios.
 - Las conexiones de los puentes corrigen una diferencia de altura de tres
   píxeles y el suelo que tapaba sus cabeceras. La comprobación contra OpenTTD
   cubre las alturas de dibujo de 428 cabeceras y 647 segmentos del mapa Kale.
+- Los cimientos base se incluyen en el binario para conservar la misma
+  geometría en instalaciones nuevas y al ejecutar fuera del repositorio.
 - La migración y las escenas verificadas de vehículos y puentes pasan en los
   seis zooms con el criterio acordado de menos de 1.000 píxeles que empeoren
   por imagen respecto de la versión anterior. Las diferencias heredadas

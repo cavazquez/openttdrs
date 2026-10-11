@@ -29,6 +29,9 @@ Los cambios relevantes de cada release se documentan aquí. El formato sigue
 - Las cabeceras de los puentes usan la altura de dibujo nativa; el suelo de
   sus fundaciones ya no tapa la conexión ferroviaria. Se corrige también el
   redondeo de segmentos en capturas a distintos zooms.
+- Los 90 sprites base de cimientos se incluyen en el binario. La geometría
+  deja de depender de GRFs descargados en el checkout o del directorio desde
+  el que se inicia el cliente; los reemplazos NewGRF explícitos se aplican después.
 
 ### Herramientas de comprobación
 

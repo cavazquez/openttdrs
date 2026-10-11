@@ -1,6 +1,6 @@
 //! Aplicación de bloques Action5 desde el `NewGRF` stack (IDs `OpenTTD` 15.3).
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::OnceLock;
 
 use crate::GameState;
@@ -57,48 +57,22 @@ fn apply_action5_table(
 /// el GRF *extra*. Se cargan antes del stack de la partida para que un `NewGRF`
 /// real pueda sobrescribirlos igual que en `OpenTTD`.
 fn load_default_foundation_action5_table(landscape: u8) -> Vec<Option<DecodedSprite>> {
-    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let asset_roots = [
-        PathBuf::from("assets/opengfx"),
-        workspace_root.join("assets/opengfx"),
-    ];
-    let mut candidates = Vec::new();
-    for root in &asset_roots {
-        candidates.push(root.join("opengfx2-32ez/ogfx2e_extra_32ez.grf"));
-        candidates.push(root.join(".signal-src-8bpp/ogfxe_extra.grf"));
-        if let Ok(entries) = std::fs::read_dir(root) {
-            let mut classic = entries
-                .filter_map(Result::ok)
-                .map(|entry| entry.path())
-                .filter(|path| {
-                    path.file_name()
-                        .and_then(|name| name.to_str())
-                        .is_some_and(|name| name.starts_with("opengfx-"))
-                })
-                .map(|path| path.join("ogfxe_extra.grf"))
-                .collect::<Vec<_>>();
-            classic.sort();
-            candidates.extend(classic);
-        }
-    }
-
-    for path in candidates {
-        let Ok(data) = std::fs::read(&path) else {
-            continue;
-        };
-        let context = Action5LoadContext::new(landscape);
-        let Ok(blocks) = collect_active_action5_blocks(&data, &context) else {
-            continue;
-        };
-        let mut slots = vec![None; crate::newgrf_sprites::FOUNDATION_ACTION5_SLOT_COUNT];
+    // These sprites are part of the base set, not an optional NewGRF. A
+    // packaged client has neither a development checkout nor GRFs under its
+    // working directory. Embed the pinned base set so the parent/child
+    // geometry is the same in a fresh Snap profile and in development.
+    const BASE_EXTRA: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/opengfx-8.0/ogfxe_extra.grf"
+    ));
+    let context = Action5LoadContext::new(landscape);
+    let mut slots = vec![None; crate::newgrf_sprites::FOUNDATION_ACTION5_SLOT_COUNT];
+    if let Ok(blocks) = collect_active_action5_blocks(BASE_EXTRA, &context) {
         for block in &blocks {
             crate::newgrf_sprites::merge_foundation_action5_block(&mut slots, block);
         }
-        if slots.iter().any(Option::is_some) {
-            return slots;
-        }
     }
-    vec![None; crate::newgrf_sprites::FOUNDATION_ACTION5_SLOT_COUNT]
+    slots
 }
 
 fn default_foundation_action5_table(climate: crate::Climate) -> Vec<Option<DecodedSprite>> {
@@ -294,4 +268,43 @@ pub fn apply_newgrf_action5_all_default_dirs(state: &mut GameState) {
     apply_newgrf_action5_canals_default_dirs(state);
     apply_newgrf_action5_twocc_default_dirs(state);
     apply_newgrf_action5_tramway_default_dirs(state);
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundled_base_foundations_are_complete_in_every_climate() {
+        for landscape in 0..4 {
+            let slots = load_default_foundation_action5_table(landscape);
+            assert_eq!(slots.len(), 90);
+            let mut visible = 0;
+            for (index, slot) in slots.iter().enumerate() {
+                let sprite = slot.as_ref().expect("missing bundled foundation");
+                assert!(sprite.width > 0 && sprite.height > 0, "slot {index}");
+                assert_eq!(
+                    sprite.rgba.len(),
+                    usize::from(sprite.width) * usize::from(sprite.height) * 4,
+                    "landscape {landscape}, slot {index}"
+                );
+                if sprite
+                    .rgba
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|pixel| pixel[3] > 0)
+                {
+                    visible += 1;
+                }
+            }
+            // Some native slots are intentionally transparent; completeness
+            // means a decoded entry in each slot, not opacity in each one.
+            assert!(
+                visible > 0,
+                "landscape {landscape}: {visible} visible slots"
+            );
+        }
+    }
 }

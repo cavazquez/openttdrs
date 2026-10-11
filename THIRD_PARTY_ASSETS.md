@@ -14,3 +14,8 @@ El texto GPL-2.0 completo se distribuye en `LICENSE`. Los scripts de conversión
 la fuente correspondiente de openttdrs están disponibles en el tag de la release.
 Los créditos detallados y fuentes preferidas de OpenSFX/OpenMSX están enlazados
 arriba; la conversión de formato no cambia autoría ni licencia.
+
+Los 90 sprites Action5 de cimientos se leen del archivo OpenGFX 8.0
+`ogfxe_extra.grf` incluido dentro del binario. Sus bytes originales, créditos,
+licencia y procedencia verificada se conservan en
+`crates/openttdrs-core/assets/opengfx-8.0/` en la fuente de esta release.

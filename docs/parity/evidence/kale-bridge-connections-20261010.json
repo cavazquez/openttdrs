@@ -1,0 +1,949 @@
+{
+  "schema": 1,
+  "date": "2026-10-10",
+  "timezone": "America/Argentina/Buenos_Aires",
+  "passed": true,
+  "base_commit": "273e894afdd3e06631ab909182dd20b3bdae0631",
+  "contracts": [
+    "bridge heads use post-foundation ti->z; BRIDGE_Z_START belongs to the middle deck",
+    "foundation ground children finish before segmented bridge head proxies",
+    "capture proxies retain native sprite-position rounding after recropping and viewport masking",
+    "six complete frames at each of two camera centres meet the agreed exclusive 1000 worsened-pixel budget",
+    "real Kale fleet uses at least one existing regional railway bridge; no orphan rail bridge heads"
+  ],
+  "why_previous_gate_missed_the_gap": {
+    "metric": "worsening versus previous client, both compared to native",
+    "legacy_errors": "errors inherited by both versions do not consume the incremental budget",
+    "coverage": "historical camera centre (132,2) and selected draw metadata do not certify final localized GPU draw order",
+    "correction": "add localized absolute witnesses and a strict ECS regression for foundation -> ground -> head; retain absolute mismatch counts"
+  },
+  "source": {
+    "path": "save/Kale_TitleGame.sav",
+    "bytes": 1085424,
+    "sha256": "584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69"
+  },
+  "binaries": {
+    "candidate": {
+      "path": "target/release/openttdrs-client",
+      "bytes": 202551512,
+      "sha256": "941c3a6d17c7be59f45efe514213997dda46b74bdeb5d842922b2c1626ad6c96"
+    },
+    "baseline": {
+      "path": "artifacts/transport-follow/bridges/client-before",
+      "bytes": 202394600,
+      "sha256": "dee7e6d8e8e14480213a064da5248ac8ab029ac8d3bcaf72aa4b74b56f650925"
+    }
+  },
+  "hardware": {
+    "gpu": "AMD Radeon RX 7600 (RADV NAVI33)",
+    "driver": "Mesa 26.0.8-1ubuntu0.3",
+    "backend": "Vulkan",
+    "display": "X11"
+  },
+  "native_reference": {
+    "regional_raster_and_origins_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+    "historical_raster_commit": "c2661164bcb6cbf5ab97b56ccbee7506a3b26833",
+    "baseset": "OpenGFX 8.0",
+    "blitter": "8bpp-simple",
+    "binary": {
+      "path": "reference/openttd-15.3-oracle/build/openttd",
+      "bytes": 365906320,
+      "sha256": "fdae5e3c386733f17a53850b415ee43966ee66ee2dedc45a7e84b4e051379a5a"
+    },
+    "regional_draw_stream": {
+      "path": "artifacts/transport-follow/bridges/native-draw.jsonl",
+      "bytes": 2117356,
+      "sha256": "0846ece56e468ca6a6b655b739fcad45c44c16e3cf9569e60ebfbaa1e0119194"
+    },
+    "global_draw_stream": {
+      "path": "artifacts/transport-follow/bridges/native-global-draw.jsonl",
+      "bytes": 77727323,
+      "sha256": "8bedc07b0782750747569b01908992e9eb80ef45d587cfcfc39bf54a353c783a"
+    }
+  },
+  "origins": {
+    "regional": {
+      "heads": 30,
+      "middle_floors": 45,
+      "passed": true
+    },
+    "global": {
+      "heads": 428,
+      "middle_floors": 647,
+      "passed": true
+    },
+    "regional_report": {
+      "path": "artifacts/transport-follow/bridges/draw-origins-masked.json",
+      "bytes": 13935,
+      "sha256": "5eab4b8f3207a87beec315b97855fae59c2bc03a586ff56cc275ebfe5a783dc8"
+    },
+    "global_report": {
+      "path": "artifacts/transport-follow/bridges/draw-origins-global-masked.json",
+      "bytes": 198097,
+      "sha256": "5b9c74a37526f0f3cc33d53021004c85dd56f9df093ed989965250af593447b2"
+    },
+    "scope": "height of sprite origin, matched by tile, ID and insertion key; not all combined pixels or NewGRF geometries"
+  },
+  "regressions": [
+    "bridge_heads_use_native_draw_origin_in_all_four_directions",
+    "kale_foundation_ground_stays_before_segmented_bridge_head",
+    "native_segmented_position_rounding_survives_recropping",
+    "kale_bridge_draw_origins_match_native_oracle (regional and entire map)"
+  ],
+  "absolute_pixel_witnesses": {
+    "scale": "1",
+    "before_head_only": {
+      "xy": [
+        237,
+        205
+      ],
+      "rgba": [
+        60,
+        88,
+        48,
+        255
+      ]
+    },
+    "final": [
+      {
+        "xy": [
+          237,
+          205
+        ],
+        "candidate_rgba": [
+          148,
+          149,
+          148,
+          255
+        ],
+        "native_rgba": [
+          148,
+          149,
+          148,
+          255
+        ]
+      },
+      {
+        "xy": [
+          254,
+          212
+        ],
+        "candidate_rgba": [
+          98,
+          101,
+          98,
+          255
+        ],
+        "native_rgba": [
+          98,
+          101,
+          98,
+          255
+        ]
+      },
+      {
+        "xy": [
+          212,
+          225
+        ],
+        "candidate_rgba": [
+          82,
+          80,
+          82,
+          255
+        ],
+        "native_rgba": [
+          82,
+          80,
+          82,
+          255
+        ]
+      }
+    ]
+  },
+  "crossings": {
+    "crossings": 6,
+    "paired_rail_bridges": 106,
+    "passed": true,
+    "rindington_crossings": [
+      {
+        "bridge_type": "TubularSteel",
+        "entry": {
+          "x": 203,
+          "y": 98
+        },
+        "exit": {
+          "x": 209,
+          "y": 98
+        },
+        "rindington": true,
+        "tick": 683,
+        "train": 1282
+      }
+    ],
+    "rindington_pairs": [
+      [
+        {
+          "x": 190,
+          "y": 131
+        },
+        {
+          "x": 192,
+          "y": 131
+        }
+      ],
+      [
+        {
+          "x": 190,
+          "y": 132
+        },
+        {
+          "x": 192,
+          "y": 132
+        }
+      ],
+      [
+        {
+          "x": 191,
+          "y": 96
+        },
+        {
+          "x": 194,
+          "y": 96
+        }
+      ],
+      [
+        {
+          "x": 203,
+          "y": 98
+        },
+        {
+          "x": 209,
+          "y": 98
+        }
+      ],
+      [
+        {
+          "x": 204,
+          "y": 109
+        },
+        {
+          "x": 204,
+          "y": 112
+        }
+      ],
+      [
+        {
+          "x": 204,
+          "y": 116
+        },
+        {
+          "x": 204,
+          "y": 118
+        }
+      ],
+      [
+        {
+          "x": 204,
+          "y": 124
+        },
+        {
+          "x": 204,
+          "y": 131
+        }
+      ],
+      [
+        {
+          "x": 205,
+          "y": 109
+        },
+        {
+          "x": 205,
+          "y": 112
+        }
+      ],
+      [
+        {
+          "x": 205,
+          "y": 116
+        },
+        {
+          "x": 205,
+          "y": 118
+        }
+      ],
+      [
+        {
+          "x": 205,
+          "y": 124
+        },
+        {
+          "x": 205,
+          "y": 131
+        }
+      ]
+    ],
+    "scope": "original Kale fleet and orders; no construction commands; AI, disasters and breakdowns disabled; topological crossings, not native bridge travel-time certification",
+    "source": "save/Kale_TitleGame.sav",
+    "ticks": 5000,
+    "unpaired_heads": []
+  },
+  "crossing_trace": {
+    "path": "artifacts/transport-follow/bridges/crossings-5000.csv",
+    "bytes": 378,
+    "sha256": "aa5f1d334f361cd9f09ebdecbb37f9112eee1692cb1794fb5ad8d5b5bd7296f7"
+  },
+  "raster": {
+    "acceptance": {
+      "metric": "worsened_pixels",
+      "exclusive_limit": 1000,
+      "alignment": [
+        0,
+        0
+      ],
+      "resolution": [
+        800,
+        600
+      ]
+    },
+    "localized": {
+      "center": [
+        204,
+        117
+      ],
+      "settle_frames": 40,
+      "report": {
+        "schema": 1,
+        "alignment": [
+          0,
+          0
+        ],
+        "passed": false,
+        "zooms": [
+          {
+            "scale": "0.25",
+            "changed_pixels": 39056,
+            "worsened_pixels": 16,
+            "improved_pixels": 39040,
+            "equally_wrong_changed_pixels": 0,
+            "native_before": 54648,
+            "native_after": 15608,
+            "lost_correct_pixels": 0,
+            "gained_correct_pixels": 39040,
+            "changed_blocks_4x4": 2443,
+            "total_pixels": 480000,
+            "passed": true,
+            "baseline_sha256": "f26f47cda708051d7d826555e2312c7502f2874aedd1bb0661127b366680a47a",
+            "candidate_sha256": "22bfc62a27b98682d4f4cfb0f78757abbc58ee048ef40c4e774ebcbd9a59e659",
+            "oracle_sha256": "cb9f128edf76bcbdd415a7d32a01bafefc415ebe2a309b36cf17303aa12a287f",
+            "budget_passed": true
+          },
+          {
+            "scale": "0.5",
+            "changed_pixels": 18104,
+            "worsened_pixels": 4,
+            "improved_pixels": 18100,
+            "equally_wrong_changed_pixels": 0,
+            "native_before": 35846,
+            "native_after": 17746,
+            "lost_correct_pixels": 0,
+            "gained_correct_pixels": 18100,
+            "changed_blocks_4x4": 1377,
+            "total_pixels": 480000,
+            "passed": true,
+            "baseline_sha256": "fc7ea6b300f3e9e303bf72197b5265f9fd8374318c483d611fa4384f8ac0ace8",
+            "candidate_sha256": "900e398b70b55abfc68b97ce72d2cb789ae787d5dd9e1e8e029512c7c491e14b",
+            "oracle_sha256": "1cccdaab4d2278d00c7ac5da0cf394e1363d87a25c14cb24e4e82c027820fa88",
+            "budget_passed": true
+          },
+          {
+            "scale": "1",
+            "changed_pixels": 7520,
+            "worsened_pixels": 2,
+            "improved_pixels": 7518,
+            "equally_wrong_changed_pixels": 0,
+            "native_before": 19967,
+            "native_after": 12449,
+            "lost_correct_pixels": 0,
+            "gained_correct_pixels": 7518,
+            "changed_blocks_4x4": 734,
+            "total_pixels": 480000,
+            "passed": true,
+            "baseline_sha256": "447eb3dc789dd9bc91331036ef433c1f4cd68f10c0ad06777d26a8682ea455a5",
+            "candidate_sha256": "79bd06733af601d2c049f9b38e98db535429b9bbc8e8af5c8006c514e5d419a8",
+            "oracle_sha256": "21109e4899f6abeca881b6c3bfad08e66e763d807dd0265c188506e83f99aa8d",
+            "budget_passed": true
+          },
+          {
+            "scale": "2",
+            "changed_pixels": 3557,
+            "worsened_pixels": 953,
+            "improved_pixels": 2563,
+            "equally_wrong_changed_pixels": 41,
+            "native_before": 298721,
+            "native_after": 297573,
+            "lost_correct_pixels": 109,
+            "gained_correct_pixels": 1257,
+            "changed_blocks_4x4": 432,
+            "total_pixels": 480000,
+            "passed": false,
+            "baseline_sha256": "00019ea0c7067e99b6651136491413985b62c11453ab3348bbcb9d096117d9a1",
+            "candidate_sha256": "8fb98ee20db72b80d67b5a464c00de3b95297ea877ce1736c6063c18d3a8b585",
+            "oracle_sha256": "dadfcf61400ca49334ac79fbbd43cf0ab1d3adbb16a5293f15808f9ce9b7e0c9",
+            "budget_passed": true
+          },
+          {
+            "scale": "4",
+            "changed_pixels": 8604,
+            "worsened_pixels": 242,
+            "improved_pixels": 8361,
+            "equally_wrong_changed_pixels": 1,
+            "native_before": 49097,
+            "native_after": 40948,
+            "lost_correct_pixels": 26,
+            "gained_correct_pixels": 8175,
+            "changed_blocks_4x4": 1113,
+            "total_pixels": 480000,
+            "passed": false,
+            "baseline_sha256": "158b9b5ee443fd538f56de74df171fcd322fb757ef3681febc441a9944b2c7db",
+            "candidate_sha256": "2c16f140ab18bb3ff01f44a8cdace4385f3d7af9aec3c8e4fb163487e997061d",
+            "oracle_sha256": "04711e98390be67e0ea3b9abdede7f472bdeb64a027892667c28ecca262bdf9a",
+            "budget_passed": true
+          },
+          {
+            "scale": "8",
+            "changed_pixels": 8116,
+            "worsened_pixels": 827,
+            "improved_pixels": 7268,
+            "equally_wrong_changed_pixels": 21,
+            "native_before": 312956,
+            "native_after": 307156,
+            "lost_correct_pixels": 33,
+            "gained_correct_pixels": 5833,
+            "changed_blocks_4x4": 1388,
+            "total_pixels": 480000,
+            "passed": false,
+            "baseline_sha256": "48499faddc562f972b9ffbc8f10350a28221527b3cbce02b751b886e596fda79",
+            "candidate_sha256": "c78ad474b5c216ef55000e1ba1f65ec6a1bfc3997cdf08032ba474e8be4be2be",
+            "oracle_sha256": "8a417b2192ba2a20e08e5c60d1a4a6817c309b3cb4c67bac3605715befacb0b6",
+            "budget_passed": true
+          }
+        ],
+        "acceptance": {
+          "metric": "worsened_pixels",
+          "exclusive_limit": 1000
+        },
+        "budget_passed": true
+      },
+      "capture_receipt": {
+        "passed": true,
+        "center": [
+          204,
+          117
+        ],
+        "resolution": [
+          800,
+          600
+        ],
+        "settle_frames": 40,
+        "paused": true,
+        "native_zoom": true,
+        "binary_sha256": "941c3a6d17c7be59f45efe514213997dda46b74bdeb5d842922b2c1626ad6c96",
+        "sav_sha256": "584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69",
+        "cases": [
+          {
+            "scale": "0.25",
+            "exit": 0,
+            "passed": true,
+            "png_sha256": "22bfc62a27b98682d4f4cfb0f78757abbc58ee048ef40c4e774ebcbd9a59e659"
+          },
+          {
+            "scale": "0.5",
+            "exit": 0,
+            "passed": true,
+            "png_sha256": "900e398b70b55abfc68b97ce72d2cb789ae787d5dd9e1e8e029512c7c491e14b"
+          },
+          {
+            "scale": "1",
+            "exit": 0,
+            "passed": true,
+            "png_sha256": "79bd06733af601d2c049f9b38e98db535429b9bbc8e8af5c8006c514e5d419a8"
+          },
+          {
+            "scale": "2",
+            "exit": 0,
+            "passed": true,
+            "png_sha256": "8fb98ee20db72b80d67b5a464c00de3b95297ea877ce1736c6063c18d3a8b585"
+          },
+          {
+            "scale": "4",
+            "exit": 0,
+            "passed": true,
+            "png_sha256": "2c16f140ab18bb3ff01f44a8cdace4385f3d7af9aec3c8e4fb163487e997061d"
+          },
+          {
+            "scale": "8",
+            "exit": 0,
+            "passed": true,
+            "png_sha256": "c78ad474b5c216ef55000e1ba1f65ec6a1bfc3997cdf08032ba474e8be4be2be"
+          }
+        ]
+      },
+      "candidate_pngs": [
+        {
+          "scale": "0.25",
+          "path": "artifacts/transport-follow/bridges/masked-final/0.25/world.png",
+          "bytes": 118014,
+          "sha256": "22bfc62a27b98682d4f4cfb0f78757abbc58ee048ef40c4e774ebcbd9a59e659"
+        },
+        {
+          "scale": "0.5",
+          "path": "artifacts/transport-follow/bridges/masked-final/0.5/world.png",
+          "bytes": 386846,
+          "sha256": "900e398b70b55abfc68b97ce72d2cb789ae787d5dd9e1e8e029512c7c491e14b"
+        },
+        {
+          "scale": "1",
+          "path": "artifacts/transport-follow/bridges/masked-final/1/world.png",
+          "bytes": 1360766,
+          "sha256": "79bd06733af601d2c049f9b38e98db535429b9bbc8e8af5c8006c514e5d419a8"
+        },
+        {
+          "scale": "2",
+          "path": "artifacts/transport-follow/bridges/masked-final/2/world.png",
+          "bytes": 1440773,
+          "sha256": "8fb98ee20db72b80d67b5a464c00de3b95297ea877ce1736c6063c18d3a8b585"
+        },
+        {
+          "scale": "4",
+          "path": "artifacts/transport-follow/bridges/masked-final/4/world.png",
+          "bytes": 1440773,
+          "sha256": "2c16f140ab18bb3ff01f44a8cdace4385f3d7af9aec3c8e4fb163487e997061d"
+        },
+        {
+          "scale": "8",
+          "path": "artifacts/transport-follow/bridges/masked-final/8/world.png",
+          "bytes": 1291267,
+          "sha256": "c78ad474b5c216ef55000e1ba1f65ec6a1bfc3997cdf08032ba474e8be4be2be"
+        }
+      ]
+    },
+    "historical": {
+      "center": [
+        132,
+        2
+      ],
+      "settle_frames": 180,
+      "report": {
+        "schema": 1,
+        "alignment": [
+          0,
+          0
+        ],
+        "passed": false,
+        "zooms": [
+          {
+            "scale": "0.25",
+            "changed_pixels": 0,
+            "worsened_pixels": 0,
+            "improved_pixels": 0,
+            "equally_wrong_changed_pixels": 0,
+            "native_before": 624,
+            "native_after": 624,
+            "lost_correct_pixels": 0,
+            "gained_correct_pixels": 0,
+            "changed_blocks_4x4": 0,
+            "total_pixels": 480000,
+            "passed": true,
+            "baseline_sha256": "0e38c89dd087ff19612c43c4f084c075770ebe31de08fa11d8e96b7920187a3e",
+            "candidate_sha256": "0e38c89dd087ff19612c43c4f084c075770ebe31de08fa11d8e96b7920187a3e",
+            "oracle_sha256": "9529d553e3aa6bb7f402e11f18d6f7243b2942fbc16159f15d91ec536944cd7b",
+            "budget_passed": true
+          },
+          {
+            "scale": "0.5",
+            "changed_pixels": 0,
+            "worsened_pixels": 0,
+            "improved_pixels": 0,
+            "equally_wrong_changed_pixels": 0,
+            "native_before": 172,
+            "native_after": 172,
+            "lost_correct_pixels": 0,
+            "gained_correct_pixels": 0,
+            "changed_blocks_4x4": 0,
+            "total_pixels": 480000,
+            "passed": true,
+            "baseline_sha256": "03457586015153c449247165c3b233b445684973c2992e28c563f7e2f1a41748",
+            "candidate_sha256": "03457586015153c449247165c3b233b445684973c2992e28c563f7e2f1a41748",
+            "oracle_sha256": "d025ab6d5c142207b33554378b4f298eb8fadba118cc5fc5b6af84693d99f7e6",
+            "budget_passed": true
+          },
+          {
+            "scale": "1",
+            "changed_pixels": 0,
+            "worsened_pixels": 0,
+            "improved_pixels": 0,
+            "equally_wrong_changed_pixels": 0,
+            "native_before": 45,
+            "native_after": 45,
+            "lost_correct_pixels": 0,
+            "gained_correct_pixels": 0,
+            "changed_blocks_4x4": 0,
+            "total_pixels": 480000,
+            "passed": true,
+            "baseline_sha256": "6eb808c54266c118374ab882692604af801fd6b1df9380c63acd3f8f88c70eb5",
+            "candidate_sha256": "6eb808c54266c118374ab882692604af801fd6b1df9380c63acd3f8f88c70eb5",
+            "oracle_sha256": "81f49dd2e245475d6dec35b1ab4d857a49014ddb7526e40d0363b029ce3d4155",
+            "budget_passed": true
+          },
+          {
+            "scale": "2",
+            "changed_pixels": 666,
+            "worsened_pixels": 13,
+            "improved_pixels": 653,
+            "equally_wrong_changed_pixels": 0,
+            "native_before": 3863,
+            "native_after": 3219,
+            "lost_correct_pixels": 9,
+            "gained_correct_pixels": 653,
+            "changed_blocks_4x4": 131,
+            "total_pixels": 480000,
+            "passed": false,
+            "baseline_sha256": "d3b856eb621c6205a8a4b8873a468c491a1aafb6944bcd7bb4cc72f68b9faa51",
+            "candidate_sha256": "4981306ff52266e9f91320b6f7e475f8ee5604bc0e7e6dbaf9c01fb2fd1ee0e0",
+            "oracle_sha256": "35309213f2ea11c3be0ccb39ca4c0cff260428d342763ab401739fc6eb68b92b",
+            "budget_passed": true
+          },
+          {
+            "scale": "4",
+            "changed_pixels": 2954,
+            "worsened_pixels": 199,
+            "improved_pixels": 2754,
+            "equally_wrong_changed_pixels": 1,
+            "native_before": 87162,
+            "native_after": 84630,
+            "lost_correct_pixels": 119,
+            "gained_correct_pixels": 2651,
+            "changed_blocks_4x4": 584,
+            "total_pixels": 480000,
+            "passed": false,
+            "baseline_sha256": "679b7096682f80b389f7301df3429f2374c55370f579cce724bf7fd4919cd118",
+            "candidate_sha256": "2fe838cb6cdb38456a0c45951bcd1dbec9e1d095b37b94178e40f6bdd61e86ae",
+            "oracle_sha256": "7e3854e82d482286409dba3d8c32daac6090cf4ec0e038482e5df712ab98ac84",
+            "budget_passed": true
+          },
+          {
+            "scale": "8",
+            "changed_pixels": 1416,
+            "worsened_pixels": 339,
+            "improved_pixels": 1077,
+            "equally_wrong_changed_pixels": 0,
+            "native_before": 71008,
+            "native_after": 70263,
+            "lost_correct_pixels": 284,
+            "gained_correct_pixels": 1029,
+            "changed_blocks_4x4": 496,
+            "total_pixels": 480000,
+            "passed": false,
+            "baseline_sha256": "0cf4af2ba2590954a862747f61f18a0c2206030917cc30ea3cda9dcdfc324474",
+            "candidate_sha256": "b52c02a1d333ce59cd1ba3f325f39a3659950bafb5a8aca6b6645b570b65284e",
+            "oracle_sha256": "5112108334311ec6accae507f9b564c89f10d50112663fa47b0322ccdd438ac5",
+            "budget_passed": true
+          }
+        ],
+        "acceptance": {
+          "metric": "worsened_pixels",
+          "exclusive_limit": 1000
+        },
+        "budget_passed": true
+      },
+      "capture_receipt": [
+        {
+          "scale": "4",
+          "exit": 0,
+          "png": true,
+          "trace": false,
+          "binary_sha256": "941c3a6d17c7be59f45efe514213997dda46b74bdeb5d842922b2c1626ad6c96",
+          "shader_sha256": null,
+          "settle_frames_requested": "180",
+          "settle_frames": "180"
+        },
+        {
+          "scale": "8",
+          "exit": 0,
+          "png": true,
+          "trace": false,
+          "binary_sha256": "941c3a6d17c7be59f45efe514213997dda46b74bdeb5d842922b2c1626ad6c96",
+          "shader_sha256": null,
+          "settle_frames_requested": "180",
+          "settle_frames": "180"
+        },
+        {
+          "scale": "0.25",
+          "exit": 0,
+          "png": true,
+          "trace": false,
+          "binary_sha256": "941c3a6d17c7be59f45efe514213997dda46b74bdeb5d842922b2c1626ad6c96",
+          "shader_sha256": null,
+          "settle_frames_requested": "180",
+          "settle_frames": "180"
+        },
+        {
+          "scale": "0.5",
+          "exit": 0,
+          "png": true,
+          "trace": false,
+          "binary_sha256": "941c3a6d17c7be59f45efe514213997dda46b74bdeb5d842922b2c1626ad6c96",
+          "shader_sha256": null,
+          "settle_frames_requested": "180",
+          "settle_frames": "180"
+        },
+        {
+          "scale": "1",
+          "exit": 0,
+          "png": true,
+          "trace": false,
+          "binary_sha256": "941c3a6d17c7be59f45efe514213997dda46b74bdeb5d842922b2c1626ad6c96",
+          "shader_sha256": null,
+          "settle_frames_requested": "180",
+          "settle_frames": "180"
+        },
+        {
+          "scale": "2",
+          "exit": 0,
+          "png": true,
+          "trace": false,
+          "binary_sha256": "941c3a6d17c7be59f45efe514213997dda46b74bdeb5d842922b2c1626ad6c96",
+          "shader_sha256": null,
+          "settle_frames_requested": "180",
+          "settle_frames": "180"
+        }
+      ],
+      "candidate_pngs": [
+        {
+          "scale": "0.25",
+          "path": "artifacts/bevy020/bridge-masked-final-hw/0.25/world.png",
+          "bytes": 117490,
+          "sha256": "0e38c89dd087ff19612c43c4f084c075770ebe31de08fa11d8e96b7920187a3e"
+        },
+        {
+          "scale": "0.5",
+          "path": "artifacts/bevy020/bridge-masked-final-hw/0.5/world.png",
+          "bytes": 301864,
+          "sha256": "03457586015153c449247165c3b233b445684973c2992e28c563f7e2f1a41748"
+        },
+        {
+          "scale": "1",
+          "path": "artifacts/bevy020/bridge-masked-final-hw/1/world.png",
+          "bytes": 818327,
+          "sha256": "6eb808c54266c118374ab882692604af801fd6b1df9380c63acd3f8f88c70eb5"
+        },
+        {
+          "scale": "2",
+          "path": "artifacts/bevy020/bridge-masked-final-hw/2/world.png",
+          "bytes": 1163633,
+          "sha256": "4981306ff52266e9f91320b6f7e475f8ee5604bc0e7e6dbaf9c01fb2fd1ee0e0"
+        },
+        {
+          "scale": "4",
+          "path": "artifacts/bevy020/bridge-masked-final-hw/4/world.png",
+          "bytes": 1440773,
+          "sha256": "2fe838cb6cdb38456a0c45951bcd1dbec9e1d095b37b94178e40f6bdd61e86ae"
+        },
+        {
+          "scale": "8",
+          "path": "artifacts/bevy020/bridge-masked-final-hw/8/world.png",
+          "bytes": 1440773,
+          "sha256": "b52c02a1d333ce59cd1ba3f325f39a3659950bafb5a8aca6b6645b570b65284e"
+        }
+      ]
+    },
+    "strict_result_kept_separate": true
+  },
+  "source_files": [
+    {
+      "path": "crates/openttdrs-client/src/camera.rs",
+      "bytes": 43164,
+      "sha256": "195a0c395777ee343977fdf7aa7e2e9923b1bb4916999c8bd80fdfd3550377cf"
+    },
+    {
+      "path": "crates/openttdrs-client/src/render/tiles/bridge_draw.rs",
+      "bytes": 164682,
+      "sha256": "24ccb23eaca30a677ec4aa326cd7bb0c6a81c2e5bd5e2146706cefe744859d50"
+    },
+    {
+      "path": "crates/openttdrs-client/src/render/tiles/spawn_coverage_tests.rs",
+      "bytes": 580413,
+      "sha256": "5b1daa17f02045ddcdba3200d18d1c91db1b00a608da023bab1a758895d767b0"
+    },
+    {
+      "path": "crates/openttdrs-client/src/render/house_viewport_sort.rs",
+      "bytes": 190765,
+      "sha256": "edaa352e86d427c94c9e31d6b8e8edb0c44c1381ba14b664d7ed1e4f3995ce7e"
+    },
+    {
+      "path": "crates/openttdrs-client/src/render/world/plugin.rs",
+      "bytes": 45923,
+      "sha256": "01d8e870cd28b7d596080894583a5d4a33eaab1ef915fac247ff66eccf43119c"
+    },
+    {
+      "path": "crates/openttdrs-core/examples/kale_bridge_crossings.rs",
+      "bytes": 5058,
+      "sha256": "1225647b61a7f3a8ba8c5c763019544c2adfa7f2068e3bcba1b78426edc5052d"
+    },
+    {
+      "path": "scripts/capture_kale_bridge_heads.py",
+      "bytes": 3866,
+      "sha256": "db16a4cd385e4f34ae4da33e5a0808d0cb80c460f3a9962ca944188bd9804e2e"
+    },
+    {
+      "path": "scripts/compare_renderer_upgrade.py",
+      "bytes": 4913,
+      "sha256": "f854ec7f491daf4c4d6b46924f38c75d96df724ee5f9f0ef3c1863bf8a460ac3"
+    },
+    {
+      "path": "Cargo.toml",
+      "bytes": 1695,
+      "sha256": "5d4bb81310c527cb24f039e3401c346880437ef53ae2e8b24c9b5c0c1ca3dabb"
+    },
+    {
+      "path": "Cargo.lock",
+      "bytes": 160653,
+      "sha256": "7fc6d68d0a9a4a6102dd81329a9b8bca57227280d8662b8ba7a524b69f9d297b"
+    }
+  ],
+  "checks": {
+    "core_tests_passed": 3086,
+    "core_tests_ignored": 6,
+    "client_tests_passed": 1721,
+    "client_tests_ignored": 3,
+    "native_origin_tests_passed": 2,
+    "fmt": true,
+    "core_and_client_clippy_all_targets_D_warnings": true,
+    "python_py_compile": true,
+    "parity_docs_fresh": true,
+    "diff_check": true,
+    "logs": [
+      {
+        "path": "artifacts/transport-follow/bridges/test-core.log",
+        "bytes": 10844,
+        "sha256": "15a0c5c81dd92013791c041522281850b7208630ac9ff76752406f846ab6a26f"
+      },
+      {
+        "path": "artifacts/transport-follow/bridges/clippy-core.log",
+        "bytes": 180,
+        "sha256": "b6b78aa3db38c6218f774c8728ca32ccd2d5e1b631120c75ba81e6be9f1907ec"
+      },
+      {
+        "path": "artifacts/transport-follow/bridges/test-client-masked.log",
+        "bytes": 13075,
+        "sha256": "228f6673a1866835c0fb5e8625de402679facbd0888ecd9050c8605ec19dd941"
+      },
+      {
+        "path": "artifacts/transport-follow/bridges/clippy-client-masked.log",
+        "bytes": 184,
+        "sha256": "914afb521fd9461edf039409e3fbbd5dc516a844ba76e211deaac747d556011b"
+      },
+      {
+        "path": "artifacts/transport-follow/bridges/test-oracle-masked.log",
+        "bytes": 352,
+        "sha256": "03c1a1a35f1a7df765b4cfbcc32d614d8e744708d7f31cf9852b649d5765fece"
+      },
+      {
+        "path": "artifacts/transport-follow/bridges/test-oracle-global-masked.log",
+        "bytes": 352,
+        "sha256": "f612214e403867f9b138ab186d63749518b25d73c745232bbff2e16ca5bf4328"
+      },
+      {
+        "path": "artifacts/transport-follow/bridges/build-client-masked.log",
+        "bytes": 189,
+        "sha256": "e93f6d43c6f903ae5cd8f5895804c0883891d4e7c488ebdb9c3d1d834f9440f8"
+      },
+      {
+        "path": "artifacts/transport-follow/bridges/fmt-masked.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "artifacts/transport-follow/bridges/docs-check.log",
+        "bytes": 359,
+        "sha256": "0b8430a312c1661aaf3a38c119e172aa7557826f6ef9024ff7fcea0007564e76"
+      },
+      {
+        "path": "artifacts/transport-follow/bridges/diff-check.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "artifacts/transport-follow/bridges/capture-masked.log",
+        "bytes": 749,
+        "sha256": "e2e4225f64e2ed9d1f7b0c29c4017d163c9091a9c7891d38ca8747ba0da7b181"
+      },
+      {
+        "path": "artifacts/transport-follow/bridges/capture-fixed-masked.log",
+        "bytes": 1331,
+        "sha256": "213ef846f9fdddd7e6b59d3c180518aaa03d34912ed67c133d8d086ebaf247b1"
+      },
+      {
+        "path": "artifacts/transport-follow/bridges/compare-masked.log",
+        "bytes": 1044,
+        "sha256": "042dfa69d41ef097c90c29a194b46fc38926a140d6449607834af2265098bbcb"
+      },
+      {
+        "path": "artifacts/transport-follow/bridges/compare-fixed-masked.log",
+        "bytes": 1006,
+        "sha256": "8a58ae875936ee65cccf80ed68a755eea8104443b8e32c0744b4d23778827cdd"
+      },
+      {
+        "path": "artifacts/transport-follow/bridges/crossings-5000.log",
+        "bytes": 842,
+        "sha256": "201183f90869a54961d1df1716482c8f788f59bfa30067fc70184d085129a910"
+      }
+    ]
+  },
+  "rejected_attempts": [
+    {
+      "path": "artifacts/transport-follow/bridges/raster-initial.json",
+      "reason": "head origin only: ground still covers head; pixel budget fails at 4 and 8"
+    },
+    {
+      "path": "artifacts/transport-follow/bridges/raster-order.json",
+      "reason": "origin and depth fixed, but capture recropping loses native rounding; pixel budget fails at 4 and 8"
+    },
+    {
+      "path": "artifacts/transport-follow/bridges/raster-fixed.json",
+      "reason": "interior rounding also applied at clamped camera; historical budget fails"
+    },
+    {
+      "path": "artifacts/transport-follow/bridges/raster-fixed-accepted.json",
+      "reason": "skipping edge rounding still worsens 1860 / 1757 pixels at 4 / 8"
+    },
+    {
+      "path": "artifacts/transport-follow/bridges/raster-fixed-phase.json",
+      "reason": "subtracting a uniform camera bias omits native viewport masking; historical budget fails"
+    },
+    {
+      "path": "artifacts/transport-follow/bridges/native-fixed",
+      "reason": "diagnostic only; 2 has in-progress smooth scroll and is not accepted; five other decoded images equal the historical reference"
+    },
+    {
+      "path": "artifacts/transport-follow/bridges/native-debug/2",
+      "reason": "native 15.3 helper does not export requested screenshot SORT_OUT; incomplete oracle rejected"
+    },
+    {
+      "path": "artifacts/transport-follow/bridges/test-oracle-global.log",
+      "reason": "relative fixture path fails because Cargo changes cwd; rerun with absolute paths passes"
+    },
+    {
+      "path": "artifacts/transport-follow/bridges/native",
+      "reason": "ramp camera centre (204,116) has a different inherited camera origin; not an acceptance input"
+    }
+  ],
+  "limits": [
+    "incremental raster budget passes; absolute mismatches remain and strict zero-loss acceptance can fail",
+    "crossings are observed in the Rust core; native bridge travel time, interpolated height and full bridge physics remain uncertified",
+    "one regional bridge crossing is witnessed, not every red bridge in the user's image",
+    "original Kale fleet and orders; AI, disasters and breakdowns disabled for the crossing probe",
+    "no global renderer, NewGRF, fleet or FPS certification; FPS work remains deferred"
+  ]
+}

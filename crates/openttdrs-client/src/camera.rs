@@ -118,7 +118,7 @@ fn openttd_inverse_remap(point: IVec2) -> IVec2 {
 /// Out2x/Out4x necesitan media pantalla. En Out8x la cuantización del recorte
 /// y la del atlas nativo se encuentran en un límite de bloque, y la referencia
 /// requiere un píxel completo para conservar el mismo origen raster.
-fn map_shot_edge_screen_bias(clamped: bool, capture_scale: f32) -> Vec2 {
+pub(crate) fn map_shot_edge_screen_bias(clamped: bool, capture_scale: f32) -> Vec2 {
     if !clamped {
         return Vec2::ZERO;
     }

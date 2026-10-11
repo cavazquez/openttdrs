@@ -989,6 +989,26 @@ fn assign_segment_proxy_depths(
     }
 }
 
+/// Local band parents also end a global parent's child draw block. Otherwise
+/// both the child and the proxy interpolate into the same depth slot and ECS
+/// allocation order decides which opaque pixels survive.
+fn restrict_child_windows_before_segment_proxies(
+    parents: &[(Entity, ViewportSortableParent, f32)],
+    proxy_depths: &mut [f32],
+    windows: &mut EntityHashMap<f32>,
+) {
+    proxy_depths.sort_unstable_by(f32::total_cmp);
+    for &(entity, _, depth) in parents {
+        let index = proxy_depths.partition_point(|&proxy_depth| proxy_depth <= depth);
+        if let Some(&limit) = proxy_depths.get(index) {
+            windows
+                .entry(entity)
+                .and_modify(|upper| *upper = upper.min(limit))
+                .or_insert(limit);
+        }
+    }
+}
+
 /// Asigna a los proxies de una banda entre los slots de sus parents normales.
 ///
 /// El sorter nativo se ejecuta una vez por banda. Los parents normales ya
@@ -1990,7 +2010,7 @@ pub(crate) fn sort_viewport_sortable_parents(
     // original parent to the same slot so all children preserve their block.
     // A vector keeps the choice deterministic when one block contributes
     // multiple promoted children.
-    for (promoted_entity, original_parent) in promoted_origins {
+    for &(promoted_entity, original_parent) in &promoted_origins {
         let Some(promoted_index) = input
             .iter()
             .position(|(entity, _, _)| *entity == promoted_entity)
@@ -2039,6 +2059,7 @@ pub(crate) fn sort_viewport_sortable_parents(
     let mut bands: Vec<_> = candidates_by_band.keys().copied().collect();
     bands.sort_unstable();
     let mut local_proxy_trace = Vec::new();
+    let mut local_proxy_depths = Vec::new();
     for band in bands {
         let Some(candidates) = candidates_by_band.remove(&band) else {
             continue;
@@ -2049,6 +2070,7 @@ pub(crate) fn sort_viewport_sortable_parents(
             &global_sorted_parents,
             &parent_states,
         );
+        local_proxy_depths.extend_from_slice(&proxy_depths);
         for (index, proxy_candidate) in candidates.into_iter().enumerate() {
             local_proxy_trace.push(ViewportSegmentProxyTrace {
                 band,
@@ -2109,6 +2131,19 @@ pub(crate) fn sort_viewport_sortable_parents(
                     entity.insert(chunk);
                 }
             }
+        }
+    }
+    restrict_child_windows_before_segment_proxies(
+        &global_sorted_parents,
+        &mut local_proxy_depths,
+        &mut child_depth_windows.next_parent_depth,
+    );
+    // Keep the same ceiling for the invisible source of a promoted child.
+    for (promoted_entity, original_parent) in promoted_origins {
+        if let Some(&limit) = child_depth_windows.next_parent_depth.get(&promoted_entity) {
+            child_depth_windows
+                .next_parent_depth
+                .insert(original_parent, limit);
         }
     }
     export_viewport_sort_trace(
@@ -4151,6 +4186,119 @@ mod tests {
             foundation_depth < ground_depth && ground_depth < building_depth,
             "el child debe quedar dentro de la secuencia foundation → ground → building; got {foundation_depth}, {ground_depth}, {building_depth}"
         );
+    }
+
+    #[test]
+    fn kale_foundation_ground_stays_before_segmented_bridge_head() {
+        // Native Kale tile (204,112): DrawFoundation(5423), its ground child
+        // (3981), then the maglev head (4372). The head is a local draw-band
+        // proxy, so it must also terminate the foundation's child interval.
+        let mut world = viewport_scope_test_world(256, 256);
+        world
+            .query_filtered::<&mut Window, With<PrimaryWindow>>()
+            .single_mut(&mut world)
+            .expect("window")
+            .resolution
+            .set(800.0, 600.0);
+        world
+            .query_filtered::<&mut Transform, With<PrimaryGameCamera>>()
+            .single_mut(&mut world)
+            .expect("camera")
+            .translation = Vec3::new(-2784.0, -5144.0, 999.0);
+        let sprite = |w, h| Sprite {
+            rect: Some(Rect::new(0.0, 0.0, w, h)),
+            ..default()
+        };
+        let foundation = world
+            .spawn((
+                ViewportSortableParent {
+                    sprite_id: 5423,
+                    bounds: ParentSpriteBounds::new(3264, 1792, 8, 3279, 1807, 14),
+                    insertion_key: viewport_insertion_key(204, 112, 0),
+                    source_depth: 3.161_34,
+                },
+                sprite(64.0, 32.0),
+                Anchor::CENTER,
+                Transform::from_xyz(-2943.0, -5055.0, 3.161_34),
+            ))
+            .id();
+        let ground = world
+            .spawn((
+                ViewportSortableChild {
+                    parent: foundation,
+                    source_depth: 3.161_16,
+                },
+                sprite(64.0, 31.0),
+                Anchor::CENTER,
+                Transform::from_xyz(-2943.0, -5055.5, 3.161_16),
+            ))
+            .id();
+        let head_sprite = sprite(48.0, 34.0);
+        let head_transform = Transform::from_xyz(-2943.0, -5051.0, 3.160_28);
+        let head = world
+            .spawn((
+                ViewportSortableParent {
+                    sprite_id: 4372,
+                    bounds: ParentSpriteBounds::new(3264, 1792, 16, 3279, 1807, 15),
+                    insertion_key: viewport_insertion_key(204, 112, 32),
+                    source_depth: 3.160_28,
+                },
+                ViewportSortableSegmentedSource {
+                    sprite: head_sprite.clone(),
+                    transform: head_transform,
+                },
+                head_sprite,
+                Anchor::CENTER,
+                head_transform,
+                Visibility::Inherited,
+            ))
+            .id();
+        world.spawn((
+            ViewportSortableParent {
+                sprite_id: 1302,
+                bounds: ParentSpriteBounds::new(3265, 1808, 16, 3265, 1823, 19),
+                insertion_key: viewport_insertion_key(204, 113, 48),
+                source_depth: 3.171_16,
+            },
+            sprite(34.0, 21.0),
+            Anchor::CENTER,
+            Transform::from_xyz(-2913.0, -5070.0, 3.171_16),
+        ));
+        let mut schedule = Schedule::default();
+        schedule.add_systems(
+            (
+                sort_viewport_sortable_parents,
+                sync_viewport_sortable_children,
+            )
+                .chain(),
+        );
+        for _ in 0..3 {
+            schedule.run(&mut world);
+            let foundation_z = world
+                .get::<Transform>(foundation)
+                .expect("foundation")
+                .translation
+                .z;
+            let ground_z = world
+                .get::<Transform>(ground)
+                .expect("ground")
+                .translation
+                .z;
+            let proxies: Vec<_> = world
+                .query::<(&ViewportSortableSegmentProxy, &Transform)>()
+                .iter(&world)
+                .filter(|(proxy, _)| proxy.source_child == head)
+                .map(|(_, transform)| transform.translation.z)
+                .collect();
+            assert!(
+                !proxies.is_empty(),
+                "head must have visible draw-band proxies"
+            );
+            assert!(
+                foundation_z < ground_z && proxies.iter().all(|&z| ground_z < z),
+                "native foundation -> ground -> head order broken: {foundation_z}, {ground_z}, {proxies:?}"
+            );
+        }
     }
 
     #[test]

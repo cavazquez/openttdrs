@@ -7849,6 +7849,232 @@ fn sloped_bridge_ramp_ground_attaches_to_the_last_foundation_parent() {
     assert_eq!(child.source_depth, transform.translation.z);
 }
 
+fn bridge_origin_test_world(map: Map, coords: Vec<TileCoord>, assets: WorldAssets) -> World {
+    let grid = RenderGrid::from_map(&map, map.dimensions().0, map.dimensions().1);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                for pos in &coords {
+                    let ctx = TileRenderContext::new(&m.0, &g.0, pos.x as u32, pos.y as u32);
+                    if matches!(ctx.kind, TileKind::RailBridge | TileKind::RoadBridge) {
+                        spawn_transport_object_tile(
+                            &mut commands,
+                            &a.0,
+                            None,
+                            None,
+                            &ctx,
+                            4.0,
+                            false,
+                            &m.0,
+                            m.0.dimensions(),
+                            &[],
+                            &[],
+                            None,
+                            &[],
+                            &[],
+                            None,
+                            None,
+                        );
+                    } else {
+                        spawn_bridge_middle(
+                            &mut commands,
+                            &m.0,
+                            m.0.dimensions(),
+                            &a.0,
+                            &ctx,
+                            false,
+                            &[],
+                            None,
+                            &[],
+                            None,
+                            None,
+                        );
+                    }
+                }
+            },
+        )
+        .expect("bridge origin spawn");
+    world
+}
+
+fn bridge_origin_test_map(rail: bool, leveled: bool, axis_y: bool) -> (Map, [TileCoord; 3]) {
+    let [north, middle, south] = if axis_y {
+        [
+            TileCoord::new(3, 1),
+            TileCoord::new(3, 2),
+            TileCoord::new(3, 4),
+        ]
+    } else {
+        [
+            TileCoord::new(1, 3),
+            TileCoord::new(2, 3),
+            TileCoord::new(4, 3),
+        ]
+    };
+    let mut map = Map::new_flat(8, 8, 2);
+    for (pos, dir) in [
+        (north, if axis_y { 1 } else { 2 }),
+        (south, if axis_y { 3 } else { 0 }),
+    ] {
+        let mut ramp = tile_template();
+        ramp.height = 2;
+        ramp.kind = if rail {
+            TileKind::RailBridge
+        } else {
+            TileKind::RoadBridge
+        };
+        ramp.mapt = 0x90;
+        ramp.m5 = 0x80 | dir | if rail { 0 } else { 4 };
+        ramp.m6 = set_bridge_type_m6(0, BridgeType::GirderSteelAlt);
+        map.set_tile(pos, ramp).expect("bridge head");
+        if leveled {
+            for corner in [
+                TileCoord::new(pos.x + 1, pos.y),
+                TileCoord::new(pos.x, pos.y + 1),
+                TileCoord::new(pos.x + 1, pos.y + 1),
+            ] {
+                map.set_height(corner, 3).expect("flattening foundation");
+            }
+        }
+    }
+    for pos in [middle, TileCoord::new(3, 3)] {
+        let raw = map.get(pos).expect("middle tile");
+        map.set_mapt_m5(pos, set_bridge_middle_mapt(raw.mapt, axis_y), raw.m5)
+            .expect("bridge above");
+    }
+    (map, [north, middle, south])
+}
+
+#[test]
+fn bridge_heads_use_native_draw_origin_in_all_four_directions() {
+    let assets = boot_assets_app();
+    for rail in [false, true] {
+        for leveled in [false, true] {
+            for axis_y in [false, true] {
+                let (map, [north, middle, south]) = bridge_origin_test_map(rail, leveled, axis_y);
+                let grid = RenderGrid::from_map(&map, 8, 8);
+                let ctxs: Vec<_> = [north, middle, south]
+                    .map(|pos| TileRenderContext::new(&map, &grid, pos.x as u32, pos.y as u32))
+                    .into();
+                let mut world =
+                    bridge_origin_test_world(map, vec![north, middle, south], assets.clone());
+                for (index, ctx) in ctxs.iter().enumerate() {
+                    let key = viewport_insertion_key(ctx.tx, ctx.ty, 32);
+                    let (parent, transform) = world
+                        .query::<(&ViewportSortableParent, &Transform)>()
+                        .iter(&world)
+                        .find(|(parent, _)| parent.insertion_key == key)
+                        .expect("bridge sprite parent");
+                    let (_, h, _, yrel) = crate::sprites::bridge_sprite_meta(parent.sprite_id)
+                        .expect("bridge sprite metadata");
+                    let origin_z = transform.translation.y + yrel + h / 2.0 - ctx.iso_pos.y;
+                    // Native DrawTile_TunnelBridge uses post-foundation ti->z;
+                    // DrawBridgeMiddle alone uses GetBridgePixelHeight() - 3.
+                    let native_z = if index == 1 {
+                        if leveled { 29.0 } else { 21.0 }
+                    } else if leveled {
+                        24.0
+                    } else {
+                        16.0
+                    };
+                    assert_eq!(
+                        origin_z, native_z,
+                        "rail={rail}, leveled={leveled}, axis_y={axis_y}, tile={:?}",
+                        ctx.coord
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires OPENTTDRS_BRIDGE_SAV, OPENTTDRS_BRIDGE_ORACLE, OPENTTDRS_BRIDGE_ORIGINS_OUT"]
+fn kale_bridge_draw_origins_match_native_oracle() {
+    let sav = std::env::var("OPENTTDRS_BRIDGE_SAV").expect("bridge SAV");
+    let oracle = std::env::var("OPENTTDRS_BRIDGE_ORACLE").expect("native world-draw oracle");
+    let out = std::env::var("OPENTTDRS_BRIDGE_ORIGINS_OUT").expect("bridge origins report");
+    std::fs::write(&out, b"{\"passed\":false,\"stage\":\"preparing\"}\n").expect("initial report");
+    let state = openttdrs_core::GameState::from_sav_game(
+        openttdrs_core::sav::load(&std::fs::read(sav).expect("SAV bytes")).expect("SAV decode"),
+    );
+    let native: Vec<serde_json::Value> = std::fs::read_to_string(oracle)
+        .expect("oracle bytes")
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("native row"))
+        .collect();
+    assert_eq!(native[0]["producer"], "openttd");
+    assert_eq!(native.last().expect("footer")["kind"], "complete");
+    let draws: Vec<_> = native
+        .iter()
+        .filter(|r| {
+            let pos = TileCoord::new(
+                r["x"].as_i64().unwrap_or(-1) as i32,
+                r["y"].as_i64().unwrap_or(-1) as i32,
+            );
+            let bridge_piece = state.map.get(pos).is_some_and(|tile| {
+                if matches!(tile.kind, TileKind::RailBridge | TileKind::RoadBridge) {
+                    r["bounds"]["oz"] == 0
+                } else {
+                    openttdrs_core::bridge_above_axis_from_mapt(tile.mapt).is_some()
+                        && r["bounds"]["oz"] == 3
+                }
+            });
+            r["primitive"] == "sortable"
+                && r["combine_group"].is_number()
+                && bridge_piece
+                && r["world"]["x"].as_i64() == r["x"].as_i64().map(|x| x * 16)
+                && r["world"]["y"].as_i64() == r["y"].as_i64().map(|y| y * 16)
+        })
+        .collect();
+    let coords: Vec<_> = draws
+        .iter()
+        .map(|r| {
+            TileCoord::new(
+                r["x"].as_i64().expect("x") as i32,
+                r["y"].as_i64().expect("y") as i32,
+            )
+        })
+        .collect();
+    let grid = RenderGrid::from_map(&state.map, 256, 256);
+    let ctxs: Vec<_> = coords
+        .iter()
+        .map(|p| TileRenderContext::new(&state.map, &grid, p.x as u32, p.y as u32))
+        .collect();
+    let mut world = bridge_origin_test_world(state.map, coords, boot_assets_app());
+    let mut rows = Vec::new();
+    for (r, ctx) in draws.iter().zip(ctxs) {
+        let native_id = r["sprite"]["id"].as_u64().expect("native sprite ID") as u32;
+        let key = viewport_insertion_key(ctx.tx, ctx.ty, 32);
+        let actual = world
+            .query::<(&ViewportSortableParent, &Transform)>()
+            .iter(&world)
+            .find(|(parent, _)| parent.insertion_key == key && parent.sprite_id == native_id);
+        let actual_z = actual.map(|(_, transform)| {
+            let (_, h, _, yrel) = crate::sprites::bridge_sprite_meta(native_id).expect("metadata");
+            transform.translation.y + yrel + h / 2.0 - ctx.iso_pos.y
+        });
+        let native_z = r["world"]["z"].as_f64().expect("native origin") as f32;
+        rows.push(serde_json::json!({"tile":ctx.coord,"sprite":native_id,"head":matches!(ctx.kind,TileKind::RailBridge | TileKind::RoadBridge),"native_z":native_z,"actual_z":actual_z,"matches":actual_z == Some(native_z)}));
+    }
+    let heads = rows.iter().filter(|r| r["head"] == true).count();
+    let passed = heads >= 20 && rows.len() > heads && rows.iter().all(|r| r["matches"] == true);
+    let report = serde_json::json!({"passed":passed,"heads":heads,"middle_floors":rows.len()-heads,"rows":rows});
+    std::fs::write(
+        out,
+        serde_json::to_vec_pretty(&report).expect("report JSON"),
+    )
+    .expect("write report");
+    assert!(
+        passed,
+        "bridge origins differ from native draw calls: {report}"
+    );
+}
+
 #[test]
 fn sloped_rail_track_attaches_to_its_foundation_parent() {
     let assets = boot_assets_app();

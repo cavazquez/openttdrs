@@ -148,7 +148,17 @@ fn sync_native_map_sprite_position(
                 Without<crate::render::MapPreviewCamera>,
             ),
         >,
-        Query<(Entity, Ref<Sprite>, &mut Transform, &Anchor), With<crate::render::MapVisualLayer>>,
+        Query<
+            (
+                Entity,
+                Ref<Sprite>,
+                &mut Transform,
+                &Anchor,
+                Has<crate::render::ViewportSortableSegmentedSource>,
+                Has<crate::render::house_viewport_sort::ViewportSortableSegmentProxy>,
+            ),
+            With<crate::render::MapVisualLayer>,
+        >,
     )>,
 ) {
     let capture_requested = crate::sprites::company_palette::native_zoom_capture_requested();
@@ -172,14 +182,23 @@ fn sync_native_map_sprite_position(
     if !scale.is_finite() || !matches!(scale.round() as i32, 2 | 4 | 8) {
         return;
     }
-    let Some(rounding) =
-        native_map_sprite_position_rounding(capture_requested, scale, camera_state.clamped)
-    else {
-        return;
-    };
+    let ordinary_rounding =
+        native_map_sprite_position_rounding(capture_requested, scale, camera_state.clamped);
     let mut sprites = queries.p1();
-    for (entity, sprite, mut transform, anchor) in &mut sprites {
-        if !sprite.is_added() && !pending.contains(&entity) {
+    for (entity, sprite, mut transform, anchor, source, proxy) in &mut sprites {
+        let segmented = source || proxy;
+        // GfxBlitter applies UnScaleByZoom (ceil) after the sprite offset.
+        // A draw-band proxy restores its source pose when clipped again;
+        // round that final pose, including Out8x, rather than only its spawn.
+        let Some(rounding) = ordinary_rounding.or_else(|| {
+            (segmented && scale == 8.0).then_some(NativeMapSpritePositionRounding::Ceil)
+        }) else {
+            continue;
+        };
+        if !sprite.is_added()
+            && !pending.contains(&entity)
+            && !(segmented && transform.is_changed())
+        {
             continue;
         }
         if sprite.custom_size.is_some()
@@ -197,16 +216,18 @@ fn sync_native_map_sprite_position(
             };
             native_map_sprite_visible_size(&sprite, rect.as_rect())
         } else {
-            if rounding != NativeMapSpritePositionRounding::Floor {
+            if rounding != NativeMapSpritePositionRounding::Floor && !segmented {
                 pending.remove(&entity);
                 continue;
             }
             let image_size = images
                 .get(&sprite.image)
                 .map(|image| image.size().as_vec2());
-            let Some(source_size) =
+            let Some(source_size) = (if segmented {
+                sprite.rect.map(|rect| rect.size()).or(image_size)
+            } else {
                 native_map_direct_sprite_source_size(&sprite, rounding, image_size)
-            else {
+            }) else {
                 pending.insert(entity);
                 continue;
             };
@@ -214,21 +235,32 @@ fn sync_native_map_sprite_position(
         };
         let current_left = transform.translation.x - source_size.x * 0.5;
         let current_top = transform.translation.y + source_size.y * 0.5;
+        // ViewportDoDraw masks left/top to whole zoom blocks before blitting.
+        // Recover that native origin before quantizing a restored band pose;
+        // the capture camera's sample-centre bias is not part of the mask.
+        let (native_left, native_top) = if segmented && camera_state.clamped && scale >= 4.0 {
+            let native_camera = camera - crate::camera::map_shot_edge_screen_bias(true, scale);
+            (
+                ((native_camera.x - window_width * 0.5 * scale) / scale).floor() * scale,
+                ((native_camera.y + window_height * 0.5 * scale) / scale).ceil() * scale,
+            )
+        } else {
+            (
+                camera.x - window_width * 0.5 * scale,
+                camera.y + window_height * 0.5 * scale,
+            )
+        };
         let screen_left = match rounding {
             NativeMapSpritePositionRounding::Floor => {
                 ((current_left - camera.x) / scale + window_width * 0.5).floor()
             }
-            NativeMapSpritePositionRounding::Ceil => {
-                ((current_left - camera.x) / scale + window_width * 0.5).ceil()
-            }
+            NativeMapSpritePositionRounding::Ceil => ((current_left - native_left) / scale).ceil(),
         };
         let screen_top = match rounding {
             NativeMapSpritePositionRounding::Floor => {
                 (window_height * 0.5 - (current_top - camera.y) / scale).floor()
             }
-            NativeMapSpritePositionRounding::Ceil => {
-                (window_height * 0.5 - (current_top - camera.y) / scale).ceil()
-            }
+            NativeMapSpritePositionRounding::Ceil => ((native_top - current_top) / scale).ceil(),
         };
         let world_left = camera.x + (screen_left - window_width * 0.5) * scale;
         let world_top = camera.y + (window_height * 0.5 - screen_top) * scale;
@@ -586,9 +618,9 @@ impl Plugin for WorldRenderPlugin {
                     sync_map_tile_spawn_viewport,
                     super::remap::sync_company_colored_sprites,
                     apply_remap_map_visuals,
-                    sync_native_map_sprite_position,
                     sort_viewport_sortable_parents,
                     sync_viewport_sortable_children,
+                    sync_native_map_sprite_position,
                     sync_flat_water_raster_footprint,
                     sync_map_label_lod,
                 )
@@ -857,6 +889,147 @@ mod tests {
                 .translation,
             Vec3::new(0.5, 1.5, 7.0)
         );
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn native_segmented_position_rounding_survives_recropping() {
+        use bevy::prelude::{App, Assets, TextureAtlas, TextureAtlasLayout, Transform, UVec2};
+        use bevy::sprite::Anchor;
+        use bevy::window::PrimaryWindow;
+        const PROBE: &str = "OPENTTDRS_TEST_SEGMENT_NATIVE_POSITION";
+        if std::env::var_os(PROBE).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+                .args(["--exact", "render::world::plugin::tests::native_segmented_position_rounding_survives_recropping", "--nocapture"])
+                .env(PROBE, "1")
+                .env("OPENTTDRS_MAP_SHOT", "segment-position-test")
+                .env("OPENTTDRS_MAP_SHOT_NATIVE_ZOOM", "1")
+                .output()
+                .expect("isolated native capture test");
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        for (scale, expected_xy, clamped_camera, expected_clamped_xy) in [
+            (
+                4.0,
+                Vec2::new(-2940.0, -5053.0),
+                Vec2::new(-2710.0, -2876.0),
+                Vec2::new(-2622.0, -2153.5),
+            ),
+            (
+                8.0,
+                Vec2::new(-2936.0, -5057.0),
+                Vec2::new(-716.0, -3870.0),
+                Vec2::new(-2620.0, -2155.5),
+            ),
+        ] {
+            let mut app = App::new();
+            app.init_resource::<Assets<bevy::prelude::Image>>();
+            app.init_resource::<Assets<TextureAtlasLayout>>();
+            app.init_resource::<crate::camera::MapShotCameraState>();
+            app.add_systems(
+                bevy::prelude::Update,
+                super::sync_native_map_sprite_position,
+            );
+            app.world_mut().spawn((
+                bevy::prelude::Window {
+                    resolution: (800, 600).into(),
+                    ..Default::default()
+                },
+                PrimaryWindow,
+            ));
+            let camera_entity = app
+                .world_mut()
+                .spawn((
+                    crate::render::PrimaryGameCamera,
+                    Transform::from_xyz(-2784.0, -5144.0, 999.9),
+                    Projection::Orthographic(OrthographicProjection {
+                        scale,
+                        ..OrthographicProjection::default_2d()
+                    }),
+                ))
+                .id();
+            let layout = app
+                .world_mut()
+                .resource_mut::<Assets<TextureAtlasLayout>>()
+                .add(TextureAtlasLayout::from_grid(
+                    UVec2::new(48, 34),
+                    1,
+                    1,
+                    None,
+                    None,
+                ));
+            let sprite = Sprite {
+                texture_atlas: Some(TextureAtlas { layout, index: 0 }),
+                ..Default::default()
+            };
+            // Actual Kale head 4372: xrel=-23, yrel=-6, size 48x34,
+            // origin iso(204,112) with post-foundation z=16. GfxBlitter's
+            // UnScaleByZoom rounds the resulting top/left upward.
+            let raw = Transform::from_xyz(-2943.0, -5051.0, 3.161_36);
+            let entity = app
+                .world_mut()
+                .spawn((
+                    crate::render::MapVisualLayer,
+                    crate::render::ViewportSortableSegmentedSource {
+                        sprite: sprite.clone(),
+                        transform: raw,
+                    },
+                    sprite,
+                    Anchor::CENTER,
+                    raw,
+                ))
+                .id();
+            for _ in 0..3 {
+                *app.world_mut()
+                    .get_mut::<Transform>(entity)
+                    .expect("recropped pose") = raw;
+                app.update();
+                assert_eq!(
+                    app.world()
+                        .get::<Transform>(entity)
+                        .expect("rounded pose")
+                        .translation,
+                    expected_xy.extend(raw.translation.z),
+                    "native rounding must survive the next recrop at scale {scale}"
+                );
+            }
+            app.world_mut()
+                .resource_mut::<crate::camera::MapShotCameraState>()
+                .clamped = true;
+            app.world_mut()
+                .get_mut::<Transform>(camera_entity)
+                .expect("clamped camera")
+                .translation = clamped_camera.extend(999.9);
+            // Native Kale head 2440 at (108,26), z=0, NFO size 48x27.
+            // The recorded edge cameras imply native masked origins
+            // (-4308,-1676) / (-3912,-1472), then blitter left/top
+            // (416,116) / (159,84). The two axes have different phases.
+            app.world_mut()
+                .get_mut::<Sprite>(entity)
+                .expect("head sprite")
+                .rect = Some(Rect::new(0.0, 0.0, 48.0, 27.0));
+            let raw = Transform::from_xyz(-2623.0, -2151.5, 1.343_4);
+            for _ in 0..3 {
+                *app.world_mut()
+                    .get_mut::<Transform>(entity)
+                    .expect("clamped pose") = raw;
+                app.update();
+                assert_eq!(
+                    app.world()
+                        .get::<Transform>(entity)
+                        .expect("clamped pose")
+                        .translation,
+                    expected_clamped_xy.extend(raw.translation.z),
+                    "native viewport masking must precede ceil at scale {scale}"
+                );
+            }
+        }
     }
 
     #[test]

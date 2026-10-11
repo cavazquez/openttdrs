@@ -36,8 +36,12 @@ aceptado con su evidencia histórica. La siguiente solicitud abrió el
 [servicio controlado del camión 314](kale-truck-follow.md): carga, descarga,
 entrada y salida del depósito, guardado en viaje y seis zooms. Queda aceptado
 en esa fixture; barcos y aeronaves requieren sus propios casos. La observación
-posterior del usuario abre la revisión de cabeceras y cruce de puentes en Kale,
-actualmente en curso. El bloque de FPS continúa aplazado.
+posterior del usuario abrió la [revisión de conexiones de puentes de Kale](kale-bridge-connections.md):
+altura de cabeceras, orden del cimiento y suelo, fase de captura y testigos de
+cruce. Queda aceptada con dos escenas en seis zooms y el presupuesto acordado;
+conserva como pendientes la física nativa completa de puentes y la paridad
+global del renderer. Termina este alcance por indicación del usuario. El
+bloque de FPS continúa aplazado.
 
 ## Entrega alpha anterior (cumplida)
 

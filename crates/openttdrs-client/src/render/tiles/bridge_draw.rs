@@ -3510,7 +3510,11 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
     let front_id = if on_ramp { 0 } else { ids.front[span.axis] };
     let pillar_id = if on_ramp { 0 } else { ids.pillar[span.axis] };
     let surface_z = bridge_surface_z(foundation_base_z, span.deck_z, on_ramp);
-    let z_draw_px = f32::from(surface_z) * HEIGHT_PX - BRIDGE_Z_START;
+    // `DrawTile_TunnelBridge` places heads at the post-foundation ti->z.
+    // Only `DrawBridgeMiddle` subtracts BRIDGE_Z_START from the deck height.
+    // Sharing that offset lowered every head by three pixels, breaking its
+    // connection to the adjacent rail/road even with correct sortable bounds.
+    let z_draw_px = f32::from(surface_z) * HEIGHT_PX - if on_ramp { 0.0 } else { BRIDGE_Z_START };
     let custom_rear = custom_bridge_sprite(
         bridge_spec_catalog,
         span,

@@ -1,0 +1,422 @@
+{
+  "schema": 1,
+  "version": "0.1.0-alpha.6",
+  "source_sha": "99814b1ab6b2729aa9060144785a8d6d206d9895",
+  "verified_at_utc": "2026-10-11T05:15:23.424156+00:00",
+  "publication": "complete",
+  "github": {
+    "tag": "v0.1.0-alpha.6",
+    "url": "https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.6",
+    "prerelease": true,
+    "workflow_url": "https://github.com/cavazquez/openttdrs/actions/runs/38113577251",
+    "workflow_conclusion": "success",
+    "asset_count": 9,
+    "packages": [
+      {
+        "platform": "linux-x86_64",
+        "hashes": {
+          "archive": {
+            "file": "openttdrs-0.1.0-alpha.6-linux-x86_64.tar.gz",
+            "sha256": "fdefcf95581077104d0d5c2fcc88d67a173aece136eeab33ec90c06d8d6afd76"
+          },
+          "client": {
+            "file": "openttdrs-client",
+            "sha256": "e04a75bccd41e11fe0a9595b034ad7d4a589ad6bcb1396fb32676df04ea05872"
+          },
+          "dedicated": {
+            "file": "openttdrs-dedicated",
+            "sha256": "5f05053c990e09dcc750801be17d32590ad3f3b28f74d568e7fe9ff658ff3473"
+          }
+        },
+        "smokes": {
+          "archive_extraction": "passed",
+          "assets": "passed",
+          "audio": "passed",
+          "client": "passed",
+          "client_server_handshake": "passed",
+          "dedicated": "passed",
+          "fonts": "passed"
+        },
+        "linux_glibc_baseline": "2.35",
+        "downloaded_hashes_verified": true,
+        "base_grf_embedded_in_client_and_dedicated": true
+      },
+      {
+        "platform": "windows-x86_64",
+        "hashes": {
+          "archive": {
+            "file": "openttdrs-0.1.0-alpha.6-windows-x86_64.zip",
+            "sha256": "dbf88601ae0f5c314cba02048e6ef92192e50fa1cda1d554cfbf8f4e5f367bf1"
+          },
+          "client": {
+            "file": "openttdrs-client.exe",
+            "sha256": "468ae99a6603b4c1bd5a15d62eb9eb850023793106c9fdce1ad90c24e91e4332"
+          },
+          "dedicated": {
+            "file": "openttdrs-dedicated.exe",
+            "sha256": "c882d7d68976f0db64ef217d06c5c207635984088a62ae85e9d9b11017ec9d50"
+          }
+        },
+        "smokes": {
+          "archive_extraction": "passed",
+          "assets": "passed",
+          "audio": "passed",
+          "client": "passed",
+          "client_server_handshake": "passed",
+          "dedicated": "passed",
+          "fonts": "passed"
+        },
+        "linux_glibc_baseline": null,
+        "downloaded_hashes_verified": true,
+        "base_grf_embedded_in_client_and_dedicated": true
+      },
+      {
+        "platform": "macos-arm64",
+        "hashes": {
+          "archive": {
+            "file": "openttdrs-0.1.0-alpha.6-macos-arm64.tar.gz",
+            "sha256": "f467b0532a8272f013be06f8d186fb6510aafdbadc393b1217b030f3e22fd549"
+          },
+          "client": {
+            "file": "openttdrs-client",
+            "sha256": "4a1a535cd8de2584ac00f67a96d5a12f8b2dd5032efa1083250965a648a33383"
+          },
+          "dedicated": {
+            "file": "openttdrs-dedicated",
+            "sha256": "a8f4889010ac980fb38e3c4af6e4790b85001e5393001753dbb0c7f7ad024d84"
+          }
+        },
+        "smokes": {
+          "archive_extraction": "passed",
+          "assets": "passed",
+          "audio": "passed",
+          "client": "passed",
+          "client_server_handshake": "passed",
+          "dedicated": "passed",
+          "fonts": "passed"
+        },
+        "linux_glibc_baseline": null,
+        "downloaded_hashes_verified": true,
+        "base_grf_embedded_in_client_and_dedicated": true
+      }
+    ]
+  },
+  "snap": {
+    "source_sha": "f268e9248efabbfa157dfb8726009d9f17340bd8",
+    "url": "https://snapcraft.io/openttdrs",
+    "channel": "latest/edge",
+    "revision": 6,
+    "store_integrity": {
+      "passed": true,
+      "revision": 6,
+      "channel": "latest/edge",
+      "downloaded_from_store": true,
+      "sha256": "bf9e85c9865bcfc804651e5a98e8803279ccfda4d1a922347a5eea40fa2034f6",
+      "byte_identical_to_validated_package": true,
+      "store_assertion_revision_size_digest_verified": true,
+      "size_bytes": 113397760
+    },
+    "tracked_source_files_verified_in_build": [
+      3898,
+      3898
+    ],
+    "binaries": [
+      {
+        "name": "openttdrs-client",
+        "sha256": "62f13aac4fc471ac2e579e27c9df3ef7d79399f23ec63fd068f19bdeef0ba0ea",
+        "embedded_base_grf": true
+      },
+      {
+        "name": "openttdrs-dedicated",
+        "sha256": "973ecb338a4b9c46f736aaf3c53ab979e17399939ba15ca707dc2f836d8faa46",
+        "embedded_base_grf": true
+      }
+    ],
+    "readonly_launcher_assets_and_menu_smoke": "passed",
+    "installed_confinement_tested": false
+  },
+  "local_checks": {
+    "core_passed": 3087,
+    "core_failed": 0,
+    "core_ignored": 6,
+    "client_passed": 1721,
+    "client_failed": 0,
+    "client_ignored": 3,
+    "core_clippy": "passed",
+    "client_clippy": "passed",
+    "release_script_tests": 13,
+    "metadata": "passed",
+    "docs": "passed",
+    "fmt": "passed"
+  },
+  "local_rust_tests_source_sha": "f268e9248efabbfa157dfb8726009d9f17340bd8",
+  "github_fix_changes_rust_code_or_versioned_graphics": false,
+  "source_checks": [
+    {
+      "name": "check",
+      "conclusion": "success",
+      "html_url": "https://github.com/cavazquez/openttdrs/actions/runs/38112525742/job/114393396208"
+    },
+    {
+      "name": "Python (runs)",
+      "conclusion": "success",
+      "html_url": "https://github.com/cavazquez/openttdrs/actions/runs/38112525742/job/114390931427"
+    },
+    {
+      "name": "Python (py_compile)",
+      "conclusion": "success",
+      "html_url": "https://github.com/cavazquez/openttdrs/actions/runs/38112525742/job/114390931413"
+    },
+    {
+      "name": "Python (golden)",
+      "conclusion": "success",
+      "html_url": "https://github.com/cavazquez/openttdrs/actions/runs/38112525742/job/114390931372"
+    },
+    {
+      "name": "rust",
+      "conclusion": "success",
+      "html_url": "https://github.com/cavazquez/openttdrs/actions/runs/38112525742/job/114390931294"
+    },
+    {
+      "name": "cargo check (macos-latest)",
+      "conclusion": "success",
+      "html_url": "https://github.com/cavazquez/openttdrs/actions/runs/38112525754/job/114390872678"
+    },
+    {
+      "name": "cargo check (windows-latest)",
+      "conclusion": "success",
+      "html_url": "https://github.com/cavazquez/openttdrs/actions/runs/38112525754/job/114390872560"
+    },
+    {
+      "name": "replay",
+      "conclusion": "success",
+      "html_url": "https://github.com/cavazquez/openttdrs/actions/runs/38112525726/job/114390872522"
+    }
+  ],
+  "base_foundations": {
+    "slots": 90,
+    "climates": 4,
+    "regression": "bundled_base_foundations_are_complete_in_every_climate",
+    "upstream": {
+      "source": "https://cdn.openttd.org/opengfx-releases/8.0/opengfx-8.0-all.zip",
+      "archive_sha256": "43a0c1dabf39cb865394f3a6cc36d4da5c10ecfaaf55652043104806810903be",
+      "files": [
+        {
+          "name": "ogfxe_extra.grf",
+          "upstream_member": "opengfx-8.0/ogfxe_extra.grf",
+          "bytes": 988215,
+          "sha256": "6472d934f15210dc4ad03acaad12d1e2717f4f5f836495cdd78bfc45fcbb0adb",
+          "identical": true
+        },
+        {
+          "name": "readme.txt",
+          "upstream_member": "opengfx-8.0/readme.txt",
+          "bytes": 15140,
+          "sha256": "c3021f3fb1c9c0f5de501772d5fe099d4c483651f60ab253b2cb291b367de3d2",
+          "identical": true
+        },
+        {
+          "name": "license.txt",
+          "upstream_member": "opengfx-8.0/license.txt",
+          "bytes": 18092,
+          "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+          "identical": true
+        }
+      ],
+      "passed": true
+    }
+  },
+  "bridge_scene": {
+    "sav": "save/Kale_TitleGame.sav",
+    "sav_sha256": "584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69",
+    "center": [
+      204,
+      117
+    ],
+    "resolution": [
+      800,
+      600
+    ],
+    "settle_frames": 40,
+    "paused": true,
+    "native_zoom": true,
+    "accepted_scene": "artifacts/transport-follow/bridges/masked-final",
+    "native_oracle": "artifacts/transport-follow/bridges/native-flat",
+    "snap": {
+      "client_sha256": "62f13aac4fc471ac2e579e27c9df3ef7d79399f23ec63fd068f19bdeef0ba0ea",
+      "isolated_cwd": true,
+      "fresh_profile_per_zoom": true,
+      "own_packaged_assets": true,
+      "acceptance": {
+        "metric": "worsened_pixels",
+        "exclusive_limit": 1000
+      },
+      "strict_passed": true,
+      "budget_passed": true,
+      "zooms": [
+        {
+          "scale": "0.25",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "native_before": 15608,
+          "native_after": 15608,
+          "baseline_sha256": "22bfc62a27b98682d4f4cfb0f78757abbc58ee048ef40c4e774ebcbd9a59e659",
+          "candidate_sha256": "22bfc62a27b98682d4f4cfb0f78757abbc58ee048ef40c4e774ebcbd9a59e659",
+          "oracle_sha256": "cb9f128edf76bcbdd415a7d32a01bafefc415ebe2a309b36cf17303aa12a287f"
+        },
+        {
+          "scale": "0.5",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "native_before": 17746,
+          "native_after": 17746,
+          "baseline_sha256": "900e398b70b55abfc68b97ce72d2cb789ae787d5dd9e1e8e029512c7c491e14b",
+          "candidate_sha256": "900e398b70b55abfc68b97ce72d2cb789ae787d5dd9e1e8e029512c7c491e14b",
+          "oracle_sha256": "1cccdaab4d2278d00c7ac5da0cf394e1363d87a25c14cb24e4e82c027820fa88"
+        },
+        {
+          "scale": "1",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "native_before": 12449,
+          "native_after": 12449,
+          "baseline_sha256": "79bd06733af601d2c049f9b38e98db535429b9bbc8e8af5c8006c514e5d419a8",
+          "candidate_sha256": "79bd06733af601d2c049f9b38e98db535429b9bbc8e8af5c8006c514e5d419a8",
+          "oracle_sha256": "21109e4899f6abeca881b6c3bfad08e66e763d807dd0265c188506e83f99aa8d"
+        },
+        {
+          "scale": "2",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "native_before": 297573,
+          "native_after": 297573,
+          "baseline_sha256": "8fb98ee20db72b80d67b5a464c00de3b95297ea877ce1736c6063c18d3a8b585",
+          "candidate_sha256": "8fb98ee20db72b80d67b5a464c00de3b95297ea877ce1736c6063c18d3a8b585",
+          "oracle_sha256": "dadfcf61400ca49334ac79fbbd43cf0ab1d3adbb16a5293f15808f9ce9b7e0c9"
+        },
+        {
+          "scale": "4",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "native_before": 40948,
+          "native_after": 40948,
+          "baseline_sha256": "2c16f140ab18bb3ff01f44a8cdace4385f3d7af9aec3c8e4fb163487e997061d",
+          "candidate_sha256": "2c16f140ab18bb3ff01f44a8cdace4385f3d7af9aec3c8e4fb163487e997061d",
+          "oracle_sha256": "04711e98390be67e0ea3b9abdede7f472bdeb64a027892667c28ecca262bdf9a"
+        },
+        {
+          "scale": "8",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "native_before": 307156,
+          "native_after": 307156,
+          "baseline_sha256": "c78ad474b5c216ef55000e1ba1f65ec6a1bfc3997cdf08032ba474e8be4be2be",
+          "candidate_sha256": "c78ad474b5c216ef55000e1ba1f65ec6a1bfc3997cdf08032ba474e8be4be2be",
+          "oracle_sha256": "8a417b2192ba2a20e08e5c60d1a4a6817c309b3cb4c67bac3605715befacb0b6"
+        }
+      ]
+    },
+    "github_linux": {
+      "client_sha256": "e04a75bccd41e11fe0a9595b034ad7d4a589ad6bcb1396fb32676df04ea05872",
+      "isolated_cwd": true,
+      "fresh_profile_per_zoom": true,
+      "own_packaged_assets": true,
+      "acceptance": {
+        "metric": "worsened_pixels",
+        "exclusive_limit": 1000
+      },
+      "strict_passed": true,
+      "budget_passed": true,
+      "zooms": [
+        {
+          "scale": "0.25",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "native_before": 15608,
+          "native_after": 15608,
+          "baseline_sha256": "22bfc62a27b98682d4f4cfb0f78757abbc58ee048ef40c4e774ebcbd9a59e659",
+          "candidate_sha256": "22bfc62a27b98682d4f4cfb0f78757abbc58ee048ef40c4e774ebcbd9a59e659",
+          "oracle_sha256": "cb9f128edf76bcbdd415a7d32a01bafefc415ebe2a309b36cf17303aa12a287f"
+        },
+        {
+          "scale": "0.5",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "native_before": 17746,
+          "native_after": 17746,
+          "baseline_sha256": "900e398b70b55abfc68b97ce72d2cb789ae787d5dd9e1e8e029512c7c491e14b",
+          "candidate_sha256": "900e398b70b55abfc68b97ce72d2cb789ae787d5dd9e1e8e029512c7c491e14b",
+          "oracle_sha256": "1cccdaab4d2278d00c7ac5da0cf394e1363d87a25c14cb24e4e82c027820fa88"
+        },
+        {
+          "scale": "1",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "native_before": 12449,
+          "native_after": 12449,
+          "baseline_sha256": "79bd06733af601d2c049f9b38e98db535429b9bbc8e8af5c8006c514e5d419a8",
+          "candidate_sha256": "79bd06733af601d2c049f9b38e98db535429b9bbc8e8af5c8006c514e5d419a8",
+          "oracle_sha256": "21109e4899f6abeca881b6c3bfad08e66e763d807dd0265c188506e83f99aa8d"
+        },
+        {
+          "scale": "2",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "native_before": 297573,
+          "native_after": 297573,
+          "baseline_sha256": "8fb98ee20db72b80d67b5a464c00de3b95297ea877ce1736c6063c18d3a8b585",
+          "candidate_sha256": "8fb98ee20db72b80d67b5a464c00de3b95297ea877ce1736c6063c18d3a8b585",
+          "oracle_sha256": "dadfcf61400ca49334ac79fbbd43cf0ab1d3adbb16a5293f15808f9ce9b7e0c9"
+        },
+        {
+          "scale": "4",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "native_before": 40948,
+          "native_after": 40948,
+          "baseline_sha256": "2c16f140ab18bb3ff01f44a8cdace4385f3d7af9aec3c8e4fb163487e997061d",
+          "candidate_sha256": "2c16f140ab18bb3ff01f44a8cdace4385f3d7af9aec3c8e4fb163487e997061d",
+          "oracle_sha256": "04711e98390be67e0ea3b9abdede7f472bdeb64a027892667c28ecca262bdf9a"
+        },
+        {
+          "scale": "8",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "native_before": 307156,
+          "native_after": 307156,
+          "baseline_sha256": "c78ad474b5c216ef55000e1ba1f65ec6a1bfc3997cdf08032ba474e8be4be2be",
+          "candidate_sha256": "c78ad474b5c216ef55000e1ba1f65ec6a1bfc3997cdf08032ba474e8be4be2be",
+          "oracle_sha256": "8a417b2192ba2a20e08e5c60d1a4a6817c309b3cb4c67bac3605715befacb0b6"
+        }
+      ],
+      "tested_package_origin": "workflow_dispatch dry-run 38112547584",
+      "public_release_runtime_byte_identity": {
+        "passed": true,
+        "source_sha": "99814b1ab6b2729aa9060144785a8d6d206d9895",
+        "tested_workflow": 38112547584,
+        "published_archive": "openttdrs-0.1.0-alpha.6-linux-x86_64.tar.gz",
+        "published_archive_sha256": "fdefcf95581077104d0d5c2fcc88d67a173aece136eeab33ec90c06d8d6afd76",
+        "runtime_files_compared": 5614,
+        "scope": "client, dedicated, every assets/ and static/ file",
+        "all_runtime_file_names_and_sha256_identical": true,
+        "six_zoom_client_sha256": "e04a75bccd41e11fe0a9595b034ad7d4a589ad6bcb1396fb32676df04ea05872"
+      }
+    }
+  },
+  "limits": [
+    "Raster acceptance covers the fixed Kale bridge scene; inherited native differences remain.",
+    "No new installed Snap/AppArmor test, global renderer parity or universal 30 FPS claim."
+  ]
+}

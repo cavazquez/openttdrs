@@ -80,6 +80,16 @@ modificada, la materialización correcta desde un directorio externo y la
 ausencia de los tiles requeridos. No se vuelven a generar los gráficos al
 publicar una release.
 
+La [prerelease alpha.6](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.6)
+se publicó desde `99814b1a` tras CI y dry-run verdes para las tres plataformas.
+Se descargaron sus nueve archivos y se comprobaron hashes de archivos,
+cliente, servidor y atlas; ambos binarios de cada plataforma incluyen el
+GRF base. Los 5.614 archivos de runtime Linux —binarios, `assets/` y `static/`—
+son idénticos a los del paquete completo que pasó los seis zooms con perfiles
+vacíos fuera del checkout. La evidencia distingue esta prueba del dry-run y
+la equivalencia de bytes con la descarga pública; no requiere volver a probar
+el mismo runtime ni sustituye las diferencias heredadas del oracle nativo.
+
 ## Reproducir sobre el Snap construido
 
 Extraer el `.snap` en un directorio nuevo, quitar sus permisos de escritura y

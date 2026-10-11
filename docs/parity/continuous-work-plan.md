@@ -1,7 +1,9 @@
 # Corte V1 — aceptación acotada por área
 
-Actualizado: **2026-10-10**. Base histórica V1: `84144747`;
+Actualizado: **2026-10-11**. Base histórica V1: `84144747`;
 base del corte alpha.4: `f1c3a5fc`; base de mejoras alpha.5: `2a497cab`.
+Las fuentes del Snap y los paquetes GitHub alpha.6 se identifican en la
+evidencia de publicación enlazada abajo.
 
 El corte V1 que actualizó el resumen del README, fijó tolerancias y creó tareas
 atómicas ya concluyó: los contratos #582–#604 están cerrados. El
@@ -13,10 +15,15 @@ evidencia interna. La auditoría del 26/09 abrió el corte acotado
 locales y criterios independientes. No reactiva las brechas históricas V1.
 
 La entrega actual de escritorio corresponde a
-[prerelease `v0.1.0-alpha.5`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.5)
-y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs) para Linux amd64.
+[prerelease `v0.1.0-alpha.6`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.6)
+y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs), revisión 6 para Linux amd64.
 Reúne las mejoras de flotas grandes y los casos acotados de movimiento y
 animación documentados en [el registro de implementación](performance-implementation.md).
+Añade Bevy 0.20, los recorridos controlados de Kale y la corrección de puentes
+enlazados abajo. Los [cimientos base del paquete](snap-alpha6-assets.md)
+conservan la escena aceptada fuera del checkout; la
+[evidencia de publicación](evidence/alpha6-publication-20261011.json)
+identifica fuente, paquetes, checks y comparación en seis zooms.
 La compatibilidad y los 30 FPS en todas las partidas continúan abiertos.
 El Snap materializa los tiles durante el build y se comprueba con assets de
 sólo lectura y perfil efímero antes de publicarlo. La instalación nueva desde

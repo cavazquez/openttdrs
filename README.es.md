@@ -20,13 +20,13 @@
 
 Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrito en **Rust** con cliente [Bevy](https://bevyengine.org/). El desarrollo es **incremental**: siempre hay algo jugable; la paridad total (NewGRF completo, red, saves idénticos al original) se aborda por cortes documentados, no de golpe.
 
-La alpha pública actual es [`0.1.0-alpha.5`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.5). Para Linux amd64, el [Snap](https://snapcraft.io/openttdrs) `0.1.0-alpha.5` está publicado en `latest/edge`. Esta entrega reduce trabajo repetido en flotas grandes y corrige movimientos, giros y animaciones de vehículos; sigue siendo un canal de pruebas, no una promesa de estabilidad ni de paridad con OpenTTD.
+La alpha pública actual es [`0.1.0-alpha.6`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.6). Para Linux amd64, el [Snap](https://snapcraft.io/openttdrs) `0.1.0-alpha.6` está publicado en `latest/edge`. Esta entrega migra a Bevy 0.20, corrige los ciclos de servicio de trenes, buses y camiones de Kale y alinea las conexiones de los puentes; sigue siendo un canal de pruebas, no una promesa de estabilidad ni de paridad con OpenTTD.
 
 > Compilar Bevy puede saturar CPU/RAM. Si hace falta: `cargo build -j 1`, o dejá que [CI](.github/workflows/ci.yml) valide el build. Las ejecuciones repetidas de `./scripts/check.sh` aprovechan `sccache` automáticamente cuando está instalado.
 
 **Gobierno:** [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [ADRs](docs/adr/)
 
-**Última actualización:** 2026-09-26
+**Última actualización:** 2026-10-11
 
 ---
 
@@ -46,7 +46,7 @@ smoke no emulaba el mount read-only de Snap; [#582](https://github.com/cavazquez
 [plan ejecutable](docs/parity/continuous-work-plan.md) conserva la evidencia
 del corte; la [auditoría](docs/audits/2026-09-18-direction.md) explica la
 selección original. La distribución alpha publicada está disponible como
-[prerelease de GitHub](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.5)
+[prerelease de GitHub](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.6)
 y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs).
 
 | Capa | Qué hay |
@@ -55,7 +55,7 @@ y [Snap Store `latest/edge`](https://snapcraft.io/openttdrs).
 | **Cliente** (`openttdrs-client`) | Vista isométrica OpenGFX, menú de inicio, toolbar, listas UI, noticias; `--server` / `--client` (I8) |
 | **Red** (`openttdrs-net`) | TCP lockstep + bin `openttdrs-dedicated` ([ADR 0001](docs/adr/0001-multiplayer-v1.md)) |
 | **NewGRF** | Catálogos Action0/3/5 y runtime parcial; las matrices de [propiedades](docs/parity/newgrf-action0-matrix.md) y [callbacks](docs/parity/newgrf-callback-matrix.md) distinguen parseado, almacenado y ejecutado |
-| **Hito 0.1** | [`0.1.0-alpha.5` publicada](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.5); solitario jugable en paquetes de escritorio, semilla visible/editable y reloj continuo. El corte reutiliza rutas e índices de flota y corrige movimientos, giros y animaciones de vehículos. El Snap estricto de `latest/edge` conserva assets en un mount de sólo lectura. **I8 red** MVP ([#21](https://github.com/cavazquez/openttdrs/issues/21) ✅) + host migration ([#171](https://github.com/cavazquez/openttdrs/issues/171), [ADR 0004](docs/adr/0004-host-migration-post-v1.md)) |
+| **Hito 0.1** | [`0.1.0-alpha.6` publicada](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.6); solitario jugable en paquetes de escritorio, semilla visible/editable y reloj continuo. El corte reutiliza rutas e índices de flota y corrige movimientos, giros y animaciones de vehículos. El Snap estricto de `latest/edge` conserva assets en un mount de sólo lectura. **I8 red** MVP ([#21](https://github.com/cavazquez/openttdrs/issues/21) ✅) + host migration ([#171](https://github.com/cavazquez/openttdrs/issues/171), [ADR 0004](docs/adr/0004-host-migration-post-v1.md)) |
 
 **Antecedentes de worldgen (cortes hasta septiembre 2026):** se alinearon las fases del generador
 procedural (`landscape` → `clear` → `towns` → `industries` → `objects` →
@@ -88,12 +88,12 @@ documentados. Editor #42 ✅ · GameScript-lite #43 ✅ · IA TransCargo ✅
 
 ## Arranque rápido
 
-> Actualizado: 2026-10-02.
+> Actualizado: 2026-10-11.
 
 ### Instalar la alpha publicada
 
 En Linux **amd64**, el [Snap Store](https://snapcraft.io/openttdrs) ofrece
-`0.1.0-alpha.5` en `latest/edge`. El paquete se comprueba contra su raíz de
+`0.1.0-alpha.6` en `latest/edge`. El paquete se comprueba contra su raíz de
 assets de sólo lectura antes de publicar y llega al menú real. Para
 instalarlo o actualizar una revisión anterior:
 
@@ -110,7 +110,7 @@ assets libres y guarda sus partidas JSON por defecto en
 carpeta. El servidor dedicado queda disponible como `openttdrs.dedicated`.
 
 También hay paquetes para Linux x86_64, Windows x86_64 y macOS arm64 en la
-[prerelease `v0.1.0-alpha.5`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.5).
+[prerelease `v0.1.0-alpha.6`](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.6).
 Descargá el archivo de tu plataforma y verificá el `.sha256` asociado antes de
 extraerlo completo.
 
@@ -222,7 +222,7 @@ snapcraft pack --use-lxd --output .
 ~~~
 
 El nombre exacto usa el campo `version` de la receta, por ejemplo
-`openttdrs_0.1.0-alpha.5_amd64.snap`. El smoke desmonta el contenido en un
+`openttdrs_0.1.0-alpha.6_amd64.snap`. El smoke desmonta el contenido en un
 directorio temporal, lo ejecuta con `$SNAP` de sólo lectura y usa un perfil
 efímero: así detecta assets que el paquete intentaría generar en runtime. Sólo
 un mantenedor autenticado debe subir una nueva revisión, después de comprobar
@@ -293,7 +293,7 @@ Un job en [.github/workflows/ci.yml](.github/workflows/ci.yml) (sccache + caché
 | plataformas | `cargo check` en macOS y Windows |
 | fuzz | replay determinista en PR + exploración semanal de `.sav`, NewGRF y frames de red |
 | release | tag SemVer exacto → prerelease con Linux x86_64, Windows x86_64 y macOS arm64 + SHA-256 |
-| Snap | empaquetado manual `core24`; `0.1.0-alpha.5` en `latest/edge` materializa assets durante el build y se comprueba con assets read-only y perfil de usuario efímero |
+| Snap | empaquetado manual `core24`; `0.1.0-alpha.6` en `latest/edge` materializa assets durante el build y se comprueba con assets read-only y perfil de usuario efímero |
 
 `check.sh ci` replica fmt/clippy/rustdoc/tests/TNBP/Python/tablas (hash; regen si hay upstream). Solo en GHA: audit, deny, cobertura en `main` y fetch OpenTTD para regen.
 
@@ -301,10 +301,10 @@ Cobertura manual: [.github/workflows/coverage.yml](.github/workflows/coverage.ym
 
 ### Release alpha
 
-> Actualizado: 2026-10-02.
+> Actualizado: 2026-10-11.
 
-El tag `v0.1.0-alpha.5` produjo la
-[prerelease pública](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.5)
+El tag `v0.1.0-alpha.6` produjo la
+[prerelease pública](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.6)
 mediante [release.yml](.github/workflows/release.yml): binarios, assets libres,
 servidor dedicado y checksums SHA-256 para Linux x86_64, Windows x86_64 y macOS
 arm64. El workflow también permite comprobar artefactos manualmente sin crear
@@ -312,8 +312,8 @@ otro tag.
 
 | Vía | Plataforma | Estado |
 |-----|------------|--------|
-| [GitHub Releases](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.5) | Linux x86_64, Windows x86_64, macOS arm64 | prerelease publicada |
-| [Snap Store](https://snapcraft.io/openttdrs) | Linux amd64 | `0.1.0-alpha.5` en `latest/edge`; assets materializados en build, smoke del paquete con assets read-only y arranque gráfico |
+| [GitHub Releases](https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.6) | Linux x86_64, Windows x86_64, macOS arm64 | prerelease publicada |
+| [Snap Store](https://snapcraft.io/openttdrs) | Linux amd64 | `0.1.0-alpha.6` en `latest/edge`; assets materializados en build, smoke del paquete con assets read-only y arranque gráfico |
 
 El empaquetado local de los paquetes de escritorio equivalente es:
 
@@ -322,7 +322,7 @@ cargo build --locked --release \
   -p openttdrs-client --bin openttdrs-client \
   -p openttdrs-net --bin openttdrs-dedicated
 ./scripts/package_release.sh \
-  0.1.0-alpha.5 x86_64-unknown-linux-gnu linux-x86_64 tar.gz
+  0.1.0-alpha.6 x86_64-unknown-linux-gnu linux-x86_64 tar.gz
 ```
 
 Para el paquete Snap y su publicación, usar la receta documentada en
@@ -361,7 +361,7 @@ global ni autoriza a relajar sus límites.
 | IA rivales propias | TransCargo y RoadHaul construyen rutas | ✅ | [#596](https://github.com/cavazquez/openttdrs/issues/596) y [#597](https://github.com/cavazquez/openttdrs/issues/597): entregas físicas, compra/órdenes y saldo humano aislado ([evidencia ferroviaria](docs/parity/transcargo-v1.md), [evidencia de pasajeros](docs/parity/roadhaul-v1.md)). No NoAI/Squirrel |
 | GS-lite propio | Goals, story y league; `CargoDelivered` cuenta sólo las unidades finales del tipo solicitado por la compañía | ✅ | [#598](https://github.com/cavazquez/openttdrs/issues/598) y [#599](https://github.com/cavazquez/openttdrs/issues/599): ledger por cargo y meta `Coal=10` con guardado 5/10, 2.000 ticks y hash/noticia única ([evidencia](docs/parity/gs-json-v1.md)). No GameScript/Squirrel |
 | Editor de escenarios | Herramientas, guardado y apertura propios | ✅ | [#600](https://github.com/cavazquez/openttdrs/issues/600) certifica un Temperate 64×64: edición, error de guardado no destructivo, JSON aislado y reapertura idéntica ([evidencia](docs/parity/editor-v1.md)). No `.scn` universal |
-| Distribución alpha | Prerelease multiplataforma y Snap estricto | ✅ | `0.1.0-alpha.5` unifica Cargo, GitHub Releases y Snap `latest/edge`; conserva la evidencia de assets read-only (#582/#583) y el dry-run gráfico nativo Windows/macOS (#601/#602) |
+| Distribución alpha | Prerelease multiplataforma y Snap estricto | ✅ | `0.1.0-alpha.6` unifica Cargo, GitHub Releases y Snap `latest/edge`; conserva la evidencia de assets read-only (#582/#583) y el dry-run gráfico nativo Windows/macOS (#601/#602) |
 | Certificación del corte | Agregador de evidencia V1 fail-closed | ✅ | [#603](https://github.com/cavazquez/openttdrs/issues/603) valida ID, SHA, fixture, comando, métrica, umbral, resultado y artefactos; sus regresiones rechazan informes ausentes, SHA mezclados, `skip` y umbrales incumplidos. Sin 20 entradas reales del mismo SHA, el resultado permanece `not-run`, nunca verde |
 
 Tolerancias V1 vinculantes; cada fila verde conserva su evidencia del mismo
@@ -424,7 +424,7 @@ Detalle de planos/chunks: [docs/MAPA_Y_FERROCARRIL.md](docs/MAPA_Y_FERROCARRIL.m
 | Python 3 + Pillow | `parse_sav`, goldens, recorte OpenGFX |
 | OpenGFX / OpenSFX / OpenMSX | Arte, SFX y música |
 | GitHub Actions + Dependabot | CI y deps mensuales |
-| Snapcraft 9 + `core24` / LXD | Snap estricto Linux amd64; `0.1.0-alpha.5` disponible en `latest/edge` |
+| Snapcraft 9 + `core24` / LXD | Snap estricto Linux amd64; `0.1.0-alpha.6` disponible en `latest/edge` |
 
 ---
 

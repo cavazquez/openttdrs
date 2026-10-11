@@ -1,6 +1,6 @@
 name: openttdrs
 title: openttdrs
-version: "0.1.0-alpha.5"
+version: "0.1.0-alpha.6"
 summary: Isometric transport simulation inspired by OpenTTD
 description: |
   openttdrs is an isometric transport simulation written in Rust and built with
@@ -67,6 +67,7 @@ parts:
     rust-channel: none
     build-environment:
       - PATH: $CRAFT_STAGE/bin:$PATH
+      - CARGO_BUILD_JOBS: "2"
     build-packages:
       - clang
       - mold

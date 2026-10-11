@@ -6,6 +6,8 @@ Los cambios relevantes de cada release se documentan aquí. El formato sigue
 
 ## [Unreleased]
 
+## [0.1.0-alpha.6] - 2026-10-11
+
 ### Compatibilidad
 
 - El cliente migra a Bevy 0.20.0; se adaptan picking de UI, tiempo virtual,
@@ -21,12 +23,26 @@ Los cambios relevantes de cada release se documentan aquí. El formato sigue
 - Saltar una orden durante la carga devuelve las reservas de toda la formación.
 - Los trenes bloqueados por PBS reintentan la reserva completa al vencer la
   espera, aunque la siguiente tesela ya estuviera reservada.
+- Los buses y camiones importados de Kale seleccionan las paradas físicas de
+  estaciones compuestas y conservan carga, descarga, servicio en depósito y
+  continuidad al guardar y cargar durante el viaje.
+- Las cabeceras de los puentes usan la altura de dibujo nativa; el suelo de
+  sus fundaciones ya no tapa la conexión ferroviaria. Se corrige también el
+  redondeo de segmentos en capturas a distintos zooms.
 
 ### Herramientas de comprobación
 
 - Copia reproducible del tren 2902 de Kale con sus órdenes, vías y señales;
   confirma llegada, transferencia y regreso. Alcance y comandos en
   `docs/parity/kale-train-follow.md`.
+- Recorridos completos del bus 1888 y del camión 314, en fixtures separadas de
+  Kale, con comprobación de carga, descarga, depósito y continuación JSON;
+  evidencia en `docs/parity/kale-bus-follow.md` y `docs/parity/kale-truck-follow.md`.
+- Dos escenas de puentes verificadas en los seis zooms con menos de 1.000
+  píxeles que empeoren por imagen respecto del cliente anterior; comprobación
+  nativa de altura de 428 cabeceras y 647 segmentos del mapa. Se conserva la
+  distinción entre mejoras incrementales y paridad global en
+  `docs/parity/kale-bridge-connections.md`.
 
 ## [0.1.0-alpha.5] - 2026-10-02
 
@@ -131,7 +147,8 @@ Los cambios relevantes de cada release se documentan aquí. El formato sigue
 - Los paquetes no están firmados ni notarizados.
 - La compatibilidad completa de ida y vuelta con `.sav` de OpenTTD no está garantizada.
 
-[Unreleased]: https://github.com/cavazquez/openttdrs/compare/v0.1.0-alpha.5...HEAD
+[Unreleased]: https://github.com/cavazquez/openttdrs/compare/v0.1.0-alpha.6...HEAD
+[0.1.0-alpha.6]: https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.6
 [0.1.0-alpha.5]: https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/cavazquez/openttdrs/releases/tag/v0.1.0-alpha.3

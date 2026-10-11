@@ -2044,8 +2044,13 @@ impl GameState {
                     crate::engine::ENGINE_AIRCRAFT_DAKOTA
                 });
                 let map_w = state.map.dimensions().0;
-                let imported_orders =
-                    orders::vehicle_orders_from_sav(&v.orders, &sav.station_index, map_w);
+                let imported_orders = orders::vehicle_orders_from_sav_with_depots(
+                    &v.orders,
+                    &sav.station_index,
+                    &state.depots,
+                    kind,
+                    map_w,
+                );
                 if !imported_orders.is_empty() {
                     vehicle.set_vehicle_orders(imported_orders);
                     let last = vehicle.orders.len().saturating_sub(1);
@@ -2312,8 +2317,13 @@ impl GameState {
                 continue;
             }
             let map_w = state.map.dimensions().0;
-            let imported_orders =
-                orders::vehicle_orders_from_sav(&v.orders, &sav.station_index, map_w);
+            let imported_orders = orders::vehicle_orders_from_sav_with_depots(
+                &v.orders,
+                &sav.station_index,
+                &state.depots,
+                kind,
+                map_w,
+            );
             if !imported_orders.is_empty() {
                 vehicle.set_vehicle_orders(imported_orders);
                 let last = vehicle.orders.len().saturating_sub(1);

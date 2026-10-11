@@ -14,7 +14,9 @@
 
 use super::super::SavError;
 use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE};
-use super::super::orders_codec::{append_ordl_orders_header, encode_vehicle_order};
+use super::super::orders_codec::{
+    append_ordl_orders_header, encode_vehicle_order_with_depot_resolver,
+};
 use super::chunks::raw_table_chunk;
 use super::codec::{write_gamma, write_str};
 use super::entities::CargoPacketExport;
@@ -107,6 +109,26 @@ fn station_id_for_pos(state: &GameState, pos: TileCoord) -> Option<u16> {
         .iter()
         .position(|s| s.pos == pos)
         .and_then(|i| u16::try_from(i).ok())
+        .or_else(|| {
+            // A hangar or platform tile need not be the station anchor.
+            // Native MAP2 stores the owning StationID on every such tile.
+            let tile = state.map.get(pos)?;
+            if !matches!(tile.kind, TileKind::Station | TileKind::Airport) {
+                return None;
+            }
+            let id = u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8);
+            state
+                .stations
+                .iter()
+                .enumerate()
+                .find_map(|(index, station)| {
+                    let station_id = station
+                        .ottd_station_id
+                        .and_then(|id| u16::try_from(id).ok())
+                        .or_else(|| u16::try_from(index).ok());
+                    (station_id == Some(id)).then_some(id)
+                })
+        })
 }
 
 fn airport_id_for_vehicle(state: &GameState, v: &Vehicle) -> u16 {
@@ -166,8 +188,19 @@ fn train_subtype_for(v: &Vehicle) -> u8 {
     }
 }
 
-fn encode_goto_order(order: &VehicleOrder, state: &GameState, map_w: u32) -> Option<Vec<u8>> {
-    encode_vehicle_order(order, |pos| station_id_for_pos(state, pos), map_w).map(|b| b.to_vec())
+fn encode_goto_order(order: &VehicleOrder, state: &GameState, _map_w: u32) -> Option<Vec<u8>> {
+    encode_vehicle_order_with_depot_resolver(
+        order,
+        |pos| station_id_for_pos(state, pos),
+        |pos| {
+            state
+                .map
+                .get(pos)
+                .and_then(crate::depot::depot_id_from_tile)
+                .or_else(|| station_id_for_pos(state, pos))
+        },
+    )
+    .map(|b| b.to_vec())
 }
 
 /// `TrackBits` desde el mapa, o `TRACK_BIT_X` si no hay vía legible.
@@ -774,8 +807,7 @@ fn current_order_runtime_for(v: &Vehicle, state: &GameState, map_w: u32) -> Vehi
             max_speed: u16::MAX,
         };
     };
-    let Some(encoded) = encode_vehicle_order(order, |pos| station_id_for_pos(state, pos), map_w)
-    else {
+    let Some(encoded) = encode_goto_order(order, state, map_w) else {
         return VehicleOrderRuntime {
             order_type: 0,
             flags: 0,
@@ -1643,6 +1675,48 @@ mod tests {
     use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
 
     #[test]
+    fn depot_orders_and_current_order_write_pool_id_instead_of_tile_index() {
+        let mut state = GameState::new(32, 32);
+        let pos = TileCoord::new(12, 18);
+        state.map.set_kind(pos, TileKind::RoadDepot).unwrap();
+        let mut tile = state.map.get(pos).unwrap();
+        tile.m2 = 58;
+        state.map.set_tile(pos, tile).unwrap();
+        let mut order = VehicleOrder::depot_pass_through(pos);
+        if let VehicleOrder::Depot { unbunch, .. } = &mut order {
+            *unbunch = true;
+        }
+        let encoded = encode_goto_order(&order, &state, 32).unwrap();
+        assert_eq!(&encoded[2..4], &58u16.to_be_bytes());
+        assert_eq!(encoded[1], 34);
+        assert_eq!(encoded[0], 66);
+        let mut vehicle = Vehicle::new(1888, VehicleKind::Bus, TileCoord::new(12, 17), pos);
+        vehicle.orders.push(order);
+        let current = current_order_runtime_for(&vehicle, &state, 32);
+        assert_eq!(current.dest, 58);
+        assert_eq!(current.flags, 34);
+        assert_eq!(current.order_type, 66);
+    }
+
+    #[test]
+    fn off_anchor_hangar_order_writes_its_station_pool_id() {
+        let mut state = GameState::new(16, 16);
+        let root = TileCoord::new(4, 4);
+        let hangar = TileCoord::new(6, 5);
+        let mut station = Station::new_with_kind(root, StopKind::Airport);
+        station.ottd_station_id = Some(77);
+        state.stations.push(station);
+        state.map.set_kind(hangar, TileKind::Airport).unwrap();
+        let mut tile = state.map.get(hangar).unwrap();
+        tile.m2 = 77;
+        tile.m5 = 1;
+        state.map.set_tile(hangar, tile).unwrap();
+        let encoded = encode_goto_order(&VehicleOrder::depot(hangar), &state, 16).unwrap();
+        assert_eq!(&encoded[2..4], &77u16.to_be_bytes());
+        assert_eq!(encoded[0], 66);
+    }
+
+    #[test]
     fn encode_station_order_for_existing_station() {
         let mut state = GameState::new(64, 64);
         state.stations = vec![Station::new_with_kind(
@@ -1652,8 +1726,8 @@ mod tests {
         let order = VehicleOrder::station(TileCoord::new(28, 39));
         let enc = encode_goto_order(&order, &state, 64).expect("encode");
         assert_eq!(enc.len(), 11);
-        // OT_GOTO_STATION | (OrderStopLocation::Middle << 4) = 0x11.
-        assert_eq!(enc[0], 0x11);
+        // Station + Middle + native NoIntermediate = 0x51.
+        assert_eq!(enc[0], 0x51);
         assert_eq!(&enc[2..4], &0u16.to_be_bytes());
     }
 

@@ -1,0 +1,596 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-10-10T21:50:53.210590-03:00",
+  "passed": true,
+  "scope": "Kale bus 1888 isolated full service cycle, reload continuation, six following-camera scales and incremental fixed-frame raster budget; FPS deferred",
+  "parent_commit": "a15ea6632c02b261f0721c11bbf6fe106258d72e",
+  "native_reference_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "source_sav": {
+    "path": "save/Kale_TitleGame.sav",
+    "sha256": "584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69",
+    "unchanged": true
+  },
+  "prepared_game": {
+    "path": "save/Kale_bus_follow.json",
+    "sha256": "d85c7a8fd94d52f0e71ac59756d6e67066ba9e5aa992dc9c65eb500043bbddee"
+  },
+  "client_binary": {
+    "path": "target/release/openttdrs-client",
+    "sha256": "fc403c264a04de28f71a6fd8264d1f611add5b297892ab30380ebc30df5abf80",
+    "profile": "release"
+  },
+  "example_binary": {
+    "path": "target/release/examples/kale_bus_follow",
+    "sha256": "0eb324c841074e6b59c4efc9d3aa3f9098dad76ce2a0c484c5a575785d74094a"
+  },
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+  "source_sha256": {
+    "Cargo.lock": "7fc6d68d0a9a4a6102dd81329a9b8bca57227280d8662b8ba7a524b69f9d297b",
+    "Cargo.toml": "5d4bb81310c527cb24f039e3401c346880437ef53ae2e8b24c9b5c0c1ca3dabb",
+    "crates/openttdrs-client/src/camera/vehicle_follow.rs": "d775e5938985ebfe7e78c56dc12dc17dec07553482402c896423d49e4c69705b",
+    "crates/openttdrs-core/examples/kale_bus_follow.rs": "16d6414c80899f88673959c075d4c5e8788dbb755a37aab14b32d5b4bae948d9",
+    "crates/openttdrs-core/src/newgrf_actions/apply/cargo.rs": "b945eedda328a14eb47604d79341848063ddad177671a1f66bdc37fc43eb0258",
+    "crates/openttdrs-core/src/road_movement/controller.rs": "9bd7d2a3fc064bf09851cdfaba5860e820d09ba89887e48a83099ddc155582c2",
+    "crates/openttdrs-core/src/road_movement/overtake.rs": "5d8bb35ee7e64635a666afca9fe1dcc16c1d5ed74e6dbde6c8e8600c49e3c816",
+    "crates/openttdrs-core/src/road_movement/rvsb.rs": "d5b597de87830526fbc91b5220678128ba45371a31d1ac9ef642122b92502ed2",
+    "crates/openttdrs-core/src/sav/mod.rs": "edae6eebb24d0664c26050a656693f9d8c0ed4a64aa32af70bc587d119e2d38c",
+    "crates/openttdrs-core/src/sav/orders.rs": "8c282a65595b705026138b5d842a3655b59e5dd029ab27f844fc619f5d3cae58",
+    "crates/openttdrs-core/src/sav/orders_codec.rs": "23a41666605846d0fe11fd936d0aa7c1f9b3e60629f0ee3d7a1d5a08ac4a24b4",
+    "crates/openttdrs-core/src/sav/write/vehicles.rs": "0059da50b19eda383038c88fb525e8834261d76a1c5bd3f9e4fd79f3cf4cb51b",
+    "crates/openttdrs-core/src/save/io.rs": "ee1817c3516f7d55354adc297e3048a16b8cb965e85633c740d43febc147e9c7",
+    "crates/openttdrs-core/src/save/migrate/mod.rs": "68ef5425a770f6433e543cde0913ed92a1549860a4acd6ef9f11ea76ccf14e87",
+    "crates/openttdrs-core/src/sim_step/cargo_transfer.rs": "6560face1da9f664d66e3b7db63d056d5f0a14ce860926c75afd7031a2746946",
+    "crates/openttdrs-core/src/vehicle/order.rs": "bbe34e0262e85ee86b188b3f18ee2d3e3784b7f8717be2af8d85c7dac9daf4e1",
+    "crates/openttdrs-core/src/vehicle/order_execution.rs": "9d4c18e2eaca88a9e3cf9dded23bd6da4f916392ac5f77eea1f5edaaf615e13b",
+    "docs/parity/continuous-work-plan.md": "caa7816a22e0cedb3fef714e310ea339324e23e636a2d674d0ec2a23f624fcca",
+    "docs/parity/kale-bus-follow.md": "1588a8946f369375758a0ae7278e09739576a34e454aab915cd53777a6d174c2",
+    "scripts/check_kale_bus_follow.py": "c366f093325a3edcf12d994d49012917152b6b9cc494bbde0ce2f8a387db7f51",
+    "scripts/follow_kale_train.sh": "0dc2c356330b032e8d24ce5c92d030b88c00257e26d440cd4ef1e622501b52b0",
+    "scripts/follow_vehicle.sh": "eef3a040bd9527fe8088b6c85b60424ccdeafa3fdbb0d67ff28c8d8641ff5e4f"
+  },
+  "route": {
+    "bus": 1888,
+    "cargo_income": 506,
+    "copy": "artifacts/transport-follow/acceptance-route-final.json",
+    "delivered_units": 19,
+    "departure_cargo": 40,
+    "depot": [
+      118,
+      78
+    ],
+    "depot_tick": 3267,
+    "destination": [
+      117,
+      51
+    ],
+    "destination_delivered_units": 5,
+    "destination_tick": 1635,
+    "directions": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "failure": null,
+    "final_cargo": 40,
+    "final_frame": 11,
+    "final_hash": 5776246084799143906,
+    "final_tile": [
+      116,
+      75
+    ],
+    "full_hash_interval": 64,
+    "home": [
+      116,
+      75
+    ],
+    "initial_hash": 7675255356361101857,
+    "loaded_units": 53,
+    "passed": true,
+    "relative_ticks": 3615,
+    "reload_matching_full_hashes": 55,
+    "reload_matching_ticks": 3426,
+    "reload_tick": 189,
+    "returned_home": true,
+    "scope": "one isolated existing bus with unchanged orders and no construction commands; world advances normally; disasters, AI and breakdowns disabled; no full-fleet/native-tick parity claim",
+    "source": "save/Kale_TitleGame.sav",
+    "visited_tiles": 44,
+    "warmup_ticks": 3077
+  },
+  "route_trace": {
+    "path": "artifacts/transport-follow/acceptance-route-final.csv",
+    "sha256": "2c765d6fee8859e23f02db961f7d4f6e34b8a8e6f700d5c88279a091896daae8"
+  },
+  "repeatability": [
+    {
+      "path": "artifacts/transport-follow/kale-bus.summary.json",
+      "sha256": "031fa60eccc16741b680f5768e972150b3383c5df0825a5c7af3a5d19cade879",
+      "matched_final_run": true
+    },
+    {
+      "path": "artifacts/transport-follow/kale-bus-repeat.summary.json",
+      "sha256": "b2826373624bc4f549f3dd658198b8c447af287511497a8066ee6c86aedc3a9d",
+      "matched_final_run": true
+    }
+  ],
+  "live_camera": {
+    "passed": true,
+    "speed": 8.0,
+    "backend": "Lavapipe Vulkan on isolated Xvfb",
+    "batches": [
+      {
+        "path": "artifacts/transport-follow/live-acceptance/results.json",
+        "sha256": "a5e6caebe8cd28260f341b4660c04a2be5841be70ff386f185fe30a264bbc354",
+        "whole_batch_passed": false,
+        "frames_requested": 1300
+      },
+      {
+        "path": "artifacts/transport-follow/live-zoom4-accepted/results.json",
+        "sha256": "8ed33c1a19620b45a082ad374acdd818bb4d48626be13f173b4f30d4b27973ae",
+        "whole_batch_passed": true,
+        "frames_requested": 500
+      },
+      {
+        "path": "artifacts/transport-follow/live-zoom8-retry/results.json",
+        "sha256": "8918c59481881299dda4596c3060244e8d62271f51155bbfc0444b9d2bc42193",
+        "whole_batch_passed": true,
+        "frames_requested": 500
+      }
+    ],
+    "zooms": [
+      {
+        "scale": "0.25",
+        "exit": 0,
+        "frames": 1359,
+        "visible_frames": 1358,
+        "camera_mismatches": 0,
+        "ticks_advanced": 10856,
+        "visited_tiles": 44,
+        "directions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          0.25
+        ],
+        "destination_tick": 3707792,
+        "depot_tick": 3709424,
+        "returned_home_tick": 3709768,
+        "cargo_income": 1324,
+        "delivered_units": 70,
+        "trace_sha256": "d3623a6c587ebe83029253875b367362ae8a6fa88944510123be2675b4b5c7e7",
+        "passed": true,
+        "trace": "artifacts/transport-follow/live-acceptance/0.25/follow.csv",
+        "batch": "artifacts/transport-follow/live-acceptance/results.json"
+      },
+      {
+        "scale": "0.5",
+        "exit": 0,
+        "frames": 1359,
+        "visible_frames": 1358,
+        "camera_mismatches": 0,
+        "ticks_advanced": 10855,
+        "visited_tiles": 44,
+        "directions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          0.5
+        ],
+        "destination_tick": 3707793,
+        "depot_tick": 3709424,
+        "returned_home_tick": 3709768,
+        "cargo_income": 1324,
+        "delivered_units": 70,
+        "trace_sha256": "d237704720e220a645dace9bc93be95b2832de96bebef223709ba4f9fe0d04d5",
+        "passed": true,
+        "trace": "artifacts/transport-follow/live-acceptance/0.5/follow.csv",
+        "batch": "artifacts/transport-follow/live-acceptance/results.json"
+      },
+      {
+        "scale": "1",
+        "exit": 0,
+        "frames": 1359,
+        "visible_frames": 1358,
+        "camera_mismatches": 0,
+        "ticks_advanced": 10857,
+        "visited_tiles": 44,
+        "directions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          1.0
+        ],
+        "destination_tick": 3707793,
+        "depot_tick": 3709425,
+        "returned_home_tick": 3709769,
+        "cargo_income": 1324,
+        "delivered_units": 70,
+        "trace_sha256": "2d79fdc5985404d56b869053af6ce33c764df7d159eb9bae5dcf59666f6f2a61",
+        "passed": true,
+        "video_valid": true,
+        "video_sha256": "9006cfa2324e9da0d1d6f8fffb45541299c6a603e32cb7f056d351a117e44afa",
+        "trace": "artifacts/transport-follow/live-acceptance/1/follow.csv",
+        "batch": "artifacts/transport-follow/live-acceptance/results.json"
+      },
+      {
+        "scale": "2",
+        "exit": 0,
+        "frames": 1359,
+        "visible_frames": 1358,
+        "camera_mismatches": 0,
+        "ticks_advanced": 10857,
+        "visited_tiles": 44,
+        "directions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          2.0
+        ],
+        "destination_tick": 3707793,
+        "depot_tick": 3709425,
+        "returned_home_tick": 3709769,
+        "cargo_income": 1324,
+        "delivered_units": 70,
+        "trace_sha256": "f3757009bd6e57aa9fafe8c916f57fd81d9c3b6c5a58622972b3c6a449b20711",
+        "passed": true,
+        "trace": "artifacts/transport-follow/live-acceptance/2/follow.csv",
+        "batch": "artifacts/transport-follow/live-acceptance/results.json"
+      },
+      {
+        "scale": "4",
+        "exit": 0,
+        "frames": 559,
+        "visible_frames": 559,
+        "camera_mismatches": 0,
+        "ticks_advanced": 4457,
+        "visited_tiles": 44,
+        "directions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          4.0
+        ],
+        "destination_tick": 3707793,
+        "depot_tick": 3709425,
+        "returned_home_tick": 3709769,
+        "cargo_income": 728,
+        "delivered_units": 31,
+        "trace_sha256": "51eff3cbbd93110404acba0c333b5e78a2a657a257aa4e375e0883755faf929e",
+        "passed": true,
+        "trace": "artifacts/transport-follow/live-zoom4-accepted/4/follow.csv",
+        "batch": "artifacts/transport-follow/live-zoom4-accepted/results.json"
+      },
+      {
+        "scale": "8",
+        "exit": 0,
+        "frames": 559,
+        "visible_frames": 559,
+        "camera_mismatches": 0,
+        "ticks_advanced": 4457,
+        "visited_tiles": 44,
+        "directions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          8.0
+        ],
+        "destination_tick": 3707793,
+        "depot_tick": 3709425,
+        "returned_home_tick": 3709769,
+        "cargo_income": 728,
+        "delivered_units": 31,
+        "trace_sha256": "bff9fa8a05501dc694e0defdc1456b270e9ab88be2295d314d962cf1bd60de7c",
+        "passed": true,
+        "trace": "artifacts/transport-follow/live-zoom8-retry/8/follow.csv",
+        "batch": "artifacts/transport-follow/live-zoom8-retry/results.json"
+      }
+    ]
+  },
+  "video": {
+    "path": "artifacts/transport-follow/live-video-accepted/1/follow.mp4",
+    "sha256": "ed5dca16455bdb1b3f03fb4ebc90b34da982ad8c4d30472c5be3eb254d6b36fb",
+    "report": "artifacts/transport-follow/live-video-accepted/results.json",
+    "result": {
+      "scale": "1",
+      "exit": 0,
+      "frames": 559,
+      "visible_frames": 559,
+      "camera_mismatches": 0,
+      "ticks_advanced": 4457,
+      "visited_tiles": 44,
+      "directions": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "observed_scales": [
+        1.0
+      ],
+      "destination_tick": 3707793,
+      "depot_tick": 3709425,
+      "returned_home_tick": 3709769,
+      "cargo_income": 728,
+      "delivered_units": 31,
+      "trace_sha256": "cbf44c37e8d9553e1af1a729a989f460fe9759da18ecaed7bdd93b09426e9edc",
+      "passed": true,
+      "video_valid": true,
+      "video_sha256": "ed5dca16455bdb1b3f03fb4ebc90b34da982ad8c4d30472c5be3eb254d6b36fb"
+    },
+    "native_cursor_recorded": false,
+    "visually_inspected_frame": "artifacts/transport-follow/bus-follow-accepted.png"
+  },
+  "fixed_raster": {
+    "report": "artifacts/transport-follow/raster-report.json",
+    "baseline": "artifacts/bevy020/fitted-final-hw",
+    "candidate": "artifacts/bevy020/bus-acceptance-hw",
+    "oracle": "artifacts/bevy020/native-retry",
+    "resolution": [
+      800,
+      600
+    ],
+    "center": [
+      132,
+      2
+    ],
+    "settle_frames": 180,
+    "backend": "desktop Vulkan GPU",
+    "comparison": {
+      "schema": 1,
+      "alignment": [
+        0,
+        0
+      ],
+      "passed": false,
+      "zooms": [
+        {
+          "scale": "0.25",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "equally_wrong_changed_pixels": 0,
+          "native_before": 624,
+          "native_after": 624,
+          "lost_correct_pixels": 0,
+          "gained_correct_pixels": 0,
+          "changed_blocks_4x4": 0,
+          "total_pixels": 480000,
+          "passed": true,
+          "baseline_sha256": "0e38c89dd087ff19612c43c4f084c075770ebe31de08fa11d8e96b7920187a3e",
+          "candidate_sha256": "0e38c89dd087ff19612c43c4f084c075770ebe31de08fa11d8e96b7920187a3e",
+          "oracle_sha256": "9529d553e3aa6bb7f402e11f18d6f7243b2942fbc16159f15d91ec536944cd7b",
+          "budget_passed": true
+        },
+        {
+          "scale": "0.5",
+          "changed_pixels": 540,
+          "worsened_pixels": 540,
+          "improved_pixels": 0,
+          "equally_wrong_changed_pixels": 0,
+          "native_before": 172,
+          "native_after": 712,
+          "lost_correct_pixels": 540,
+          "gained_correct_pixels": 0,
+          "changed_blocks_4x4": 93,
+          "total_pixels": 480000,
+          "passed": false,
+          "baseline_sha256": "03457586015153c449247165c3b233b445684973c2992e28c563f7e2f1a41748",
+          "candidate_sha256": "33fe5ade021c18d347986b485c6c1fd42fd801d6f196c5683aae4eb9d60040b8",
+          "oracle_sha256": "d025ab6d5c142207b33554378b4f298eb8fadba118cc5fc5b6af84693d99f7e6",
+          "budget_passed": true
+        },
+        {
+          "scale": "1",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "equally_wrong_changed_pixels": 0,
+          "native_before": 45,
+          "native_after": 45,
+          "lost_correct_pixels": 0,
+          "gained_correct_pixels": 0,
+          "changed_blocks_4x4": 0,
+          "total_pixels": 480000,
+          "passed": true,
+          "baseline_sha256": "6eb808c54266c118374ab882692604af801fd6b1df9380c63acd3f8f88c70eb5",
+          "candidate_sha256": "6eb808c54266c118374ab882692604af801fd6b1df9380c63acd3f8f88c70eb5",
+          "oracle_sha256": "81f49dd2e245475d6dec35b1ab4d857a49014ddb7526e40d0363b029ce3d4155",
+          "budget_passed": true
+        },
+        {
+          "scale": "2",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "equally_wrong_changed_pixels": 0,
+          "native_before": 3863,
+          "native_after": 3863,
+          "lost_correct_pixels": 0,
+          "gained_correct_pixels": 0,
+          "changed_blocks_4x4": 0,
+          "total_pixels": 480000,
+          "passed": true,
+          "baseline_sha256": "d3b856eb621c6205a8a4b8873a468c491a1aafb6944bcd7bb4cc72f68b9faa51",
+          "candidate_sha256": "d3b856eb621c6205a8a4b8873a468c491a1aafb6944bcd7bb4cc72f68b9faa51",
+          "oracle_sha256": "35309213f2ea11c3be0ccb39ca4c0cff260428d342763ab401739fc6eb68b92b",
+          "budget_passed": true
+        },
+        {
+          "scale": "4",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "equally_wrong_changed_pixels": 0,
+          "native_before": 87162,
+          "native_after": 87162,
+          "lost_correct_pixels": 0,
+          "gained_correct_pixels": 0,
+          "changed_blocks_4x4": 0,
+          "total_pixels": 480000,
+          "passed": true,
+          "baseline_sha256": "679b7096682f80b389f7301df3429f2374c55370f579cce724bf7fd4919cd118",
+          "candidate_sha256": "679b7096682f80b389f7301df3429f2374c55370f579cce724bf7fd4919cd118",
+          "oracle_sha256": "7e3854e82d482286409dba3d8c32daac6090cf4ec0e038482e5df712ab98ac84",
+          "budget_passed": true
+        },
+        {
+          "scale": "8",
+          "changed_pixels": 12,
+          "worsened_pixels": 0,
+          "improved_pixels": 12,
+          "equally_wrong_changed_pixels": 0,
+          "native_before": 71007,
+          "native_after": 70997,
+          "lost_correct_pixels": 0,
+          "gained_correct_pixels": 10,
+          "changed_blocks_4x4": 10,
+          "total_pixels": 480000,
+          "passed": true,
+          "baseline_sha256": "8e1e86ac545f663ce112558c390f0804fb01548659827c1af5f3a7cf7fe586ce",
+          "candidate_sha256": "308f6e61344f3769b1fac31631426146e63efb06043f5d177fc3e93480263fc7",
+          "oracle_sha256": "5112108334311ec6accae507f9b564c89f10d50112663fa47b0322ccdd438ac5",
+          "budget_passed": true
+        }
+      ],
+      "acceptance": {
+        "metric": "worsened_pixels",
+        "exclusive_limit": 1000
+      },
+      "budget_passed": true
+    },
+    "repeat_at_0_5": {
+      "scale": "0.5",
+      "repeat_changed_pixels": 540,
+      "baseline_comparison": {
+        "changed_pixels": 0,
+        "worsened_pixels": 0,
+        "improved_pixels": 0,
+        "equally_wrong_changed_pixels": 0,
+        "native_before": 172,
+        "native_after": 172,
+        "lost_correct_pixels": 0,
+        "gained_correct_pixels": 0,
+        "changed_blocks_4x4": 0,
+        "total_pixels": 480000,
+        "passed": true
+      },
+      "budget_passed": true
+    },
+    "worst_worsened_pixels": 540
+  },
+  "checks": {
+    "core_tests": {
+      "passed": 3082,
+      "ignored": 6,
+      "suites": 65,
+      "log": "artifacts/transport-follow/acceptance-core-final.log",
+      "log_sha256": "846c1746571aa57a36993f6186f091c7ca75d5063ca9c22e93a44af42954be94"
+    },
+    "client_tests": {
+      "passed": 1718,
+      "ignored": 2,
+      "suites": 1,
+      "log": "artifacts/transport-follow/acceptance-client-tests.log",
+      "log_sha256": "5f5885118789810b20ea5bfba6b9c48725e4d17d9d18b934c856b650f92d71da"
+    },
+    "clippy": {
+      "command": "cargo clippy --locked --offline --profile ci -j2 -p openttdrs-core -p openttdrs-client --all-targets -- -D warnings",
+      "exit": 0,
+      "log": "artifacts/transport-follow/acceptance-clippy.log",
+      "log_sha256": "11fd910c8d7f564e6977eb828024694fc7e5bc6722741e798e6f0855f41e5b79"
+    },
+    "fmt": {
+      "command": "cargo fmt --all -- --check",
+      "exit": 0
+    },
+    "docs": {
+      "command": "./scripts/check_parity_docs_fresh.sh",
+      "exit": 0,
+      "log": "artifacts/transport-follow/acceptance-docs.log",
+      "log_sha256": "0b8430a312c1661aaf3a38c119e172aa7557826f6ef9024ff7fcea0007564e76"
+    },
+    "shell_syntax": {
+      "command": "bash -n scripts/follow_vehicle.sh scripts/follow_kale_train.sh",
+      "exit": 0
+    },
+    "python_syntax": {
+      "command": "python3 -m py_compile scripts/check_kale_bus_follow.py",
+      "exit": 0
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "exit": 0
+    }
+  },
+  "rejected_or_interrupted_attempts": [
+    {
+      "path": "artifacts/transport-follow/live-acceptance/results.json",
+      "reason": "Outer launcher was interrupted during scale 4; only its four completed successful cases are used."
+    },
+    {
+      "path": "artifacts/transport-follow/live-zoom4-final/results.json",
+      "reason": "Long launcher was interrupted before completing its requested capture; replaced by the complete bounded cycle."
+    },
+    {
+      "path": "artifacts/transport-follow/live-zoom8-accepted/results.json",
+      "reason": "Client exited with code 0 at 104 frames before servicing the destination or returning; rejected. Isolated retry completed 559 frames and passed."
+    }
+  ],
+  "limits": [
+    "No native live tick-by-tick or full-fleet parity certification.",
+    "No traffic, articulated vehicles, trams, nearest-depot, route construction edits or comprehensive NewGRF/CargoDist coverage.",
+    "Trucks, ships and aircraft require separate service-cycle cases.",
+    "The scale 0.5 fixed frame varies by 540 pixels between captures of the same binary; both observations are retained and their cause is unconfirmed.",
+    "No FPS or GPU-performance acceptance claim."
+  ]
+}

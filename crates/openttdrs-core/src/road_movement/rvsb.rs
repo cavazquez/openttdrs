@@ -20,6 +20,8 @@ pub const RVSB_IN_ROAD_STOP: u8 = 1 << RVS_IN_ROAD_STOP;
 pub const RVSB_IN_DT_ROAD_STOP: u8 = 1 << RVS_IN_DT_ROAD_STOP;
 pub const RVSB_DRIVE_SIDE: u8 = 1 << RVS_DRIVE_SIDE;
 pub const RVSB_TRACKDIR_MASK: u8 = 0x0F;
+/// Native road-stop entry direction; excludes bay/entered-stop flags.
+pub const RVSB_ROAD_STOP_TRACKDIR_MASK: u8 = 0x09;
 
 /// Máscaras de los flags internos de una parada en bahía.
 pub const RVSB_USING_SECOND_BAY: u8 = 1 << RVS_USING_SECOND_BAY;

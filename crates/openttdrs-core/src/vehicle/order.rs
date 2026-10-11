@@ -10,7 +10,7 @@ pub const MAX_VEHICLE_NAME_CHARS: usize = 32;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OrderNonStop {
-    /// Parar en estaciones intermedias del trayecto (`GoVia`, bit 6 de `type`).
+    /// Parar también en estaciones intermedias (sin `NoIntermediate`, bit 6).
     StopAtIntermediate,
     /// No parar salvo en el destino de la orden (`NonStop`, default en `OpenTTD`).
     #[default]

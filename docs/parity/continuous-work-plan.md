@@ -29,8 +29,11 @@ parada, reservas de carga y reintento PBS; conserva como pendientes la flota
 completa y la paridad de señalización. La [migración a Bevy 0.20](bevy-020-migration.md)
 queda aceptada en los seis zooms con el presupuesto acordado de menos de
 1.000 píxeles que empeoren por imagen; Órdenes y seguimiento de cámara pasan
-sus comprobaciones. Este corte termina aquí por indicación del usuario. El
-bloque de FPS continúa aplazado.
+sus comprobaciones. El corte Bevy terminó por indicación del usuario. Su
+solicitud posterior abrió el [servicio controlado del bus de Kale](kale-bus-follow.md):
+paradas, pasajeros, depósito, recarga en viaje y cámara en seis zooms. Queda
+aceptado con su evidencia y termina en el bus 1888; camiones, barcos y
+aeronaves requieren sus propios casos. El bloque de FPS continúa aplazado.
 
 ## Entrega alpha anterior (cumplida)
 

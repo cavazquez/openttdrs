@@ -629,10 +629,26 @@ fn finish_vehicle_unloading_if_empty(state: &mut GameState, vehicle_idx: usize) 
     if !clear_vehicle_unloading_if_empty(state, vehicle_idx) {
         return false;
     }
-    state.vehicles[vehicle_idx].advance_after_unloading();
-    state.vehicles[vehicle_idx].sync_order_destination_with_stations(&state.map, &state.stations);
+    if bus_service_should_attempt_loading(&state.vehicles[vehicle_idx]) {
+        // Native loading follows the completed unload in the next pass.
+        state.vehicles[vehicle_idx].cargo_loading = true;
+    } else {
+        state.vehicles[vehicle_idx].advance_after_unloading();
+        state.vehicles[vehicle_idx]
+            .sync_order_destination_with_stations(&state.map, &state.stations);
+    }
     trigger_vehicle_empty_if_consist_empty(state, vehicle_idx);
     true
+}
+
+fn bus_service_should_attempt_loading(vehicle: &crate::Vehicle) -> bool {
+    vehicle.kind == VehicleKind::Bus
+        && vehicle.road_pos_valid
+        && vehicle.prev_unit.is_none()
+        && vehicle.awaiting_load_window
+        && vehicle
+            .current_order_ref()
+            .is_some_and(|order| order.is_station_like() && !order.no_load())
 }
 
 fn clear_vehicle_unloading_if_empty(state: &mut GameState, vehicle_idx: usize) -> bool {
@@ -1042,7 +1058,10 @@ fn unload_vehicles_impl<const PROFILE: bool>(
     {
         let selection_span = profile.span::<PROFILE>(UnloadPhase::Selection);
         let order_vehicle_idx = vehicle_order_index(state, i);
-        if !train_ready_for_station_transfer(&state.vehicles[order_vehicle_idx]) {
+        if !vehicle_ready_for_station_transfer(
+            &state.vehicles[order_vehicle_idx],
+            state.construction.road_drive_on_right(),
+        ) {
             continue;
         }
         if *loaded_flag {
@@ -1147,6 +1166,9 @@ fn unload_vehicles_impl<const PROFILE: bool>(
             unload_type,
         );
         if !will_unload {
+            // Native CargoUnloading follows UnloadCount, not total cargo:
+            // MTA_KEEP passengers must not prevent this service from ending.
+            state.vehicles[i].cargo_unloading = mail_remaining;
             continue;
         }
 
@@ -1500,10 +1522,19 @@ fn unload_vehicles_impl<const PROFILE: bool>(
                 let _ = finish_vehicle_unloading_if_empty(state, i);
             }
         } else {
-            state.vehicles[i].cargo_unloading = true;
+            // Remaining KEEP packets stay aboard, but are not an unfinished
+            // unload. Match native UnloadCount after this gradual chunk.
+            state.vehicles[i].cargo_unloading = unload_units < unloadable;
         }
         if mail_remaining {
             state.vehicles[i].cargo_unloading = true;
+        }
+        if !state.vehicles[i].cargo_unloading
+            && bus_service_should_attempt_loading(&state.vehicles[i])
+        {
+            // This tick cannot load after unloading. Keep the stop window
+            // open for that next attempt, including around retained cargo.
+            state.vehicles[i].cargo_loading = true;
         }
     }
 
@@ -1573,7 +1604,10 @@ pub(super) fn load_vehicles(
         .take(state.vehicles.len())
     {
         let order_vehicle_idx = vehicle_order_index(state, i);
-        if !train_ready_for_station_transfer(&state.vehicles[order_vehicle_idx]) {
+        if !vehicle_ready_for_station_transfer(
+            &state.vehicles[order_vehicle_idx],
+            state.construction.road_drive_on_right(),
+        ) {
             continue;
         }
         // El refit de estación se evalúa antes de los filtros de capacidad y
@@ -1596,8 +1630,15 @@ pub(super) fn load_vehicles(
         let loading = state.vehicles[i].cargo_loading;
         let mut has_reserved_load = state.vehicles[i].cargo_packets.reserved_count() > 0;
         let unit_capacity = vehicle_unit_capacity(state, i);
-        // Con carga a bordo: solo seguir cargando si full_load o carga gradual.
-        if state.vehicles[i].cargo != 0 && !allow_top_up && !loading && !has_reserved_load {
+        // A normal service also fills the free seats around MTA_KEEP cargo.
+        // Outside a loading window, only an existing gradual/full load may
+        // continue; driving through a station must not start another pickup.
+        if state.vehicles[i].cargo != 0
+            && !allow_top_up
+            && !loading
+            && !has_reserved_load
+            && !state.vehicles[order_vehicle_idx].awaiting_load_window
+        {
             continue;
         }
         if state.vehicles[i].cargo_unloading {
@@ -3064,7 +3105,18 @@ fn try_load_from_station_waiting_cargo(
 /// Native trains begin loading after `VehicleEnter_Station` confirms the exact
 /// stop coordinate. A wagon entering a platform is insufficient: transferring
 /// then stops the head before the other wagons can reach the platform.
-fn train_ready_for_station_transfer(head: &crate::Vehicle) -> bool {
+fn vehicle_ready_for_station_transfer(head: &crate::Vehicle, drive_on_right: bool) -> bool {
+    if crate::road_movement::traffic::is_road_vehicle_kind(head.kind) && head.road_pos_valid {
+        if crate::road_movement::rvsb::is_bay_road_state(head.road_state) {
+            return crate::road_movement::bay::road_vehicle_stopped_in_bay_side(
+                head,
+                drive_on_right,
+            );
+        }
+        if crate::road_movement::rvsb::is_drive_through_road_state(head.road_state) {
+            return head.frame == crate::road_movement::rvsb::RVC_DRIVE_THROUGH_STOP_FRAME;
+        }
+    }
     head.kind != VehicleKind::Train
         // Abstract legacy trains do not use the native front-engine controller.
         || head.engine_id.is_none()
@@ -3320,6 +3372,163 @@ fn station_has_industry_waiting(
 )] // Fixtures de mapa acotado construidos en cada prueba.
 mod tests {
     use super::*;
+
+    #[test]
+    fn drive_through_service_waits_for_native_stop_frame() {
+        let stop = TileCoord::new(4, 4);
+        let next = TileCoord::new(7, 4);
+        let mut state = GameState::new(12, 8);
+        crate::apply_command(&mut state, &crate::Command::PlaceRoad(TileCoord::new(3, 4))).unwrap();
+        crate::apply_command(
+            &mut state,
+            &crate::Command::PlaceBusStop(stop, crate::RSV_DRIVE_THROUGH_X),
+        )
+        .unwrap();
+        state.stations[0].add_waiting_cargo(CargoType::Passengers, 40);
+        let mut bus = crate::Vehicle::new(70, VehicleKind::Bus, stop, stop);
+        bus.road_pos_valid = true;
+        bus.road_state = crate::road_movement::rvsb::RVSB_IN_DT_ROAD_STOP;
+        bus.frame = 0;
+        bus.orders = vec![
+            crate::VehicleOrder::station_with_types(
+                stop,
+                crate::OrderLoadType::LoadIfPossible,
+                crate::OrderUnloadType::Transfer,
+                crate::OrderNonStop::NonStopDestination,
+            ),
+            crate::VehicleOrder::station(next),
+        ];
+        bus.cargo_packets.push(crate::CargoPacket::new(
+            CargoType::Passengers,
+            10,
+            TileCoord::new(1, 1),
+        ));
+        bus.sync_cargo_from_packets();
+        state.vehicles.push(bus);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+        for frame in [0, 1, 10] {
+            state.vehicles[0].frame = frame;
+            let mut unloaded = [false];
+            unload_vehicles(&mut state, 0, &[false], &mut unloaded);
+            let mut loaded = [false];
+            load_vehicles(&mut state, &mut loaded, &unloaded);
+            assert_eq!(state.vehicles[0].cargo, 10, "incoming frame {frame}");
+            assert_eq!(state.vehicles[0].current_order, 0);
+            assert_eq!(state.stations[0].cargo_stock.passengers, 40);
+            assert_eq!(loaded, [false]);
+            assert_eq!(unloaded, [false]);
+        }
+        state.vehicles[0].frame = crate::road_movement::rvsb::RVC_DRIVE_THROUGH_STOP_FRAME;
+        state.vehicles[0].awaiting_load_window = true;
+        let mut unloaded = [false];
+        unload_vehicles(&mut state, 1, &[false], &mut unloaded);
+        assert!(unloaded[0]);
+        assert!(state.vehicles[0].cargo < 10);
+    }
+
+    #[test]
+    fn retained_packets_do_not_keep_a_finished_unload_active() {
+        let stop = TileCoord::new(4, 4);
+        let next = TileCoord::new(7, 4);
+        let mut state = GameState::new(12, 8);
+        crate::apply_command(&mut state, &crate::Command::PlaceRoad(TileCoord::new(3, 4))).unwrap();
+        crate::apply_command(
+            &mut state,
+            &crate::Command::PlaceBusStop(stop, crate::RSV_DRIVE_THROUGH_X),
+        )
+        .unwrap();
+        state
+            .map
+            .set_completed_house(TileCoord::new(4, 5), 4, 0)
+            .unwrap();
+        let mut bus = crate::Vehicle::new(70, VehicleKind::Bus, stop, stop);
+        bus.road_pos_valid = true;
+        bus.road_state = crate::road_movement::rvsb::RVSB_IN_DT_ROAD_STOP;
+        bus.frame = crate::road_movement::rvsb::RVC_DRIVE_THROUGH_STOP_FRAME;
+        bus.awaiting_load_window = true;
+        bus.orders = vec![
+            crate::VehicleOrder::station_with_types(
+                stop,
+                crate::OrderLoadType::NoLoad,
+                crate::OrderUnloadType::UnloadIfPossible,
+                crate::OrderNonStop::NonStopDestination,
+            ),
+            crate::VehicleOrder::station(next),
+        ];
+        bus.cargo_packets.push(
+            crate::CargoPacket::new(CargoType::Passengers, 10, TileCoord::new(1, 1))
+                .with_first_station(TileCoord::new(1, 1)),
+        );
+        bus.cargo_packets
+            .push(crate::CargoPacket::new(CargoType::Passengers, 3, stop).with_first_station(stop));
+        bus.sync_cargo_from_packets();
+        state.vehicles.push(bus);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+        for tick in 0..20 {
+            let mut unloaded = [false];
+            unload_vehicles(&mut state, tick, &[false], &mut unloaded);
+        }
+        assert_eq!(
+            state.vehicles[0].cargo, 3,
+            "only boarding-station packets remain"
+        );
+        assert!(!state.vehicles[0].cargo_unloading);
+        assert_eq!(state.stats.cargo_units_final_delivered, 10);
+        assert_eq!(state.vehicles[0].orders[1].destination(), next);
+    }
+
+    #[test]
+    fn ordinary_service_fills_seats_around_retained_passengers() {
+        for retained in [0, 3] {
+            let stop = TileCoord::new(4, 4);
+            let mut state = GameState::new(12, 8);
+            crate::apply_command(&mut state, &crate::Command::PlaceRoad(TileCoord::new(3, 4)))
+                .unwrap();
+            crate::apply_command(
+                &mut state,
+                &crate::Command::PlaceBusStop(stop, crate::RSV_DRIVE_THROUGH_X),
+            )
+            .unwrap();
+            state.stations[0].cargo_stock.passengers = 12;
+            state.stations[0].ensure_packets_from_stock();
+            let mut bus = crate::Vehicle::new(70, VehicleKind::Bus, stop, stop);
+            bus.road_pos_valid = true;
+            bus.road_state = crate::road_movement::rvsb::RVSB_IN_DT_ROAD_STOP;
+            bus.frame = crate::road_movement::rvsb::RVC_DRIVE_THROUGH_STOP_FRAME;
+            bus.awaiting_load_window = true;
+            bus.orders = vec![
+                crate::VehicleOrder::station(stop),
+                crate::VehicleOrder::station(TileCoord::new(7, 4)),
+            ];
+            state
+                .map
+                .set_completed_house(TileCoord::new(4, 5), 4, 0)
+                .unwrap();
+            bus.cargo_packets.push(
+                crate::CargoPacket::new(CargoType::Passengers, 10, TileCoord::new(1, 1))
+                    .with_first_station(TileCoord::new(1, 1)),
+            );
+            if retained > 0 {
+                bus.cargo_packets.push(
+                    crate::CargoPacket::new(CargoType::Passengers, retained, stop)
+                        .with_first_station(stop),
+                );
+            }
+            bus.sync_cargo_from_packets();
+            state.vehicles.push(bus);
+            state.runtime.fleet_index.rebuild(&state.vehicles);
+            for tick in 0..20 {
+                let mut unloaded = [false];
+                unload_vehicles(&mut state, tick, &[false], &mut unloaded);
+                load_vehicles(&mut state, &mut [false], &unloaded);
+            }
+            assert_eq!(state.vehicles[0].cargo, u32::from(retained) + 12);
+            assert_eq!(state.stats.cargo_units_loaded, 12);
+            assert_eq!(state.stations[0].cargo_stock.passengers, 0);
+            assert_eq!(state.vehicles[0].current_order, 1);
+            assert_eq!(state.stats.cargo_units_final_delivered, 10);
+        }
+    }
 
     #[test]
     fn wagon_on_platform_does_not_transfer_before_front_engine_begin_loading() {

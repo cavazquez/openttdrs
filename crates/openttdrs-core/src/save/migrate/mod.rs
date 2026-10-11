@@ -40,10 +40,13 @@ pub(super) fn migrate_loaded_state(
         }
         v += 1;
     }
+    // Modern snapshots persist the publication frontier and pending jobs.
+    // Recomputing it here also reroutes waiting packets and consumes Random().
+    // Hydration rebuilds only legacy snapshots without that frontier.
+    state.hydrate_runtime();
+    // Apply transient catalogues after hydration so their resolved strings
+    // and diagnostics survive the runtime reset.
     after_migrate_refresh_newgrf(&mut state);
-    state.ensure_timers_from_tick();
-    state.rebuild_station_flows();
-    state.sanitize_all_vehicle_orders();
     Ok(state)
 }
 

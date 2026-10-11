@@ -143,7 +143,14 @@ pub fn drive_state_with_overtake_and_side(
     drive_on_right: bool,
 ) -> u8 {
     let side = if drive_on_right { RVSB_DRIVE_SIDE } else { 0 };
-    (road_state & RVSB_TRACKDIR_MASK) ^ (overtaking & RVSB_DRIVE_SIDE) ^ side
+    // DT stops encode EnteredStop inside the ordinary trackdir nibble.
+    // Native movement always uses the straight entry direction there.
+    let trackdir = if crate::road_movement::rvsb::is_drive_through_road_state(road_state) {
+        road_state & crate::road_movement::rvsb::RVSB_ROAD_STOP_TRACKDIR_MASK
+    } else {
+        road_state & RVSB_TRACKDIR_MASK
+    };
+    trackdir ^ (overtaking & RVSB_DRIVE_SIDE) ^ side
 }
 
 fn tile_is_station(map: &Map, pos: TileCoord) -> bool {
@@ -203,6 +210,28 @@ fn opposite_dir(dir: u8) -> u8 {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    #[test]
+    fn entered_drive_through_stop_keeps_the_native_straight_exit() {
+        use crate::road_movement::{drive_data::road_drive_entry, rvsb};
+        for direction in [0, 1, 8, 9] {
+            for right in [false, true] {
+                for overtaking in [0, rvsb::RVSB_DRIVE_SIDE] {
+                    let state = rvsb::RVSB_IN_DT_ROAD_STOP | direction | rvsb::RVSB_ENTERED_STOP;
+                    let expected = direction ^ overtaking ^ if right { 16 } else { 0 };
+                    let lookup =
+                        super::drive_state_with_overtake_and_side(state, overtaking, right);
+                    assert_eq!(lookup, expected);
+                    for frame in 12..=15 {
+                        assert_eq!(
+                            road_drive_entry(lookup, frame),
+                            road_drive_entry(expected, frame)
+                        );
+                        assert!(road_drive_entry(lookup, frame).is_some());
+                    }
+                }
+            }
+        }
+    }
     use super::*;
     use crate::vehicle::{DIR_SW, VehicleKind};
     use std::collections::VecDeque;

@@ -11,7 +11,9 @@ use super::orders_codec::{
 use super::table::{SlRecord, SlValue, record_get};
 
 pub use super::orders_codec::SavOrder;
+#[cfg(test)]
 pub(crate) use super::orders_codec::vehicle_orders_from_sav;
+pub(crate) use super::orders_codec::vehicle_orders_from_sav_with_depots;
 pub(crate) use super::orders_codec::{OTTD_TRAVEL_TIMETABLED, OTTD_WAIT_TIMETABLED};
 
 /// `SLV_105` — listas de órdenes como pool `OrderList` (`ORDL`).
@@ -352,8 +354,8 @@ mod tests {
                 airport_persistent_storage_id: None,
             },
         );
-        // Middle = bits 4–5 = 1 (default `VehicleOrder::station`).
-        let order_type = OT_GOTO_STATION | (1 << 4);
+        // Middle + native NoIntermediate (default VehicleOrder::station).
+        let order_type = OT_GOTO_STATION | (1 << 4) | (1 << 6);
         let orders = vehicle_orders_from_sav(
             &[SavOrder {
                 order_type,
@@ -398,7 +400,7 @@ mod tests {
         assert!(full.0);
         let no_unload = stop_flags_from_sav(OTTD_UNLOAD_NO_UNLOAD);
         assert!(no_unload.1);
-        let order_type = OT_GOTO_STATION | (1 << 4); // Middle
+        let order_type = OT_GOTO_STATION | (1 << 4) | (1 << 6); // Middle, no intermediate stops
         let orders = vehicle_orders_from_sav(
             &[SavOrder {
                 order_type,

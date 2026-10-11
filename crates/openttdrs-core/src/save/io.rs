@@ -188,7 +188,6 @@ pub(super) fn load_from_str_with_limit(text: &str, limit: u64) -> Result<GameSta
         crate::command::normalize_synthetic_rail_crossings(&mut state.map);
         state.map.migrate_legacy_clear_grass_m5();
         state.ensure_timers_from_tick();
-        state.rebuild_station_flows();
         state.sanitize_all_vehicle_orders();
         // JSON plano no lleva versión: tratarlo como anterior a v26 para no
         // borrar un `max_loan` individual al reconstruir el runtime.
@@ -212,6 +211,49 @@ mod tests {
 
     fn versioned_json_size(state: &GameState) -> u64 {
         serialized_json_size(&versioned_file(state)).unwrap()
+    }
+
+    #[test]
+    fn published_cargo_routes_survive_both_json_loaders_without_rebuilding() {
+        use crate::{CargoType, TileCoord};
+        let mut state = GameState::new(8, 8);
+        state.map.migrate_legacy_clear_grass_m5();
+        state.cargo_dist.distribution = crate::flow_stat::DistributionType::Symmetric;
+        crate::newgrf_actions::apply_newgrf_stack_catalogs_default_dirs(&mut state);
+        state.hydrate_runtime();
+        state.infer_legacy_company_max_loan_overrides();
+        state.runtime.cargo_routing_initialized = true;
+        state
+            .runtime
+            .station_flows
+            .by_station
+            .entry(TileCoord::new(2, 2))
+            .or_default()
+            .by_cargo
+            .entry(CargoType::Passengers)
+            .or_default()
+            .add_flow(TileCoord::new(1, 1), TileCoord::new(5, 5), 7);
+        let hash = state.canonical_hash();
+        let random = state.random;
+        let legacy = state.save_json().unwrap();
+        let versioned = serde_json::to_string(&versioned_file(&state)).unwrap();
+        for json in [legacy, versioned] {
+            let mut loaded = super::load_from_str(&json).unwrap();
+            assert_eq!(
+                loaded.canonical_hash(),
+                hash,
+                "loader input: {}",
+                &json[..32]
+            );
+            assert_eq!(loaded.random, random);
+            assert_eq!(loaded.runtime.station_flow_rebuilds, 0);
+            let mut continuous = state.clone();
+            for _ in 0..32 {
+                continuous.step();
+                loaded.step();
+                assert_eq!(continuous.canonical_hash(), loaded.canonical_hash());
+            }
+        }
     }
 
     #[test]

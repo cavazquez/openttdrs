@@ -363,6 +363,7 @@ fn handle_drive_through_stop(
     v.cur_speed = 0;
     v.subspeed = 0;
     v.progress = 0;
+    v.road_state |= RVSB_ENTERED_STOP;
     v.advance_destination_after_arrival_with_catalog(engine_catalog);
     true
 }

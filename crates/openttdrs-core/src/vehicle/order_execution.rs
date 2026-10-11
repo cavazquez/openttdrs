@@ -193,9 +193,13 @@ impl super::model::Vehicle {
                 self.apply_order_destination_with_stations(map, stations, order);
                 true
             }
-            crate::vehicle::order::VehicleOrder::Depot { stop: false, .. } => {
+            crate::vehicle::order::VehicleOrder::Depot {
+                stop: false,
+                unbunch,
+                ..
+            } => {
                 // Servicio opcional: saltar si no hace falta.
-                if !self.needs_servicing {
+                if !unbunch && !self.needs_servicing {
                     self.increment_real_order_index();
                     return self.update_order_dest_with_stations_impl(
                         map,
@@ -578,6 +582,28 @@ mod tests {
     use crate::map::{Map, TileKind};
     use crate::vehicle::order::OrderConditionKind;
     use crate::{Command, GameState, TileCoord, Vehicle, VehicleKind, VehicleOrder, apply_command};
+
+    #[test]
+    fn unbunch_depot_is_visited_even_without_a_service_due() {
+        let map = depot_map();
+        let pos = TileCoord::new(3, 2);
+        let mut vehicle = Vehicle::new(1888, VehicleKind::Bus, TileCoord::new(3, 3), pos);
+        let mut order = VehicleOrder::depot_pass_through(pos);
+        if let VehicleOrder::Depot { unbunch, .. } = &mut order {
+            *unbunch = true;
+        }
+        vehicle.orders = vec![order, VehicleOrder::station(TileCoord::new(9, 9))];
+        assert!(!vehicle.needs_servicing);
+        vehicle.sync_order_destination_with_stations(&map, &[]);
+        assert_eq!(vehicle.current_order, 0);
+        assert_eq!(vehicle.dest, pos);
+        vehicle.orders[0] = VehicleOrder::depot_pass_through(pos);
+        vehicle.sync_order_destination_with_stations(&map, &[]);
+        assert_eq!(
+            vehicle.current_order, 1,
+            "optional service is still skipped"
+        );
+    }
 
     #[test]
     fn station_departure_paths_keep_native_movement_fractions() {

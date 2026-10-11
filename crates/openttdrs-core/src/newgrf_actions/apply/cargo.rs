@@ -94,11 +94,14 @@ pub fn apply_newgrf_cargoes(state: &mut GameState, search_dirs: &[&Path]) {
             }
         }
     }
+    let catalog_changed = state.cargo_spec_catalog != catalog;
     state.cargo_spec_catalog = catalog;
     // El selector PATS de CargoDist consulta las clases del catálogo activo.
     // Rehacer los flows al cambiarlo evita que un SAV importado calcule un
     // cargo NewGRF como mercancía default hasta el siguiente rollover mensual.
-    if state.cargo_dist.has_automatic_distribution() {
+    // Reapplying identical specs on JSON load must preserve the published
+    // routes, waiting packets and RNG. A real class change still rebuilds.
+    if catalog_changed && state.cargo_dist.has_automatic_distribution() {
         state.rebuild_station_flows();
     }
 }

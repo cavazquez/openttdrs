@@ -69,25 +69,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Dependencias del pipeline OpenGFX
+      # Las tablas Rust de sprites y las páginas del atlas forman una pareja
+      # versionada. Regenerar sólo las imágenes aquí y compilarlas con las
+      # tablas del checkout en otro job dibuja recortes de sprites distintos.
+      - name: Validar assets versionados
         run: |
-          sudo apt-get update
-          sudo apt-get install -y grfcodec unzip
-          python3 -m pip install --user --upgrade -r scripts/requirements-assets.txt
-          python3 -c 'from PIL import Image; assert hasattr(Image.Image, "get_flattened_data")'
-
-      - name: Recuperar referencia OpenTTD fijada
-        run: ./scripts/fetch-openttd-reference.sh
-
-      - name: Generar assets OpenGFX 32bpp redistribuibles
-        run: ./scripts/descargar_assets.sh graficos --32bpp
-
-      - name: Validar assets requeridos
-        run: |
-          test -f assets/opengfx/tiles/grass.png
-          test -f assets/opengfx/tiles/vehicle_train_e.png
           test -f assets/opengfx/atlas/tiles_atlas_0.png
           test -f static/fonts/DejaVuSansMono.ttf
+          test -f assets/music/theme.ogg
+          test -d assets/sounds
+          git diff --exit-code -- assets/opengfx/atlas crates/openttdrs-client/src/sprites
 
       - name: Assets compartidos
         uses: actions/upload-artifact@v7
@@ -98,7 +89,6 @@ jobs:
           path: |
             assets/music
             assets/sounds
-            assets/opengfx/tiles
             assets/opengfx/atlas
             static
 
@@ -228,12 +218,23 @@ jobs:
           name: runtime-assets
           path: .
 
+      - name: Exigir atlas y tablas del mismo checkout
+        shell: bash
+        run: git diff --exit-code -- assets/opengfx/atlas crates/openttdrs-client/src/sprites
+
       - name: Compilar cliente y servidor dedicado
         shell: bash
         run: >-
           cargo build --locked --release --target "${{ matrix.target }}"
           -p openttdrs-client --bin openttdrs-client
           -p openttdrs-net --bin openttdrs-dedicated
+
+      - name: Materializar tiles con el cliente compilado
+        shell: bash
+        run: |
+          suffix=""
+          if [[ "${{ matrix.target }}" == *windows* ]]; then suffix=".exe"; fi
+          ./scripts/prepare_release_assets.sh "target/${{ matrix.target }}/release/openttdrs-client${suffix}"
 
       - name: Empaquetar y generar SHA-256
         shell: bash

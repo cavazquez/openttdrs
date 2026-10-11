@@ -2,7 +2,10 @@
 
 Fecha: **2026-10-11**. Alcance: los cimientos base Action5 y la escena de
 conexiones de puentes de Kale al ejecutar un paquete desde un perfil vacío.
-La publicación de esta alpha se registra por separado de la corrección.
+La [evidencia de publicación](evidence/alpha6-publication-20261011.json)
+registra los paquetes y verificaciones de la entrega. El Snap revisión 6
+usa la fuente `f268e924`; el arreglo posterior del workflow de GitHub conserva
+el código Rust y los gráficos de ese commit.
 
 ## Divergencia reproducida
 
@@ -42,6 +45,40 @@ del paquete y perfiles vacíos fuera del checkout, coincide exactamente con
 la escena aceptada en `0.25`, `0.5`, `1`, `2`, `4` y `8`: cero píxeles cambiados.
 Esto conserva las diferencias heredadas respecto de OpenTTD documentadas en
 [las conexiones de puentes](kale-bridge-connections.md).
+
+El Snap final `0.1.0-alpha.6` se publicó como revisión **6** en
+[`latest/edge`](https://snapcraft.io/openttdrs). Su descarga desde el Store
+coincide byte por byte con el paquete validado: SHA-256
+`bf9e85c9865bcfc804651e5a98e8803279ccfda4d1a922347a5eea40fa2034f6`.
+Las seis capturas usan ese paquete extraído, su launcher y sus assets de
+sólo lectura con perfiles vacíos: cero píxeles cambiados o empeorados
+respecto de la escena aceptada. El smoke del menú también pasa.
+
+## Atlas de los paquetes GitHub
+
+El primer workflow por tag pasó el smoke gráfico de Linux y macOS, pero el
+paquete Linux falló al cargar esta partida: en `1×`, 475.488 píxeles cambiados
+y 470.767 empeorados respecto de la escena aceptada. El menú no ejercitaba las
+posiciones del atlas del mapa. Se canceló la publicación antes de crear la
+prerelease; no se publicó ese paquete.
+
+El job de assets regeneraba imágenes y tablas Rust con el modo `32bpp`, pero
+sólo transfería las imágenes al job que compilaba. Ese job usaba las tablas
+versionadas de otro atlas: una región válida de la textura correspondía a un
+sprite distinto. La corrección conserva el atlas y las tablas del checkout;
+cada plataforma deriva sus PNG sueltos con su propio cliente `--check-assets`
+antes de empaquetar. El control Git rechaza cambios en atlas o tablas antes
+de compilar y antes de materializar los tiles.
+
+Con el mismo binario Linux del paquete fallido, usar el atlas versionado y
+derivar sus 5.547 tiles produce la escena aceptada en los seis zooms: cero
+píxeles cambiados o empeorados. Esto aísla la mezcla de atlas y tablas como
+causa, sin alterar el renderer.
+
+Las regresiones de empaquetado cubren un atlas reemplazado, una tabla
+modificada, la materialización correcta desde un directorio externo y la
+ausencia de los tiles requeridos. No se vuelven a generar los gráficos al
+publicar una release.
 
 ## Reproducir sobre el Snap construido
 

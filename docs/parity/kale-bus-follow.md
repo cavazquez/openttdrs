@@ -3,6 +3,13 @@
 Actualizado: **2026-10-10**. Corte acotado posterior al seguimiento del tren y
 a la migración a Bevy 0.20. FPS permanece aplazado.
 
+Las cifras de este documento pertenecen al corte histórico `c1046845`.
+El [caso posterior del camión 314](kale-truck-follow.md) comparte el ejemplo
+y el runner del bus, conserva las paradas viales unidas y refuerza la prueba
+del depósito: exige estado oculto, servicio y salida. Su evidencia incluye
+una nueva ejecución del bus, cuyos hashes y punto físico inicial cambian
+por esas correcciones; la evidencia anterior se conserva intacta.
+
 La fuente es `save/Kale_TitleGame.sav`, SHA-256
 `584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69`.
 Se usa su bus **1888**, motor vanilla 0, capacidad de 40 pasajeros, con las
@@ -161,7 +168,8 @@ Este caso no cierra paridad tick a tick con una partida nativa en ejecución,
 tráfico y adelantamientos con múltiples buses, todas las variantes de
 depósito, nearest-depot, órdenes condicionales, tranvías, vehículos
 articulados, NewGRF, obras que alteren la ruta ni todos los estados CargoDist.
-Los ciclos equivalentes de camiones, barcos y aeronaves quedan para cortes
-propios, con guardado en viaje, cámaras fijas y seguimiento en seis zooms.
+El camión 314 tiene su [caso propio](kale-truck-follow.md). Los ciclos de
+barcos y aeronaves siguen pendientes, con guardado en viaje, cámaras fijas
+y seguimiento en seis zooms.
 No se amplía el presupuesto visual acordado: menos de 1.000 píxeles que
 empeoran por imagen de 800×600; las mejoras no consumen ese presupuesto.

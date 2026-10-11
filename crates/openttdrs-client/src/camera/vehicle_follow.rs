@@ -43,7 +43,7 @@ pub(super) fn install(app: &mut App) {
     if let Some(path) = std::env::var_os("OPENTTDRS_FOLLOW_TRACE_OUT") {
         let result = std::fs::File::create(path).and_then(|file| {
             let mut output = BufWriter::new(file);
-            writeln!(output, "frame,tick,x,y,direction,rail_pixel,order,loading,camera_x,camera_y,sprite_x,sprite_y,scale,kind,cargo,cargo_loading,cargo_unloading,running,road_x,road_y,road_frame,road_state,last_station_x,last_station_y,cargo_income,delivered_units,vehicle_id")?;
+            writeln!(output, "frame,tick,x,y,direction,rail_pixel,order,loading,camera_x,camera_y,sprite_x,sprite_y,scale,kind,cargo,cargo_loading,cargo_unloading,running,road_x,road_y,road_frame,road_state,last_station_x,last_station_y,cargo_income,delivered_units,vehicle_id,in_depot,service_generation")?;
             Ok(output)
         });
         match result {
@@ -108,7 +108,7 @@ fn trace_follow(
     let company = &sim.state.companies[vehicle.owner.index()];
     let result = writeln!(
         trace.output,
-        "{frame},{},{},{},{},{},{},{},{},{},{sprite_x},{sprite_y},{},{:?},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+        "{frame},{},{},{},{},{},{},{},{},{},{sprite_x},{sprite_y},{},{:?},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
         sim.state.tick.get(),
         vehicle.pos.x,
         vehicle.pos.y,
@@ -132,7 +132,9 @@ fn trace_follow(
         station.y,
         company.cargo_income_earned,
         sim.state.stats.cargo_units_final_delivered,
-        vehicle.id
+        vehicle.id,
+        openttdrs_core::refit::vehicle_is_in_depot(&sim.state.map, vehicle),
+        vehicle.depot_service_generation()
     );
     trace.frame = trace.frame.wrapping_add(1);
     if let Err(error) = result.and_then(|()| trace.output.flush()) {

@@ -1149,8 +1149,8 @@ impl super::model::Vehicle {
         }
     }
 
-    /// En una parada de bahía la llegada ocurre en `_road_stop_stop_frame`,
-    /// varios frames después de cruzar el límite de la tesela.
+    /// Road stops and depots complete arrival at their native stop frame,
+    /// several movement frames after crossing the tile boundary.
     fn defers_road_station_arrival(&self, map: Option<&Map>) -> bool {
         let is_road_vehicle = matches!(
             self.kind,
@@ -1170,6 +1170,8 @@ impl super::model::Vehicle {
             && map.is_some_and(|map| {
                 crate::station::is_connected_bay_road_stop(map, self.pos)
                     || crate::station::is_drive_through_road_stop(map, self.pos)
+                    || (self.road_pos_valid
+                        && map.get_kind(self.pos) == Some(crate::TileKind::RoadDepot))
             })
     }
 
@@ -1918,14 +1920,20 @@ impl super::model::Vehicle {
         if order.is_depot() {
             let halt = order.depot_stops();
             let needs = self.needs_servicing;
-            if halt || needs {
+            let native_road_entry = crate::road_movement::traffic::is_road_vehicle_kind(self.kind)
+                && self.road_state == crate::road_movement::RVSB_IN_DEPOT;
+            if halt || needs || native_road_entry {
                 if let Some(cargo) = order.depot_refit_cargo() {
                     self.pending_depot_order_refit = Some(cargo);
                 }
-                if engine_catalog.is_empty() {
-                    self.service_at_depot();
-                } else {
-                    self.service_at_depot_with_catalog(engine_catalog);
+                // Native road entry already called VehicleServiceInDepot
+                // before processing this halt order. Do not service twice.
+                if !native_road_entry {
+                    if engine_catalog.is_empty() {
+                        self.service_at_depot();
+                    } else {
+                        self.service_at_depot_with_catalog(engine_catalog);
+                    }
                 }
             }
             if halt {

@@ -147,6 +147,24 @@ pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
         return true;
     }
 
+    if vehicles[v_idx].frame == super::rvsb::RVC_DEPOT_STOP_FRAME
+        && let Some(map) = map
+        && map.get_kind(vehicles[v_idx].pos) == Some(crate::TileKind::RoadDepot)
+        && let Some(mouth) = crate::depot::road_depot_mouth_dir(map, vehicles[v_idx].pos)
+        && state == trackdir_from_direction(super::depot::road_depot_entry_direction(mouth))
+    {
+        // VehicleEnter_Road hides the vehicle only at RVC_DEPOT_STOP_FRAME.
+        // Tile entry itself must neither finish the order nor bypass service.
+        let v = &mut vehicles[v_idx];
+        v.road_state = RVSB_IN_DEPOT;
+        v.road_depot_phase = RoadDepotPhase::InDepot;
+        v.direction = (v.direction + 4) % 8;
+        v.cur_speed = 0;
+        v.service_at_depot_with_catalog(engine_catalog);
+        v.advance_destination_after_arrival_with_catalog(engine_catalog);
+        return false;
+    }
+
     if is_bay_road_state(state) {
         let stop = bay_stop_frame_side(state, drive_on_right).unwrap_or(u8::MAX);
         let entered = state & RVSB_ENTERED_STOP != 0;
@@ -257,7 +275,12 @@ fn enter_next_tile(
     let v = &mut vehicles[v_idx];
     let prev_dir = v.direction;
     v.advance_one_tile_with_catalog(map, engine_catalog);
-    if v.direction != prev_dir || v.movement_target().is_some() {
+    if let Some(mouth) = map.and_then(|map| crate::depot::road_depot_mouth_dir(map, v.pos)) {
+        // The depot has one straight entry trackdir. A curve on the previous
+        // road tile must not remain active inside the depot movement table.
+        v.direction = super::depot::road_depot_entry_direction(mouth);
+        v.road_state = trackdir_from_direction(v.direction);
+    } else if v.direction != prev_dir || v.movement_target().is_some() {
         let inbound = v.direction;
         let outbound = v.movement_target().map_or(inbound, |next| {
             crate::vehicle::direction_from_tile_step(v.pos, next)
@@ -343,8 +366,19 @@ fn drive_through_should_stop(v: &Vehicle, map: Option<&Map>) -> bool {
         _ => false,
     };
     type_matches
-        && v.current_order_ref()
-            .is_some_and(|order| order.should_stop_at_station(v.last_station_visited, v.pos))
+        && v.current_order_ref().is_some_and(|order| {
+            let anchor = order.destination();
+            // SAV stations can have a dock/rail anchor and a joined road stop.
+            // Native ShouldStopAtStation receives StationID, not a tile.
+            let same_native_station = map.get(anchor).is_some_and(|target| {
+                target.kind == crate::TileKind::Station
+                    && target.mapt & 0xF0 == 0x50
+                    && tile.mapt & 0xF0 == 0x50
+                    && (target.m2, target.m2_hi) == (tile.m2, tile.m2_hi)
+            });
+            let station = if same_native_station { anchor } else { v.pos };
+            order.should_stop_at_station(v.last_station_visited, station)
+        })
 }
 
 fn handle_drive_through_stop(
@@ -677,7 +711,7 @@ fn road_table_position(v: &Vehicle, drive_on_right: bool, frame: u8) -> Option<(
     ))
 }
 
-fn sync_road_position_from_table(v: &mut Vehicle, drive_on_right: bool) {
+pub(crate) fn sync_road_position_from_table(v: &mut Vehicle, drive_on_right: bool) {
     let (x, y) = road_table_position(v, drive_on_right, v.frame).unwrap_or((
         v.pos.x.saturating_mul(ROAD_TILE_SIZE),
         v.pos
@@ -1093,6 +1127,115 @@ mod tests {
     use crate::road_movement::rvsb::{RVSB_ENTERED_STOP, RVSB_USING_SECOND_BAY};
     use crate::vehicle::{DIR_E, DIR_NE, DIR_SW, VehicleKind};
     use std::collections::VecDeque;
+
+    #[test]
+    fn native_depot_frame_services_once_and_respects_halt() {
+        for mouth in 0..4 {
+            for drive_on_right in [false, true] {
+                for halt in [false, true] {
+                    let depot = TileCoord::new(3, 3);
+                    let next = TileCoord::new(6, 3);
+                    let mut map = Map::new_flat(8, 8, 0);
+                    map.set_kind(depot, TileKind::RoadDepot).unwrap();
+                    let mut tile = map.get(depot).unwrap();
+                    tile.m5 = 0x20 | mouth;
+                    map.set_tile(depot, tile).unwrap();
+                    let entrance = crate::depot::road_depot_entrance_tile(&map, depot).unwrap();
+                    map.set_kind(entrance, TileKind::Road).unwrap();
+                    let mut v = Vehicle::new(314, VehicleKind::Truck, entrance, depot);
+                    v.running = true;
+                    v.direction = super::super::depot::road_depot_entry_direction(mouth);
+                    v.road_state = 2; // Curve on the preceding road tile.
+                    v.road_pos_valid = true;
+                    v.path.push_back(depot);
+                    v.orders = vec![
+                        crate::VehicleOrder::Depot {
+                            depot,
+                            stop: halt,
+                            wait_ticks: 0,
+                            travel_ticks: 0,
+                            refit_cargo: Some(crate::CargoType::Coal),
+                            unbunch: !halt,
+                        },
+                        crate::VehicleOrder::station(next),
+                    ];
+                    let mut vehicles = vec![v];
+                    assert!(enter_next_tile(
+                        &mut vehicles,
+                        0,
+                        Some(&map),
+                        drive_on_right,
+                        &[],
+                        None,
+                    ));
+                    assert_eq!(vehicles[0].pos, depot);
+                    assert_eq!(
+                        vehicles[0].road_state,
+                        trackdir_from_direction(vehicles[0].direction),
+                        "the depot must use a straight entry, even after a curve"
+                    );
+                    assert_eq!(vehicles[0].current_order, 0);
+                    assert_eq!(vehicles[0].service_generation, 0);
+                    vehicles[0].frame = 10;
+                    sync_road_position_from_table(&mut vehicles[0], drive_on_right);
+                    individual_road_vehicle_controller_side(
+                        &mut vehicles,
+                        0,
+                        Some(&map),
+                        drive_on_right,
+                    );
+                    assert_eq!(vehicles[0].frame, 11);
+                    assert_eq!(vehicles[0].current_order, 0);
+                    assert_eq!(vehicles[0].service_generation, 0);
+                    assert_eq!(vehicles[0].pending_depot_order_refit, None);
+                    assert_eq!(vehicles[0].road_depot_phase, RoadDepotPhase::None);
+                    individual_road_vehicle_controller_side(
+                        &mut vehicles,
+                        0,
+                        Some(&map),
+                        drive_on_right,
+                    );
+                    assert_eq!(vehicles[0].road_state, RVSB_IN_DEPOT);
+                    assert_eq!(vehicles[0].road_depot_phase, RoadDepotPhase::InDepot);
+                    assert_eq!(vehicles[0].service_generation, 1);
+                    assert_eq!(
+                        vehicles[0].pending_depot_order_refit,
+                        Some(crate::CargoType::Coal),
+                        "entry service must not erase the scheduled refit"
+                    );
+                    assert_eq!(vehicles[0].running, !halt);
+                    assert_eq!(vehicles[0].current_order, usize::from(!halt));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn drive_through_joined_stop_uses_full_native_station_id() {
+        let (mut map, stop, _, _) = drive_through_map(false, 2);
+        let anchor = TileCoord::new(5, 5);
+        let mut tile = map.get(anchor).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m6 = crate::station::STATION_TYPE_DOCK << 3;
+        map.set_tile(anchor, tile).unwrap();
+        let mut tile = map.get(stop).unwrap();
+        tile.mapt = 0x50;
+        map.set_tile(stop, tile).unwrap();
+        map.set_m2_u16(anchor, 0x1234).unwrap();
+        map.set_m2_u16(stop, 0x1234).unwrap();
+        let mut v = Vehicle::new(314, VehicleKind::Truck, stop, stop);
+        v.orders = vec![crate::VehicleOrder::station(anchor)];
+        assert!(drive_through_should_stop(&v, Some(&map)));
+        map.set_m2_u16(stop, 0x2234).unwrap();
+        assert!(
+            !drive_through_should_stop(&v, Some(&map)),
+            "the low byte alone is insufficient"
+        );
+        map.set_m2_u16(stop, 0x1234).unwrap();
+        v.last_station_visited = Some(anchor);
+        assert!(!drive_through_should_stop(&v, Some(&map)));
+    }
 
     fn bay_map() -> (Map, TileCoord, TileCoord) {
         let mut map = Map::new_flat(8, 8, 0);

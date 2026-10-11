@@ -189,6 +189,13 @@ fn service_vehicle_units_with_catalog(
 }
 
 impl super::model::Vehicle {
+    /// Diagnostic counter of completed depot services in this runtime.
+    /// It is not persisted and does not participate in canonical state.
+    #[must_use]
+    pub const fn depot_service_generation(&self) -> u32 {
+        self.service_generation
+    }
+
     /// Restaura fiabilidad tras servicio en depósito.
     pub fn service_at_depot(&mut self) {
         let engine_id = self

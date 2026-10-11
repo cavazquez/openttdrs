@@ -1,5 +1,6 @@
 mod cargo_rating;
 mod coverage;
+pub(crate) use coverage::station_cargo_acceptance_with_newgrf_and_cargo_catalog;
 mod destination;
 mod geometry;
 pub(crate) use geometry::vehicle_physically_at_station_with_footprint;
@@ -28,7 +29,8 @@ pub use coverage::{
 };
 pub use destination::{
     resolve_aircraft_station_dest, resolve_order_destination, resolve_order_destination_from,
-    resolve_order_destination_from_with_stations, ship_docking_tiles_for_station,
+    resolve_order_destination_from_with_stations, road_stop_tiles_for_station,
+    ship_docking_tiles_for_station,
 };
 pub use geometry::{
     bay_entry_direction, dock_station_native_id, dock_station_tiles, is_connected_bay_road_stop,

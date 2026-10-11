@@ -1719,6 +1719,7 @@ impl GameState {
         // dos piezas `MP_STATION`. Indexarlas por `MAP2` permite reconstruir
         // la huella completa al importar un save.
         let mut imported_dock_tiles: HashMap<u32, Vec<TileCoord>> = HashMap::new();
+        let mut imported_road_stop_tiles: HashMap<u32, Vec<TileCoord>> = HashMap::new();
         let (map_w, map_h) = state.map.dimensions();
         for y in 0..map_h {
             let Ok(y) = i32::try_from(y) else {
@@ -1745,6 +1746,15 @@ impl GameState {
                 }
                 if stop_kind == StopKind::Dock {
                     imported_dock_tiles.entry(station_id).or_default().push(c);
+                }
+                if matches!(
+                    stop_kind,
+                    StopKind::BusStop | StopKind::TruckStop | StopKind::RoadWaypoint
+                ) {
+                    imported_road_stop_tiles
+                        .entry(station_id)
+                        .or_default()
+                        .push(c);
                 }
             }
         }
@@ -1881,6 +1891,17 @@ impl GameState {
                 state.climate,
                 sav.version,
             );
+            // STNN.xy can be a dock, rail platform or another road stop.
+            // MAP2 identifies every physical road stop of this station.
+            station.joined_tiles.extend(
+                imported_road_stop_tiles
+                    .remove(&st.station_id)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|tile| *tile != station.pos),
+            );
+            station.joined_tiles.sort_unstable();
+            station.joined_tiles.dedup();
             state.stations.push(station);
         }
         hydrate_sav_road_stop_tiles(&mut state, &sav.road_stop_station_data);
@@ -3384,7 +3405,8 @@ mod tests {
     }
 
     #[test]
-    fn from_sav_game_preserves_docks_on_intermodal_station() {
+    #[allow(clippy::too_many_lines)]
+    fn from_sav_game_preserves_docks_and_road_stops_on_intermodal_station() {
         let anchor = TileCoord::new(1, 1);
         let first_land = TileCoord::new(2, 3);
         let first_water = crate::station::dock_water_tile(first_land, 1);
@@ -3416,6 +3438,21 @@ mod tests {
             map.set_m2_u16(water, station_id).expect("dock water id");
         }
 
+        let truck_stop = TileCoord::new(8, 6);
+        let bus_stop = TileCoord::new(8, 3);
+        let foreign_stop = TileCoord::new(8, 5);
+        for (pos, kind, id) in [
+            (truck_stop, 2, station_id),
+            (bus_stop, 3, station_id),
+            (foreign_stop, 2, station_id + 1),
+        ] {
+            let mut tile = map.get(pos).expect("road stop tile");
+            tile.kind = TileKind::Station;
+            tile.mapt = 0x50;
+            tile.m6 = kind << 3;
+            map.set_tile(pos, tile).expect("road stop bytes");
+            map.set_m2_u16(pos, id).expect("road stop station id");
+        }
         let mut sav = empty_sav(352, map);
         sav.stations.push(SavStation {
             station_id: u32::from(station_id),
@@ -3423,7 +3460,7 @@ mod tests {
             airport_origin: None,
             owner: crate::company::CompanyId::PLAYER.0,
             name: Some("Intermodal con muelles".into()),
-            facilities: FACIL_TRAIN | FACIL_DOCK,
+            facilities: FACIL_TRAIN | FACIL_DOCK | FACIL_TRUCK_STOP | FACIL_BUS_STOP,
             string_id: None,
             build_date: crate::station::STATION_BUILD_DATE_DEFAULT,
             town_id: None,
@@ -3444,12 +3481,38 @@ mod tests {
         let state = GameState::from_sav_game(sav);
         let station = state.stations.first().expect("intermodal station");
         assert_eq!(station.stop_kind, StopKind::RailStation);
-        assert_eq!(station.effective_facilities(), FACIL_TRAIN | FACIL_DOCK);
+        assert_eq!(
+            station.effective_facilities(),
+            FACIL_TRAIN | FACIL_DOCK | FACIL_TRUCK_STOP | FACIL_BUS_STOP
+        );
         assert!(station.can_service_vehicle(crate::vehicle::VehicleKind::Train));
         assert!(station.can_service_vehicle(crate::vehicle::VehicleKind::Ship));
         for tile in [first_land, first_water, second_land, second_water] {
             assert!(station.covers_tile(tile), "missing dock tile {tile:?}");
         }
+        assert!(station.covers_tile(truck_stop));
+        assert!(station.covers_tile(bus_stop));
+        assert!(!station.covers_tile(foreign_stop));
+        assert_eq!(
+            crate::station::road_stop_tiles_for_station(
+                &state.map,
+                &state.stations,
+                crate::VehicleKind::Truck,
+                anchor,
+                anchor
+            ),
+            vec![truck_stop]
+        );
+        assert_eq!(
+            crate::station::road_stop_tiles_for_station(
+                &state.map,
+                &state.stations,
+                crate::VehicleKind::Bus,
+                anchor,
+                anchor
+            ),
+            vec![bus_stop]
+        );
         let dock_tiles = crate::station::dock_station_tiles(&state.map, station);
         assert_eq!(dock_tiles.len(), 4);
         assert!(dock_tiles.contains(&first_land));

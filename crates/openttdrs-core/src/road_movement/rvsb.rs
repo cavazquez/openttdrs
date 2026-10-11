@@ -45,6 +45,8 @@ pub const RVC_DEFAULT_START_FRAME: u8 = 0;
 pub const RVC_TURN_AROUND_START_FRAME: u8 = 1;
 /// Frame al salir de depósito.
 pub const RVC_DEPOT_START_FRAME: u8 = 6;
+/// Frame at which `VehicleEnter_Road` hides an entering vehicle (roadveh.h).
+pub const RVC_DEPOT_STOP_FRAME: u8 = 11;
 /// Frame de servicio dentro de una parada drive-through (`roadveh.h`).
 pub const RVC_DRIVE_THROUGH_STOP_FRAME: u8 = 11;
 

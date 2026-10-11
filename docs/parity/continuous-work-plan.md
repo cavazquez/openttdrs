@@ -32,8 +32,12 @@ queda aceptada en los seis zooms con el presupuesto acordado de menos de
 sus comprobaciones. El corte Bevy terminó por indicación del usuario. Su
 solicitud posterior abrió el [servicio controlado del bus de Kale](kale-bus-follow.md):
 paradas, pasajeros, depósito, recarga en viaje y cámara en seis zooms. Queda
-aceptado con su evidencia y termina en el bus 1888; camiones, barcos y
-aeronaves requieren sus propios casos. El bloque de FPS continúa aplazado.
+aceptado con su evidencia histórica. La siguiente solicitud abrió el
+[servicio controlado del camión 314](kale-truck-follow.md): carga, descarga,
+entrada y salida del depósito, guardado en viaje y seis zooms. Queda aceptado
+en esa fixture; barcos y aeronaves requieren sus propios casos. La observación
+posterior del usuario abre la revisión de cabeceras y cruce de puentes en Kale,
+actualmente en curso. El bloque de FPS continúa aplazado.
 
 ## Entrega alpha anterior (cumplida)
 

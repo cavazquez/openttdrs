@@ -1145,7 +1145,7 @@ fn unload_vehicles_impl<const PROFILE: bool>(
         );
         drop(staging_span);
         let acceptance_span = profile.span::<PROFILE>(UnloadPhase::Acceptance);
-        let accepted = crate::station::station_accepts_cargo_with_newgrf_and_cargo_catalog(
+        let acceptance = crate::station::station_cargo_acceptance_with_newgrf_and_cargo_catalog(
             &state.map,
             &mut state.industries,
             &state.towns,
@@ -1156,6 +1156,7 @@ fn unload_vehicles_impl<const PROFILE: bool>(
             cargo_type,
             &state.cargo_spec_catalog,
         );
+        let accepted = acceptance.accepted;
         drop(acceptance_span);
         let staging_span = profile.span::<PROFILE>(UnloadPhase::Staging);
         let will_unload = crate::cargo_packet::prepare_unload(
@@ -1316,7 +1317,11 @@ fn unload_vehicles_impl<const PROFILE: bool>(
                     // receptor aceptó todas sus unidades. Una aceptación
                     // parcial conserva la semántica histórica de reencolar
                     // el packet completo, antes que perder su remanente.
-                    let final_delivery = town_cargo || accepted_industry == u32::from(packet.count);
+                    // DeliverGoods accepts every unit when houses contribute
+                    // always_accepted. Goods delivered to a town need no industry.
+                    let final_delivery = town_cargo
+                        || acceptance.always_accepted
+                        || accepted_industry == u32::from(packet.count);
                     if final_delivery {
                         physically_delivered_units =
                             physically_delivered_units.saturating_add(u32::from(packet.count));
@@ -1393,12 +1398,12 @@ fn unload_vehicles_impl<const PROFILE: bool>(
                 .get_mut(cargo_type)
                 .mark_final_delivery();
         }
-        if town_cargo && delivered_units > 0 {
+        if (town_cargo || acceptance.always_accepted) && physically_delivered_units > 0 {
             town::record_delivery_near_town(
                 &mut state.towns,
                 station_pos,
                 cargo_type,
-                delivered_units,
+                physically_delivered_units,
             );
         }
         let mut reinserted = Vec::new();
@@ -3475,6 +3480,75 @@ mod tests {
         assert!(!state.vehicles[0].cargo_unloading);
         assert_eq!(state.stats.cargo_units_final_delivered, 10);
         assert_eq!(state.vehicles[0].orders[1].destination(), next);
+    }
+
+    #[test]
+    fn goods_delivered_to_accepting_houses_are_consumed_once() {
+        for houses in [1, 2] {
+            let stop = TileCoord::new(4, 4);
+            let source = TileCoord::new(1, 1);
+            let mut state = GameState::new(12, 8);
+            crate::apply_command(&mut state, &crate::Command::PlaceRoad(TileCoord::new(3, 4)))
+                .unwrap();
+            crate::apply_command(
+                &mut state,
+                &crate::Command::PlaceTruckStop(stop, crate::RSV_DRIVE_THROUGH_X),
+            )
+            .unwrap();
+            for x in 0..houses {
+                state
+                    .map
+                    .set_completed_house(TileCoord::new(4 + x, 5), 0, 0)
+                    .unwrap();
+            }
+            state.towns.push(crate::town::Town {
+                id: 0,
+                pos: stop,
+                population: 100,
+                ..Default::default()
+            });
+            let mut truck = crate::Vehicle::new(314, VehicleKind::Truck, stop, stop);
+            truck.cargo_type = Some(CargoType::Goods);
+            truck.road_pos_valid = true;
+            truck.road_state = crate::road_movement::rvsb::RVSB_IN_DT_ROAD_STOP;
+            truck.frame = crate::road_movement::rvsb::RVC_DRIVE_THROUGH_STOP_FRAME;
+            truck.awaiting_load_window = true;
+            truck.orders = vec![
+                crate::VehicleOrder::station_with_types(
+                    stop,
+                    crate::OrderLoadType::NoLoad,
+                    crate::OrderUnloadType::Unload,
+                    crate::OrderNonStop::NonStopDestination,
+                ),
+                crate::VehicleOrder::station(TileCoord::new(7, 4)),
+            ];
+            truck.cargo_packets.push(
+                crate::CargoPacket::new(CargoType::Goods, 10, source).with_first_station(source),
+            );
+            truck.sync_cargo_from_packets();
+            state.vehicles.push(truck);
+            state.runtime.fleet_index.rebuild(&state.vehicles);
+            for tick in 0..20 {
+                unload_vehicles(&mut state, tick, &[false], &mut [false]);
+            }
+            let expected = if houses == 2 { 10 } else { 0 };
+            assert_eq!(state.vehicles[0].cargo, 0);
+            assert_eq!(state.stats.cargo_units_final_delivered, expected);
+            assert_eq!(
+                state.companies[0]
+                    .cargo_units_delivered_by_type
+                    .units_for(CargoType::Goods),
+                expected
+            );
+            assert_eq!(
+                state.stations[0].cargo_stock.goods,
+                10 - u32::try_from(expected).unwrap()
+            );
+            assert_eq!(
+                state.towns[0].received_new[crate::town::TownGrowthEffect::Goods as usize],
+                u32::try_from(expected).unwrap()
+            );
+        }
     }
 
     #[test]

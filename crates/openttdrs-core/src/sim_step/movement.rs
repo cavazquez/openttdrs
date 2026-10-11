@@ -287,6 +287,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                 &mut road_traffic,
             );
             state.vehicles = vehicles;
+            trigger_depot_on_entry(state, i, was_in_depot);
             if !was_broken_down && state.vehicles[i].is_broken_down() {
                 state
                     .runtime
@@ -880,6 +881,7 @@ fn sync_road_articulated_parts(
 
 /// Cruce de la boca de un depósito road. El vehículo queda oculto mientras
 /// está dentro y aparece recién al iniciar el frame de salida.
+#[allow(clippy::too_many_lines)] // Keep the serialized and native depot phases together.
 fn tick_road_depot_movement(state: &mut GameState, i: usize) -> bool {
     use crate::VehicleKind;
     use crate::road_movement::{
@@ -922,6 +924,9 @@ fn tick_road_depot_movement(state: &mut GameState, i: usize) -> bool {
             if !state.vehicles[i].running {
                 return true;
             }
+            if crate::depot_leave::vehicle_waiting_for_unbunching(&state.vehicles[i]) {
+                return true;
+            }
             let Some(exit) = crate::depot::road_depot_entrance_tile(&state.map, depot) else {
                 return true;
             };
@@ -942,6 +947,21 @@ fn tick_road_depot_movement(state: &mut GameState, i: usize) -> bool {
                 return true;
             };
             let direction = road_depot_exit_direction(mouth);
+            if state.vehicles[i].road_state == crate::road_movement::RVSB_IN_DEPOT {
+                // RoadVehLeaveDepot starts at native frame 6, then returns
+                // to the ordinary movement table and acceleration controller.
+                let drive_on_right = state.construction.road_drive_on_right();
+                let v = &mut state.vehicles[i];
+                v.service_at_depot_with_catalog(&state.engine_catalog);
+                v.road_depot_phase = RoadDepotPhase::None;
+                v.road_state = crate::road_movement::trackdir_from_direction(direction);
+                v.direction = direction;
+                v.frame = crate::road_movement::rvsb::RVC_DEPOT_START_FRAME;
+                crate::road_movement::controller::sync_road_position_from_table(v, drive_on_right);
+                v.path.clear();
+                crate::depot_leave::leave_unbunching_depot(&mut state.vehicles, i);
+                return true;
+            }
             state.vehicles[i].direction = direction;
             state.vehicles[i].progress = ROAD_DEPOT_EXIT_START;
             state.vehicles[i].road_depot_phase = RoadDepotPhase::Exiting {
@@ -1113,6 +1133,75 @@ mod tests {
     use crate::newgrf_sprites::{Action2RandomEntry, TrainSpriteAssign, TrainSpriteGraphics};
     use crate::{GameState, TileCoord, TileKind, Vehicle, VehicleKind};
     use std::collections::VecDeque;
+
+    #[test]
+    fn native_road_depot_exit_waits_and_uses_frame_six() {
+        let depot = TileCoord::new(3, 3);
+        let mut state = GameState::new(8, 8);
+        state.map.set_kind(depot, TileKind::RoadDepot).unwrap();
+        let exit = crate::depot::road_depot_entrance_tile(&state.map, depot).unwrap();
+        state.map.set_kind(exit, TileKind::Road).unwrap();
+        let mut truck = Vehicle::new(314, VehicleKind::Truck, depot, TileCoord::new(6, 3));
+        truck.running = true;
+        truck.road_pos_valid = true;
+        truck.road_state = crate::road_movement::RVSB_IN_DEPOT;
+        truck.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
+        truck.shared_order_id = Some(7);
+        truck.orders = vec![
+            crate::VehicleOrder::Depot {
+                depot,
+                stop: false,
+                unbunch: true,
+                wait_ticks: 0,
+                travel_ticks: 0,
+                refit_cargo: None,
+            },
+            crate::VehicleOrder::station(TileCoord::new(6, 3)),
+        ];
+        truck.current_order = 1;
+        truck.sim_tick = 9;
+        truck.depot_unbunching_next_departure = 10;
+        truck.service_generation = 1;
+        state.vehicles.push(truck);
+        assert!(tick_road_depot_movement(&mut state, 0));
+        assert_eq!(
+            state.vehicles[0].road_state,
+            crate::road_movement::RVSB_IN_DEPOT
+        );
+        state.vehicles[0].sim_tick = 10;
+        state
+            .vehicles
+            .push(Vehicle::new(1, VehicleKind::Bus, exit, exit));
+        assert!(tick_road_depot_movement(&mut state, 0));
+        assert_eq!(
+            state.vehicles[0].service_generation, 1,
+            "traffic still blocks release"
+        );
+        state.vehicles.pop();
+        let orders = state.vehicles[0].orders.clone();
+        assert!(tick_road_depot_movement(&mut state, 0));
+        let v = &state.vehicles[0];
+        assert_eq!(v.road_depot_phase, crate::vehicle::RoadDepotPhase::None);
+        assert_eq!(v.frame, 6);
+        assert_eq!(v.service_generation, 2);
+        assert_eq!(v.current_order, 1);
+        assert_eq!(v.orders, orders);
+        let lookup = v.road_state
+            | if state.construction.road_drive_on_right() {
+                0x10
+            } else {
+                0
+            };
+        let entry = crate::road_movement::road_drive_entry(lookup, 6).unwrap();
+        assert_eq!(
+            (v.road_x, v.road_y),
+            (
+                depot.x * 16 + i32::from(entry.x),
+                depot.y * 16 + i32::from(entry.y)
+            )
+        );
+        assert_eq!(v.depot_unbunching_last_departure, 10);
+    }
 
     fn assert_aircraft_phase_state(actual: &GameState, expected: &GameState) {
         assert_eq!(actual.map.tiles(), expected.map.tiles());

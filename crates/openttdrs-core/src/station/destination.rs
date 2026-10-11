@@ -97,12 +97,46 @@ fn ship_docking_tile_for_station(
         .next()
 }
 
+/// Physical road stops of a logical station, filtered like YAPF's
+/// `PfDetectDestinationTile`. A dock or rail anchor is not a road endpoint.
+#[must_use]
+pub fn road_stop_tiles_for_station(
+    map: &Map,
+    stations: &[Station],
+    kind: VehicleKind,
+    station: TileCoord,
+    from: TileCoord,
+) -> Vec<TileCoord> {
+    let expected = match kind {
+        VehicleKind::Truck => 2,
+        VehicleKind::Bus | VehicleKind::Tram => 3,
+        _ => return Vec::new(),
+    };
+    let mut tiles = vec![station];
+    if let Some(logical) = stations.iter().find(|s| s.covers_tile(station)) {
+        tiles.push(logical.pos);
+        tiles.extend(logical.joined_tiles.iter().copied());
+    }
+    tiles.retain(|&pos| {
+        map.get(pos).is_some_and(|tile| {
+            tile.kind == TileKind::Station && super::station_type_from_m6(tile.m6) == expected
+        })
+    });
+    tiles.sort_unstable_by_key(|pos| {
+        (
+            pos.x.abs_diff(from.x) + pos.y.abs_diff(from.y),
+            pos.y,
+            pos.x,
+        )
+    });
+    tiles.dedup();
+    tiles
+}
+
 /// Destino de movimiento según tipo de vehículo y orden.
 ///
-/// Bus/camión: la tesela de la estación — como `OpenTTD`,
-/// `RoadVehicle::GetOrderStationLocation` conserva el ancla de la estación y
-/// el controlador decide si puede entrar a la bahía, atravesar un drive-through
-/// o continuar por la carretera cuando la ruta no alcanza la parada.
+/// Bus/camión: una parada física del tipo correcto. Las órdenes conservan el
+/// ancla lógica; `YapfRoad` termina en una parada de esa identidad y tipo.
 /// Tren: la tesela de parada en la plataforma (`GetTrainStopLocation` simplificado).
 #[must_use]
 pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrder) -> TileCoord {
@@ -168,7 +202,10 @@ pub fn resolve_order_destination_from_with_stations(
         (
             VehicleKind::Truck | VehicleKind::Bus | VehicleKind::Tram,
             VehicleOrder::Station { station, .. },
-        ) => station,
+        ) => road_stop_tiles_for_station(map, stations, kind, station, from)
+            .into_iter()
+            .next()
+            .unwrap_or(station),
         (_, order) => order.destination(),
     }
 }

@@ -1,0 +1,803 @@
+{
+  "schema": 1,
+  "date": "2026-10-10",
+  "passed": true,
+  "contracts": {
+    "KTR-STOPS": "accepted for truck 314 only",
+    "KTR-DEPOT": "accepted for truck 314 only",
+    "KTR-DELIVERY": "accepted for truck 314 only",
+    "KTR-RELOAD": "accepted for truck 314 only",
+    "KTR-ZOOM": "accepted for truck 314 only"
+  },
+  "base_commit": "c1046845165291998d57ada96b53606cf0eb194c",
+  "source": {
+    "path": "save/Kale_TitleGame.sav",
+    "sha256": "584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69"
+  },
+  "prepared_game": {
+    "path": "save/Kale_truck_follow.json",
+    "sha256": "341b8e646cb8990a1cd456354e489d19851f147e6f35d4b987dc9c1945a00a3b"
+  },
+  "native_reference": {
+    "commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+    "version": "15.3",
+    "rules": [
+      "YapfRoad physical StationID/type endpoints",
+      "VehicleEnter_Road frame 11",
+      "RoadVehLeaveDepot frame 6 and unbunch/traffic",
+      "VehicleEnterDepot service before order processing",
+      "DeliverGoods house always_accepted consumption"
+    ]
+  },
+  "truck": {
+    "id": 314,
+    "engine": 13,
+    "cargo": "Goods",
+    "capacity": 18,
+    "orders_unchanged": true,
+    "native_order_indices": {
+      "depot": 0,
+      "source": 1,
+      "destination": 2
+    },
+    "station_ids": [
+      40,
+      52
+    ],
+    "depot_id": 12
+  },
+  "binaries": {
+    "client": {
+      "path": "target/release/openttdrs-client",
+      "sha256": "dee7e6d8e8e14480213a064da5248ac8ab029ac8d3bcaf72aa4b74b56f650925"
+    },
+    "truck_example": {
+      "path": "target/release/examples/kale_truck_follow",
+      "sha256": "2610d228822e402552355b747ca2a9398324a9b54e0dda97f787c20a6380fca1"
+    },
+    "bus_example": {
+      "path": "target/release/examples/kale_bus_follow",
+      "sha256": "1eb9b14c2d2373644fdec2ba85b7f15afa771e2f86ca5f2cd2cafdaad73870a0"
+    }
+  },
+  "source_files": {
+    "crates/openttdrs-client/src/camera/vehicle_follow.rs": "36c76de3d926ad79310f9b289c08bb55338e1e67e3be3eaac96a52bddf23c832",
+    "crates/openttdrs-core/examples/kale_bus_follow.rs": "871e9920103b43ea5537e84fca98cb484206ce5fb47e8f943f82780541ee13c5",
+    "crates/openttdrs-core/examples/kale_truck_follow.rs": "7d41f0e1661fe06d76abf81d8cac4bbe16e870cc2d8dddcc76caa346d1d44abd",
+    "crates/openttdrs-core/examples/support/kale_road_follow.rs": "79245a8badc365ef98e99f2de8f422a39bd365750f9124f443318f764e1e26f0",
+    "crates/openttdrs-core/src/road_movement/controller.rs": "b8ff2d37db0ddbf011062b6e9784a3683af0f855f752670443bd09dfc0ef39b2",
+    "crates/openttdrs-core/src/road_movement/rvsb.rs": "ed1db007ea0289592c910de603170a54e68fa41b5433de206b7037ddb587592c",
+    "crates/openttdrs-core/src/sav/mod.rs": "a5d735c71ba931f87185bb049e6990c2f6b8fe8c8df1010fa2da30aa8c00934f",
+    "crates/openttdrs-core/src/sim_step/cargo_transfer.rs": "159c8eda95f5f7437604e52578924d485763276d1689f0cd00db4423bbb8ed38",
+    "crates/openttdrs-core/src/sim_step/movement.rs": "830732e94960843ca7c5da2c40495a6f0798ce0a3d8ba86d9ecd2e46fd7a7be6",
+    "crates/openttdrs-core/src/station/coverage.rs": "3b1d84bdad5756b4d88bbe31a7f799f81bac776ba4a9538e019cd1310c29dbb7",
+    "crates/openttdrs-core/src/station/destination.rs": "f106ac54182436c189a87f1986c564c00f5fcc1a657913082245db4ce5e0b3a4",
+    "crates/openttdrs-core/src/station/mod.rs": "b3d70424ddde62d8270adaaa675fbf3315abfe492142a4f3c8d136bda5fe8026",
+    "crates/openttdrs-core/src/vehicle/movement.rs": "d159ac2d1cf357b8ecf5262ebaa130516fec3525aed371dc7cb8b5e62a9a9de9",
+    "crates/openttdrs-core/src/vehicle/reliability.rs": "9f4bffa4071cfba957fd6df4bfc6687599f0ccabb7a58b636d9e6e49a57fc78b",
+    "docs/parity/continuous-work-plan.md": "0ff51555808466bcbeafd8d89e8dc27bf8be985ef12d86f04fe08e61a98a4a2d",
+    "docs/parity/kale-bus-follow.md": "e25d4cc2cb1e91255eb30cea0ce5af2a45c3c8175ed6d1ec2f7b3c4323e052a9",
+    "docs/parity/kale-truck-follow.md": "9d4915d1183acfb8c0c6ce2ed3f5b8eb91e5aad22feb7bbbca7b9f7b38c98c2d",
+    "scripts/check_kale_bus_follow.py": "d2778ae3405319be015e73393b757c815a794432cf8c36b59874877b471adde0",
+    "scripts/check_kale_road_follow.py": "9fab0ef0b30fef70a8eeac7e2a54bef902997cd51e069ab1bf1d36a4c1e3eef1",
+    "scripts/check_kale_truck_follow.py": "57d3eb066d5a9c1970d4ff3c9730e3fdcfd16319b3c37204a299d047572d290c"
+  },
+  "build_provenance": {
+    "client_log": {
+      "path": "artifacts/transport-follow/truck/build-client-final.log",
+      "sha256": "d70ddfcdb94d3dfb668950680e607b93e9fc66645e620957ad30b1b1eaf2635b"
+    },
+    "examples_log": {
+      "path": "artifacts/transport-follow/truck/build-examples-final.log",
+      "sha256": "dc9678d9a5bb6570d067488619dc877d3a09d815972b9957c25c7a2349c0422a"
+    },
+    "profile": "release -j2 --locked --offline",
+    "post_build_edits": "Only rustdoc backticks, local Clippy length annotations and SAV test panic messages were changed after the captured client build; runtime statements are unchanged."
+  },
+  "route": {
+    "cargo_income": 446,
+    "copy": "artifacts/transport-follow/truck/final.json",
+    "delivered_units": 18,
+    "departure_cargo": 18,
+    "depot": [
+      211,
+      145
+    ],
+    "depot_order": 0,
+    "depot_service_generations": 2,
+    "depot_tick": 2120,
+    "destination": [
+      202,
+      113
+    ],
+    "destination_delivered_units": 18,
+    "destination_order": 2,
+    "destination_tick": 1084,
+    "directions": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "exited_depot": true,
+    "failure": null,
+    "final_cargo": 0,
+    "final_frame": 11,
+    "final_hash": 15273303786613245903,
+    "final_tile": [
+      209,
+      145
+    ],
+    "full_hash_interval": 64,
+    "home": [
+      206,
+      144
+    ],
+    "home_order": 1,
+    "home_stop": [
+      209,
+      145
+    ],
+    "initial_hash": 3032763334350831802,
+    "kind": "Truck",
+    "loaded_units": 18,
+    "passed": true,
+    "relative_ticks": 2639,
+    "reload_matching_full_hashes": 40,
+    "reload_matching_ticks": 2500,
+    "reload_tick": 139,
+    "returned_home": true,
+    "scope": "one isolated existing road vehicle with unchanged orders and no construction commands; world advances normally; disasters, AI and breakdowns disabled; no full-fleet/native-tick parity claim",
+    "source": "save/Kale_TitleGame.sav",
+    "truck": 314,
+    "vehicle_id": 314,
+    "visited_tiles": 40,
+    "warmup_ticks": 2114
+  },
+  "route_trace": {
+    "path": "artifacts/transport-follow/truck/final-route.csv",
+    "sha256": "a0f5187cb1109185445f2a121efd6669cec4c94ed653fb37bacf7afd3541095e"
+  },
+  "repeatability": {
+    "matched_final_result": true,
+    "repeat": {
+      "path": "artifacts/transport-follow/truck/repeat.summary.json",
+      "sha256": "6550401afd517d3fd8594609151091c618b5310784c67abaf0616606e07e859d"
+    },
+    "earlier": {
+      "path": "artifacts/transport-follow/truck/acceptance-route.summary.json",
+      "sha256": "aac6038b3957363179f9006cc3d0a898c3c889db94da41993d5774594dc0e683"
+    }
+  },
+  "mid_save": {
+    "path": "artifacts/transport-follow/truck/final-route.mid.json",
+    "sha256": "dee8b0720290503f06f5f2eff16a180c83e13f826a84ee1ade50fa24c7caa2cf"
+  },
+  "live_camera": {
+    "passed": true,
+    "backend": "Lavapipe Vulkan on isolated Xvfb",
+    "batches": [
+      {
+        "path": "artifacts/transport-follow/truck/live-low-retry/results.json",
+        "sha256": "7c205523b081066db417cae217359289180240f62e9e053be10960a31f9caad7"
+      },
+      {
+        "path": "artifacts/transport-follow/truck/live-1-accepted/results.json",
+        "sha256": "b814ec7a1af2a29d27664a55abc85e36876cd09c964007a3f8d22b413ad4b41f"
+      },
+      {
+        "path": "artifacts/transport-follow/truck/live-4-retry/results.json",
+        "sha256": "51a2e3ab7c752e1b0f0e5608cc6c2f4f209c1f07275b7592416c34c18bb1b950"
+      },
+      {
+        "path": "artifacts/transport-follow/truck/live-8-accepted/results.json",
+        "sha256": "473e5e736d9ebcb679d40ed833d2862e9a1e984e4ff8788207c3f135596367e8"
+      }
+    ],
+    "zooms": [
+      {
+        "scale": "0.25",
+        "exit": 0,
+        "frames": 559,
+        "visible_frames": 521,
+        "camera_mismatches": 0,
+        "ticks_advanced": 4415,
+        "visited_tiles": 40,
+        "directions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          0.25
+        ],
+        "destination_tick": 3706275,
+        "depot_tick": 3707314,
+        "returned_home_tick": 3707831,
+        "cargo_income": 492,
+        "delivered_units": 20,
+        "trace_sha256": "ee2778408f1724923fdbf1871d75664e23838d58e40f18acf08e45d3482210b7",
+        "depot_services": 2,
+        "passed": true,
+        "batch": "artifacts/transport-follow/truck/live-low-retry/results.json"
+      },
+      {
+        "scale": "0.5",
+        "exit": 0,
+        "frames": 559,
+        "visible_frames": 521,
+        "camera_mismatches": 0,
+        "ticks_advanced": 4451,
+        "visited_tiles": 40,
+        "directions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          0.5
+        ],
+        "destination_tick": 3706276,
+        "depot_tick": 3707315,
+        "returned_home_tick": 3707827,
+        "cargo_income": 492,
+        "delivered_units": 20,
+        "trace_sha256": "4559d7d7398e7bf332202e0e0742fdb31a62b638048f74d6ddd128426040c366",
+        "depot_services": 2,
+        "passed": true,
+        "batch": "artifacts/transport-follow/truck/live-low-retry/results.json"
+      },
+      {
+        "scale": "1",
+        "exit": 0,
+        "frames": 559,
+        "visible_frames": 522,
+        "camera_mismatches": 0,
+        "ticks_advanced": 4457,
+        "visited_tiles": 40,
+        "directions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          1.0
+        ],
+        "destination_tick": 3706278,
+        "depot_tick": 3707310,
+        "returned_home_tick": 3707830,
+        "cargo_income": 492,
+        "delivered_units": 20,
+        "trace_sha256": "9325c67639ab671ebe7e2d0a8ac5eaeae64be1968dc98a65befb5f41820c1e94",
+        "depot_services": 2,
+        "passed": true,
+        "video_valid": true,
+        "video_sha256": "232ec8def63210625756b847dc28cfebe1ebb444a04698fb775b63a27d76b480",
+        "batch": "artifacts/transport-follow/truck/live-1-accepted/results.json"
+      },
+      {
+        "scale": "2",
+        "exit": 0,
+        "frames": 559,
+        "visible_frames": 522,
+        "camera_mismatches": 0,
+        "ticks_advanced": 4457,
+        "visited_tiles": 40,
+        "directions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          2.0
+        ],
+        "destination_tick": 3706278,
+        "depot_tick": 3707310,
+        "returned_home_tick": 3707830,
+        "cargo_income": 492,
+        "delivered_units": 20,
+        "trace_sha256": "b5a7a8e240c0c13fcfdd3cf90541a6dc1cc90dc787fe41040bd020ecf10085a2",
+        "depot_services": 2,
+        "passed": true,
+        "batch": "artifacts/transport-follow/truck/live-low-retry/results.json"
+      },
+      {
+        "scale": "4",
+        "exit": 0,
+        "frames": 559,
+        "visible_frames": 522,
+        "camera_mismatches": 0,
+        "ticks_advanced": 4457,
+        "visited_tiles": 40,
+        "directions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          4.0
+        ],
+        "destination_tick": 3706278,
+        "depot_tick": 3707310,
+        "returned_home_tick": 3707830,
+        "cargo_income": 492,
+        "delivered_units": 20,
+        "trace_sha256": "603dba8a811ed0709b2b728c947a103a7b579017215a5a5e57d25339d8bb722b",
+        "depot_services": 2,
+        "passed": true,
+        "batch": "artifacts/transport-follow/truck/live-4-retry/results.json"
+      },
+      {
+        "scale": "8",
+        "exit": 0,
+        "frames": 559,
+        "visible_frames": 522,
+        "camera_mismatches": 0,
+        "ticks_advanced": 4457,
+        "visited_tiles": 40,
+        "directions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "observed_scales": [
+          8.0
+        ],
+        "destination_tick": 3706278,
+        "depot_tick": 3707310,
+        "returned_home_tick": 3707830,
+        "cargo_income": 492,
+        "delivered_units": 20,
+        "trace_sha256": "4a176c8f80f7b2ccb6c90f2ca8faf0894546a3ff60a016ab8e918eab1b13f5b1",
+        "depot_services": 2,
+        "passed": true,
+        "batch": "artifacts/transport-follow/truck/live-8-accepted/results.json"
+      }
+    ]
+  },
+  "live_reloaded": {
+    "path": "artifacts/transport-follow/truck/live-reloaded/results.json",
+    "sha256": "6773c6b39e6179cac5a612172b242fdb40c7461cffaf4b62e72b65fed3ee547e",
+    "result": {
+      "passed": true,
+      "truck": 314,
+      "binary_sha256": "dee7e6d8e8e14480213a064da5248ac8ab029ac8d3bcaf72aa4b74b56f650925",
+      "game_sha256": "dee8b0720290503f06f5f2eff16a180c83e13f826a84ee1ade50fa24c7caa2cf",
+      "frames_requested": 500,
+      "speed": 8.0,
+      "zooms": [
+        {
+          "scale": "1",
+          "exit": 0,
+          "frames": 559,
+          "visible_frames": 522,
+          "camera_mismatches": 0,
+          "ticks_advanced": 4457,
+          "visited_tiles": 40,
+          "directions": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "observed_scales": [
+            1.0
+          ],
+          "destination_tick": 3706273,
+          "depot_tick": 3707313,
+          "returned_home_tick": 3707833,
+          "cargo_income": 492,
+          "delivered_units": 20,
+          "trace_sha256": "439c8fd279b820e35180d115d693583473fc3a8e0afe9a709836f0a1c1d2a066",
+          "depot_services": 2,
+          "passed": true,
+          "video_valid": true,
+          "video_sha256": "3405ba663352acdf012776e0b8e9b177c88e1491590c00bcfda2397aeaec583f"
+        }
+      ],
+      "scope": "isolated road service cycle and camera; no FPS/native tick certification"
+    }
+  },
+  "bus_regression": {
+    "core": {
+      "path": "artifacts/transport-follow/truck/bus-regression.summary.json",
+      "sha256": "40ab32aa8f2212ad869993b8b9a3f9c7ff379296f2bfdab88858e405860e7364",
+      "result": {
+        "bus": 1888,
+        "cargo_income": 515,
+        "copy": "artifacts/transport-follow/truck/bus-regression.json",
+        "delivered_units": 20,
+        "departure_cargo": 40,
+        "depot": [
+          118,
+          78
+        ],
+        "depot_order": 2,
+        "depot_service_generations": 2,
+        "depot_tick": 3312,
+        "destination": [
+          117,
+          51
+        ],
+        "destination_delivered_units": 6,
+        "destination_order": 1,
+        "destination_tick": 1637,
+        "directions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "exited_depot": true,
+        "failure": null,
+        "final_cargo": 40,
+        "final_frame": 11,
+        "final_hash": 8666283282968573772,
+        "final_tile": [
+          117,
+          76
+        ],
+        "full_hash_interval": 64,
+        "home": [
+          116,
+          75
+        ],
+        "home_order": 0,
+        "home_stop": [
+          117,
+          76
+        ],
+        "initial_hash": 1330097984836633464,
+        "kind": "Bus",
+        "loaded_units": 53,
+        "passed": true,
+        "relative_ticks": 3675,
+        "reload_matching_full_hashes": 56,
+        "reload_matching_ticks": 3493,
+        "reload_tick": 182,
+        "returned_home": true,
+        "scope": "one isolated existing road vehicle with unchanged orders and no construction commands; world advances normally; disasters, AI and breakdowns disabled; no full-fleet/native-tick parity claim",
+        "source": "save/Kale_TitleGame.sav",
+        "vehicle_id": 1888,
+        "visited_tiles": 42,
+        "warmup_ticks": 3002
+      }
+    },
+    "client": {
+      "path": "artifacts/transport-follow/truck/live-bus-regression/results.json",
+      "sha256": "faa4279934c8bfb41f66cb309dc53b930a748b91e5eeaeeeafc7702f4f09c440",
+      "result": {
+        "passed": true,
+        "bus": 1888,
+        "binary_sha256": "dee7e6d8e8e14480213a064da5248ac8ab029ac8d3bcaf72aa4b74b56f650925",
+        "game_sha256": "fcaa4d480e1c7814dd9f05af70a0c91af26839c29849631acc45fe5740662599",
+        "frames_requested": 500,
+        "speed": 8.0,
+        "zooms": [
+          {
+            "scale": "1",
+            "exit": 0,
+            "frames": 559,
+            "visible_frames": 537,
+            "camera_mismatches": 0,
+            "ticks_advanced": 4457,
+            "visited_tiles": 42,
+            "directions": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "observed_scales": [
+              1.0
+            ],
+            "destination_tick": 3707718,
+            "depot_tick": 3709390,
+            "returned_home_tick": 3709758,
+            "cargo_income": 815,
+            "delivered_units": 35,
+            "trace_sha256": "fcba57f5df1bfbbfb503790e8cc17f17cb018543d5a6d619c744ebcd348c0bf4",
+            "depot_services": 2,
+            "passed": true,
+            "video_valid": true,
+            "video_sha256": "aa21dea48ba4241cfa7efd1d66791087d245df38d493041bb790e3030a6528eb"
+          }
+        ],
+        "scope": "isolated road service cycle and camera; no FPS/native tick certification"
+      }
+    },
+    "note": "Joined physical road stops change the bus starting tile and hashes versus its historical c1046845 receipt; the reinforced complete-cycle contract still passes."
+  },
+  "video": {
+    "path": "artifacts/transport-follow/truck/live-1-accepted/1/follow.mp4",
+    "sha256": "232ec8def63210625756b847dc28cfebe1ebb444a04698fb775b63a27d76b480",
+    "duration_seconds": 41.1,
+    "resolution": [
+      1280,
+      720
+    ],
+    "native_cursor_recorded": false,
+    "inspected_frame": {
+      "path": "artifacts/transport-follow/truck/truck-follow.png",
+      "sha256": "d76231c2c286bdf3c36aac380d2f5e710511d652455428a82d3e3d4c9d76dee3"
+    }
+  },
+  "fixed_raster": {
+    "baseline": "artifacts/bevy020/bus-acceptance-hw",
+    "candidate": "artifacts/bevy020/truck-final-hw",
+    "oracle": "artifacts/bevy020/native-retry",
+    "center": [
+      132,
+      2
+    ],
+    "resolution": [
+      800,
+      600
+    ],
+    "settle_frames": 180,
+    "backend": "AMD RX 7600 desktop Vulkan",
+    "comparison": {
+      "schema": 1,
+      "alignment": [
+        0,
+        0
+      ],
+      "passed": false,
+      "zooms": [
+        {
+          "scale": "0.25",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "equally_wrong_changed_pixels": 0,
+          "native_before": 624,
+          "native_after": 624,
+          "lost_correct_pixels": 0,
+          "gained_correct_pixels": 0,
+          "changed_blocks_4x4": 0,
+          "total_pixels": 480000,
+          "passed": true,
+          "baseline_sha256": "0e38c89dd087ff19612c43c4f084c075770ebe31de08fa11d8e96b7920187a3e",
+          "candidate_sha256": "0e38c89dd087ff19612c43c4f084c075770ebe31de08fa11d8e96b7920187a3e",
+          "oracle_sha256": "9529d553e3aa6bb7f402e11f18d6f7243b2942fbc16159f15d91ec536944cd7b",
+          "budget_passed": true
+        },
+        {
+          "scale": "0.5",
+          "changed_pixels": 540,
+          "worsened_pixels": 0,
+          "improved_pixels": 540,
+          "equally_wrong_changed_pixels": 0,
+          "native_before": 712,
+          "native_after": 172,
+          "lost_correct_pixels": 0,
+          "gained_correct_pixels": 540,
+          "changed_blocks_4x4": 93,
+          "total_pixels": 480000,
+          "passed": true,
+          "baseline_sha256": "33fe5ade021c18d347986b485c6c1fd42fd801d6f196c5683aae4eb9d60040b8",
+          "candidate_sha256": "03457586015153c449247165c3b233b445684973c2992e28c563f7e2f1a41748",
+          "oracle_sha256": "d025ab6d5c142207b33554378b4f298eb8fadba118cc5fc5b6af84693d99f7e6",
+          "budget_passed": true
+        },
+        {
+          "scale": "1",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "equally_wrong_changed_pixels": 0,
+          "native_before": 45,
+          "native_after": 45,
+          "lost_correct_pixels": 0,
+          "gained_correct_pixels": 0,
+          "changed_blocks_4x4": 0,
+          "total_pixels": 480000,
+          "passed": true,
+          "baseline_sha256": "6eb808c54266c118374ab882692604af801fd6b1df9380c63acd3f8f88c70eb5",
+          "candidate_sha256": "6eb808c54266c118374ab882692604af801fd6b1df9380c63acd3f8f88c70eb5",
+          "oracle_sha256": "81f49dd2e245475d6dec35b1ab4d857a49014ddb7526e40d0363b029ce3d4155",
+          "budget_passed": true
+        },
+        {
+          "scale": "2",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "equally_wrong_changed_pixels": 0,
+          "native_before": 3863,
+          "native_after": 3863,
+          "lost_correct_pixels": 0,
+          "gained_correct_pixels": 0,
+          "changed_blocks_4x4": 0,
+          "total_pixels": 480000,
+          "passed": true,
+          "baseline_sha256": "d3b856eb621c6205a8a4b8873a468c491a1aafb6944bcd7bb4cc72f68b9faa51",
+          "candidate_sha256": "d3b856eb621c6205a8a4b8873a468c491a1aafb6944bcd7bb4cc72f68b9faa51",
+          "oracle_sha256": "35309213f2ea11c3be0ccb39ca4c0cff260428d342763ab401739fc6eb68b92b",
+          "budget_passed": true
+        },
+        {
+          "scale": "4",
+          "changed_pixels": 0,
+          "worsened_pixels": 0,
+          "improved_pixels": 0,
+          "equally_wrong_changed_pixels": 0,
+          "native_before": 87162,
+          "native_after": 87162,
+          "lost_correct_pixels": 0,
+          "gained_correct_pixels": 0,
+          "changed_blocks_4x4": 0,
+          "total_pixels": 480000,
+          "passed": true,
+          "baseline_sha256": "679b7096682f80b389f7301df3429f2374c55370f579cce724bf7fd4919cd118",
+          "candidate_sha256": "679b7096682f80b389f7301df3429f2374c55370f579cce724bf7fd4919cd118",
+          "oracle_sha256": "7e3854e82d482286409dba3d8c32daac6090cf4ec0e038482e5df712ab98ac84",
+          "budget_passed": true
+        },
+        {
+          "scale": "8",
+          "changed_pixels": 11,
+          "worsened_pixels": 11,
+          "improved_pixels": 0,
+          "equally_wrong_changed_pixels": 0,
+          "native_before": 70997,
+          "native_after": 71008,
+          "lost_correct_pixels": 11,
+          "gained_correct_pixels": 0,
+          "changed_blocks_4x4": 8,
+          "total_pixels": 480000,
+          "passed": false,
+          "baseline_sha256": "308f6e61344f3769b1fac31631426146e63efb06043f5d177fc3e93480263fc7",
+          "candidate_sha256": "0cf4af2ba2590954a862747f61f18a0c2206030917cc30ea3cda9dcdfc324474",
+          "oracle_sha256": "5112108334311ec6accae507f9b564c89f10d50112663fa47b0322ccdd438ac5",
+          "budget_passed": true
+        }
+      ],
+      "acceptance": {
+        "metric": "worsened_pixels",
+        "exclusive_limit": 1000
+      },
+      "budget_passed": true
+    },
+    "worst_worsened_pixels": 11,
+    "captures": {
+      "path": "artifacts/bevy020/truck-final-hw/captures.json",
+      "sha256": "83ef79336a58754ce361b7a9e986fa68419dd14f7251f23dd65b3e86551b9a0f"
+    }
+  },
+  "checks": {
+    "core_tests": {
+      "path": "artifacts/transport-follow/truck/test-core-final.log",
+      "sha256": "cec4cdf6cda5b952575d73744cf9ecc2b18824b55624f1c901efcdaf659bf4a6",
+      "passed": 3086,
+      "ignored": 6,
+      "suites": 65
+    },
+    "client_tests": {
+      "path": "artifacts/transport-follow/truck/test-client-retry.log",
+      "sha256": "ca2ca3c85bd16c4410dfc960734532d225fe4c66cb5135c0d1390ccbeae08a9a",
+      "passed": 1718,
+      "ignored": 2,
+      "suites": 1
+    },
+    "final_depot_regression": {
+      "path": "artifacts/transport-follow/truck/test-depot-final.log",
+      "sha256": "0cedc47297f82a4c9b282d68ccf92b914c72a104a25d37d24704a12bf3cd135a"
+    },
+    "clippy": {
+      "exit": 0,
+      "command": "cargo clippy -p openttdrs-core -p openttdrs-client --all-targets --profile ci -j2 --locked --offline -- -D warnings",
+      "log": {
+        "path": "artifacts/transport-follow/truck/clippy-retry.log",
+        "sha256": "da7cdccd38397fca645c97712355b71cfb3c23b44e5385c0345aa4f514c99ec5"
+      }
+    },
+    "fmt": {
+      "exit": 0,
+      "command": "cargo fmt --all -- --check",
+      "log": {
+        "path": "artifacts/transport-follow/truck/fmt-publish.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "python_syntax": {
+      "exit": 0,
+      "command": "python3 -m py_compile scripts/check_kale_road_follow.py scripts/check_kale_bus_follow.py scripts/check_kale_truck_follow.py"
+    },
+    "parity_docs": {
+      "exit": 0,
+      "command": "./scripts/check_parity_docs_fresh.sh",
+      "log": {
+        "path": "artifacts/transport-follow/truck/docs-final.log",
+        "sha256": "0b8430a312c1661aaf3a38c119e172aa7557826f6ef9024ff7fcea0007564e76"
+      }
+    },
+    "diff": {
+      "exit": 0,
+      "command": "git diff --check"
+    },
+    "shell_syntax": {
+      "exit": 0,
+      "command": "bash -n scripts/follow_vehicle.sh"
+    }
+  },
+  "rejected_or_interrupted_attempts": [
+    {
+      "path": "artifacts/transport-follow/truck/live-low-accepted/results.json",
+      "reason": "Scale 0.25 exited at 328 frames without returning home; rejected."
+    },
+    {
+      "path": "artifacts/transport-follow/truck/live-4-accepted/results.json",
+      "reason": "Scale 4 exited at 159 frames without depot service or return; rejected."
+    },
+    {
+      "path": "artifacts/transport-follow/truck/capture-raster.log",
+      "reason": "Initial batch produced scale 0.25 but scale 0.5 exited without its PNG; full isolated retry replaces the batch."
+    },
+    {
+      "path": "artifacts/transport-follow/truck/test-client-final.log",
+      "reason": "Initial test command terminated with signal 143 before a test result; complete retry passes."
+    },
+    {
+      "path": "artifacts/transport-follow/truck/cycle-working.summary.json",
+      "reason": "Before the house acceptance fix, route and payment passed but final delivered units were zero; rejected."
+    }
+  ],
+  "limits": [
+    "One isolated existing Kale truck; no complete-fleet traffic certification.",
+    "No live native tick-by-tick or payment parity claim.",
+    "Physical stop selection uses geometric proximity, not complete multi-target YAPF cost/reachability.",
+    "House acceptance covers the existing supported table, not NewGRF house callbacks or headquarters.",
+    "Partial industrial cargo acceptance retains its previous behavior.",
+    "No articulated road vehicles, trams, nearest-depot, route construction edits or comprehensive CargoDist/NewGRF acceptance.",
+    "Frozen raster and moving follow camera verify separate contracts.",
+    "No FPS acceptance claim.",
+    "The later user-reported bridge head alignment issue belongs to a separate stage; this receipt does not certify bridge drawing."
+  ]
+}

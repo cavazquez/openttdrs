@@ -50,6 +50,9 @@ pub struct StationCoverage {
     /// `NewGRF`. Se mantiene aparte de los cuatro contadores históricos para
     /// no perder cargos que no son `Goods`/`Water`.
     pub accepted_cargo: CargoStock,
+    /// Acceptance contributed by houses, distinct from industrial capacity.
+    /// Mirrors the supported house cargos in `OpenTTD`'s `always_accepted` mask.
+    pub always_accepted_cargo: CargoStock,
     /// Cuando una tesela de industria `NewGRF` participa en la cobertura, la
     /// tabla por cargo es exacta: un cero de callback no debe caer al proxy
     /// genérico de mercancías.
@@ -202,6 +205,18 @@ pub fn station_coverage_at(
                     // The reduced house table uses the historical Oil slot as
                     // the proxy for tropical Water acceptance.
                     coverage.accepted_cargo.add(CargoType::Oil, amounts[3]);
+                    coverage
+                        .always_accepted_cargo
+                        .add(CargoType::Passengers, amounts[0]);
+                    coverage
+                        .always_accepted_cargo
+                        .add(CargoType::Mail, amounts[1]);
+                    coverage
+                        .always_accepted_cargo
+                        .add(CargoType::Goods, amounts[2]);
+                    coverage
+                        .always_accepted_cargo
+                        .add(CargoType::Oil, amounts[3]);
                 }
                 TileKind::Industry => {
                     coverage.accepts_goods = coverage
@@ -358,6 +373,18 @@ pub fn station_coverage_at_with_newgrf_and_cargo_catalog(
                     coverage.accepted_cargo.add(CargoType::Mail, amounts[1]);
                     coverage.accepted_cargo.add(CargoType::Goods, amounts[2]);
                     coverage.accepted_cargo.add(CargoType::Oil, amounts[3]);
+                    coverage
+                        .always_accepted_cargo
+                        .add(CargoType::Passengers, amounts[0]);
+                    coverage
+                        .always_accepted_cargo
+                        .add(CargoType::Mail, amounts[1]);
+                    coverage
+                        .always_accepted_cargo
+                        .add(CargoType::Goods, amounts[2]);
+                    coverage
+                        .always_accepted_cargo
+                        .add(CargoType::Oil, amounts[3]);
                 }
                 TileKind::Industry => {
                     let gfx = crate::map::industry_gfx(&tile);
@@ -464,8 +491,40 @@ pub fn station_accepts_cargo_with_newgrf_and_cargo_catalog(
     cargo: CargoType,
     cargo_catalog: &[CargoSpecDef],
 ) -> bool {
+    station_cargo_acceptance_with_newgrf_and_cargo_catalog(
+        map,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        station,
+        cargo,
+        cargo_catalog,
+    )
+    .accepted
+}
+
+#[derive(Clone, Copy, Default)]
+pub(crate) struct CargoAcceptance {
+    pub accepted: bool,
+    pub always_accepted: bool,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn station_cargo_acceptance_with_newgrf_and_cargo_catalog(
+    map: &Map,
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: Climate,
+    station: &Station,
+    cargo: CargoType,
+    cargo_catalog: &[CargoSpecDef],
+) -> CargoAcceptance {
     if !station.accepts_cargo(cargo) {
-        return false;
+        return CargoAcceptance::default();
     }
     let coverage = station_coverage_at_with_newgrf_and_cargo_catalog(
         map,
@@ -478,13 +537,18 @@ pub fn station_accepts_cargo_with_newgrf_and_cargo_catalog(
         station_catchment_radius(station),
         cargo_catalog,
     );
-    if coverage.exact_cargo_acceptance {
+    let accepted = if coverage.exact_cargo_acceptance {
         coverage.accepted_cargo.get(cargo) >= STATION_ACCEPTANCE_THRESHOLD
     } else {
         // The legacy unload path only had the station-type predicate. Keep
         // that behavior when no NewGRF industry tile supplied an exact table;
         // the catchment amounts remain available to Action2/UI callers.
         true
+    };
+    CargoAcceptance {
+        accepted,
+        always_accepted: coverage.always_accepted_cargo.get(cargo) > 0
+            && coverage.accepted_cargo.get(cargo) >= STATION_ACCEPTANCE_THRESHOLD,
     }
 }
 

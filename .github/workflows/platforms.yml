@@ -40,7 +40,7 @@ jobs:
         uses: ./.github/composite/sccache
 
       - name: Caché Cargo
-        uses: Swatinem/rust-cache@v2.9.2
+        uses: Swatinem/rust-cache@v2.9.3
         with:
           shared-key: platform-${{ matrix.os }}
 
